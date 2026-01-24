@@ -3,6 +3,8 @@ import { motion, AnimatePresence, animate, useMotionValue, useTransform } from '
 import { Layers, Zap, Layout, Box, Droplet, Brush, FileText } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { getPdfDocumentFromUrl, renderPdfPageToCanvas } from '@/lib/pdf-utils';
+import * as THREE from 'three';
+import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 
 interface LandingPageProps {
     onStart: () => void;
@@ -328,15 +330,12 @@ function DemoFlowchart() {
                                 开始生成流程图…
                             </div>
                             <div className="text-white/45 text-sm mt-1">解析论文结构 · 抽取模块 · 组织链路</div>
-                            <div className="mt-4 flex items-center gap-2">
-                                {[0, 1, 2, 3, 4].map((i) => (
-                                    <motion.div
-                                        key={i}
-                                        className="w-2.5 h-2.5 rounded-full bg-blue-300/60"
-                                        animate={{ opacity: [0.25, 1, 0.25], scale: [0.85, 1.1, 0.85] }}
-                                        transition={{ duration: 1.0, repeat: Infinity, delay: i * 0.12 }}
-                                    />
-                                ))}
+                            <div className="mt-4 h-1.5 w-64 rounded-full bg-white/10 overflow-hidden">
+                                <motion.div 
+                                    className="h-full bg-blue-400/80" 
+                                    animate={{ width: ["0%", "100%"] }} 
+                                    transition={{ duration: 2.0, ease: "easeInOut" }} 
+                                />
                             </div>
                         </motion.div>
                     </motion.div>
@@ -624,19 +623,44 @@ function DemoCAD() {
         const runSequence = () => {
             setStep(0);
             setIsGenerating(false);
-            timeouts.push(setTimeout(() => setIsGenerating(true), 2200));
-            timeouts.push(setTimeout(() => { setIsGenerating(false); setStep(1); }, 4200));
-            timeouts.push(setTimeout(() => setStep(2), 9000));
-            timeouts.push(setTimeout(() => runSequence(), 15000));
+            
+            // 0s: Display Input Prompt (Wait 2s)
+            
+            // 2s: Start Generating 2D (Duration 2s)
+            timeouts.push(setTimeout(() => setIsGenerating(true), 2000));
+            
+            // 4s: Show 2D Plan (Duration 3s)
+            timeouts.push(setTimeout(() => { setIsGenerating(false); setStep(1); }, 4000));
+            
+            // 7s: Start Generating 3D (Duration 2s)
+            timeouts.push(setTimeout(() => setIsGenerating(true), 7000));
+            
+            // 9s: Show 3D View (Duration 3s)
+            timeouts.push(setTimeout(() => { setIsGenerating(false); setStep(2); }, 9000));
+
+            // 12s: Start Generating Render (Duration 2s)
+            timeouts.push(setTimeout(() => setIsGenerating(true), 12000));
+
+            // 14s: Show Final Render (Duration 3s)
+            timeouts.push(setTimeout(() => { setIsGenerating(false); setStep(3); }, 14000));
+            
+            // 17s: Loop
+            timeouts.push(setTimeout(() => runSequence(), 17000));
         };
 
         runSequence();
         return () => timeouts.forEach(clearTimeout);
     }, []);
 
-    // Step 0: Input
-    // Step 1: 2D Plan
-    // Step 2: 3D View
+    // Helper to get generating text
+    const getGenState = () => {
+        if (step === 0) return { title: "正在生成平面方案...", sub: "AI 布局规划 · 动线分析 · 空间划分" };
+        if (step === 1) return { title: "正在构建三维模型...", sub: "结构升维 · 材质映射 · 光影计算" };
+        if (step === 2) return { title: "正在渲染装修效果...", sub: "光线追踪 · 风格化处理 · 8K 级渲染" };
+        return { title: "处理中...", sub: "请稍候" };
+    };
+
+    const genState = getGenState();
 
     return (
         <div className="w-full h-full flex flex-col items-center justify-center relative overflow-hidden bg-zinc-900">
@@ -664,16 +688,15 @@ function DemoCAD() {
                         >
                             <div className="text-white/85 font-semibold flex items-center gap-2">
                                 <Box className="w-4 h-4 text-purple-200" />
-                                开始生成方案…
+                                {genState.title}
                             </div>
-                            <div className="text-white/45 text-sm mt-1">布局规划 · 家具摆放 · 2D → 3D</div>
-                            <div className="mt-4 space-y-2">
-                                <div className="h-2 rounded bg-white/10 overflow-hidden">
-                                    <motion.div className="h-full bg-purple-400/70" animate={{ width: ["0%", "100%"] }} transition={{ duration: 2.0, ease: "easeInOut" }} />
-                                </div>
-                                <div className="h-2 rounded bg-white/10 overflow-hidden">
-                                    <motion.div className="h-full bg-fuchsia-400/60" animate={{ width: ["0%", "92%"] }} transition={{ duration: 2.0, ease: "easeInOut", delay: 0.05 }} />
-                                </div>
+                            <div className="text-white/45 text-sm mt-1">{genState.sub}</div>
+                            <div className="mt-4 h-1.5 w-64 rounded-full bg-white/10 overflow-hidden">
+                                <motion.div 
+                                    className="h-full bg-purple-400/70" 
+                                    animate={{ width: ["0%", "100%"] }} 
+                                    transition={{ duration: 2.0, ease: "easeInOut" }} 
+                                />
                             </div>
                         </motion.div>
                     </motion.div>
@@ -686,7 +709,7 @@ function DemoCAD() {
                         className="relative w-[720px] h-[540px] bg-zinc-800/80 border-4 border-white/20 shadow-2xl"
                         style={{ transformStyle: "preserve-3d" }}
                         initial={{ rotateX: 0, rotateZ: 0 }}
-                        animate={step === 2 ? { rotateX: 62, rotateZ: 28, scale: 0.72 } : { rotateX: 0, rotateZ: 0, scale: 1 }}
+                        animate={step >= 2 ? { rotateX: 0, rotateZ: 0, scale: 1 } : { rotateX: 0, rotateZ: 0, scale: 1 }}
                         transition={{ duration: 1.5, ease: "easeInOut" }}
                     >
                         {/* Floor Grid */}
@@ -695,7 +718,7 @@ function DemoCAD() {
 
                         {/* Room Elements - Only show after input */}
                         {step >= 1 && (
-                            <CadPlan is3d={step === 2} />
+                            <CadPlan step={step} />
                         )}
                     </motion.div>
                 </div>
@@ -758,9 +781,11 @@ function CadBox3D({
     );
 }
 
-function CadPlan({ is3d }: { is3d: boolean }) {
-    if (!is3d) return <CadPlan2D />;
-    return <CadPlan3D />;
+function CadPlan({ step }: { step: number }) {
+    if (step === 1) return <CadPlan2D />;
+    if (step === 2) return <CadPlan3D />;
+    if (step === 3) return <CadRenderResult />;
+    return null;
 }
 
 function CadPlan2D() {
@@ -909,73 +934,523 @@ function CadPlan2D() {
 }
 
 function CadPlan3D() {
-    const is3d = true;
-    const wallHeight = 240;
-    const innerWallHeight = 200;
     return (
         <div className="absolute inset-4 rounded-2xl border border-white/10 bg-black/25 overflow-hidden">
             <div className="absolute inset-0 flex">
-                <div className="relative flex-1 overflow-hidden">
-                    <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_40%,rgba(255,255,255,0.14),transparent_62%)]" />
-                    <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.07)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.07)_1px,transparent_1px)] bg-[size:18px_18px]" />
-                    <div className="absolute inset-0 bg-gradient-to-br from-purple-900/18 via-transparent to-amber-900/16" />
-
-                    <div className="absolute inset-0" style={{ transformStyle: "preserve-3d" }}>
-                        <div className="absolute inset-0 shadow-[inset_0_-110px_140px_rgba(0,0,0,0.7)]" />
-
-                        <CadBox3D
-                            is3d={is3d}
-                            x={52}
-                            y={46}
-                            w={456}
-                            h={328}
-                            height={18}
-                            topClassName="bg-gradient-to-br from-zinc-200/12 to-zinc-900/24"
-                            sideClassName="bg-gradient-to-b from-zinc-950/85 to-zinc-900/90"
-                            borderClassName="border border-white/10"
-                            roundedClassName="rounded-xl"
-                        />
-
-                        <CadBox3D is3d={is3d} x={52} y={46} w={456} h={18} height={wallHeight} topClassName="bg-zinc-800/70" sideClassName="bg-gradient-to-b from-zinc-950/95 to-zinc-900/95" borderClassName="border border-white/14" />
-                        <CadBox3D is3d={is3d} x={52} y={356} w={456} h={18} height={wallHeight} topClassName="bg-zinc-800/70" sideClassName="bg-gradient-to-b from-zinc-950/95 to-zinc-900/95" borderClassName="border border-white/14" />
-                        <CadBox3D is3d={is3d} x={52} y={46} w={18} h={328} height={wallHeight} topClassName="bg-zinc-800/70" sideClassName="bg-gradient-to-b from-zinc-950/95 to-zinc-900/95" borderClassName="border border-white/14" />
-                        <CadBox3D is3d={is3d} x={490} y={46} w={18} h={328} height={wallHeight} topClassName="bg-zinc-800/70" sideClassName="bg-gradient-to-b from-zinc-950/95 to-zinc-900/95" borderClassName="border border-white/14" />
-
-                        <CadBox3D is3d={is3d} x={260} y={46} w={12} h={176} height={innerWallHeight} topClassName="bg-zinc-700/65" sideClassName="bg-gradient-to-b from-zinc-950/92 to-zinc-900/92" borderClassName="border border-white/10" />
-                        <CadBox3D is3d={is3d} x={260} y={222} w={248} h={12} height={innerWallHeight} topClassName="bg-zinc-700/65" sideClassName="bg-gradient-to-b from-zinc-950/92 to-zinc-900/92" borderClassName="border border-white/10" />
-                        <CadBox3D is3d={is3d} x={150} y={222} w={110} h={12} height={innerWallHeight} topClassName="bg-zinc-700/65" sideClassName="bg-gradient-to-b from-zinc-950/92 to-zinc-900/92" borderClassName="border border-white/10" />
-                        <CadBox3D is3d={is3d} x={150} y={222} w={12} h={152} height={innerWallHeight} topClassName="bg-zinc-700/65" sideClassName="bg-gradient-to-b from-zinc-950/92 to-zinc-900/92" borderClassName="border border-white/10" />
-                        <CadBox3D is3d={is3d} x={52} y={306} w={98} h={12} height={innerWallHeight} topClassName="bg-zinc-700/65" sideClassName="bg-gradient-to-b from-zinc-950/92 to-zinc-900/92" borderClassName="border border-white/10" />
-
-                        <CadBox3D is3d={is3d} x={286} y={92} w={136} h={68} height={62} topClassName="bg-gradient-to-br from-purple-500/55 to-purple-900/55" sideClassName="bg-gradient-to-b from-purple-950/88 to-purple-900/88" borderClassName="border border-purple-200/22" roundedClassName="rounded-xl" />
-                        <CadBox3D is3d={is3d} x={430} y={100} w={66} h={54} height={54} topClassName="bg-gradient-to-br from-purple-400/45 to-purple-900/45" sideClassName="bg-gradient-to-b from-purple-950/88 to-purple-900/88" borderClassName="border border-purple-200/18" roundedClassName="rounded-xl" />
-                        <CadBox3D is3d={is3d} x={332} y={168} w={94} h={70} height={28} topClassName="bg-gradient-to-br from-amber-300/45 to-amber-900/45" sideClassName="bg-gradient-to-b from-amber-950/88 to-amber-900/88" borderClassName="border border-amber-200/18" roundedClassName="rounded-full" />
-                        <CadBox3D is3d={is3d} x={460} y={62} w={40} h={136} height={140} topClassName="bg-gradient-to-br from-zinc-500/45 to-zinc-900/45" sideClassName="bg-gradient-to-b from-zinc-950/92 to-zinc-800/92" borderClassName="border border-white/12" roundedClassName="rounded-lg" />
-
-                        <CadBox3D is3d={is3d} x={292} y={246} w={186} h={80} height={22} topClassName="bg-gradient-to-br from-stone-300/18 to-stone-800/22" sideClassName="bg-gradient-to-b from-stone-950/72 to-stone-900/82" borderClassName="border border-white/10" roundedClassName="rounded-2xl" />
-                        {[
-                            { x: 282, y: 236 }, { x: 452, y: 236 }, { x: 282, y: 322 }, { x: 452, y: 322 }
-                        ].map((c, i) => (
-                            <CadBox3D key={i} is3d={is3d} x={c.x} y={c.y} w={34} h={34} height={20} topClassName="bg-gradient-to-br from-zinc-400/35 to-zinc-900/35" sideClassName="bg-gradient-to-b from-zinc-950/92 to-zinc-800/92" borderClassName="border border-white/12" roundedClassName="rounded-xl" />
-                        ))}
-
-                        <CadBox3D is3d={is3d} x={310} y={332} w={196} h={36} height={70} topClassName="bg-gradient-to-br from-emerald-400/22 to-emerald-900/22" sideClassName="bg-gradient-to-b from-emerald-950/74 to-emerald-900/78" borderClassName="border border-emerald-200/16" roundedClassName="rounded-xl" />
-                        <CadBox3D is3d={is3d} x={320} y={290} w={90} h={30} height={40} topClassName="bg-gradient-to-br from-blue-400/18 to-blue-900/18" sideClassName="bg-gradient-to-b from-blue-950/74 to-blue-900/78" borderClassName="border border-blue-200/16" roundedClassName="rounded-xl" />
-                        <CadBox3D is3d={is3d} x={414} y={290} w={90} h={30} height={40} topClassName="bg-gradient-to-br from-blue-400/18 to-blue-900/18" sideClassName="bg-gradient-to-b from-blue-950/74 to-blue-900/78" borderClassName="border border-blue-200/16" roundedClassName="rounded-xl" />
-
-                        <div className="absolute inset-0 pointer-events-none" style={{ transform: "translateZ(6px)" }}>
-                            <svg viewBox="0 0 560 420" className="absolute inset-0 w-full h-full opacity-55">
-                                <path d="M260 122 A40 40 0 0 1 300 162" fill="none" stroke="rgba(148,163,184,0.6)" strokeWidth="2.2" />
-                                <path d="M150 304 A40 40 0 0 1 190 344" fill="none" stroke="rgba(148,163,184,0.6)" strokeWidth="2.2" />
-                            </svg>
-                        </div>
-                    </div>
-                </div>
-
-                <CadInfoPanel />
+                <CadThreeViewport />
+                {/* Info Panel Removed as per request */}
             </div>
         </div>
     );
+}
+
+function CadRenderResult() {
+    return (
+        <div className="absolute inset-0 rounded-2xl border border-white/10 overflow-hidden bg-black">
+             <motion.div 
+                initial={{ opacity: 0 }} 
+                animate={{ opacity: 1 }} 
+                transition={{ duration: 1.0 }}
+                className="w-full h-full relative"
+            >
+                <img 
+                    src="/templates/unnamed.jpg" 
+                    alt="Final Render" 
+                    className="w-full h-full object-cover"
+                />
+                
+                {/* Overlay Text */}
+                <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-8">
+                    <motion.div 
+                        initial={{ y: 20, opacity: 0 }}
+                        animate={{ y: 0, opacity: 1 }}
+                        transition={{ delay: 0.5 }}
+                        className="flex justify-between items-end"
+                    >
+                        <div>
+                            <div className="text-white/90 text-2xl font-light mb-1 font-artistic">新中式 · 禅意雅居</div>
+                            <div className="text-white/50 text-sm font-mono">RENDERED BY NEXUS AI · 8K ULTRA HD</div>
+                        </div>
+                        <div className="flex gap-2">
+                             <div className="px-3 py-1 rounded-full border border-white/20 bg-white/10 backdrop-blur-md text-xs text-white/70">
+                                极致光影
+                             </div>
+                             <div className="px-3 py-1 rounded-full border border-white/20 bg-white/10 backdrop-blur-md text-xs text-white/70">
+                                材质还原
+                             </div>
+                        </div>
+                    </motion.div>
+                </div>
+
+                {/* Scanline Effect */}
+                <div className="absolute inset-0 bg-[linear-gradient(rgba(0,0,0,0)_50%,rgba(0,0,0,0.1)_50%)] bg-[size:100%_4px] pointer-events-none opacity-50" />
+            </motion.div>
+        </div>
+    )
+}
+
+function CadThreeViewport() {
+    const hostRef = React.useRef<HTMLDivElement | null>(null);
+
+    React.useEffect(() => {
+        const host = hostRef.current;
+        if (!host) return;
+
+        // --- TEXTURE GENERATION HELPERS ---
+        // Generates a high-quality wood floor texture using Canvas API
+        const createWoodTexture = () => {
+            const canvas = document.createElement('canvas');
+            canvas.width = 1024;
+            canvas.height = 1024;
+            const ctx = canvas.getContext('2d');
+            if (!ctx) return new THREE.Texture();
+
+            // Base wood color
+            ctx.fillStyle = '#e8dcca'; 
+            ctx.fillRect(0, 0, 1024, 1024);
+
+            // Wood grain noise
+            for (let i = 0; i < 4000; i++) {
+                ctx.fillStyle = Math.random() > 0.5 ? '#d4c5b0' : '#f0e6d6';
+                ctx.globalAlpha = 0.15;
+                const x = Math.random() * 1024;
+                const y = Math.random() * 1024;
+                const w = Math.random() * 200 + 50;
+                const h = Math.random() * 4 + 1;
+                ctx.fillRect(x, y, w, h);
+            }
+
+            // Plank lines
+            ctx.globalAlpha = 0.6;
+            ctx.strokeStyle = '#cbbba8';
+            ctx.lineWidth = 2;
+            const plankW = 120;
+            const plankH = 600;
+            
+            for (let x = 0; x <= 1024; x += plankW) {
+                ctx.beginPath();
+                ctx.moveTo(x, 0);
+                ctx.lineTo(x, 1024);
+                ctx.stroke();
+            }
+            
+            // Staggered horizontal joints
+            for (let x = 0; x <= 1024; x += plankW) {
+                const offset = (x / plankW) % 2 === 0 ? 0 : plankH / 2;
+                for (let y = offset; y <= 1024; y += plankH) {
+                     ctx.beginPath();
+                     ctx.moveTo(x, y);
+                     ctx.lineTo(x + plankW, y);
+                     ctx.stroke();
+                }
+            }
+
+            const texture = new THREE.CanvasTexture(canvas);
+            texture.wrapS = THREE.RepeatWrapping;
+            texture.wrapT = THREE.RepeatWrapping;
+            // Scale texture to look realistic on the large floor
+            texture.repeat.set(4, 4); 
+            return texture;
+        };
+
+        // Generates a subtle stucco/paint texture for walls
+        const createWallTexture = () => {
+            const canvas = document.createElement('canvas');
+            canvas.width = 512;
+            canvas.height = 512;
+            const ctx = canvas.getContext('2d');
+            if (!ctx) return new THREE.Texture();
+
+            // Base paint color
+            ctx.fillStyle = '#f5f5f5';
+            ctx.fillRect(0, 0, 512, 512);
+
+            // Noise for "Latex Paint" bumpiness
+            for (let i = 0; i < 10000; i++) {
+                ctx.fillStyle = Math.random() > 0.5 ? '#ffffff' : '#eeeeee';
+                ctx.globalAlpha = 0.08;
+                ctx.fillRect(Math.random() * 512, Math.random() * 512, 2, 2);
+            }
+
+            const texture = new THREE.CanvasTexture(canvas);
+            texture.wrapS = THREE.RepeatWrapping;
+            texture.wrapT = THREE.RepeatWrapping;
+            texture.repeat.set(2, 2);
+            return texture;
+        };
+
+        // --- SCENE SETUP ---
+        const scene = new THREE.Scene();
+        // Use a null background to let the CSS gradient shine through, or a very dark architectural grey
+        // User complained about "White Screen", so we keep it transparent or dark.
+        scene.background = null; 
+
+        const camera = new THREE.PerspectiveCamera(45, host.clientWidth / host.clientHeight, 0.1, 1000);
+        // Architectural isometric-ish view
+        camera.position.set(8, 12, 12);
+        camera.lookAt(0, 0, 0);
+
+        const renderer = new THREE.WebGLRenderer({ 
+            antialias: true, 
+            alpha: true, 
+            preserveDrawingBuffer: true,
+            powerPreference: "high-performance"
+        });
+        renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
+        renderer.setSize(host.clientWidth, host.clientHeight);
+        renderer.useLegacyLights = false;
+        
+        // Re-enable shadows for realism, but keep map size reasonable
+        renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        renderer.toneMapping = THREE.ACESFilmicToneMapping;
+        renderer.toneMappingExposure = 1.0;
+
+        host.appendChild(renderer.domElement);
+
+        const controls = new OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+        controls.dampingFactor = 0.05;
+        controls.maxPolarAngle = Math.PI / 2 - 0.1; // Prevent going below ground
+        controls.target.set(0, 0, 0);
+
+        // --- LIGHTING (Realistic) ---
+        const ambient = new THREE.AmbientLight(0xffffff, 0.6);
+        scene.add(ambient);
+
+        const dirLight = new THREE.DirectionalLight(0xffffff, 1.2);
+        dirLight.position.set(10, 20, 10);
+        dirLight.castShadow = true;
+        dirLight.shadow.mapSize.width = 2048;
+        dirLight.shadow.mapSize.height = 2048;
+        dirLight.shadow.camera.near = 0.5;
+        dirLight.shadow.camera.far = 50;
+        dirLight.shadow.camera.left = -15;
+        dirLight.shadow.camera.right = 15;
+        dirLight.shadow.camera.top = 15;
+        dirLight.shadow.camera.bottom = -15;
+        dirLight.shadow.bias = -0.0005;
+        scene.add(dirLight);
+
+        // Warm accent light for cozy interior feel
+        const pointLight = new THREE.PointLight(0xffaa00, 0.5, 20);
+        pointLight.position.set(0, 5, 0);
+        scene.add(pointLight);
+
+        // --- MATERIALS ---
+        const wallTexture = createWallTexture();
+        const floorTexture = createWoodTexture();
+
+        const materials = {
+            wall: new THREE.MeshStandardMaterial({ 
+                map: wallTexture,
+                color: 0xffffff,
+                roughness: 0.8,
+                metalness: 0.1
+            }), 
+            floor: new THREE.MeshStandardMaterial({ 
+                map: floorTexture,
+                color: 0xffffff,
+                roughness: 0.5,
+                metalness: 0.1
+            }),
+            glass: new THREE.MeshPhysicalMaterial({ 
+                color: 0xaaccff, 
+                transparent: true, 
+                opacity: 0.2,
+                roughness: 0.0,
+                metalness: 0.1,
+                transmission: 0.9,
+                thickness: 0.5
+            }),
+            woodDark: new THREE.MeshStandardMaterial({ 
+                color: 0x5c4033, 
+                roughness: 0.6,
+                metalness: 0.2 
+            }),
+            woodLight: new THREE.MeshStandardMaterial({ 
+                color: 0x8d6e63, 
+                roughness: 0.6,
+                metalness: 0.1 
+            }),
+            fabricGrey: new THREE.MeshStandardMaterial({ 
+                color: 0xcccccc, 
+                roughness: 0.9,
+                metalness: 0.0 
+            }),
+            fabricBlue: new THREE.MeshStandardMaterial({ 
+                color: 0x60a5fa, 
+                roughness: 0.9,
+                metalness: 0.0 
+            }),
+            metal: new THREE.MeshStandardMaterial({ 
+                color: 0x999999, 
+                roughness: 0.2,
+                metalness: 0.9 
+            }),
+            kitchenTop: new THREE.MeshStandardMaterial({ 
+                color: 0x111111, 
+                roughness: 0.1,
+                metalness: 0.1 
+            }),
+            leather: new THREE.MeshStandardMaterial({ 
+                color: 0x4a3728, 
+                roughness: 0.4,
+                metalness: 0.1 
+            }),
+            rug: new THREE.MeshStandardMaterial({ 
+                color: 0xdddddd, 
+                roughness: 1.0 
+            })
+        };
+
+        const group = new THREE.Group();
+        scene.add(group);
+
+        // Dimensions (mm)
+        const mm = {
+            outerW: 5800,
+            outerD: 4200,
+            wallOuter: 240,
+            wallInner: 120,
+            height: 2800,
+            floor: 100
+        };
+        const scale = 0.001;
+        const toUnits = (v: number) => v * scale;
+
+        // --- GEOMETRY CONSTRUCTION ---
+        
+        // 1. Floor
+        const floorGeom = new THREE.BoxGeometry(toUnits(mm.outerW + 2000), toUnits(mm.floor), toUnits(mm.outerD + 2000));
+        const floorMesh = new THREE.Mesh(floorGeom, materials.floor);
+        floorMesh.position.set(0, -toUnits(mm.floor) / 2, 0);
+        floorMesh.receiveShadow = true;
+        group.add(floorMesh);
+
+        // Helper to add boxes
+        const addBox = (sizeX: number, sizeY: number, sizeZ: number, x: number, y: number, z: number, material: THREE.Material, castsShadow = true) => {
+            const mesh = new THREE.Mesh(new THREE.BoxGeometry(toUnits(sizeX), toUnits(sizeY), toUnits(sizeZ)), material);
+            mesh.position.set(toUnits(x), toUnits(y), toUnits(z));
+            mesh.castShadow = castsShadow;
+            mesh.receiveShadow = true;
+            group.add(mesh);
+        };
+
+        // Helper for table/chair legs
+        const addLegs = (x: number, y: number, z: number, w: number, d: number, legH: number, legThick: number, mat: THREE.Material) => {
+            const offsetW = w/2 - legThick/2;
+            const offsetD = d/2 - legThick/2;
+            const legY = y - legH/2; 
+            addBox(legThick, legH, legThick, x - offsetW, legY, z - offsetD, mat);
+            addBox(legThick, legH, legThick, x + offsetW, legY, z - offsetD, mat);
+            addBox(legThick, legH, legThick, x - offsetW, legY, z + offsetD, mat);
+            addBox(legThick, legH, legThick, x + offsetW, legY, z + offsetD, mat);
+        }
+
+        const addTable = (x: number, y: number, z: number, w: number, h: number, d: number, mat: THREE.Material) => {
+            const topThick = 40;
+            addBox(w, topThick, d, x, y + h - topThick/2, z, mat); // Top
+            addLegs(x, y + h - topThick, z, w - 100, d - 100, h - topThick, 60, mat); // Legs
+        };
+
+        const addChair = (x: number, y: number, z: number, angle: number = 0) => {
+             const seatH = 450;
+             const seatW = 450;
+             const seatD = 450;
+             const backH = 400;
+             const mat = materials.woodLight;
+             const fabric = materials.fabricGrey;
+
+             const chairGroup = new THREE.Group();
+             
+             // Seat
+             const seat = new THREE.Mesh(new THREE.BoxGeometry(toUnits(seatW), toUnits(50), toUnits(seatD)), fabric);
+             seat.position.set(0, toUnits(seatH), 0);
+             seat.castShadow = true;
+             seat.receiveShadow = true;
+             chairGroup.add(seat);
+             
+             // Legs
+             const legGeo = new THREE.BoxGeometry(toUnits(40), toUnits(seatH), toUnits(40));
+             const positions = [[-1, -1], [1, -1], [-1, 1], [1, 1]];
+             positions.forEach(([px, pz]) => {
+                 const leg = new THREE.Mesh(legGeo, mat);
+                 leg.position.set(toUnits(px * (seatW/2 - 20)), toUnits(seatH/2), toUnits(pz * (seatD/2 - 20)));
+                 leg.castShadow = true;
+                 chairGroup.add(leg);
+             });
+
+             // Back
+             const back = new THREE.Mesh(new THREE.BoxGeometry(toUnits(seatW), toUnits(backH), toUnits(20)), mat);
+             back.position.set(0, toUnits(seatH + backH/2), toUnits(-seatD/2 + 10));
+             back.castShadow = true;
+             chairGroup.add(back);
+
+             chairGroup.position.set(toUnits(x), toUnits(y), toUnits(z));
+             chairGroup.rotation.y = angle;
+             group.add(chairGroup);
+        };
+
+        const addWallAlongX = (xCenter: number, zCenter: number, length: number, thickness: number, height: number) => {
+            addBox(length, height, thickness, xCenter, height / 2, zCenter, materials.wall);
+        };
+        const addWallAlongZ = (xCenter: number, zCenter: number, length: number, thickness: number, height: number) => {
+            addBox(thickness, height, length, xCenter, height / 2, zCenter, materials.wall);
+        };
+
+        const halfW = mm.outerW / 2;
+        const halfD = mm.outerD / 2;
+
+        // -- Outer Walls --
+        const winLen = 1400;
+        const winSill = 900;
+        const winHeight = 1200;
+        const winXCenter = 1809; 
+        const northZ = -halfD + mm.wallOuter / 2;
+        
+        const nWallLeftLen = (halfW + winXCenter - winLen/2);
+        const nWallRightLen = (halfW - winXCenter - winLen/2);
+        
+        addBox(nWallLeftLen, mm.height, mm.wallOuter, -halfW + nWallLeftLen/2, mm.height/2, northZ, materials.wall);
+        addBox(nWallRightLen, mm.height, mm.wallOuter, halfW - nWallRightLen/2, mm.height/2, northZ, materials.wall);
+        addBox(winLen, winSill, mm.wallOuter, winXCenter, winSill/2, northZ, materials.wall);
+        addBox(winLen, mm.height - (winSill + winHeight), mm.wallOuter, winXCenter, mm.height - (mm.height - (winSill + winHeight))/2, northZ, materials.wall);
+        
+        const glassMesh = new THREE.Mesh(new THREE.BoxGeometry(toUnits(winLen), toUnits(winHeight), toUnits(40)), materials.glass);
+        glassMesh.position.set(toUnits(winXCenter), toUnits(winSill + winHeight/2), toUnits(northZ));
+        group.add(glassMesh);
+
+        const southZ = halfD - mm.wallOuter / 2;
+        addWallAlongX(0, southZ, mm.outerW, mm.wallOuter, mm.height);
+
+        const eastX = halfW - mm.wallOuter / 2;
+        addWallAlongZ(eastX, 0, mm.outerD, mm.wallOuter, mm.height);
+
+        const westX = -halfW + mm.wallOuter / 2;
+        const doorW = 1000;
+        const doorH = 2200;
+        const doorZ = -halfD + 1200; 
+        
+        const wWallSeg1 = Math.abs(-halfD - (doorZ - doorW/2));
+        const wWallSeg2 = Math.abs(halfD - (doorZ + doorW/2));
+        
+        addBox(mm.wallOuter, mm.height, wWallSeg1, westX, mm.height/2, -halfD + wWallSeg1/2, materials.wall);
+        addBox(mm.wallOuter, mm.height, wWallSeg2, westX, mm.height/2, halfD - wWallSeg2/2, materials.wall);
+        addBox(mm.wallOuter, mm.height - doorH, doorW, westX, mm.height - (mm.height - doorH)/2, doorZ, materials.wall);
+        
+        const doorPanel = new THREE.Mesh(new THREE.BoxGeometry(toUnits(doorW), toUnits(doorH), toUnits(50)), materials.woodDark);
+        const doorGroup = new THREE.Group();
+        doorGroup.add(doorPanel);
+        doorPanel.position.set(toUnits(doorW/2), toUnits(doorH/2), 0);
+        doorGroup.position.set(toUnits(westX), 0, toUnits(doorZ - doorW/2));
+        doorGroup.rotation.y = Math.PI / 4; 
+        group.add(doorGroup);
+
+        // -- Internal Walls --
+        const innerX = -halfW + mm.wallOuter + 2427;
+        addWallAlongZ(innerX, -halfD + mm.wallOuter + 930, 1700, mm.wallInner, mm.height);
+        addWallAlongX(innerX + 1240, -halfD + mm.wallOuter + 1860, 2600, mm.wallInner, mm.height);
+        addWallAlongX(innerX - 520, -halfD + mm.wallOuter + 1860, 1100, mm.wallInner, mm.height);
+        addWallAlongZ(innerX - 520, -halfD + mm.wallOuter + 2800, 1500, mm.wallInner, mm.height);
+        addWallAlongX(-halfW + mm.wallOuter + 520, -halfD + mm.wallOuter + 2760, 1200, mm.wallInner, mm.height);
+
+        // -- Furniture --
+        // Sofa
+        addBox(800, 200, 2200, -halfW + 1200, 100, halfD - 1400, materials.woodDark); 
+        addBox(1200, 200, 800, -halfW + 2200, 100, halfD - 2100, materials.woodDark);
+        addBox(750, 200, 2150, -halfW + 1200, 300, halfD - 1400, materials.fabricGrey);
+        addBox(1150, 200, 750, -halfW + 2200, 300, halfD - 2100, materials.fabricGrey);
+        addBox(300, 400, 2200, -halfW + 900, 400, halfD - 1400, materials.fabricGrey);
+        addBox(1200, 400, 300, -halfW + 2200, 400, halfD - 2450, materials.fabricGrey);
+        addBox(150, 300, 300, -halfW + 1200, 450, halfD - 2100, materials.fabricBlue);
+        addBox(150, 300, 300, -halfW + 1200, 450, halfD - 1100, materials.fabricBlue);
+
+        // Coffee Table & Rug
+        addTable(-halfW + 2000, 0, halfD - 1200, 1000, 400, 600, materials.woodDark);
+        const rugMesh = new THREE.Mesh(new THREE.BoxGeometry(toUnits(2600), toUnits(20), toUnits(2000)), materials.rug);
+        rugMesh.position.set(toUnits(-halfW + 1600), toUnits(10), toUnits(halfD - 1600));
+        rugMesh.receiveShadow = true;
+        group.add(rugMesh);
+
+        // Floor Lamp
+        const lampPole = new THREE.Mesh(new THREE.CylinderGeometry(toUnits(20), toUnits(20), toUnits(1600), 12), materials.metal);
+        lampPole.position.set(toUnits(-halfW + 2500), toUnits(800), toUnits(halfD - 2500));
+        lampPole.castShadow = true;
+        group.add(lampPole);
+        const lampShade = new THREE.Mesh(new THREE.ConeGeometry(toUnits(250), toUnits(300), 32, 1, true), new THREE.MeshStandardMaterial({ color: 0xfff7ed, roughness: 1.0, side: THREE.DoubleSide }));
+        lampShade.position.set(toUnits(-halfW + 2500), toUnits(1600), toUnits(halfD - 2500));
+        group.add(lampShade);
+
+        // TV
+        addBox(400, 500, 2000, innerX - 200, 250, halfD - 1400, materials.woodLight);
+        addBox(50, 800, 1400, innerX - 180, 800, halfD - 1400, new THREE.MeshStandardMaterial({ color: 0x000000, roughness: 0.2 }));
+
+        // Dining
+        addTable(innerX + 800, 0, halfD - 1200, 1400, 750, 800, materials.woodLight);
+        addChair(innerX + 500, 0, halfD - 1200, Math.PI / 2);
+        addChair(innerX + 1100, 0, halfD - 1200, -Math.PI / 2);
+        addChair(innerX + 800, 0, halfD - 900, Math.PI);
+        addChair(innerX + 800, 0, halfD - 1500, 0);
+        
+        // Kitchen
+        const kitchenZ = -halfD + mm.wallOuter + 2860;
+        addBox(700, 850, 2800, innerX + 350, 425, kitchenZ, materials.woodDark);
+        addBox(2400, 850, 600, innerX + 1550, 425, -halfD + mm.wallOuter + 300, materials.woodDark);
+        addBox(700, 40, 2800, innerX + 350, 870, kitchenZ, materials.kitchenTop);
+        addBox(2400, 40, 600, innerX + 1550, 870, -halfD + mm.wallOuter + 300, materials.kitchenTop);
+        addBox(500, 700, 2800, innerX + 250, 2000, kitchenZ, materials.woodLight);
+
+        // Bedroom
+        addBox(1900, 300, 2100, innerX + 1400, 150, -halfD + 1400, materials.woodDark);
+        addBox(1800, 200, 2000, innerX + 1400, 400, -halfD + 1400, materials.fabricGrey);
+        addBox(1900, 1000, 100, innerX + 1400, 500, -halfD + 350, materials.leather);
+        addBox(700, 150, 400, innerX + 1100, 575, -halfD + 600, materials.fabricBlue);
+        addBox(700, 150, 400, innerX + 1700, 575, -halfD + 600, materials.fabricBlue);
+        addBox(600, 2400, 2000, innerX + 2700, 1200, -halfD + 1400, materials.woodLight);
+
+        // Shower
+        const showerGlass = new THREE.Mesh(new THREE.BoxGeometry(toUnits(20), toUnits(2000), toUnits(900)), materials.glass);
+        showerGlass.position.set(toUnits(innerX - 520 + 750), toUnits(1000), toUnits(-halfD + mm.wallOuter + 3250));
+        group.add(showerGlass);
+
+        group.position.y = toUnits(mm.floor);
+
+        const ro = new ResizeObserver(() => {
+            if (!host) return;
+            const w = host.clientWidth;
+            const h = host.clientHeight;
+            if (w === 0 || h === 0) return;
+            renderer.setSize(w, h, false);
+            camera.aspect = w / h;
+            camera.updateProjectionMatrix();
+        });
+        ro.observe(host);
+
+        let running = true;
+        renderer.setAnimationLoop(() => {
+            if (!running) return;
+            controls.update();
+            renderer.render(scene, camera);
+        });
+
+        return () => {
+            running = false;
+            renderer.setAnimationLoop(null);
+            ro.disconnect();
+            controls.dispose();
+            
+            Object.values(materials).forEach(m => m.dispose());
+            floorTexture.dispose();
+            wallTexture.dispose();
+            renderer.dispose();
+            if (host.contains(renderer.domElement)) {
+                host.removeChild(renderer.domElement);
+            }
+        };
+    }, []);
+
+    return <div className="relative flex-1 overflow-hidden" ref={hostRef} />;
 }
 
 function CadInfoPanel() {
@@ -1173,7 +1648,7 @@ function DemoPPT() {
                                 开始生成 PPT…
                             </div>
                             <div className="text-white/45 text-sm mt-1">抽取要点 · 自动排版 · 渲染幻灯片</div>
-                            <div className="mt-4 h-2 rounded-full bg-white/10 overflow-hidden">
+                            <div className="mt-4 h-1.5 w-64 rounded-full bg-white/10 overflow-hidden">
                                 <motion.div
                                     className="h-full bg-gradient-to-r from-cyan-400/70 via-blue-400/70 to-purple-400/70"
                                     animate={{ width: ["0%", "100%"] }}
