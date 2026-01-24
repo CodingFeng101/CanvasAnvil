@@ -1640,9 +1640,14 @@ function DemoPPT() {
                         animate={{ opacity: 1 }}
                         exit={{ opacity: 0 }}
                         transition={{ duration: 0.25 }}
-                        className="absolute inset-0 flex items-center justify-center z-30 pointer-events-none"
+                        className="absolute inset-0 flex items-center justify-center bg-black/50 backdrop-blur-sm z-40 pointer-events-none"
                     >
-                        <div className="w-full max-w-lg rounded-2xl border border-cyan-300/25 bg-white/10 backdrop-blur-2xl px-7 py-6 shadow-[0_24px_80px_rgba(0,0,0,0.55)]">
+                        <motion.div
+                            initial={{ y: 10, opacity: 0 }}
+                            animate={{ y: 0, opacity: 1 }}
+                            exit={{ y: -10, opacity: 0 }}
+                            className="rounded-2xl border border-cyan-300/25 bg-white/10 backdrop-blur-2xl px-7 py-6 shadow-[0_24px_80px_rgba(0,0,0,0.55)]"
+                        >
                             <div className="text-white/85 font-semibold flex items-center gap-2">
                                 <FileText className="w-4 h-4 text-cyan-200" />
                                 开始生成 PPT…
@@ -1650,13 +1655,12 @@ function DemoPPT() {
                             <div className="text-white/45 text-sm mt-1">抽取要点 · 自动排版 · 渲染幻灯片</div>
                             <div className="mt-4 h-1.5 w-64 rounded-full bg-white/10 overflow-hidden">
                                 <motion.div
-                                    className="h-full bg-gradient-to-r from-cyan-400/70 via-blue-400/70 to-purple-400/70"
+                                    className="h-full bg-cyan-300/80"
                                     animate={{ width: ["0%", "100%"] }}
                                     transition={{ duration: 2.0, ease: "easeInOut" }}
                                 />
                             </div>
-                            <div className="mt-3 text-white/40 text-xs font-mono">GENERATING</div>
-                        </div>
+                        </motion.div>
                     </motion.div>
                 )}
             </AnimatePresence>
