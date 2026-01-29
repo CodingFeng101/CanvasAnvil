@@ -18,6 +18,8 @@ import { Button } from "@/components/ui/button";
 type WorkspaceType = 'flow' | 'cad' | 'ppt';
 
 const HISTORY_STORAGE_KEY = 'unified-ai-workspace-history';
+const CAD_WORKSPACE_STORAGE_KEY = 'unified-ai-workspace-cad-state-v1';
+const FLOW_WORKSPACE_STORAGE_KEY = 'unified-ai-workspace-flow-state-v1';
 
 class ErrorBoundary extends React.Component<{ children: React.ReactNode }, { error: Error | null }> {
   state: { error: Error | null } = { error: null };
@@ -56,18 +58,64 @@ class ErrorBoundary extends React.Component<{ children: React.ReactNode }, { err
 }
 
 function App() {
+  const initialFlowState = (() => {
+    if (typeof window === "undefined") return null;
+    try {
+      const raw = localStorage.getItem(FLOW_WORKSPACE_STORAGE_KEY);
+      const parsed = raw ? JSON.parse(raw) : null;
+      if (!parsed || typeof parsed !== "object") return null;
+      return parsed as any;
+    } catch {
+      return null;
+    }
+  })();
+
+  const initialCadState = (() => {
+    if (typeof window === "undefined") return null;
+    try {
+      const raw = localStorage.getItem(CAD_WORKSPACE_STORAGE_KEY);
+      const parsed = raw ? JSON.parse(raw) : null;
+      if (!parsed || typeof parsed !== "object") return null;
+      return parsed as any;
+    } catch {
+      return null;
+    }
+  })();
+
   const [showLanding, setShowLanding] = useState(true);
   const [activeWorkspace, setActiveWorkspace] = useState<WorkspaceType>('flow');
   const [attachments, setAttachments] = useState<{ id: string; type: 'xml' | 'python' | 'json'; content: string; name: string }[]>([]);
   
   // Workspace specific states
-  const [generatedXml, setGeneratedXml] = useState<string | undefined>(undefined);
-  const [cad2dSvg, setCad2dSvg] = useState<string | undefined>(undefined);
-  const [cadPlan, setCadPlan] = useState<any>(null);
-  const [cadImages, setCadImages] = useState<{ title: string; url: string }[]>([]);
+  const [generatedXml, setGeneratedXml] = useState<string | undefined>(() => {
+    const v = initialFlowState?.generatedXml;
+    return typeof v === "string" ? v : undefined;
+  });
+  const [cad2dSvg, setCad2dSvg] = useState<string | undefined>(() => {
+    const v = initialCadState?.cad2dSvg;
+    return typeof v === "string" ? v : undefined;
+  });
+  const [cadPlan, setCadPlan] = useState<any>(() => (initialCadState?.cadPlan ?? null));
+  const [cadImages, setCadImages] = useState<{ title: string; url: string }[]>(() => {
+    const v = initialCadState?.cadImages;
+    return Array.isArray(v)
+      ? v
+          .filter((x: any) => x && typeof x.title === "string" && typeof x.url === "string")
+          .map((x: any) => ({ title: x.title, url: x.url }))
+      : [];
+  });
   const [cadImagesLoading, setCadImagesLoading] = useState(false);
-  const [cadBom, setCadBom] = useState<{ columns: string[]; rows: any[] } | null>(null);
-  const [cadFocusPanel, setCadFocusPanel] = useState<"2d" | "renders" | "bom" | null>(null);
+  const [cadBom, setCadBom] = useState<{ columns: string[]; rows: any[] } | null>(() => {
+    const v = initialCadState?.cadBom;
+    if (!v || typeof v !== "object") return null;
+    const columns = Array.isArray((v as any).columns) ? (v as any).columns.filter((c: any) => typeof c === "string") : [];
+    const rows = Array.isArray((v as any).rows) ? (v as any).rows : [];
+    return { columns, rows };
+  });
+  const [cadFocusPanel, setCadFocusPanel] = useState<"2d" | "renders" | "bom" | null>(() => {
+    const v = initialCadState?.cadFocusPanel;
+    return v === "2d" || v === "renders" || v === "bom" ? v : null;
+  });
   const [pptIncomingEdit, setPptIncomingEdit] = useState<{ id: string; payload: string } | null>(null);
   const [pptDraftSlides, setPptDraftSlides] = useState<Array<{ id: string; slideId: string; title: string; json: string; kind: "outline" | "slide_image"; imageUrl?: string }>>([]);
   const cadImageObjectUrlsRef = useRef<string[]>([]);
@@ -98,6 +146,38 @@ function App() {
   useEffect(() => {
       localStorage.setItem(HISTORY_STORAGE_KEY, JSON.stringify(versionHistories));
   }, [versionHistories]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      localStorage.setItem(
+        FLOW_WORKSPACE_STORAGE_KEY,
+        JSON.stringify({
+          generatedXml: typeof generatedXml === "string" ? generatedXml : null,
+          updatedAt: Date.now(),
+        })
+      );
+    } catch {
+    }
+  }, [generatedXml]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      localStorage.setItem(
+        CAD_WORKSPACE_STORAGE_KEY,
+        JSON.stringify({
+          cad2dSvg: typeof cad2dSvg === "string" ? cad2dSvg : null,
+          cadPlan: cadPlan ?? null,
+          cadImages,
+          cadBom,
+          cadFocusPanel,
+          updatedAt: Date.now(),
+        })
+      );
+    } catch {
+    }
+  }, [cad2dSvg, cadPlan, cadImages, cadBom, cadFocusPanel]);
 
   useEffect(() => {
     const nextObjectUrls = cadImages
@@ -372,6 +452,7 @@ function App() {
               {activeWorkspace === 'flow' && (
                 <FlowchartWorkspace
                   initialXml={generatedXml}
+                  onXmlChange={setGeneratedXml}
                   onAddToChat={(code) => handleAddToChat(code, 'xml', 'diagram.xml')}
                 />
               )}

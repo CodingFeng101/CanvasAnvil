@@ -46,6 +46,7 @@ type TemplateItem =
 
 const PPT_TEMPLATE_UPLOADS_KEY = "ppt_template_uploads_v1";
 const PPT_TEMPLATE_HIDDEN_PRESETS_KEY = "ppt_template_hidden_presets_v1";
+const PPT_WORKSPACE_STORAGE_KEY = "unified-ai-workspace-ppt-state-v1";
 
 const PRESET_TEMPLATES: PresetTemplate[] = [
   { id: "preset-tech-business", name: "科技商务", path: "/templates/template_b.png" },
@@ -59,11 +60,42 @@ const PRESET_TEMPLATES: PresetTemplate[] = [
 const MODEL_CONCURRENCY = 30;
 
 export function PptWorkspace({ data, onAddToChat, onPptReadyChange, incomingEdit }: PptWorkspaceProps) {
+  const initialPptState = (() => {
+    if (typeof window === "undefined") return null;
+    try {
+      const raw = localStorage.getItem(PPT_WORKSPACE_STORAGE_KEY);
+      const parsed = raw ? JSON.parse(raw) : null;
+      if (!parsed || typeof parsed !== "object") return null;
+      return parsed as any;
+    } catch {
+      return null;
+    }
+  })();
+
   // If data is provided by AI, use it. Otherwise maintain local state for demo.
-  const [localSlides, setLocalSlides] = useState<SlideData[]>([]);
-  const [currentSlideIndex, setCurrentSlideIndex] = useState(0);
+  const [localSlides, setLocalSlides] = useState<SlideData[]>(() => {
+    const v = initialPptState?.localSlides;
+    if (!Array.isArray(v)) return [];
+    return v
+      .filter((s: any) => s && typeof s.id === "string")
+      .map((s: any) => ({
+        id: String(s.id),
+        title: typeof s.title === "string" ? s.title : "",
+        content: Array.isArray(s.content) ? s.content.filter((x: any) => typeof x === "string") : [],
+        note: typeof s.note === "string" ? s.note : undefined,
+        layout: typeof s.layout === "string" ? s.layout : undefined,
+        description: typeof s.description === "string" ? s.description : undefined,
+      }));
+  });
+  const [currentSlideIndex, setCurrentSlideIndex] = useState(() => {
+    const v = initialPptState?.currentSlideIndex;
+    return typeof v === "number" && Number.isFinite(v) ? Math.max(0, Math.floor(v)) : 0;
+  });
   const [templateImage, setTemplateImage] = useState<string | null>(null);
-  const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null);
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(() => {
+    const v = initialPptState?.selectedTemplateId;
+    return typeof v === "string" ? v : null;
+  });
   const [uploadedTemplates, setUploadedTemplates] = useState<UploadTemplate[]>(() => {
     if (typeof window === "undefined") return [];
     try {
@@ -87,17 +119,57 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, incomingEdit
       return [];
     }
   });
-  const [generatedImages, setGeneratedImages] = useState<Record<string, string>>({});
-  const [imageVersions, setImageVersions] = useState<Record<string, Array<{ id: string; url: string; timestamp: number; type: 'generated' | 'edited'; instruction?: string }>>>({});
-  const [currentImageVersionId, setCurrentImageVersionId] = useState<Record<string, string>>({});
+  const [generatedImages, setGeneratedImages] = useState<Record<string, string>>(() => {
+    const v = initialPptState?.generatedImages;
+    if (!v || typeof v !== "object" || Array.isArray(v)) return {};
+    const out: Record<string, string> = {};
+    for (const [k, val] of Object.entries(v)) {
+      if (typeof k === "string" && typeof val === "string") out[k] = val;
+    }
+    return out;
+  });
+  const [imageVersions, setImageVersions] = useState<Record<string, Array<{ id: string; url: string; timestamp: number; type: 'generated' | 'edited'; instruction?: string }>>>(() => {
+    const v = initialPptState?.imageVersions;
+    if (!v || typeof v !== "object" || Array.isArray(v)) return {};
+    const out: Record<string, Array<{ id: string; url: string; timestamp: number; type: 'generated' | 'edited'; instruction?: string }>> = {};
+    for (const [k, val] of Object.entries(v)) {
+      if (typeof k !== "string" || !Array.isArray(val)) continue;
+      out[k] = val
+        .filter((x: any) => x && typeof x.id === "string" && typeof x.url === "string" && typeof x.timestamp === "number" && (x.type === "generated" || x.type === "edited"))
+        .map((x: any) => ({
+          id: x.id,
+          url: x.url,
+          timestamp: x.timestamp,
+          type: x.type,
+          instruction: typeof x.instruction === "string" ? x.instruction : undefined,
+        }));
+    }
+    return out;
+  });
+  const [currentImageVersionId, setCurrentImageVersionId] = useState<Record<string, string>>(() => {
+    const v = initialPptState?.currentImageVersionId;
+    if (!v || typeof v !== "object" || Array.isArray(v)) return {};
+    const out: Record<string, string> = {};
+    for (const [k, val] of Object.entries(v)) {
+      if (typeof k === "string" && typeof val === "string") out[k] = val;
+    }
+    return out;
+  });
   const [isGeneratingImage, setIsGeneratingImage] = useState(false);
   
   // Creation Wizard State
-  const [creationStep, setCreationStep] = useState<CreationStep>('idle');
-  const [creationMode, setCreationMode] = useState<CreationMode>('idea');
-  const [ideaInput, setIdeaInput] = useState("");
-  const [outlineInput, setOutlineInput] = useState("");
-  const [descriptionInput, setDescriptionInput] = useState("");
+  const [creationStep, setCreationStep] = useState<CreationStep>(() => {
+    const v = initialPptState?.creationStep;
+    if (v === "idle" || v === "input" || v === "outline" || v === "generating_content" || v === "generating_images" || v === "done") return v;
+    return localSlides.length > 0 ? "done" : "idle";
+  });
+  const [creationMode, setCreationMode] = useState<CreationMode>(() => {
+    const v = initialPptState?.creationMode;
+    return v === "idea" || v === "outline" || v === "description" ? v : "idea";
+  });
+  const [ideaInput, setIdeaInput] = useState(() => (typeof initialPptState?.ideaInput === "string" ? initialPptState.ideaInput : ""));
+  const [outlineInput, setOutlineInput] = useState(() => (typeof initialPptState?.outlineInput === "string" ? initialPptState.outlineInput : ""));
+  const [descriptionInput, setDescriptionInput] = useState(() => (typeof initialPptState?.descriptionInput === "string" ? initialPptState.descriptionInput : ""));
   const [referenceFiles, setReferenceFiles] = useState<ReferenceFile[]>([]);
   const [isParsingReferenceFiles, setIsParsingReferenceFiles] = useState(false);
   const [referencePreviewOpen, setReferencePreviewOpen] = useState(false);
@@ -130,6 +202,46 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, incomingEdit
     } catch {
     }
   }, [hiddenPresetTemplateIds]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      localStorage.setItem(
+        PPT_WORKSPACE_STORAGE_KEY,
+        JSON.stringify({
+          localSlides,
+          currentSlideIndex,
+          selectedTemplateId,
+          generatedImages,
+          imageVersions,
+          currentImageVersionId,
+          creationStep,
+          creationMode,
+          ideaInput,
+          outlineInput,
+          descriptionInput,
+          updatedAt: Date.now(),
+        })
+      );
+    } catch {
+    }
+  }, [
+    localSlides,
+    currentSlideIndex,
+    selectedTemplateId,
+    generatedImages,
+    imageVersions,
+    currentImageVersionId,
+    creationStep,
+    creationMode,
+    ideaInput,
+    outlineInput,
+    descriptionInput,
+  ]);
+
+  useEffect(() => {
+    onPptReadyChange?.(localSlides.length > 0);
+  }, [localSlides.length]);
 
   useEffect(() => {
       if (typeof window === "undefined") return;
@@ -181,10 +293,19 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, incomingEdit
       setTemplateImage(null);
       return;
     }
-    const exists = selectedTemplateId && templates.some((t) => t.id === selectedTemplateId);
-    if (exists) return;
-    void setTemplateFromItem(templates[0]);
-  }, [selectedTemplateId, hiddenPresetTemplateIds.join("|"), uploadedTemplates.map((t) => t.id).join("|")]);
+    const selected = selectedTemplateId ? templates.find((t) => t.id === selectedTemplateId) : null;
+    if (!selected) {
+      void setTemplateFromItem(templates[0]);
+      return;
+    }
+    if (!templateImage) {
+      void setTemplateFromItem(selected);
+      return;
+    }
+    if (selected.kind === "upload" && templateImage !== selected.dataUrl) {
+      setTemplateImage(selected.dataUrl);
+    }
+  }, [selectedTemplateId, templateImage, hiddenPresetTemplateIds.join("|"), uploadedTemplates.map((t) => t.id).join("|")]);
 
   const addUploadedTemplates = async (files: File[]) => {
     const imageFiles = Array.from(files || []).filter((f) => f && f.type.startsWith("image/"));

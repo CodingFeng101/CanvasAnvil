@@ -84,67 +84,68 @@ export function FilePreviewList({
                 {files.map((file, index) => {
                     const imageUrl = imageUrls.get(file) || null
                     const pdfInfo = pdfData.get(file)
+                    const isImage = file.type.startsWith("image/")
+                    const isPdf = isPdfFile(file)
+                    const isText = isTextFile(file)
+                    const secondary = pdfInfo?.isExtracting
+                        ? "Reading..."
+                        : pdfInfo?.charCount
+                            ? `${formatCharCount(pdfInfo.charCount)} chars`
+                            : isPdf
+                                ? "PDF"
+                                : isText
+                                    ? "Text"
+                                    : ""
                     return (
-                        <div key={file.name + index} className="relative group">
+                        <div key={file.name + index} className="group">
                             <div
-                                className={`w-20 h-20 border rounded-md overflow-hidden bg-muted ${
-                                    file.type.startsWith("image/") && imageUrl
-                                        ? "cursor-pointer"
-                                        : ""
-                                }`}
-                                onClick={() =>
-                                    file.type.startsWith("image/") &&
-                                    imageUrl &&
-                                    setSelectedImage(imageUrl)
-                                }
+                                className="flex items-center gap-2.5 w-[260px] max-w-full border rounded-lg overflow-hidden bg-background/70 px-3 py-2"
                             >
-                                {file.type.startsWith("image/") && imageUrl ? (
-                                    <img
-                                        src={imageUrl}
-                                        alt={file.name}
-                                        className="object-cover w-full h-full"
-                                    />
-                                ) : isPdfFile(file) || isTextFile(file) ? (
-                                    <div className="flex flex-col items-center justify-center h-full p-1">
-                                        {pdfInfo?.isExtracting ? (
-                                            <Loader2 className="h-6 w-6 text-blue-500 mb-1 animate-spin" />
-                                        ) : isPdfFile(file) ? (
-                                            <FileText className="h-6 w-6 text-red-500 mb-1" />
-                                        ) : (
-                                            <FileCode className="h-6 w-6 text-blue-500 mb-1" />
-                                        )}
-                                        <span className="text-xs text-center truncate w-full px-1">
-                                            {file.name.length > 10
-                                                ? `${file.name.slice(0, 7)}...`
-                                                : file.name}
-                                        </span>
-                                        {pdfInfo?.isExtracting ? (
-                                            <span className="text-[10px] text-muted-foreground">
-                                                Reading...
-                                            </span>
-                                        ) : pdfInfo?.charCount ? (
-                                            <span className="text-[10px] text-green-600 font-medium">
-                                                {formatCharCount(
-                                                    pdfInfo.charCount,
-                                                )}{" "}
-                                                chars
-                                            </span>
-                                        ) : null}
-                                    </div>
-                                ) : (
-                                    <div className="flex items-center justify-center h-full text-xs text-center p-1">
-                                        {file.name}
-                                    </div>
-                                )}
+                                <div
+                                    className={`h-11 w-11 rounded-md overflow-hidden bg-muted flex items-center justify-center ${
+                                        isImage && imageUrl ? "cursor-pointer" : ""
+                                    }`}
+                                    onClick={() => {
+                                        if (isImage && imageUrl) setSelectedImage(imageUrl)
+                                    }}
+                                >
+                                    {isImage && imageUrl ? (
+                                        <img
+                                            src={imageUrl}
+                                            alt={file.name}
+                                            className="object-cover w-full h-full"
+                                        />
+                                    ) : (
+                                        <>
+                                            {pdfInfo?.isExtracting ? (
+                                                <Loader2 className="h-5 w-5 text-blue-500 animate-spin" />
+                                            ) : isPdf ? (
+                                                <FileText className="h-5 w-5 text-red-500" />
+                                            ) : (
+                                                <FileCode className="h-5 w-5 text-blue-500" />
+                                            )}
+                                        </>
+                                    )}
+                                </div>
+
+                                <div className="min-w-0 flex-1">
+                                    <div className="text-xs font-medium truncate">{file.name}</div>
+                                    {secondary ? (
+                                        <div className="text-[10px] text-muted-foreground truncate">
+                                            {secondary}
+                                        </div>
+                                    ) : null}
+                                </div>
+
+                                <button
+                                    type="button"
+                                    onClick={() => onRemoveFile(file)}
+                                    className="shrink-0 rounded-md p-1 text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                                    aria-label="Remove file"
+                                >
+                                    <X className="h-4 w-4" />
+                                </button>
                             </div>
-                            <button
-                                type="button"
-                                onClick={() => onRemoveFile(file)}
-                                className="absolute -top-2 -right-2 bg-destructive rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity text-destructive-foreground"
-                                aria-label="Remove file"
-                            >
-                                <X className="h-3 w-3" />
-                            </button>
                         </div>
                     )
                 })}

@@ -28,7 +28,7 @@ interface ChatInputProps {
     insertPptToken?: { key: number; slideId: string; label: string; tag: string } | null;
     onInsertPptTokenHandled?: () => void;
     clearKey?: string | number;
-    uploadMode?: "all" | "imagesOnly" | "none";
+    uploadMode?: "all" | "imagesOnly" | "filesOnly" | "none";
 }
 
 export function ChatInput({
@@ -267,6 +267,12 @@ export function ChatInput({
 
     const showRichPlaceholder = isRich && !richPlainText.trim() && !richHasFocus;
 
+    const filterByUploadMode = (incoming: File[]) => {
+        if (uploadMode === "imagesOnly") return incoming.filter((f) => f.type.startsWith("image/"));
+        if (uploadMode === "filesOnly") return incoming.filter((f) => !f.type.startsWith("image/"));
+        return incoming;
+    };
+
     const handlePaste = (e: React.ClipboardEvent) => {
         if (uploadMode === "none") return;
         const items = e.clipboardData.items;
@@ -280,7 +286,7 @@ export function ChatInput({
         }
 
         if (pastedFiles.length > 0) {
-            const filtered = uploadMode === "imagesOnly" ? pastedFiles.filter((f) => f.type.startsWith("image/")) : pastedFiles;
+            const filtered = filterByUploadMode(pastedFiles);
             if (filtered.length === 0) return;
             e.preventDefault();
             handleFileChange([...files, ...filtered]);
@@ -291,7 +297,7 @@ export function ChatInput({
         e.preventDefault();
         if (uploadMode === "none") return;
         const droppedFiles = Array.from(e.dataTransfer.files);
-        const filtered = uploadMode === "imagesOnly" ? droppedFiles.filter((f) => f.type.startsWith("image/")) : droppedFiles;
+        const filtered = filterByUploadMode(droppedFiles);
         if (filtered.length > 0) {
             handleFileChange([...files, ...filtered]);
         }
@@ -303,7 +309,7 @@ export function ChatInput({
     const onFileInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         if (e.target.files?.length) {
             const incoming = Array.from(e.target.files);
-            const filtered = uploadMode === "imagesOnly" ? incoming.filter((f) => f.type.startsWith("image/")) : incoming;
+            const filtered = filterByUploadMode(incoming);
             if (filtered.length > 0) handleFileChange([...files, ...filtered]);
             e.target.value = ''; // Reset
         }
@@ -319,7 +325,7 @@ export function ChatInput({
             onDragOver={(e) => e.preventDefault()}
             onDrop={handleDrop}
         >
-            {uploadMode !== "none" && (
+            {(uploadMode === "all" || uploadMode === "imagesOnly") && (
                 <input
                     type="file"
                     multiple
@@ -329,10 +335,15 @@ export function ChatInput({
                     onChange={onFileInputChange}
                 />
             )}
-            {uploadMode === "all" && (
+            {(uploadMode === "all" || uploadMode === "filesOnly") && (
                 <input
                     type="file"
                     multiple
+                    accept={
+                        uploadMode === "filesOnly"
+                            ? ".pdf,application/pdf,text/*,.txt,.md,.markdown,.json,.csv,.xml,.yaml,.yml,.toml"
+                            : "image/*,.pdf,application/pdf,text/*,.txt,.md,.markdown,.json,.csv,.xml,.yaml,.yml,.toml"
+                    }
                     className="hidden"
                     ref={fileInputRef}
                     onChange={onFileInputChange}
@@ -497,17 +508,19 @@ export function ChatInput({
                         </ButtonWithTooltip>
                     )}
 
-                    <ButtonWithTooltip
-                        tooltipContent="上传图片"
-                        variant="ghost"
-                        size="icon"
-                        onClick={handleImageUpload}
-                        className="h-9 w-9 text-muted-foreground hover:text-foreground rounded-lg"
-                    >
-                        <ImageIcon className="w-5 h-5" />
-                    </ButtonWithTooltip>
+                    {(uploadMode === "all" || uploadMode === "imagesOnly") && (
+                        <ButtonWithTooltip
+                            tooltipContent="上传图片"
+                            variant="ghost"
+                            size="icon"
+                            onClick={handleImageUpload}
+                            className="h-9 w-9 text-muted-foreground hover:text-foreground rounded-lg"
+                        >
+                            <ImageIcon className="w-5 h-5" />
+                        </ButtonWithTooltip>
+                    )}
                     
-                    {uploadMode === "all" && (
+                    {(uploadMode === "all" || uploadMode === "filesOnly") && (
                         <ButtonWithTooltip
                             tooltipContent="上传文件"
                             variant="ghost"

@@ -367,6 +367,8 @@ export function ChatPanel({
       });
     };
 
+    const displayFileTexts: string[] = [];
+
     for (const file of files) {
         if (file.type.startsWith('image/')) {
              try {
@@ -392,10 +394,14 @@ export function ChatPanel({
                  } else {
                      content = await extractTextFileContent(file);
                  }
-                 fileTexts.push(`[${isPdfFile(file) ? 'PDF' : 'File'}: ${file.name}]\n${content}`);
+                 const block = `[${isPdfFile(file) ? 'PDF' : 'File'}: ${file.name}]\n${content}`;
+                 fileTexts.push(block);
+                 displayFileTexts.push(block);
              } catch (e) {
                  console.error("Failed to read file", file.name, e);
-                 fileTexts.push(`[File: ${file.name}] (Failed to read content)`);
+                 const block = `[File: ${file.name}]\n(Failed to read content)`;
+                 fileTexts.push(block);
+                 displayFileTexts.push(block);
              }
         }
     }
@@ -436,11 +442,10 @@ export function ChatPanel({
     const imageTags = currentUploadedImageItems
       .map((it) => `[[IMAGE|${safeTagText(it.name)}|${it.url}]]`)
       .join("\n");
-    const nonImageFiles = files.filter((f) => !f.type.startsWith("image/"));
     const displayParts = [
       imageTags,
       rawInput,
-      nonImageFiles.length > 0 ? `（已附加文件：${nonImageFiles.map((f) => f.name).join("，")}）` : "",
+      displayFileTexts.length > 0 ? displayFileTexts.join("\n\n") : "",
     ].filter(Boolean);
     const displayContent = displayParts.join("\n\n");
 
@@ -849,7 +854,7 @@ export function ChatPanel({
             onStop={handleStop}
             onFilesChange={setFiles}
             files={files}
-            uploadMode={workspaceId === "ppt" ? "imagesOnly" : "all"}
+                uploadMode={workspaceId === "ppt" ? "imagesOnly" : workspaceId === "cad" ? "filesOnly" : "all"}
             onOpenGlobalConstraints={() => setShowGlobalConstraints(true)}
             placeholder={inputPlaceholder}
             focusKey={workspaceId === "ppt" ? pptInputFocusTick : undefined}

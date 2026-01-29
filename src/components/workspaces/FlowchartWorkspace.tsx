@@ -11,12 +11,15 @@ import {
 interface FlowchartWorkspaceProps {
   initialXml?: string;
   onAddToChat?: (xmlSnippet: string) => void;
+  onXmlChange?: (xml: string) => void;
 }
 
-export function FlowchartWorkspace({ initialXml, onAddToChat }: FlowchartWorkspaceProps) {
+export function FlowchartWorkspace({ initialXml, onAddToChat, onXmlChange }: FlowchartWorkspaceProps) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const [isLoaded, setIsLoaded] = useState(false);
   const [selectedCells, setSelectedCells] = useState<any[]>([]);
+  const lastEmittedXmlRef = useRef<string>("");
+  const autosaveInFlightRef = useRef(false);
 
   // Default empty graph
   const emptyXml = '<mxGraphModel><root><mxCell id="0"/><mxCell id="1" parent="0"/></root></mxGraphModel>';
@@ -60,6 +63,47 @@ export function FlowchartWorkspace({ initialXml, onAddToChat }: FlowchartWorkspa
     window.addEventListener('message', handleMessage);
     return () => window.removeEventListener('message', handleMessage);
   }, []);
+
+  useEffect(() => {
+    if (!isLoaded) return;
+    const iframe = iframeRef.current;
+    if (!iframe?.contentWindow) return;
+
+    const requestExport = () => {
+      if (autosaveInFlightRef.current) return;
+      autosaveInFlightRef.current = true;
+
+      const handleExport = (e: MessageEvent) => {
+        if (typeof e.data !== "string") return;
+        try {
+          const msg = JSON.parse(e.data);
+          if (msg.event !== "export") return;
+          const xml = String(msg.data || "");
+          autosaveInFlightRef.current = false;
+          window.removeEventListener("message", handleExport);
+          if (!xml) return;
+          if (xml === lastEmittedXmlRef.current) return;
+          lastEmittedXmlRef.current = xml;
+          onXmlChange?.(xml);
+        } catch {
+        }
+      };
+
+      window.addEventListener("message", handleExport);
+      iframe.contentWindow.postMessage(
+        JSON.stringify({
+          action: "export",
+          format: "xml",
+          spin: "Saving...",
+        }),
+        "*"
+      );
+    };
+
+    requestExport();
+    const id = window.setInterval(requestExport, 2500);
+    return () => window.clearInterval(id);
+  }, [isLoaded, onXmlChange]);
 
   // Separate effect to handle XML loading when either loaded state or xml changes
   useEffect(() => {

@@ -151,13 +151,12 @@ export function LandingPage({ onStart }: LandingPageProps) {
                                                 <Layers className="w-5 h-5 text-blue-300" />
                                             </div>
                                             <div>
-                                                <div className="text-white/90 font-semibold">GraphRAG 论文流程图</div>
-                                                <div className="text-white/45 text-sm mt-0.5">输入需求 → 逐步搭建 Approach 图</div>
+                                                <div className="text-white/90 font-semibold">智绘流程蓝图</div>
+                                                <div className="text-white/45 text-sm mt-0.5">输入需求 → 生成并迭代流程图</div>
                                             </div>
                                         </div>
-                                        <div className="mt-2 text-xs text-white/55 space-y-1">
-                                            <div>· 论文级呈现：Approach 图风格</div>
-                                            <div>· 结构清晰：索引/聚类/检索一眼懂</div>
+                                        <div className="mt-2 text-sm text-white/60 space-y-1">
+                                            <div>· 原子级修改：仅改不满意处，保留满意部分</div>
                                         </div>
                                     </button>
 
@@ -178,9 +177,9 @@ export function LandingPage({ onStart }: LandingPageProps) {
                                                 <div className="text-white/45 text-sm mt-0.5">输入需求 → 2D 平面 → 装修图 / 物料清单</div>
                                             </div>
                                         </div>
-                                        <div className="mt-2 text-xs text-white/55 space-y-1">
-                                            <div>· 先 2D 后 装修图/物料：方案落地更快</div>
-                                            <div>· 风格可控：一键切换风格</div>
+                                        <div className="mt-2 text-sm text-white/55 space-y-1">
+                                            <div>· 全流程覆盖：需求→方案→2D→出图/清单</div>
+                                            <div>· 2D 支持原子修改</div>
                                         </div>
                                     </button>
 
@@ -197,13 +196,12 @@ export function LandingPage({ onStart }: LandingPageProps) {
                                                 <Layout className="w-5 h-5 text-cyan-300" />
                                             </div>
                                             <div>
-                                                <div className="text-white/90 font-semibold">演示文稿生成</div>
-                                                <div className="text-white/45 text-sm mt-0.5">参考 PDF → 缩略图列表 → 幻灯片播放</div>
+                                                <div className="text-white/90 font-semibold">智创演示文稿</div>
+                                                <div className="text-white/45 text-sm mt-0.5">文案 → 结构 → 幻灯片</div>
                                             </div>
                                         </div>
-                                        <div className="mt-2 text-xs text-white/55 space-y-1">
-                                            <div>· 内容复用：PDF 直接变演示</div>
-                                            <div>· 展示顺滑：缩略图 + 自动播放</div>
+                                        <div className="mt-2 text-sm text-white/60 space-y-1">
+                                            <div>· 单页/多页修改：支持精修与批量统一调整</div>
                                         </div>
                                     </button>
                                 </div>
