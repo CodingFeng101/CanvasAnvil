@@ -46,14 +46,38 @@ function createLimiter(max: number) {
         item.signal.removeEventListener("abort", item.onAbort);
         item.onAbort = undefined;
       }
+      let finished = false;
+      let abortHandler: (() => void) | null = null;
 
-      item
-        .run()
-        .then(item.resolve, item.reject)
-        .finally(() => {
-          active -= 1;
-          pump();
-        });
+      const finish = () => {
+        if (finished) return;
+        finished = true;
+        if (item.signal && abortHandler) {
+          item.signal.removeEventListener("abort", abortHandler as any);
+        }
+        active -= 1;
+        pump();
+      };
+
+      if (item.signal) {
+        abortHandler = () => {
+          const err = Object.assign(new Error("Aborted"), { name: "AbortError" });
+          item.reject(err);
+          finish();
+        };
+        item.signal.addEventListener("abort", abortHandler, { once: true });
+      }
+
+      item.run().then(
+        (value) => {
+          item.resolve(value);
+          finish();
+        },
+        (reason) => {
+          item.reject(reason);
+          finish();
+        }
+      );
     }
   };
 
@@ -87,7 +111,15 @@ export function getAIConfig(): AIConfig {
   if (typeof window === 'undefined') return DEFAULT_CONFIG;
   const stored = localStorage.getItem(STORAGE_KEY);
   if (stored) {
-    return { ...DEFAULT_CONFIG, ...JSON.parse(stored) };
+    try {
+      return { ...DEFAULT_CONFIG, ...JSON.parse(stored) };
+    } catch {
+      try {
+        localStorage.removeItem(STORAGE_KEY);
+      } catch {
+      }
+      return DEFAULT_CONFIG;
+    }
   }
   return DEFAULT_CONFIG;
 }
@@ -145,12 +177,9 @@ export async function streamChatMessage(
           onChunk(fullContent);
         }
       }
-      console.log("=== AI Chat Response ===");
-      console.log(fullContent);
-      console.log("========================");
       return fullContent;
     } catch (error) {
-      if ((error as any)?.name === "AbortError") {
+      if ((error as any)?.name === "AbortError" || (error as any)?.name === "APIUserAbortError") {
         throw error;
       }
       console.error("Chat Stream Error:", error);
@@ -160,8 +189,58 @@ export async function streamChatMessage(
 }
 
 // Simple non-stream wrapper
-export async function generateChatMessage(messages: ChatMessage[], model?: string) {
-  return streamChatMessage(messages, () => {}, model);
+export type GenerateChatMessageOptions = {
+  signal?: AbortSignal;
+  timeoutMs?: number;
+};
+
+export async function generateChatMessage(messages: ChatMessage[], model?: string, options?: GenerateChatMessageOptions) {
+  const timeoutMs = typeof options?.timeoutMs === "number" && options.timeoutMs > 0 ? options.timeoutMs : 0;
+  const externalSignal = options?.signal;
+
+  const controller = typeof AbortController !== "undefined" ? new AbortController() : null;
+  const mergedSignal = controller?.signal || externalSignal;
+  let timeoutId: any = null;
+
+  if (controller && externalSignal) {
+    if (externalSignal.aborted) controller.abort();
+    else externalSignal.addEventListener("abort", () => controller.abort(), { once: true });
+  }
+
+  if (controller && timeoutMs > 0) {
+    timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+  }
+
+  try {
+    return await limitModelCall(async () => {
+      const config = getAIConfig();
+      const client = getClient();
+
+      if (!config.apiKey) {
+        throw new Error("请先在设置中配置 API Key");
+      }
+
+      try {
+        const resp = await client.chat.completions.create(
+          {
+            model: model || config.chatModel,
+            messages,
+            stream: false,
+          },
+          mergedSignal ? ({ signal: mergedSignal } as any) : undefined
+        );
+        return resp.choices?.[0]?.message?.content || "";
+      } catch (error) {
+        if ((error as any)?.name === "AbortError" || (error as any)?.name === "APIUserAbortError") {
+          throw error;
+        }
+        console.error("Chat Error:", error);
+        throw error;
+      }
+    }, mergedSignal);
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId);
+  }
 }
 
 // Legacy non-stream function (kept for compatibility if needed)
@@ -172,7 +251,8 @@ export async function sendChatMessage(messages: ChatMessage[]) {
 // Image Generation Client
 export interface ImageGenerationRequest {
   prompt: string;
-  referenceImageUrl?: string; // For image-to-image
+  referenceImageUrl?: string; // Main reference (kept for backward compatibility)
+  additionalReferenceImageUrls?: string[]; // Additional references
 }
 
 // Helper to validate and clean URL
@@ -182,6 +262,42 @@ function cleanUrl(url: string) {
     // If it looks like a path but not absolute URL, return as is (might be base64 or relative)
     if (url.startsWith('data:image')) return url;
     return null;
+}
+
+function dataUrlToObjectUrl(dataUrl: string) {
+    if (typeof window === "undefined") return null;
+    if (!dataUrl.startsWith("data:image")) return null;
+    const comma = dataUrl.indexOf(",");
+    if (comma < 0) return null;
+    const header = dataUrl.slice(0, comma);
+    const data = dataUrl.slice(comma + 1);
+    const mimeMatch = header.match(/^data:(image\/[a-zA-Z0-9.+-]+);base64$/);
+    const mime = mimeMatch?.[1] || "image/png";
+    const binary = atob(data);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i);
+    const blob = new Blob([bytes], { type: mime });
+    return URL.createObjectURL(blob);
+}
+
+async function objectUrlToDataUrl(objectUrl: string) {
+    if (typeof window === "undefined") return null;
+    if (!objectUrl || !objectUrl.startsWith("blob:")) return null;
+    try {
+        const resp = await fetch(objectUrl);
+        const blob = await resp.blob();
+        return await new Promise<string | null>((resolve) => {
+            const reader = new FileReader();
+            reader.onerror = () => resolve(null);
+            reader.onloadend = () => {
+                const result = reader.result;
+                resolve(typeof result === "string" ? result : null);
+            };
+            reader.readAsDataURL(blob);
+        });
+    } catch {
+        return null;
+    }
 }
 
 function extractImageUrlFromContent(messageContent: any) {
@@ -219,10 +335,6 @@ function extractImageUrlFromContent(messageContent: any) {
 }
 
 function parseAIResponse(result: any) {
-    console.log("=== AI Image Response (Parsed) ===");
-    console.log(JSON.stringify(result, null, 2));
-    console.log("==================================");
-
     if (result.error) {
         throw new Error(result.error.message || "API Error");
     }
@@ -242,6 +354,25 @@ export async function generateImage(request: ImageGenerationRequest, signal?: Ab
       throw new Error("请先在设置中配置 API Key");
     }
   
+    let referenceImageUrl = request.referenceImageUrl;
+    if (referenceImageUrl && referenceImageUrl.startsWith("blob:")) {
+      const dataUrl = await objectUrlToDataUrl(referenceImageUrl);
+      if (dataUrl) referenceImageUrl = dataUrl;
+      else referenceImageUrl = undefined;
+    }
+
+    const additionalUrls: string[] = [];
+    if (request.additionalReferenceImageUrls && request.additionalReferenceImageUrls.length > 0) {
+        for (const url of request.additionalReferenceImageUrls) {
+            if (url.startsWith("blob:")) {
+                const dataUrl = await objectUrlToDataUrl(url);
+                if (dataUrl) additionalUrls.push(dataUrl);
+            } else {
+                additionalUrls.push(url);
+            }
+        }
+    }
+
     const myHeaders = new Headers();
     myHeaders.append("Authorization", `Bearer ${config.apiKey}`);
     myHeaders.append("Content-Type", "application/json");
@@ -253,13 +384,22 @@ export async function generateImage(request: ImageGenerationRequest, signal?: Ab
       }
     ];
   
-    if (request.referenceImageUrl) {
+    if (referenceImageUrl) {
       content.push({
         "type": "image_url",
         "image_url": {
-          "url": request.referenceImageUrl
+          "url": referenceImageUrl
         }
       });
+    }
+
+    for (const url of additionalUrls) {
+        content.push({
+            "type": "image_url",
+            "image_url": {
+                "url": url
+            }
+        });
     }
   
     const raw = JSON.stringify({
@@ -267,7 +407,7 @@ export async function generateImage(request: ImageGenerationRequest, signal?: Ab
       "messages": [
         {
           "role": "user",
-          "content": request.referenceImageUrl ? content : request.prompt
+          "content": referenceImageUrl || additionalUrls.length > 0 ? content : request.prompt
         }
       ],
       "stream": false
@@ -289,7 +429,15 @@ export async function generateImage(request: ImageGenerationRequest, signal?: Ab
       }
   
       const result = await response.json();
-      return parseAIResponse(result);
+      const url = parseAIResponse(result);
+      if (url && url.startsWith("data:image")) {
+        try {
+          const objectUrl = dataUrlToObjectUrl(url);
+          if (objectUrl) return objectUrl;
+        } catch {
+        }
+      }
+      return url;
     } catch (error) {
       console.error("Image Gen Error:", error);
       throw error;

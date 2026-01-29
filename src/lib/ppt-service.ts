@@ -16,6 +16,69 @@ export interface SlideEditRoutingItem {
     instruction: string;
 }
 
+const PPT_OUTLINE_SYSTEM = `You are a presentation outline generator.
+Return ONLY JSON. Do not wrap in markdown code blocks. Do not include any extra text.`;
+
+const parseJsonLoose = (text: string) => {
+    const raw = String(text || "").trim();
+    if (!raw) throw new Error("Empty AI response");
+
+    const tryParse = (s: string) => {
+        try {
+            return JSON.parse(s);
+        } catch {
+            return null;
+        }
+    };
+
+    const direct = tryParse(raw);
+    if (direct) return direct;
+
+    const jsonBlock = raw.match(/```json\s*([\s\S]*?)\s*```/i);
+    if (jsonBlock?.[1]) {
+        const inner = String(jsonBlock[1]).trim();
+        const parsed = tryParse(inner);
+        if (parsed) return parsed;
+    }
+
+    const findBalanced = (openChar: "[" | "{", closeChar: "]" | "}") => {
+        const start = raw.indexOf(openChar);
+        if (start < 0) return null;
+        let depth = 0;
+        for (let i = start; i < raw.length; i += 1) {
+            const ch = raw[i];
+            if (ch === openChar) depth += 1;
+            if (ch === closeChar) depth -= 1;
+            if (depth === 0) {
+                const candidate = raw.slice(start, i + 1);
+                const parsed = tryParse(candidate);
+                if (parsed) return parsed;
+                return null;
+            }
+        }
+        return null;
+    };
+
+    const arr = findBalanced("[", "]");
+    if (arr) return arr;
+    const obj = findBalanced("{", "}");
+    if (obj) return obj;
+
+    throw new Error("Failed to parse AI JSON");
+};
+
+const normalizePages = (value: any): PptPage[] => {
+    const asArray = Array.isArray(value) ? value : Array.isArray(value?.slides) ? value.slides : null;
+    if (!asArray) return [];
+    return asArray
+        .map((p: any) => ({
+            title: typeof p?.title === "string" ? p.title : "",
+            content: Array.isArray(p?.content) ? p.content.map((x: any) => String(x)) : Array.isArray(p?.bullets) ? p.bullets.map((x: any) => String(x)) : [],
+            description: typeof p?.description === "string" ? p.description : ""
+        }))
+        .filter((p: PptPage) => p.title.trim().length > 0);
+};
+
 const urlToDataUri = async (url: string): Promise<string> => {
     if (!url) return "";
     if (url.startsWith("data:")) return url;
@@ -48,26 +111,31 @@ const downloadBlob = (data: Uint8Array | ArrayBuffer, mime: string, filename: st
 export const pptService = {
     // 1. Generate Outline
     generateOutline: async (topic: string): Promise<PptPage[]> => {
-        const prompt = `Create a presentation outline for the topic: "${topic}". 
-        Return ONLY a JSON array of objects with "title" (string) and "content" (array of strings, bullet points) and "description" (string, visual description for image generation).
-        Example:
-        [
-            {"title": "Introduction", "content": ["Point 1", "Point 2"], "description": "A futuristic cityscape"},
-            ...
-        ]`;
-        
-        const response = await generateChatMessage([{ role: 'user', content: prompt }]);
-        
+        const prompt = `Create a presentation outline for the topic: "${topic}".
+Output a JSON array of slide objects:
+[
+  {"title": "Slide title", "content": ["bullet 1", "bullet 2"], "description": "visual description for image generation"},
+  ...
+]
+Rules:
+- Prefer 6-10 slides unless the topic requires otherwise.
+- Each bullet <= 12 words.
+- description must be concrete (subject, composition, lighting, colors, style).
+- Output ONLY JSON.`;
+
+        const response = await generateChatMessage([
+            { role: "system", content: PPT_OUTLINE_SYSTEM },
+            { role: "user", content: prompt }
+        ], undefined, { timeoutMs: 120000 });
+
         try {
-            // Extract JSON
-            const match = response.match(/\[[\s\S]*\]/);
-            if (match) {
-                return JSON.parse(match[0]);
-            }
-            return JSON.parse(response);
+            const parsed = parseJsonLoose(response);
+            const pages = normalizePages(parsed);
+            if (pages.length === 0) throw new Error("No outline parsed from AI response");
+            return pages;
         } catch (e) {
             console.error("Failed to parse outline", e);
-            throw new Error("Failed to parse AI response");
+            throw e instanceof Error ? e : new Error("Failed to parse AI response");
         }
     },
 
@@ -87,16 +155,20 @@ Rules:
 - Prefer 6-10 slides unless the description implies otherwise.
 - Bullets are short and specific (<= 12 words each).
 - Descriptions are concrete: subject, composition, lighting, colors, style.
-- Do not include markdown or extra text outside JSON.`;
+- Output ONLY JSON.`;
 
-        const response = await generateChatMessage([{ role: 'user', content: prompt }]);
         try {
-            const match = response.match(/\[[\s\S]*\]/);
-            if (match) return JSON.parse(match[0]);
-            return JSON.parse(response);
+            const response = await generateChatMessage([
+                { role: "system", content: PPT_OUTLINE_SYSTEM },
+                { role: "user", content: prompt }
+            ], undefined, { timeoutMs: 120000 });
+            const parsed = parseJsonLoose(response);
+            const pages = normalizePages(parsed);
+            if (pages.length === 0) throw new Error("No slides parsed from AI response");
+            return pages;
         } catch (e) {
             console.error("Failed to parse slides from description", e);
-            throw new Error("Failed to parse AI response");
+            throw e instanceof Error ? e : new Error("Failed to parse AI response");
         }
     },
 
@@ -150,6 +222,7 @@ Title: ${page.title}
 Bullets: ${(page.content || []).join(" | ")}
 Visual style: modern, professional, clean layout, high contrast, no watermarks.
 Scene/subject: ${page.description || page.title}
+Format: Landscape 16:9 aspect ratio.
 Rules:
 - Avoid large paragraphs of text in the image.
 - Prefer diagrammatic/illustrative composition matching the bullets.
@@ -161,13 +234,14 @@ Rules:
         });
     },
 
-    editPageImage: async (page: PptPage, instruction: string, referenceImageUrl?: string, templateImageUrl?: string) => {
+    editPageImage: async (page: PptPage, instruction: string, referenceImageUrl?: string, templateImageUrl?: string, additionalImages?: string[]) => {
         const prompt = `Edit the slide image based on instruction.
 Slide title: ${page.title}
 Bullets: ${(page.content || []).join(" | ")}
 Original visual description: ${page.description || ""}
 Instruction: ${instruction}
 Style: keep consistent with the template, professional, clean.
+Format: Landscape 16:9 aspect ratio.
 Rules:
 - Keep layout readable.
 - Do not add watermark.
@@ -176,7 +250,8 @@ Rules:
         const ref = referenceImageUrl || templateImageUrl;
         return await generateImage({
             prompt,
-            referenceImageUrl: ref
+            referenceImageUrl: ref,
+            additionalReferenceImageUrls: additionalImages
         });
     },
 

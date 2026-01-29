@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import { Highlight, themes } from "prism-react-renderer";
 import { ChevronRight, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -8,41 +8,48 @@ interface CodeBlockProps {
     code: string;
     language?: string;
     isStreaming?: boolean; // New prop to indicate if content is actively streaming
+    blockId?: string;
 }
 
-export function CodeBlock({ code, language = "xml", isStreaming = false }: CodeBlockProps) {
-    // Default to closed (false) initially
-    // If it's streaming, we keep it closed but show spinner.
-    const [isOpen, setIsOpen] = useState(false);
-    
-    // Auto-open if it's a very short snippet? No, user said "always collapsed".
-    // But we might want to ensure the code block updates even if closed.
+const openStateById = new Map<string, boolean>();
+
+export function CodeBlock({ code, language = "xml", isStreaming = false, blockId }: CodeBlockProps) {
+    const [isOpen, setIsOpen] = useState(() => {
+        if (blockId && openStateById.has(blockId)) return Boolean(openStateById.get(blockId));
+        return false;
+    });
+    const preRef = useRef<HTMLPreElement | null>(null);
+    const normalizedLanguage = useMemo(() => (language || "text").toLowerCase(), [language]);
+    const normalizedCode = useMemo(() => String(code ?? ""), [code]);
     
     return (
         <Collapsible
             open={isOpen}
-            onOpenChange={setIsOpen}
-            className="w-full my-2 border border-border/50 rounded-lg bg-zinc-900 overflow-hidden group shadow-sm"
+            onOpenChange={(open) => {
+                setIsOpen(open);
+                if (blockId) openStateById.set(blockId, open);
+            }}
+            className="w-full my-2 border border-border/50 rounded-lg bg-zinc-50 overflow-hidden group shadow-sm"
         >
-            <CollapsibleTrigger className="flex items-center gap-2 w-full p-2.5 cursor-pointer hover:bg-zinc-800/50 transition-colors text-xs font-medium text-zinc-400 select-none bg-zinc-900/50">
+            <CollapsibleTrigger className="flex items-center gap-2 w-full p-2.5 cursor-pointer hover:bg-zinc-100 transition-colors text-xs font-medium text-zinc-600 select-none bg-zinc-100/70">
                 <ChevronRight className={cn("w-4 h-4 transition-transform duration-200", isOpen && "rotate-90")} />
                 
-                <span className="uppercase font-semibold tracking-wider text-zinc-300">{language}</span>
+                <span className="uppercase font-semibold tracking-wider text-zinc-700">{normalizedLanguage}</span>
                 
                 {isStreaming ? (
                     <div className="flex items-center gap-2 ml-auto">
-                         <span className="text-[10px] text-blue-400 animate-pulse">Generating code...</span>
-                         <Loader2 className="w-3.5 h-3.5 animate-spin text-blue-500" />
+                         <span className="text-[10px] text-blue-600 animate-pulse">Generating code...</span>
+                         <Loader2 className="w-3.5 h-3.5 animate-spin text-blue-600" />
                     </div>
                 ) : (
-                    <span className="ml-auto text-[10px] opacity-70 font-mono">{code.length} chars</span>
+                    <span className="ml-auto text-[10px] opacity-70 font-mono">{normalizedCode.length} chars</span>
                 )}
             </CollapsibleTrigger>
             
             <CollapsibleContent>
                 <div className="p-0 border-t border-border/50">
-                     <div className="overflow-hidden w-full bg-zinc-950/50">
-                        <Highlight theme={themes.github} code={code} language={language}>
+                     <div className="overflow-hidden w-full bg-zinc-50">
+                        <Highlight theme={themes.github} code={normalizedCode} language={normalizedLanguage as any}>
                             {({
                                 className: _className,
                                 style,
@@ -51,31 +58,41 @@ export function CodeBlock({ code, language = "xml", isStreaming = false }: CodeB
                                 getTokenProps,
                             }) => (
                                 <pre
-                                    className="text-[11px] leading-relaxed overflow-x-auto overflow-y-auto max-h-[500px] scrollbar-thin p-3"
+                                    ref={preRef}
+                                    className="text-[11px] leading-relaxed overflow-x-hidden overflow-y-auto overscroll-contain max-h-[500px] scrollbar-thin p-3 whitespace-pre-wrap break-words"
                                     style={{
                                         ...style,
                                         fontFamily: "var(--font-mono), ui-monospace, monospace",
                                         backgroundColor: "transparent",
                                         margin: 0,
                                     }}
+                                    onWheelCapture={(e) => {
+                                        const el = preRef.current;
+                                        if (!el) return;
+                                        const atTop = el.scrollTop <= 0;
+                                        const atBottom = el.scrollTop + el.clientHeight >= el.scrollHeight - 1;
+                                        const dy = e.deltaY;
+                                        if (dy > 0 && !atBottom) e.stopPropagation();
+                                        if (dy < 0 && !atTop) e.stopPropagation();
+                                    }}
                                 >
-                                    {tokens.map((line, i) => (
-                                        <div
-                                            key={i}
-                                            {...getLineProps({ line })}
-                                            style={{ display: 'table-row' }}
-                                        >
-                                            <span className="table-cell select-none text-zinc-600 text-right pr-4 w-8">{i + 1}</span>
-                                            <span className="table-cell">
-                                                {line.map((token, key) => (
-                                                    <span
-                                                        key={key}
-                                                        {...getTokenProps({ token })}
-                                                    />
-                                                ))}
-                                            </span>
-                                        </div>
-                                    ))}
+                                    {tokens.map((line, i) => {
+                                        const lineProps = getLineProps({ line });
+                                        return (
+                                            <div
+                                                key={i}
+                                                {...lineProps}
+                                                className={cn("grid grid-cols-[3.25rem_1fr] gap-0", lineProps?.className)}
+                                            >
+                                                <span className="select-none text-zinc-400 text-right pr-4">{i + 1}</span>
+                                                <span className="min-w-0 whitespace-pre-wrap break-words">
+                                                    {line.map((token, key) => (
+                                                        <span key={key} {...getTokenProps({ token })} />
+                                                    ))}
+                                                </span>
+                                            </div>
+                                        );
+                                    })}
                                 </pre>
                             )}
                         </Highlight>

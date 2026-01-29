@@ -19,8 +19,6 @@ export function SettingsDialog() {
   const handleSave = () => {
     saveAIConfig(config);
     setIsOpen(false);
-    // Reload page to ensure all components pick up new config (simplest way)
-    window.location.reload();
   };
 
   return (
@@ -112,7 +110,7 @@ export function SettingsDialog() {
                 className="gap-2 rounded-lg shadow-sm"
               >
                 <Save className="w-4 h-4" />
-                保存并刷新
+                保存
               </Button>
             </div>
           </div>

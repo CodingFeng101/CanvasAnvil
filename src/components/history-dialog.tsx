@@ -6,14 +6,14 @@ import {
     DialogTitle,
 } from "@/components/ui/dialog"
 import { Button } from '@/components/ui/button';
-import { Clock, RotateCcw, FileCode } from 'lucide-react';
+import { Clock, RotateCcw, FileCode, Trash2 } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 
 export interface HistoryItem {
     id: string;
     timestamp: number;
     content: string; // XML or code
-    type: 'xml' | 'python' | 'json';
+    type: 'xml' | 'python' | 'json' | 'svg';
     summary?: string;
 }
 
@@ -22,6 +22,7 @@ interface HistoryDialogProps {
     onToggleHistory: (show: boolean) => void;
     history: HistoryItem[];
     onRestore: (item: HistoryItem) => void;
+    onClear?: () => void;
 }
 
 export function HistoryDialog({
@@ -29,6 +30,7 @@ export function HistoryDialog({
     onToggleHistory,
     history,
     onRestore,
+    onClear,
 }: HistoryDialogProps) {
     const formatDate = (ts: number) => {
         return new Date(ts).toLocaleString();
@@ -38,10 +40,23 @@ export function HistoryDialog({
         <Dialog open={showHistory} onOpenChange={onToggleHistory}>
             <DialogContent className="max-w-md max-h-[80vh] flex flex-col">
                 <DialogHeader>
-                    <DialogTitle className="flex items-center gap-2">
-                        <Clock className="w-5 h-5 text-muted-foreground" />
-                        版本历史
-                    </DialogTitle>
+                    <div className="flex items-center justify-between gap-3">
+                        <DialogTitle className="flex items-center gap-2">
+                            <Clock className="w-5 h-5 text-muted-foreground" />
+                            版本历史
+                        </DialogTitle>
+                        {history.length > 0 && onClear && (
+                            <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={onClear}
+                                className="gap-1 text-xs"
+                            >
+                                <Trash2 className="w-3.5 h-3.5" />
+                                清空
+                            </Button>
+                        )}
+                    </div>
                 </DialogHeader>
                 
                 <div className="flex-1 overflow-hidden mt-2">

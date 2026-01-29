@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { motion } from "framer-motion";
 import { generateImage } from '@/lib/ai-client';
 import { pptService, PptPage } from '@/lib/ppt-service';
-import { Loader2, Plus, Image as ImageIcon, MessageSquarePlus, Upload, Presentation, Sparkles, Check, Play, FileText, Download, Lightbulb } from 'lucide-react';
+import { Loader2, Plus, Image as ImageIcon, MessageSquarePlus, Upload, Presentation, Sparkles, Check, Play, FileText, Download, Lightbulb, X, ArrowLeft, ArrowRight } from 'lucide-react';
 import {
   ContextMenu,
   ContextMenuContent,
@@ -38,13 +38,22 @@ type CreationStep = 'idle' | 'input' | 'outline' | 'generating_content' | 'gener
 type CreationMode = 'idea' | 'outline' | 'description';
 type ReferenceFile = { id: string; filename: string; content: string; charCount: number };
 
-const AVAILABLE_TEMPLATES = [
-  { name: "科技商务", path: "/templates/template_b.png" },
-  { name: "学术汇报", path: "/templates/template_academic.jpg" },
-  { name: "极简主义", path: "/templates/template_s.png" },
-  { name: "矢量插画", path: "/templates/template_vector_illustration.png" },
-  { name: "活力黄", path: "/templates/template_y.png" },
-  { name: "磨砂玻璃", path: "/templates/template_glass.png" },
+type PresetTemplate = { id: string; name: string; path: string };
+type UploadTemplate = { id: string; name: string; dataUrl: string };
+type TemplateItem =
+  | { id: string; name: string; kind: "preset"; previewSrc: string; presetPath: string }
+  | { id: string; name: string; kind: "upload"; previewSrc: string; dataUrl: string };
+
+const PPT_TEMPLATE_UPLOADS_KEY = "ppt_template_uploads_v1";
+const PPT_TEMPLATE_HIDDEN_PRESETS_KEY = "ppt_template_hidden_presets_v1";
+
+const PRESET_TEMPLATES: PresetTemplate[] = [
+  { id: "preset-tech-business", name: "科技商务", path: "/templates/template_b.png" },
+  { id: "preset-academic", name: "学术汇报", path: "/templates/template_academic.jpg" },
+  { id: "preset-minimal", name: "极简主义", path: "/templates/template_s.png" },
+  { id: "preset-vector", name: "矢量插画", path: "/templates/template_vector_illustration.png" },
+  { id: "preset-yellow", name: "活力黄", path: "/templates/template_y.png" },
+  { id: "preset-glass", name: "磨砂玻璃", path: "/templates/template_glass.png" },
 ];
 
 const MODEL_CONCURRENCY = 30;
@@ -54,16 +63,34 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, incomingEdit
   const [localSlides, setLocalSlides] = useState<SlideData[]>([]);
   const [currentSlideIndex, setCurrentSlideIndex] = useState(0);
   const [templateImage, setTemplateImage] = useState<string | null>(null);
-  const [uploadedTemplateImage, setUploadedTemplateImage] = useState<string | null>(null);
-  const [selectedTemplatePath, setSelectedTemplatePath] = useState<string | null>(null);
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null);
+  const [uploadedTemplates, setUploadedTemplates] = useState<UploadTemplate[]>(() => {
+    if (typeof window === "undefined") return [];
+    try {
+      const raw = localStorage.getItem(PPT_TEMPLATE_UPLOADS_KEY);
+      const parsed = raw ? JSON.parse(raw) : [];
+      if (!Array.isArray(parsed)) return [];
+      return parsed
+        .filter((x: any) => x && typeof x.id === "string" && typeof x.name === "string" && typeof x.dataUrl === "string")
+        .map((x: any) => ({ id: x.id, name: x.name, dataUrl: x.dataUrl }));
+    } catch {
+      return [];
+    }
+  });
+  const [hiddenPresetTemplateIds, setHiddenPresetTemplateIds] = useState<string[]>(() => {
+    if (typeof window === "undefined") return [];
+    try {
+      const raw = localStorage.getItem(PPT_TEMPLATE_HIDDEN_PRESETS_KEY);
+      const parsed = raw ? JSON.parse(raw) : [];
+      return Array.isArray(parsed) ? parsed.map((x: any) => String(x)) : [];
+    } catch {
+      return [];
+    }
+  });
   const [generatedImages, setGeneratedImages] = useState<Record<string, string>>({});
   const [imageVersions, setImageVersions] = useState<Record<string, Array<{ id: string; url: string; timestamp: number; type: 'generated' | 'edited'; instruction?: string }>>>({});
   const [currentImageVersionId, setCurrentImageVersionId] = useState<Record<string, string>>({});
   const [isGeneratingImage, setIsGeneratingImage] = useState(false);
-  const [selectedSlideIds, setSelectedSlideIds] = useState<Record<string, boolean>>({});
-  const [bulkEditOpen, setBulkEditOpen] = useState(false);
-  const [bulkEditText, setBulkEditText] = useState("");
-  const [isApplyingBulkEdit, setIsApplyingBulkEdit] = useState(false);
   
   // Creation Wizard State
   const [creationStep, setCreationStep] = useState<CreationStep>('idle');
@@ -79,43 +106,132 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, incomingEdit
   const referenceFileInputRef = useRef<HTMLInputElement | null>(null);
   const [slideshowOpen, setSlideshowOpen] = useState(false);
   const [slideshowIndex, setSlideshowIndex] = useState(0);
-  const [slideshowAuto, setSlideshowAuto] = useState(true);
-  
-  // Load default template on mount
+  const [windowDimensions, setWindowDimensions] = useState({ width: 0, height: 0 });
+
+  const templates: TemplateItem[] = [
+    ...PRESET_TEMPLATES
+      .filter((t) => !hiddenPresetTemplateIds.includes(t.id))
+      .map((t) => ({ id: t.id, name: t.name, kind: "preset" as const, previewSrc: t.path, presetPath: t.path })),
+    ...uploadedTemplates.map((t) => ({ id: t.id, name: t.name, kind: "upload" as const, previewSrc: t.dataUrl, dataUrl: t.dataUrl })),
+  ];
+
   useEffect(() => {
-    const loadDefaultTemplate = async () => {
-      try {
-        const response = await fetch(AVAILABLE_TEMPLATES[0].path);
-        const blob = await response.blob();
-        const reader = new FileReader();
-        reader.onloadend = () => {
-          setTemplateImage(reader.result as string);
-          setSelectedTemplatePath(AVAILABLE_TEMPLATES[0].path);
-        };
-        reader.readAsDataURL(blob);
-      } catch (e) {
-        console.error("Failed to load default template", e);
-      }
-    };
-    loadDefaultTemplate();
+    if (typeof window === "undefined") return;
+    try {
+      localStorage.setItem(PPT_TEMPLATE_UPLOADS_KEY, JSON.stringify(uploadedTemplates));
+    } catch {
+    }
+  }, [uploadedTemplates]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      localStorage.setItem(PPT_TEMPLATE_HIDDEN_PRESETS_KEY, JSON.stringify(hiddenPresetTemplateIds));
+    } catch {
+    }
+  }, [hiddenPresetTemplateIds]);
+
+  useEffect(() => {
+      if (typeof window === "undefined") return;
+      const handleResize = () => {
+          setWindowDimensions({ width: window.innerWidth, height: window.innerHeight });
+      };
+      window.addEventListener('resize', handleResize);
+      handleResize();
+      return () => window.removeEventListener('resize', handleResize);
   }, []);
 
-  const handleTemplateSelect = async (path: string) => {
-      try {
-        const response = await fetch(path);
-        const blob = await response.blob();
-        const reader = new FileReader();
-        reader.onloadend = () => {
-          setTemplateImage(reader.result as string);
-          setSelectedTemplatePath(path);
-        };
-        reader.readAsDataURL(blob);
-      } catch (e) {
-        console.error("Failed to load template", e);
+  const getSlideshowDimensions = () => {
+      if (!windowDimensions.width) return { width: '90vw', height: '50.625vw' }; // Fallback
+      const maxWidth = windowDimensions.width * 0.9;
+      const maxHeight = windowDimensions.height * 0.85;
+      
+      let w = maxWidth;
+      let h = w * 9 / 16;
+      
+      if (h > maxHeight) {
+          h = maxHeight;
+          w = h * 16 / 9;
       }
+      return { width: w, height: h };
   };
 
-  // Sync prop data to local state
+  const setTemplateFromItem = async (item: TemplateItem) => {
+    setSelectedTemplateId(item.id);
+    if (item.kind === "upload") {
+      setTemplateImage(item.dataUrl);
+      return;
+    }
+    try {
+      const response = await fetch(item.presetPath);
+      const blob = await response.blob();
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setTemplateImage(reader.result as string);
+      };
+      reader.readAsDataURL(blob);
+    } catch (e) {
+      console.error("Failed to load template", e);
+    }
+  };
+
+  useEffect(() => {
+    if (templates.length === 0) {
+      setSelectedTemplateId(null);
+      setTemplateImage(null);
+      return;
+    }
+    const exists = selectedTemplateId && templates.some((t) => t.id === selectedTemplateId);
+    if (exists) return;
+    void setTemplateFromItem(templates[0]);
+  }, [selectedTemplateId, hiddenPresetTemplateIds.join("|"), uploadedTemplates.map((t) => t.id).join("|")]);
+
+  const addUploadedTemplates = async (files: File[]) => {
+    const imageFiles = Array.from(files || []).filter((f) => f && f.type.startsWith("image/"));
+    if (imageFiles.length === 0) return;
+    const toDataUrl = (file: File) =>
+      new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result as string);
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+    const baseName = (name: string) => String(name || "").replace(/\.[^.]+$/, "") || "模板";
+
+    const created: UploadTemplate[] = [];
+    for (const f of imageFiles) {
+      try {
+        const dataUrl = await toDataUrl(f);
+        const id = `upload-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+        const name = baseName(f.name);
+        created.push({ id, name, dataUrl });
+      } catch (e) {
+        console.error("Failed to read template image", e);
+      }
+    }
+    if (created.length === 0) return;
+    setUploadedTemplates((prev) => [...prev, ...created]);
+    const last = created[created.length - 1];
+    setSelectedTemplateId(last.id);
+    setTemplateImage(last.dataUrl);
+  };
+
+  const handleTemplateUploadInputChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    e.target.value = "";
+    await addUploadedTemplates(files);
+  };
+
+  const deleteTemplate = (item: TemplateItem) => {
+    if (item.kind === "preset") {
+      setHiddenPresetTemplateIds((prev) => (prev.includes(item.id) ? prev : [...prev, item.id]));
+      return;
+    }
+    setUploadedTemplates((prev) => prev.filter((t) => t.id !== item.id));
+  };
+
+  const [isApplyingEdits, setIsApplyingEdits] = useState(false);
+
   useEffect(() => {
     if (data && data.slides && data.slides.length > 0) {
       setLocalSlides(data.slides);
@@ -143,6 +259,7 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, incomingEdit
               : null;
 
       if (!incomingSlides || incomingSlides.length === 0) return;
+      const uploadedImages: string[] = Array.isArray(parsed?.uploadedImages) ? parsed.uploadedImages : [];
 
       const mergedSlides: SlideData[] = (() => {
           const existing = localSlides.length > 0 ? [...localSlides] : [];
@@ -168,8 +285,7 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, incomingEdit
       })();
 
       setLocalSlides(mergedSlides);
-      setCreationStep('done');
-      onPptReadyChange?.(true);
+      const allowImageEdits = creationStep === 'done';
 
       const editTasks: Array<() => Promise<void>> = [];
       for (const inc of incomingSlides) {
@@ -185,16 +301,17 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, incomingEdit
           const slide = mergedSlides.find((s) => s.id === id);
           if (!slide) continue;
 
-          if (incomingImageUrl.trim()) {
+          if (allowImageEdits && incomingImageUrl.trim()) {
               pushImageVersion(id, incomingImageUrl, 'edited', instruction.trim() ? instruction : undefined);
               continue;
           }
 
-          if (!instruction.trim()) continue;
+          if (!allowImageEdits || !instruction.trim()) continue;
           editTasks.push(async () => {
               const versions = imageVersions[id] || [];
               const currentVersion = currentImageVersionId[id];
               const currentUrl = currentVersion ? versions.find(v => v.id === currentVersion)?.url : generatedImages[id];
+              if (!currentUrl) return;
 
               const page: PptPage = {
                   id,
@@ -202,7 +319,13 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, incomingEdit
                   content: slide.content || [],
                   description: slide.description
               };
-              const editedUrl = await pptService.editPageImage(page, instruction, currentUrl || undefined, templateImage || undefined);
+              const editedUrl = await pptService.editPageImage(
+                  page, 
+                  instruction, 
+                  currentUrl || undefined, 
+                  templateImage || undefined,
+                  uploadedImages
+              );
               if (editedUrl) {
                   pushImageVersion(id, editedUrl, 'edited', instruction);
               }
@@ -210,17 +333,22 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, incomingEdit
       }
 
       if (editTasks.length > 0) {
+          setIsApplyingEdits(true);
           try {
               await runInParallel(editTasks, MODEL_CONCURRENCY);
           } catch (e) {
               console.error("Failed to apply image edits", e);
+          } finally {
+              setIsApplyingEdits(false);
           }
       }
   };
 
   useEffect(() => {
       if (!incomingEdit?.payload) return;
-      applyIncomingSlideEdits(incomingEdit.payload);
+      Promise.resolve(applyIncomingSlideEdits(incomingEdit.payload)).catch((e) => {
+          console.error("Failed to apply incoming slide edits", e);
+      });
   }, [incomingEdit?.id]);
 
   const activeSlides = localSlides.length > 0 ? localSlides : [];
@@ -238,15 +366,6 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, incomingEdit
       setSlideshowIndex(currentSlideIndex);
   }, [slideshowOpen]);
 
-  useEffect(() => {
-      if (!slideshowOpen || !slideshowAuto) return;
-      if (activeSlides.length <= 1) return;
-      const id = window.setInterval(() => {
-          setSlideshowIndex((prev) => (prev + 1) % activeSlides.length);
-      }, 3000);
-      return () => window.clearInterval(id);
-  }, [slideshowOpen, slideshowAuto, activeSlides.length]);
-
   const pushImageVersion = (slideId: string, url: string, type: 'generated' | 'edited', instruction?: string) => {
       const versionId = `v-${Date.now()}-${Math.random().toString(16).slice(2)}`;
       setImageVersions(prev => ({
@@ -258,19 +377,6 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, incomingEdit
       }));
       setCurrentImageVersionId(prev => ({ ...prev, [slideId]: versionId }));
       setGeneratedImages(prev => ({ ...prev, [slideId]: url }));
-  };
-
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        setTemplateImage(e.target?.result as string);
-        setUploadedTemplateImage(e.target?.result as string);
-        setSelectedTemplatePath("upload");
-      };
-      reader.readAsDataURL(file);
-    }
   };
 
   const addReferenceFiles = async (files: File[]) => {
@@ -323,10 +429,10 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, incomingEdit
   };
 
   const resetGenerationState = () => {
+      console.log("Resetting generation state...");
       setGeneratedImages({});
       setImageVersions({});
       setCurrentImageVersionId({});
-      setSelectedSlideIds({});
       setCurrentSlideIndex(0);
   };
 
@@ -371,7 +477,7 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, incomingEdit
           if (heading) {
               pushCurrent();
               current = {
-                  id: `slide-${slides.length}`,
+                  id: `slide-${slides.length + 1}`,
                   title: heading[2].trim() || `第 ${slides.length + 1} 页`,
                   content: []
               };
@@ -380,7 +486,7 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, incomingEdit
           const bullet = l.match(/^[-•]\s+(.*)$/);
           if (bullet) {
               if (!current) {
-                  current = { id: `slide-${slides.length}`, title: `第 ${slides.length + 1} 页`, content: [] };
+                  current = { id: `slide-${slides.length + 1}`, title: `第 ${slides.length + 1} 页`, content: [] };
               }
               current.content.push(bullet[1].trim());
               continue;
@@ -388,7 +494,7 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, incomingEdit
           const desc = l.match(/^description[:：]\s*(.*)$/i);
           if (desc) {
               if (!current) {
-                  current = { id: `slide-${slides.length}`, title: `第 ${slides.length + 1} 页`, content: [] };
+                  current = { id: `slide-${slides.length + 1}`, title: `第 ${slides.length + 1} 页`, content: [] };
               }
               current.description = desc[1].trim();
               continue;
@@ -404,9 +510,13 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, incomingEdit
       for (const task of tasks) {
           const p = Promise.resolve().then(() => task());
           results.push(p);
-          const e: Promise<void> = p.then(() => {
+          let e: Promise<void>;
+          e = p
+            .catch(() => {
+            })
+            .then(() => {
               executing.splice(executing.indexOf(e), 1);
-          });
+            });
           executing.push(e);
           if (executing.length >= limit) {
               await Promise.race(executing);
@@ -443,7 +553,7 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, incomingEdit
       try {
           const pages = await pptService.generateSlidesFromDescription(descriptionInput);
           const nextSlides: SlideData[] = pages.map((p, i) => ({
-              id: `slide-${i}`,
+              id: `slide-${i + 1}`,
               title: p.title,
               content: p.content,
               description: p.description
@@ -469,8 +579,11 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, incomingEdit
     
     try {
         const pages = await pptService.generateOutline(ideaInput);
+        if (!Array.isArray(pages) || pages.length === 0) {
+            throw new Error("Invalid outline response");
+        }
         const slides: SlideData[] = pages.map((p, i) => ({
-            id: `slide-${i}`,
+            id: `slide-${i + 1}`,
             title: p.title,
             content: p.content,
             description: p.description
@@ -480,7 +593,13 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, incomingEdit
         onPptReadyChange?.(true);
     } catch (e) {
         console.error("Failed to generate outline", e);
-        alert("生成大纲失败，请重试");
+        const name = (e as any)?.name;
+        const isAbort = name === "AbortError" || name === "APIUserAbortError";
+        const msg = isAbort ? "生成大纲超时或被中断（120s）。请检查网络/模型可用性后重试。" : e instanceof Error ? e.message : "生成大纲失败，请重试";
+        alert(msg);
+        setCreationStep("idle");
+    } finally {
+        setProgress({ current: 0, total: 0, message: "" });
     }
   };
 
@@ -640,7 +759,7 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, incomingEdit
         }
 
         if (imageUrl) {
-            const slideId = currentSlide.id || `slide-${currentSlideIndex}`;
+            const slideId = currentSlide.id || `slide-${currentSlideIndex + 1}`;
             pushImageVersion(slideId, imageUrl, 'generated');
         }
     } catch (e) {
@@ -652,70 +771,12 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, incomingEdit
 
   const handleAddSlideToChat = (slide: SlideData) => {
     if (onAddToChat) {
-        const slideId = slide.id || `slide-${currentSlideIndex}`;
+        const slideId = slide.id || `slide-${currentSlideIndex + 1}`;
         const currentVersion = currentImageVersionId[slideId];
         const versions = imageVersions[slideId] || [];
         const imageUrl = currentVersion ? versions.find(v => v.id === currentVersion)?.url : generatedImages[slideId];
         onAddToChat(JSON.stringify({ ...slide, imageUrl }, null, 2), `${slideId}.json`);
     }
-  };
-
-  const handleAddSelectedSlidesToChat = () => {
-      if (!onAddToChat) return;
-      const selected = activeSlides
-          .filter(s => selectedSlideIds[s.id] )
-          .map((slide) => {
-              const slideId = slide.id;
-              const currentVersion = currentImageVersionId[slideId];
-              const versions = imageVersions[slideId] || [];
-              const imageUrl = currentVersion ? versions.find(v => v.id === currentVersion)?.url : generatedImages[slideId];
-              return { ...slide, imageUrl };
-          });
-
-      if (selected.length === 0) return;
-      onAddToChat(JSON.stringify({ slides: selected }, null, 2), `slides-selected.json`);
-  };
-
-  const handleApplyBulkEdit = async () => {
-      if (!bulkEditText.trim() || isApplyingBulkEdit) return;
-      setIsApplyingBulkEdit(true);
-      try {
-          const routes = await pptService.routeSlideEdits(
-              activeSlides.map(s => ({ title: s.title, bullets: s.content || [] })),
-              bulkEditText
-          );
-
-          const editTasks = routes.map((r) => async () => {
-              const idx = r.slideIndex;
-              const slide = activeSlides[idx];
-              if (!slide) return;
-
-              const slideId = slide.id;
-              const versions = imageVersions[slideId] || [];
-              const currentVersion = currentImageVersionId[slideId];
-              const currentUrl = currentVersion ? versions.find(v => v.id === currentVersion)?.url : generatedImages[slideId];
-
-              const page: PptPage = {
-                  id: slideId,
-                  title: slide.title,
-                  content: slide.content || [],
-                  description: slide.description
-              };
-
-              const editedUrl = await pptService.editPageImage(page, r.instruction, currentUrl || undefined, templateImage || undefined);
-              if (editedUrl) {
-                  pushImageVersion(slideId, editedUrl, 'edited', r.instruction);
-              }
-          });
-
-          await runInParallel(editTasks, MODEL_CONCURRENCY);
-          setBulkEditOpen(false);
-          setBulkEditText("");
-      } catch (e) {
-          console.error("Bulk edit failed", e);
-      } finally {
-          setIsApplyingBulkEdit(false);
-      }
   };
 
   const handleDownloadPpt = async () => {
@@ -763,7 +824,7 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, incomingEdit
   };
 
   // Render Creation Wizard
-  if (activeSlides.length === 0 && (creationStep === 'idle' || creationStep === 'input')) {
+  if (activeSlides.length === 0 && (creationStep === 'idle' || creationStep === 'input' || creationStep === 'done')) {
       const tabs = [
         { id: 'idea', label: '想法' },
         { id: 'outline', label: '大纲' },
@@ -802,52 +863,42 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, incomingEdit
                         </label>
                         
                         <div className="grid gap-4 grid-cols-[repeat(auto-fill,minmax(180px,1fr))]">
-                             {/* Upload Card */}
-                             <label className={`cursor-pointer border-2 border-dashed rounded-xl transition-all duration-200 overflow-hidden relative aspect-video flex flex-col items-center justify-center group ${
-                                selectedTemplatePath === "upload"
-                                    ? "border-blue-500 bg-blue-50/30 dark:bg-zinc-800/50"
-                                    : "border-zinc-200 dark:border-zinc-700 hover:border-blue-500 hover:bg-blue-50/30 dark:hover:bg-zinc-800/50"
-                             }`}>
-                                {uploadedTemplateImage ? (
-                                    <>
-                                        <img src={uploadedTemplateImage} className="w-full h-full object-cover opacity-80 group-hover:opacity-100 transition-opacity" alt="Template" />
-                                        {selectedTemplatePath === "upload" && (
-                                            <div className="absolute top-2 left-2 rounded-full bg-blue-600 px-2 py-0.5 text-[10px] font-medium text-white shadow">
-                                                已选择
-                                            </div>
-                                        )}
-                                        <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                                            <span className="text-white text-xs font-medium px-3 py-1 bg-black/50 rounded-full backdrop-blur-sm">更换图片</span>
-                                        </div>
-                                    </>
-                                ) : (
-                                    <div className="flex flex-col items-center text-zinc-400 group-hover:text-blue-500 transition-colors">
-                                        <div className="w-10 h-10 rounded-full bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center mb-2 group-hover:bg-blue-100 dark:group-hover:bg-blue-900/30 transition-colors">
-                                            <Upload className="w-5 h-5" />
-                                        </div>
-                                        <span className="text-xs font-medium">上传参考图</span>
+                            <label className="cursor-pointer border-2 border-dashed rounded-xl transition-all duration-200 overflow-hidden relative aspect-video flex flex-col items-center justify-center group border-zinc-200 dark:border-zinc-700 hover:border-blue-500 hover:bg-blue-50/30 dark:hover:bg-zinc-800/50">
+                                <div className="flex flex-col items-center text-zinc-400 group-hover:text-blue-500 transition-colors">
+                                    <div className="w-10 h-10 rounded-full bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center mb-2 group-hover:bg-blue-100 dark:group-hover:bg-blue-900/30 transition-colors">
+                                        <Upload className="w-5 h-5" />
                                     </div>
-                                )}
-                                <input type="file" accept="image/*" className="hidden" onChange={handleFileUpload} />
+                                    <span className="text-xs font-medium">添加模板</span>
+                                </div>
+                                <input type="file" accept="image/*" multiple className="hidden" onChange={handleTemplateUploadInputChange} />
                             </label>
-
-                            {/* Preset Templates */}
-                            {AVAILABLE_TEMPLATES.map((t) => (
-                                <div 
-                                    key={t.path}
-                                    onClick={() => handleTemplateSelect(t.path)}
+                            {templates.map((t) => (
+                                <div
+                                    key={t.id}
+                                    onClick={() => void setTemplateFromItem(t)}
                                     className={`cursor-pointer border rounded-xl overflow-hidden relative aspect-video group transition-all duration-200 bg-zinc-100 dark:bg-zinc-900 ${
-                                        selectedTemplatePath === t.path
+                                        selectedTemplateId === t.id
                                             ? "border-blue-500 ring-2 ring-blue-500 shadow-md"
                                             : "border-zinc-200 dark:border-zinc-700 hover:ring-2 hover:ring-blue-500 hover:shadow-md"
                                     }`}
                                 >
-                                    <img src={t.path} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" alt={t.name} />
-                                    {selectedTemplatePath === t.path && (
+                                    <img src={t.previewSrc} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" alt={t.name} />
+                                    {selectedTemplateId === t.id && (
                                         <div className="absolute top-2 left-2 rounded-full bg-blue-600 px-2 py-0.5 text-[10px] font-medium text-white shadow">
                                             已选择
                                         </div>
                                     )}
+                                    <button
+                                        type="button"
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            deleteTemplate(t);
+                                        }}
+                                        className="absolute top-2 right-2 rounded-full bg-black/50 text-white p-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                                        title="删除模板"
+                                    >
+                                        <X className="w-3.5 h-3.5" />
+                                    </button>
                                     <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 to-transparent p-3 pt-8 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
                                         <div className="text-white text-xs font-medium text-center">{t.name}</div>
                                     </div>
@@ -1127,12 +1178,6 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, incomingEdit
         <div className="flex items-center gap-4">
             <h2 className="font-semibold text-sm text-foreground">PPT 演示文稿</h2>
             <div className="h-4 w-px bg-border"></div>
-            <label className="flex items-center gap-2 text-xs text-muted-foreground hover:text-foreground cursor-pointer transition-colors">
-                <Upload className="w-3.5 h-3.5" />
-                <span>{templateImage ? "已上传模板" : "上传模板参考图"}</span>
-                <input type="file" accept="image/*" className="hidden" onChange={handleFileUpload} />
-            </label>
-            <div className="h-4 w-px bg-border"></div>
             <button
                 onClick={() => setSlideshowOpen(true)}
                 disabled={activeSlides.length === 0}
@@ -1168,37 +1213,6 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, incomingEdit
       <div className="flex-1 flex overflow-hidden">
         {/* Thumbnails */}
         <div className="w-64 bg-zinc-50 dark:bg-zinc-900 border-r border-border overflow-y-auto p-4 space-y-4">
-          <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-7 px-2 text-xs"
-              onClick={() => {
-                const next: Record<string, boolean> = {};
-                for (const s of activeSlides) next[s.id] = true;
-                setSelectedSlideIds(next);
-              }}
-            >
-              全选
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-7 px-2 text-xs"
-              onClick={() => setSelectedSlideIds({})}
-            >
-              清空
-            </Button>
-            <Button
-              variant="default"
-              size="sm"
-              className="h-7 px-2 text-xs ml-auto"
-              onClick={handleAddSelectedSlidesToChat}
-              disabled={Object.keys(selectedSlideIds).length === 0}
-            >
-              加入对话
-            </Button>
-          </div>
           {activeSlides.map((slide, index) => {
             const hasGeneratedImage = generatedImages[slide.id || index];
             return (
@@ -1213,24 +1227,18 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, incomingEdit
                     }`}
                     >
                     <div
-                      className="absolute top-1 left-1 z-20 flex items-center gap-1 bg-white/90 dark:bg-zinc-900/80 rounded px-1.5 py-1 border border-border/50"
+                      className="absolute top-1 left-1 z-20"
                       onClick={(e) => e.stopPropagation()}
                     >
-                      <input
-                        type="checkbox"
-                        checked={!!selectedSlideIds[slide.id]}
-                        onChange={(e) => {
-                          const checked = e.target.checked;
-                          setSelectedSlideIds(prev => {
-                            const next = { ...prev };
-                            if (checked) next[slide.id] = true;
-                            else delete next[slide.id];
-                            return next;
-                          });
-                        }}
-                        className="h-3 w-3"
-                      />
-                      <span className="text-[10px] text-muted-foreground">选中</span>
+                      <Button
+                        size="sm"
+                        variant="destructive"
+                        className="h-6 px-2 text-[10px] gap-1 shadow-sm opacity-0 group-hover:opacity-100 transition-opacity"
+                        onClick={() => handleAddSlideToChat(slide)}
+                      >
+                        <Presentation className="w-3 h-3" />
+                        加入对话
+                      </Button>
                     </div>
                     {/* Thumbnail Preview */}
                     {hasGeneratedImage ? (
@@ -1285,15 +1293,6 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, incomingEdit
               {isGeneratingImage ? <Loader2 className="w-3 h-3 mr-1 animate-spin" /> : null}
               重渲染本页
             </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              className="h-7 px-2 text-xs"
-              onClick={() => setBulkEditOpen(true)}
-              disabled={activeSlides.length === 0}
-            >
-              批量修改
-            </Button>
             {currentSlide && (imageVersions[currentSlide.id] || []).length > 0 && (
               <select
                 className="h-7 text-xs rounded-md border border-input bg-background px-2"
@@ -1320,10 +1319,13 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, incomingEdit
           {currentSlide ? (
              <ContextMenu>
                 <ContextMenuTrigger className="outline-none">
-                    <div className="relative w-full max-w-[1100px] aspect-[16/9] bg-white shadow-2xl rounded-sm overflow-hidden flex flex-col transition-transform duration-300">
+                    <div 
+                        className="relative w-full max-w-[1100px] bg-white shadow-2xl rounded-sm overflow-hidden flex flex-col transition-transform duration-300"
+                        style={{ aspectRatio: "16/9" }}
+                    >
                         {/* Display either generated image or DOM layout */}
                         {currentSlideImage ? (
-                            <img src={currentSlideImage} className="w-full h-full object-cover" alt="AI Generated Slide" />
+                            <img src={currentSlideImage} className="w-full h-full object-contain bg-white" alt="AI Generated Slide" />
                         ) : (
                             <div className="w-full h-full p-12 flex flex-col relative">
                                 {/* Background Template */}
@@ -1355,6 +1357,14 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, incomingEdit
                         )}
                         
                         {/* Overlay Label if Generated */}
+                        {(isApplyingEdits || isGeneratingImage) && (
+                            <div className="absolute inset-0 z-50 flex items-center justify-center bg-white/50 backdrop-blur-[2px]">
+                                <div className="flex flex-col items-center gap-3 bg-white shadow-xl px-6 py-4 rounded-xl border border-blue-100">
+                                    <Loader2 className="w-6 h-6 text-blue-600 animate-spin" />
+                                    <span className="text-sm font-medium text-zinc-700">幻灯片正在生成中...</span>
+                                </div>
+                            </div>
+                        )}
                     </div>
                 </ContextMenuTrigger>
                 <ContextMenuContent>
@@ -1374,105 +1384,86 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, incomingEdit
       </div>
 
       <Dialog open={slideshowOpen} onOpenChange={setSlideshowOpen}>
-        <DialogContent className="max-w-none w-screen h-screen p-0 bg-black border-none">
-          <div className="w-full h-full flex flex-col">
-            <div className="h-14 px-4 flex items-center justify-between text-white/90">
-              <div className="text-sm">
-                {activeSlides.length > 0 ? `第 ${slideshowIndex + 1} / ${activeSlides.length} 页` : ""}
-              </div>
-              <div className="flex items-center gap-2">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="text-white hover:text-white hover:bg-white/10"
-                  onClick={() => setSlideshowAuto((v) => !v)}
-                >
-                  {slideshowAuto ? "暂停" : "自动播放"}
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="text-white hover:text-white hover:bg-white/10"
-                  onClick={() => setSlideshowOpen(false)}
-                >
-                  退出
-                </Button>
-              </div>
+        <DialogContent className="inset-0 left-0 top-0 translate-x-0 translate-y-0 w-screen h-screen max-w-none sm:max-w-none rounded-none p-0 bg-black/95 border-none flex flex-col">
+          <div className="h-16 px-6 flex items-center justify-between text-white/90 bg-black/50 backdrop-blur-sm z-50">
+            <div className="text-sm font-medium">
+              {activeSlides.length > 0 ? `第 ${slideshowIndex + 1} / ${activeSlides.length} 页` : ""}
             </div>
-            <div className="flex-1 flex items-center justify-center px-6 pb-6">
-              {activeSlides[slideshowIndex] ? (
-                <div className="w-full max-w-[1400px] aspect-[16/9] bg-white shadow-2xl overflow-hidden">
+            <div className="flex items-center gap-4">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-white hover:text-white hover:bg-white/10 gap-2"
+                onClick={() => setSlideshowOpen(false)}
+              >
+                <X className="w-4 h-4" />
+                退出
+              </Button>
+            </div>
+          </div>
+          
+          <div className="flex-1 flex items-center justify-center p-8 overflow-hidden bg-black/90">
+            {activeSlides[slideshowIndex] ? (
+              <div className="relative w-full h-full flex items-center justify-center">
+                  <div 
+                    className="relative bg-white shadow-2xl overflow-hidden rounded-lg mx-auto"
+                    style={{
+                      width: getSlideshowDimensions().width,
+                      height: getSlideshowDimensions().height
+                    }}
+                  >
                   {getSlideImageUrl(activeSlides[slideshowIndex].id) ? (
                     <img
                       src={getSlideImageUrl(activeSlides[slideshowIndex].id)}
-                      className="w-full h-full object-cover"
+                      className="w-full h-full object-contain bg-black"
                       alt="Slide"
                     />
                   ) : (
-                    <div className="w-full h-full p-12 flex flex-col">
-                      <h1 className="text-4xl font-bold mb-8 text-zinc-900 border-b-4 border-blue-600 pb-4 w-fit pr-12">
+                    <div className="w-full h-full p-16 flex flex-col">
+                      <h1 className="text-5xl font-bold mb-12 text-zinc-900 border-b-4 border-blue-600 pb-6 w-fit pr-16">
                         {activeSlides[slideshowIndex].title}
                       </h1>
-                      <div className="flex-1 space-y-6">
+                      <div className="flex-1 space-y-8">
                         {(activeSlides[slideshowIndex].content || []).map((point, i) => (
-                          <div key={i} className="flex gap-4 text-2xl text-zinc-700 leading-relaxed items-start">
+                          <div key={i} className="flex gap-6 text-3xl text-zinc-700 leading-relaxed items-start">
                             <span className="text-blue-600 mt-2">•</span>
                             <span>{point}</span>
                           </div>
                         ))}
                       </div>
-                      <div className="mt-auto pt-8 flex justify-between text-sm text-zinc-400 border-t border-zinc-100">
+                      <div className="mt-auto pt-8 flex justify-between text-lg text-zinc-400 border-t border-zinc-100">
                         <span>Generated by Unified AI Workspace</span>
                         <span>{slideshowIndex + 1}</span>
                       </div>
                     </div>
                   )}
                 </div>
-              ) : null}
-            </div>
-            <div className="h-16 px-4 flex items-center justify-center gap-3">
-              <Button
-                variant="outline"
-                className="bg-white/10 border-white/20 text-white hover:bg-white/15"
-                onClick={() => setSlideshowIndex((v) => (v - 1 + activeSlides.length) % activeSlides.length)}
-                disabled={activeSlides.length <= 1}
-              >
-                上一页
-              </Button>
-              <Button
-                variant="outline"
-                className="bg-white/10 border-white/20 text-white hover:bg-white/15"
-                onClick={() => setSlideshowIndex((v) => (v + 1) % activeSlides.length)}
-                disabled={activeSlides.length <= 1}
-              >
-                下一页
-              </Button>
-            </div>
+              </div>
+            ) : null}
           </div>
-        </DialogContent>
-      </Dialog>
 
-      <Dialog open={bulkEditOpen} onOpenChange={setBulkEditOpen}>
-        <DialogContent className="sm:max-w-[720px]">
-          <DialogHeader>
-            <DialogTitle>批量修改（智能拆分到对应幻灯片）</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-3">
-            <Textarea
-              value={bulkEditText}
-              onChange={(e) => setBulkEditText(e.target.value)}
-              placeholder="把你对多张幻灯片的修改意见一次性写在这里，例如：第1页标题更简洁；第3页配图换成更科技感的插画；结尾页增加总结..."
-              className="min-h-[180px]"
-            />
-            <div className="flex justify-end gap-2">
-              <Button variant="outline" onClick={() => setBulkEditOpen(false)} disabled={isApplyingBulkEdit}>
-                取消
-              </Button>
-              <Button onClick={handleApplyBulkEdit} disabled={!bulkEditText.trim() || isApplyingBulkEdit}>
-                {isApplyingBulkEdit ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
-                开始应用
-              </Button>
+          <div className="h-20 px-4 flex items-center justify-center gap-8 pb-4">
+            <Button
+              variant="outline"
+              size="lg"
+              className="bg-white/10 border-white/20 text-white hover:bg-white/20 hover:text-white rounded-full w-12 h-12 p-0"
+              onClick={() => setSlideshowIndex((v) => (v - 1 + activeSlides.length) % activeSlides.length)}
+              disabled={activeSlides.length <= 1}
+            >
+              <ArrowLeft className="w-6 h-6" />
+            </Button>
+            <div className="text-white/50 text-sm font-medium">
+                {slideshowIndex + 1} / {activeSlides.length}
             </div>
+            <Button
+              variant="outline"
+              size="lg"
+              className="bg-white/10 border-white/20 text-white hover:bg-white/20 hover:text-white rounded-full w-12 h-12 p-0"
+              onClick={() => setSlideshowIndex((v) => (v + 1) % activeSlides.length)}
+              disabled={activeSlides.length <= 1}
+            >
+              <ArrowRight className="w-6 h-6" />
+            </Button>
           </div>
         </DialogContent>
       </Dialog>

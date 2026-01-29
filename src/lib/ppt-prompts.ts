@@ -77,7 +77,7 @@ You can organize the content in two ways:
 
 Choose the format that best fits the content. Use parts when the PPT has clear major sections.
 
-The user's request: ${ideaPrompt}. Now generate the outline, don't include any other text.
+The user's request: ${ideaPrompt}. Now generate the outline as valid JSON only. Do not wrap in markdown code blocks. Do not include any other text.
 ${getLanguageInstruction(language)}
 `;
 }
