@@ -7,6 +7,8 @@ import {
   ContextMenuItem,
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
+import { useUiLanguage } from "@/lib/use-ui-language";
+import { t } from "@/lib/i18n";
 
 interface FlowchartWorkspaceProps {
   initialXml?: string;
@@ -20,6 +22,7 @@ export function FlowchartWorkspace({ initialXml, onAddToChat, onXmlChange }: Flo
   const [selectedCells, setSelectedCells] = useState<any[]>([]);
   const lastEmittedXmlRef = useRef<string>("");
   const autosaveInFlightRef = useRef(false);
+  const uiLang = useUiLanguage();
 
   // Default empty graph
   const emptyXml = '<mxGraphModel><root><mxCell id="0"/><mxCell id="1" parent="0"/></root></mxGraphModel>';
@@ -44,8 +47,8 @@ export function FlowchartWorkspace({ initialXml, onAddToChat, onXmlChange }: Flo
                              action: 'export',
                              format: 'xml',
                              callback: true,
-                             label: 'Add to Chat',
-                             tooltip: 'Add current diagram to chat',
+                             label: t(uiLang, "flow.addToChat"),
+                             tooltip: t(uiLang, "flow.addToChat.tooltip"),
                              icon: 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSJub25lIiBzdHJva2U9ImN1cnJlbnRDb2xvciIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiPjxwYXRoIGQ9Ik0yMSAxNWExIDEgMCAwIDEtMSAxSDRhMSAxIDAgMCAxLTEtMVY4YTEgMSAwIDAgMSAxLTFoMTZhMSAxIDAgMCAxIDEgMXY3em0tNC03djEwaC0ydjZoLTJ2LTZoLTJ2LTZIOSIgLz48L3N2Zz4='
                          }]
                      }
@@ -94,7 +97,7 @@ export function FlowchartWorkspace({ initialXml, onAddToChat, onXmlChange }: Flo
         JSON.stringify({
           action: "export",
           format: "xml",
-          spin: "Saving...",
+          spin: t(uiLang, "flow.saving"),
         }),
         "*"
       );
@@ -163,7 +166,7 @@ export function FlowchartWorkspace({ initialXml, onAddToChat, onXmlChange }: Flo
      iframe.contentWindow.postMessage(JSON.stringify({
         action: 'export',
         format: 'xml',
-        spin: 'Updating chat...'
+        spin: t(uiLang, "flow.updatingChat")
      }), '*');
   };
 
@@ -172,16 +175,16 @@ export function FlowchartWorkspace({ initialXml, onAddToChat, onXmlChange }: Flo
       <ContextMenuTrigger className="w-full h-full relative overflow-hidden bg-muted flex">
         <iframe
           ref={iframeRef}
-          src="https://embed.diagrams.net/?embed=1&ui=min&spin=1&noSaveBtn=1&noExitBtn=1&lang=zh&proto=json"
+          src={`https://embed.diagrams.net/?embed=1&ui=min&spin=1&noSaveBtn=1&noExitBtn=1&lang=${uiLang === "zh" ? "zh" : "en"}&proto=json`}
           className="w-full h-full border-0 block"
-          title="流程图编辑器"
+          title={t(uiLang, "flow.editorTitle")}
         />
       </ContextMenuTrigger>
       
       <ContextMenuContent>
         <ContextMenuItem onClick={handleAddToChat} className="cursor-pointer gap-2">
           <MessageSquarePlus className="w-4 h-4" />
-          <span>添加到对话</span>
+          <span>{t(uiLang, "flow.addToChat")}</span>
         </ContextMenuItem>
       </ContextMenuContent>
     </ContextMenu>

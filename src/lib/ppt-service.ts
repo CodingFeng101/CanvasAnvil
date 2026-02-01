@@ -1,11 +1,15 @@
 import PptxGenJS from "pptxgenjs"
 import { PDFDocument } from "pdf-lib"
-import { generateChatMessage, generateImage, type ChatMessage } from "./ai-client"
+import { generateChatMessage, generateImage } from "./ai-client"
+import pptOutlineSystem from "../../agent/ppt/outline.md?raw"
+import pptSlidesGenerateSystem from "../../agent/ppt/slides-generate.md?raw"
 
 export interface PptPage {
     title: string;
     content: string[];
     description?: string;
+    note?: string;
+    layout?: string;
     status?: string;
     id?: string;
 }
@@ -16,8 +20,11 @@ export interface SlideEditRoutingItem {
     instruction: string;
 }
 
-const PPT_OUTLINE_SYSTEM = `You are a presentation outline generator.
+const PPT_OUTLINE_SYSTEM = String(pptOutlineSystem || "").trim() || `You are a presentation outline generator.
 Return ONLY JSON. Do not wrap in markdown code blocks. Do not include any extra text.`;
+
+const PPT_SLIDES_GENERATE_SYSTEM = String(pptSlidesGenerateSystem || "").trim() || `You are a presentation slide planning agent.
+Return ONLY JSON. Do not include any extra text.`;
 
 const parseJsonLoose = (text: string) => {
     const raw = String(text || "").trim();
@@ -74,7 +81,9 @@ const normalizePages = (value: any): PptPage[] => {
         .map((p: any) => ({
             title: typeof p?.title === "string" ? p.title : "",
             content: Array.isArray(p?.content) ? p.content.map((x: any) => String(x)) : Array.isArray(p?.bullets) ? p.bullets.map((x: any) => String(x)) : [],
-            description: typeof p?.description === "string" ? p.description : ""
+            description: typeof p?.description === "string" ? p.description : "",
+            note: typeof p?.note === "string" ? p.note : undefined,
+            layout: typeof p?.layout === "string" ? p.layout : undefined,
         }))
         .filter((p: PptPage) => p.title.trim().length > 0);
 };
@@ -112,16 +121,18 @@ export const pptService = {
     // 1. Generate Outline
     generateOutline: async (topic: string): Promise<PptPage[]> => {
         const prompt = `Create a presentation outline for the topic: "${topic}".
-Output a JSON array of slide objects:
-[
-  {"title": "Slide title", "content": ["bullet 1", "bullet 2"], "description": "visual description for image generation"},
-  ...
-]
+Return JSON (no extra text). Markdown code block is allowed.
+Return either:
+- a JSON array of slide objects, OR
+- an object with a "slides" array.
+
+Each slide object:
+{ "title": "Slide title", "content": ["bullet 1", "bullet 2"], "description": "visual description for image generation", "note": "speaker notes (optional)", "layout": "layout hint (optional)" }
+
 Rules:
 - Prefer 6-10 slides unless the topic requires otherwise.
 - Each bullet <= 12 words.
-- description must be concrete (subject, composition, lighting, colors, style).
-- Output ONLY JSON.`;
+- description must be concrete (subject, composition, lighting, colors, style).`;
 
         const response = await generateChatMessage([
             { role: "system", content: PPT_OUTLINE_SYSTEM },
@@ -140,22 +151,24 @@ Rules:
     },
 
     generateSlidesFromDescription: async (description: string): Promise<PptPage[]> => {
-        const prompt = `You are a presentation planner.
-Given the following user description, create a complete slide plan (titles, bullets, and visual descriptions).
+        const prompt = `Given the following user description, create a complete slide plan (titles, bullets, and visual descriptions).
 
 User description:
 ${description}
 
-Return ONLY a JSON array of objects:
-[
-  {"title": "Slide title", "content": ["bullet 1", "bullet 2"], "description": "visual description for image generation"},
-  ...
-]
+Return JSON (no extra text). Markdown code block is allowed.
+Return either:
+- a JSON array of slide objects, OR
+- an object with a "slides" array.
+
+Each slide object:
+{ "title": "Slide title", "content": ["bullet 1", "bullet 2"], "description": "visual description for image generation", "note": "speaker notes (optional)", "layout": "layout hint (optional)" }
+
 Rules:
 - Prefer 6-10 slides unless the description implies otherwise.
 - Bullets are short and specific (<= 12 words each).
 - Descriptions are concrete: subject, composition, lighting, colors, style.
-- Output ONLY JSON.`;
+`;
 
         try {
             const response = await generateChatMessage([
@@ -182,33 +195,53 @@ Rules:
                 .join("\n\n")
             : "";
 
-        const prompt = `You are a presentation assistant.
-Topic: ${topic}
+        const currentSlideJson = JSON.stringify(
+            {
+                id: page.id || `slide-${index + 1}`,
+                title: page.title,
+                content: page.content,
+                description: page.description || "",
+                note: page.note || "",
+                layout: page.layout || "",
+            },
+            null,
+            2
+        );
+
+        const prompt = `Topic: ${topic}
 Slide index: ${index + 1}
-Slide title: ${page.title}
-Current bullets: ${page.content.join(" | ")}
-Current visual description: ${page.description || ""}
 
-${refText ? `Reference:\n${refText}\n\n` : ""}Return ONLY valid JSON:
-{
-  "content": ["bullet1", "bullet2"],
-  "description": "visual description for slide image generation"
-}
-Rules:
-- Keep bullets short and specific (<= 12 words each).
-- Make description precise: scene, objects, composition, style, colors.
-`;
+Current slide:
+${currentSlideJson}
 
-        const response = await generateChatMessage([{ role: "user", content: prompt }]);
-        const match = response.match(/\{[\s\S]*\}/);
-        if (!match) return page;
+${refText ? `Reference:\n${refText}\n\n` : ""}Task:
+- Improve bullets (<= 12 words each), and refine description for image generation.
+- Optionally add speaker note and layout hint if helpful.
+- Keep id stable.
+
+Return JSON only (no extra text).`;
+
+        const response = await generateChatMessage(
+            [
+                { role: "system", content: PPT_SLIDES_GENERATE_SYSTEM },
+                { role: "user", content: prompt },
+            ],
+            undefined,
+            { timeoutMs: 120000 }
+        );
 
         try {
-            const parsed = JSON.parse(match[0]);
+            const parsed = parseJsonLoose(response);
+            const asSlides = Array.isArray(parsed?.slides) ? parsed.slides : Array.isArray(parsed) ? parsed : null;
+            const first = Array.isArray(asSlides) && asSlides.length > 0 ? asSlides[0] : null;
+            if (!first || typeof first !== "object") return page;
             return {
                 ...page,
-                content: Array.isArray(parsed.content) ? parsed.content : page.content,
-                description: typeof parsed.description === "string" ? parsed.description : page.description,
+                title: typeof first.title === "string" ? first.title : page.title,
+                content: Array.isArray(first.content) ? first.content.map((x: any) => String(x)) : page.content,
+                description: typeof first.description === "string" ? first.description : page.description,
+                note: typeof first.note === "string" ? first.note : page.note,
+                layout: typeof first.layout === "string" ? first.layout : page.layout,
             };
         } catch {
             return page;
@@ -236,6 +269,8 @@ Rules:
 
     editPageImage: async (page: PptPage, instruction: string, referenceImageUrl?: string, templateImageUrl?: string, additionalImages?: string[]) => {
         const prompt = `Edit the slide image based on instruction.
+You will be given the current slide image as the primary reference image. Treat it as the base image and modify it, not regenerate from scratch.
+If additional reference images are provided, they may include the template/style reference and user-provided assets. Keep the overall visual style consistent with the template.
 Slide title: ${page.title}
 Bullets: ${(page.content || []).join(" | ")}
 Original visual description: ${page.description || ""}
@@ -248,10 +283,14 @@ Rules:
 `;
 
         const ref = referenceImageUrl || templateImageUrl;
+        const additionalReferenceImageUrls = Array.isArray(additionalImages) ? [...additionalImages] : [];
+        if (referenceImageUrl && templateImageUrl && templateImageUrl !== referenceImageUrl) {
+            additionalReferenceImageUrls.push(templateImageUrl);
+        }
         return await generateImage({
             prompt,
             referenceImageUrl: ref,
-            additionalReferenceImageUrls: additionalImages
+            additionalReferenceImageUrls
         });
     },
 

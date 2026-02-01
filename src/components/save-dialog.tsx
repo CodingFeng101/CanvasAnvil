@@ -16,6 +16,8 @@ import {
     SelectTrigger,
     SelectValue,
 } from "@/components/ui/select"
+import { useUiLanguage } from "@/lib/use-ui-language";
+import { t } from "@/lib/i18n";
 
 interface SaveDialogProps {
     open: boolean
@@ -32,6 +34,7 @@ export function SaveDialog({
 }: SaveDialogProps) {
     const [filename, setFilename] = useState(defaultFilename)
     const [format, setFormat] = useState("xml")
+    const uiLang = useUiLanguage();
 
     const handleSave = () => {
         onSave(filename, format)
@@ -42,12 +45,12 @@ export function SaveDialog({
         <Dialog open={open} onOpenChange={onOpenChange}>
             <DialogContent className="sm:max-w-[425px]">
                 <DialogHeader>
-                    <DialogTitle>保存图表</DialogTitle>
+                    <DialogTitle>{t(uiLang, "saveDialog.title")}</DialogTitle>
                 </DialogHeader>
                 <div className="grid gap-4 py-4">
                     <div className="grid grid-cols-4 items-center gap-4">
                         <Label htmlFor="filename" className="text-right">
-                            文件名
+                            {t(uiLang, "saveDialog.filename")}
                         </Label>
                         <Input
                             id="filename"
@@ -58,11 +61,11 @@ export function SaveDialog({
                     </div>
                     <div className="grid grid-cols-4 items-center gap-4">
                         <Label htmlFor="format" className="text-right">
-                            格式
+                            {t(uiLang, "saveDialog.format")}
                         </Label>
                         <Select value={format} onValueChange={setFormat}>
                             <SelectTrigger className="col-span-3">
-                                <SelectValue placeholder="选择格式" />
+                                <SelectValue placeholder={t(uiLang, "saveDialog.chooseFormat")} />
                             </SelectTrigger>
                             <SelectContent>
                                 <SelectItem value="xml">XML (Draw.io)</SelectItem>
@@ -73,7 +76,7 @@ export function SaveDialog({
                     </div>
                 </div>
                 <DialogFooter>
-                    <Button onClick={handleSave}>保存</Button>
+                    <Button onClick={handleSave}>{t(uiLang, "common.save")}</Button>
                 </DialogFooter>
             </DialogContent>
         </Dialog>

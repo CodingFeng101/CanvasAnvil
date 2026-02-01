@@ -93,6 +93,37 @@ export function getPageDescriptionPrompt(
   const filesXml = formatReferenceFilesXml(projectContext.reference_files_content);
   const originalInput = projectContext.idea_prompt || "";
 
+  if (language === "en") {
+    return `${filesXml}We are generating per-slide content descriptions for a PPT.
+The user's original request is:\n${originalInput}\n
+We already have the full outline:\n${JSON.stringify(outline)}\n${partInfo}
+Now generate the description for slide ${pageIndex}:
+${JSON.stringify(pageOutline)}
+
+[IMPORTANT] The "Slide text" section will be rendered directly on the PPT slide. Please ensure:
+1. Keep text concise; each bullet is ~8–16 words
+2. Use clear list structure
+3. Avoid long sentences and overly complex wording
+4. Make it highly readable for live presentation
+5. Do not add any extra explanatory notes or commentary
+
+Output format example:
+Slide title: Human societies: living with nature
+
+Slide text:
+- Hunter-gatherer societies: limited impact due to small scale
+- High dependence: life relies on direct natural supply
+- Adaptation over transformation: learn from nature to survive
+- Impact pattern: local, short-term, low intensity, self-recovering
+
+Other slide materials (add when helpful: markdown image links, formulas, tables, etc.)
+
+[About images] If reference files include local image URLs starting with /files/ (e.g. /files/mineru/xxx/image.png), output them in markdown, e.g. ![alt text](/files/mineru/xxx/image.png). These images will be included in the slide.
+
+${getLanguageInstruction(language)}
+`;
+  }
+
   return `${filesXml}我们正在为PPT的每一页生成内容描述。
 用户的原始需求是：\n${originalInput}\n
 我们已经有了完整的大纲：\n${JSON.stringify(outline)}\n${partInfo}
@@ -133,10 +164,44 @@ export function getImageGenerationPrompt(
 ) {
   let materialImagesNote = "";
   if (hasMaterialImages) {
-    materialImagesNote = `\n\n提示：除了模板参考图片（用于风格参考）外，还提供了额外的素材图片。这些素材图片是可供挑选和使用的元素，你可以从这些素材图片中选择合适的图片、图标、图表或其他视觉元素直接整合到生成的PPT页面中。请根据页面内容的需要，智能地选择和组合这些素材图片中的元素。`;
+    materialImagesNote =
+      language === "en"
+        ? `\n\nNote: In addition to the template reference image (for style), extra material images are provided. You may select and integrate suitable images/icons/charts/visual elements from them to enrich the slide, based on the content needs.`
+        : `\n\n提示：除了模板参考图片（用于风格参考）外，还提供了额外的素材图片。这些素材图片是可供挑选和使用的元素，你可以从这些素材图片中选择合适的图片、图标、图表或其他视觉元素直接整合到生成的PPT页面中。请根据页面内容的需要，智能地选择和组合这些素材图片中的元素。`;
   }
 
-  const extraReqText = extraRequirements ? `\n\n额外要求（请务必遵循）：\n${extraRequirements}\n` : "";
+  const extraReqText = extraRequirements
+    ? language === "en"
+      ? `\n\nExtra requirements (must follow):\n${extraRequirements}\n`
+      : `\n\n额外要求（请务必遵循）：\n${extraRequirements}\n`
+    : "";
+
+  if (language === "en") {
+    return `You are an expert UI/UX presentation designer. Generate a well-designed PPT slide.
+The current slide description:
+<page_description>
+${pageDesc}
+</page_description>
+
+<reference_information>
+Overall outline:
+${outlineText}
+
+Current section: ${currentSection}
+</reference_information>
+
+<design_guidelines>
+- Text must be crisp and sharp; 4K quality; 16:9 aspect ratio.
+- Colors and design language must closely match the template reference image.
+- Create the best composition automatically and render all text from the description accurately.
+- Unless necessary, avoid markdown symbols (like #, *).
+- Use the template only for style; do not include any template text.
+- Fill empty areas with appropriately sized decorative shapes or illustrations.
+</design_guidelines>
+${getPptLanguageInstruction(language)}
+${materialImagesNote}${extraReqText}
+`;
+  }
 
   return `你是一位专家级UI UX演示设计师，专注于生成设计良好的PPT页面。
 当前PPT页面的页面描述如下:
@@ -163,4 +228,25 @@ ${outlineText}
 ${getPptLanguageInstruction(language)}
 ${materialImagesNote}${extraReqText}
 `;
+}
+
+export function getTemplateGenerationPrompt(args: { requirements: string; language?: string }) {
+  const language = args.language || "zh";
+  const requirements = String(args.requirements || "").trim();
+  const pageDesc =
+    language === "en"
+      ? `We are generating a PPT template background image (blank slide) that will be used as a style reference for generating slides later.
+User requirements:
+${requirements}
+Rules:
+- Generate a clean template background for a 16:9 slide.
+- Do NOT include any text, letters, or watermarks.`
+      : `我们正在生成一张PPT模板背景图（空白页面），用于后续生成整套PPT时的风格参考。
+用户需求：
+${requirements}
+规则：
+- 生成一张16:9比例的干净模板背景图。
+- 禁止出现任何文字、字母或水印。`;
+
+  return getImageGenerationPrompt(pageDesc, "", "", false, "", language);
 }

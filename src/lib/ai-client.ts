@@ -1,4 +1,6 @@
 import OpenAI from 'openai';
+import { getUiLanguage } from "@/lib/ui-language";
+import { t } from "@/lib/i18n";
 
 // Configuration Interfaces
 export interface AIConfig {
@@ -144,6 +146,37 @@ export interface ChatMessage {
   content: string;
 }
 
+const UI_LANG_POLICY_PREFIX = "UI_LANG_POLICY:";
+
+function getUiLanguagePolicySystemMessage(): ChatMessage {
+  const uiLang = getUiLanguage();
+  if (uiLang === "en") {
+    return {
+      role: "system",
+      content:
+        `${UI_LANG_POLICY_PREFIX} uiLang=en\n` +
+        "All assistant outputs must be in English.\n" +
+        "- Do not output Chinese characters.\n" +
+        "- If an agent must output code/JSON/XML only, keep the required format and keep any fixed identifiers/schema keys; write any human-readable strings in English unless the schema mandates otherwise.",
+    };
+  }
+  return {
+    role: "system",
+    content:
+      `${UI_LANG_POLICY_PREFIX} uiLang=zh\n` +
+      "All assistant outputs must be in Simplified Chinese.\n" +
+      "- Do not output English unless required for code, identifiers, proper nouns, or file paths.\n" +
+      "- If an agent must output code/JSON/XML only, keep the required format and keep any fixed identifiers/schema keys; write any human-readable strings in Chinese unless the schema mandates otherwise.",
+  };
+}
+
+function applyUiLanguagePolicy(messages: ChatMessage[]): ChatMessage[] {
+  const filtered = (messages || []).filter(
+    (m) => !(m.role === "system" && String(m.content || "").startsWith(UI_LANG_POLICY_PREFIX))
+  );
+  return [getUiLanguagePolicySystemMessage(), ...filtered];
+}
+
 // Stream Chat Message
 export async function streamChatMessage(
   messages: ChatMessage[],
@@ -156,14 +189,14 @@ export async function streamChatMessage(
     const client = getClient();
     
     if (!config.apiKey) {
-      throw new Error("请先在设置中配置 API Key");
+      throw new Error(t(getUiLanguage(), "error.missingApiKey"));
     }
   
     try {
       const stream = await client.chat.completions.create(
         {
           model: model || config.chatModel,
-          messages: messages,
+          messages: applyUiLanguagePolicy(messages),
           stream: true,
         },
         signal ? ({ signal } as any) : undefined
@@ -217,14 +250,14 @@ export async function generateChatMessage(messages: ChatMessage[], model?: strin
       const client = getClient();
 
       if (!config.apiKey) {
-        throw new Error("请先在设置中配置 API Key");
+        throw new Error(t(getUiLanguage(), "error.missingApiKey"));
       }
 
       try {
         const resp = await client.chat.completions.create(
           {
             model: model || config.chatModel,
-            messages,
+            messages: applyUiLanguagePolicy(messages),
             stream: false,
           },
           mergedSignal ? ({ signal: mergedSignal } as any) : undefined
@@ -351,7 +384,7 @@ export async function generateImage(request: ImageGenerationRequest, signal?: Ab
     const config = getAIConfig();
     
     if (!config.apiKey) {
-      throw new Error("请先在设置中配置 API Key");
+      throw new Error(t(getUiLanguage(), "error.missingApiKey"));
     }
   
     let referenceImageUrl = request.referenceImageUrl;

@@ -27,6 +27,7 @@
     "motion": "^12.28.1",
     "openai": "^6.16.0",
     "pdf-lib": "^1.17.1",
+    "@jvmr/pptx-to-html": "^1.0.0",
     "pptxgenjs": "^4.0.1",
     "prism-react-renderer": "^2.4.1",
     "react": "^18.3.1",

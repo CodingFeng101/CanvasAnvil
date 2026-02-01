@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Bot, Trash2, History, Settings2, SidebarClose, SidebarOpen, Plus } from 'lucide-react';
+import { Bot, Trash2, History, Settings2, PanelRightClose, PanelRightOpen, Plus } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { streamChatMessage, ChatMessage, getAIConfig } from '@/lib/ai-client';
 import { DRAWIO_SYSTEM_PROMPT } from '@/lib/system-prompts';
@@ -11,6 +11,11 @@ import { HistoryDialog, HistoryItem } from '@/components/history-dialog';
 import { ResetWarningModal } from '@/components/reset-warning-modal';
 import { useFileProcessor } from '@/lib/use-file-processor';
 import { buildCadBomMessages, buildCadImagesMessages, buildCadTasksSystemContent } from '@/lib/cad-tasks';
+import { CAD_PLAN_AGENT_PROMPT, CAD_SVG_GENERATE_AGENT_PROMPT, CAD_SVG_PATCH_AGENT_PROMPT } from '@/lib/cad-agents';
+import flowPatchAgentPrompt from "../../agent/flow/patch.md?raw";
+import flowReplaceAgentPrompt from "../../agent/flow/replace.md?raw";
+import { t } from "@/lib/i18n";
+import { useUiLanguage } from "@/lib/use-ui-language";
 
 interface Attachment {
   id: string;
@@ -19,6 +24,9 @@ interface Attachment {
   name: string;
 }
 
+type CodeActionResult = { ok: boolean; retry?: boolean; error?: string };
+type MaybePromise<T> = T | Promise<T>;
+
 interface ChatPanelProps {
   className?: string;
   attachments?: Attachment[];
@@ -26,7 +34,7 @@ interface ChatPanelProps {
   pptDraftSlides?: Array<{ id: string; slideId: string; title: string; json: string; kind: "outline" | "slide_image"; imageUrl?: string }>;
   onRemovePptDraftSlide?: (id: string) => void;
   onClearPptDraftSlides?: () => void;
-  onCodeAction?: (code: string, type: 'flow' | 'cad' | 'ppt') => void;
+  onCodeAction?: (code: string, type: 'flow' | 'cad' | 'ppt') => MaybePromise<void | CodeActionResult>;
   systemPrompt?: string;
   initialMessages?: ChatMessage[];
   onMessagesChange?: (messages: ChatMessage[]) => void;
@@ -48,6 +56,10 @@ interface ChatPanelProps {
     plan?: any;
     svg2d?: string;
   };
+  flowContext?: {
+    xml?: string;
+  };
+  onClearWorkspace?: () => void;
 }
 
 const STORAGE_KEY_PREFIX = 'chat_history_v2_';
@@ -84,8 +96,12 @@ export function ChatPanel({
     onRestore,
     onClearVersionHistory,
     onClearAttachments,
-    cadContext
+    cadContext,
+    flowContext,
+    onClearWorkspace
 }: ChatPanelProps) {
+  const uiLang = useUiLanguage();
+  const trText = (zhText: string, enText: string) => (uiLang === "zh" ? zhText : enText);
   // Persistence key
   const storageKey = `${STORAGE_KEY_PREFIX}${workspaceId}`;
 
@@ -101,7 +117,7 @@ export function ChatPanel({
         }
     }
     return initialMessages.length > 0 ? initialMessages : [
-        { role: 'assistant', content: '你好！我是你的 AI 助手。请告诉我你的需求。' }
+        { role: 'assistant', content: t(uiLang, "chat.hello") }
     ];
   });
 
@@ -113,6 +129,8 @@ export function ChatPanel({
   const [showGlobalConstraints, setShowGlobalConstraints] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
   const [showResetWarning, setShowResetWarning] = useState(false);
+  const flowAutoRetryCountRef = useRef(0);
+  const MAX_FLOW_AUTO_RETRY = 3;
   
   const [files, setFiles] = useState<File[]>([]);
   const abortControllerRef = useRef<AbortController | null>(null);
@@ -128,7 +146,11 @@ export function ChatPanel({
   const getPptLabel = (slideId: string, title: string) => {
     const m = String(slideId || "").match(/(\d+)/);
     const n = m ? Number(m[1]) : NaN;
-    if (!Number.isNaN(n)) return title ? `第 ${n} 页：${title}` : `第 ${n} 页`;
+    if (!Number.isNaN(n)) {
+      return uiLang === "zh"
+        ? (title ? `第 ${n} 页：${title}` : `第 ${n} 页`)
+        : (title ? `Slide ${n}: ${title}` : `Slide ${n}`);
+    }
     return title || slideId;
   };
 
@@ -214,7 +236,10 @@ export function ChatPanel({
   const sanitizeAssistantContentForDisplay = (content: string) => {
     if (workspaceId !== "cad") return content;
     if (!content) return content;
-    let next = content.replace(/```(?:python|py|python3)\s*[\s\S]*?```/g, "（已在后台推导完成）");
+    let next = content.replace(
+      /```(?:python|py|python3)\s*[\s\S]*?```/g,
+      trText("（已在后台推导完成）", "(Processed in the background)")
+    );
     next = next
       .split("\n")
       .filter((line) => !/freecad/i.test(line))
@@ -224,7 +249,7 @@ export function ChatPanel({
       const text = String(inner || "").trim();
       if (!text) return full;
       if (text.includes('"type"') && text.includes('"cad_images"')) {
-        return "（已提交装修图生成任务）";
+        return trText("（已提交装修图生成任务）", "(CAD drawing generation task submitted)");
       }
       if (text.includes('"type"') && text.includes('"cad_plan"')) {
         try {
@@ -238,14 +263,17 @@ export function ChatPanel({
           const rooms = Array.isArray(plan?.rooms) ? plan.rooms : [];
 
           const lines: string[] = [];
-          if (summary) lines.push(`方案概述：${summary}`);
-          if (style) lines.push(`风格：${style}`);
-          if (rooms.length > 0) lines.push(`空间：${rooms.map((r: any) => String(r?.name || r?.type || "")).filter(Boolean).join("、")}`);
-          if (assumptions.length > 0) lines.push(`假设：${assumptions.join("；")}`);
-          if (constraints.length > 0) lines.push(`约束：${constraints.join("；")}`);
-          return lines.length > 0 ? lines.join("\n") : "（已生成方案）";
+          if (summary) lines.push(trText(`方案概述：${summary}`, `Summary: ${summary}`));
+          if (style) lines.push(trText(`风格：${style}`, `Style: ${style}`));
+          if (rooms.length > 0) {
+            const roomNames = rooms.map((r: any) => String(r?.name || r?.type || "")).filter(Boolean);
+            lines.push(trText(`空间：${roomNames.join("、")}`, `Spaces: ${roomNames.join(", ")}`));
+          }
+          if (assumptions.length > 0) lines.push(trText(`假设：${assumptions.join("；")}`, `Assumptions: ${assumptions.join("; ")}`));
+          if (constraints.length > 0) lines.push(trText(`约束：${constraints.join("；")}`, `Constraints: ${constraints.join("; ")}`));
+          return lines.length > 0 ? lines.join("\n") : trText("（已生成方案）", "(Plan generated)");
         } catch {
-          return "（已生成方案）";
+          return trText("（已生成方案）", "(Plan generated)");
         }
       }
       return full;
@@ -304,8 +332,21 @@ export function ChatPanel({
   }, [messages, storageKey, onMessagesChange]);
 
   const clearHistory = () => {
+    abortControllerRef.current?.abort();
+    abortControllerRef.current = null;
+    setIsLoading(false);
+    setInput('');
+    setPptInputSegments([{ type: "text", text: "" }]);
+    setFiles([]);
+    onClearAttachments?.();
+    onClearPptDraftSlides?.();
+    onClearWorkspace?.();
+    try {
+      localStorage.removeItem(storageKey);
+    } catch {
+    }
     const newMsgs: ChatMessage[] = [
-        { role: 'assistant', content: '你好！对话记录已清空。' }
+        { role: 'assistant', content: t(uiLang, "chat.cleared") }
     ];
     setMessages(newMsgs);
     setShowResetWarning(false);
@@ -320,13 +361,120 @@ export function ChatPanel({
     setFiles([]);
     onClearAttachments?.();
     const newMsgs: ChatMessage[] = [
-      { role: 'assistant', content: '你好！新对话已开始。请告诉我你的需求。' }
+      { role: 'assistant', content: t(uiLang, "chat.newChat") }
     ];
     setMessages(newMsgs);
     try {
       localStorage.removeItem(storageKey);
     } catch {
     }
+  };
+
+  const runCodeAction = async (code: string, type: 'flow' | 'cad' | 'ppt') => {
+    const result = await Promise.resolve(onCodeAction?.(code, type));
+    if (!result || typeof result !== "object") return { ok: true } as CodeActionResult;
+    const r = result as any;
+    if (typeof r.ok === "boolean") {
+      return { ok: r.ok, retry: !!r.retry, error: typeof r.error === "string" ? r.error : undefined } as CodeActionResult;
+    }
+    return { ok: true } as CodeActionResult;
+  };
+
+  const handleAssistantResponse = async (fullResponse: string) => {
+    if (!fullResponse) return { flowPatchFound: false, flowRetryError: null as string | null };
+
+    const pyMatch = fullResponse.match(/```python\n([\s\S]*?)\n```/);
+    if (pyMatch && pyMatch[1] && workspaceId !== "cad") {
+      await runCodeAction(pyMatch[1], 'cad');
+    }
+
+    if (workspaceId === "cad") {
+      const jsMatch = fullResponse.match(/```(javascript|js)\n([\s\S]*?)\n```/);
+      if (jsMatch && jsMatch[2]) {
+        await runCodeAction(jsMatch[2], 'cad');
+      }
+    }
+
+    const svgMatch = fullResponse.match(/```svg\n([\s\S]*?)\n```/);
+    if (svgMatch && svgMatch[1]) {
+      await runCodeAction(svgMatch[1], 'cad');
+    }
+
+    let flowPatchFound = false;
+    let flowRetryError: string | null = null;
+
+    const jsonRegex = /```json\s*([\s\S]*?)```/g;
+    let m: RegExpExecArray | null;
+    while ((m = jsonRegex.exec(fullResponse))) {
+      const jsonText = String(m[1] || "").trim();
+      if (!jsonText) continue;
+
+      if (workspaceId === 'ppt') {
+        try {
+          const parsed = JSON.parse(jsonText);
+          if (lastUploadedImagesRef.current.length > 0) {
+            parsed.uploadedImages = lastUploadedImagesRef.current;
+            await runCodeAction(JSON.stringify(parsed), 'ppt');
+          } else {
+            await runCodeAction(jsonText, 'ppt');
+          }
+        } catch {
+          await runCodeAction(jsonText, 'ppt');
+        }
+        continue;
+      }
+
+      if (workspaceId === 'flow') {
+        try {
+          const parsed = JSON.parse(jsonText);
+          if (parsed?.type === "flow_patch") flowPatchFound = true;
+        } catch {
+        }
+        const r = await runCodeAction(jsonText, 'flow');
+        if (!r.ok && r.retry) {
+          flowRetryError = r.error || "Unknown error";
+        }
+        continue;
+      }
+
+      await runCodeAction(jsonText, workspaceId === "cad" ? 'cad' : 'ppt');
+    }
+
+    if (workspaceId === "flow" && !flowPatchFound) {
+      const xmlMatch = fullResponse.match(/```xml\n([\s\S]*?)\n```/);
+      if (xmlMatch && xmlMatch[1]) {
+        const r = await runCodeAction(xmlMatch[1], 'flow');
+        if (!r.ok && r.retry) {
+          flowRetryError = r.error || "Unknown error";
+        }
+      }
+    }
+
+    return { flowPatchFound, flowRetryError };
+  };
+
+  const buildFlowRetryPrompt = (errorText: string, forceReplace: boolean) => {
+    const err = String(errorText || "").slice(0, 600);
+    if (uiLang === "en") {
+      return [
+        `The previous flow_patch could not be applied to the current diagram. Reason: ${err}`,
+        "",
+        "Please retry and strictly follow:",
+        "- Output exactly one ```json``` code block with type=flow_patch",
+        forceReplace
+          ? "- This time you MUST use mode=replace and output the full <mxGraphModel>...</mxGraphModel> (do not output patch)"
+          : "- If the patch cannot precisely match the Current diagram XML, use mode=replace and output the full <mxGraphModel>...</mxGraphModel>",
+      ].join("\n");
+    }
+    return [
+      `刚才的 flow_patch 无法应用到当前图，原因：${err}`,
+      "",
+      "请重试并严格遵守：",
+      "- 只能输出一个 ```json``` 代码块，type=flow_patch",
+      forceReplace
+        ? "- 本次必须直接用 mode=replace 输出完整 <mxGraphModel>...</mxGraphModel>（不要输出 patch）"
+        : "- 如果 patch 不能精确命中 Current diagram XML，请直接用 mode=replace 输出完整 <mxGraphModel>...</mxGraphModel>",
+    ].join("\n");
   };
 
   const handleSend = async () => {
@@ -337,6 +485,7 @@ export function ChatPanel({
           .join("")
       : input;
     if ((!rawInput.trim() && files.length === 0 && attachments.length === 0 && pptDraftSlides.length === 0) || isLoading) return;
+    flowAutoRetryCountRef.current = 0;
 
     const normalizedInput = rawInput.trim();
     const referencedPptSlideIds = isPpt
@@ -390,6 +539,23 @@ export function ChatPanel({
              try {
                  let content = "";
                  if (isPdfFile(file)) {
+                     try {
+                         const { getPdfDocumentFromUrl, renderPdfPageToCanvas } = await import("@/lib/pdf-utils");
+                         const objectUrl = URL.createObjectURL(file);
+                         try {
+                             const pdf = await getPdfDocumentFromUrl(objectUrl);
+                             const canvas = document.createElement("canvas");
+                             await renderPdfPageToCanvas({ pdf, pageNumber: 1, canvas, targetWidth: 520 });
+                             const previewUrl = canvas.toDataURL("image/png");
+                             if (previewUrl && previewUrl.startsWith("data:image")) {
+                                 currentUploadedImageItems.push({ name: file.name, url: previewUrl });
+                             }
+                         } finally {
+                             URL.revokeObjectURL(objectUrl);
+                         }
+                     } catch (e) {
+                         console.error("Failed to render PDF preview", file.name, e);
+                     }
                      content = await extractPdfText(file);
                  } else {
                      content = await extractTextFileContent(file);
@@ -428,11 +594,30 @@ export function ChatPanel({
             .join("\n\n")
         : "";
 
+    const flowContextText =
+      workspaceId === "flow" && typeof flowContext?.xml === "string" && flowContext.xml.trim()
+        ? `Current diagram XML:\n\n\`\`\`xml\n${flowContext.xml}\n\`\`\``
+        : "";
+
+    const cadContextText =
+      workspaceId === "cad"
+        ? [
+            cadContext?.plan ? `Current CAD plan:\n\n\`\`\`json\n${JSON.stringify(cadContext.plan, null, 2)}\n\`\`\`` : "",
+            typeof cadContext?.svg2d === "string" && cadContext.svg2d.trim()
+              ? `Current 2D SVG:\n\n\`\`\`svg\n${cadContext.svg2d}\n\`\`\``
+              : "",
+          ]
+            .filter(Boolean)
+            .join("\n\n")
+        : "";
+
     const promptParts = [
       rawInput,
       fileTexts.length > 0 ? fileTexts.join("\n\n") : "",
       pptDraftContextText,
-      contextAttachmentsText
+      contextAttachmentsText,
+      flowContextText,
+      cadContextText
     ].filter(Boolean);
     const promptContent = promptParts.join("\n\n");
     lastUploadedImagesRef.current = currentUploadedImages;
@@ -458,7 +643,7 @@ export function ChatPanel({
     setFiles([]); 
     if (workspaceId === "ppt") onClearPptDraftSlides?.();
 
-    if (workspaceId === "cad" && mode === "text" && /确认\s*2d|满意|生成\s*装修|生成\s*物料|cad_ready_for_export/i.test(normalizedInput)) {
+    if (workspaceId === "cad" && mode === "text" && /(cad_ready_for_export|一键\s*(出图|生成)|one[- ]?click)/i.test(normalizedInput)) {
       const svg2d = cadContext?.svg2d || "";
       const planJson = cadContext?.plan ? JSON.stringify(cadContext.plan) : "";
 
@@ -480,7 +665,7 @@ export function ChatPanel({
       const constraintsKey = workspaceId ? `${STORAGE_GLOBAL_CONSTRAINTS_KEY}-${workspaceId}` : STORAGE_GLOBAL_CONSTRAINTS_KEY;
       const globalConstraints = typeof window !== 'undefined' ? localStorage.getItem(constraintsKey) || '' : '';
       const globalSystemPrompt = config.systemPrompt || '';
-      const systemContent = buildCadTasksSystemContent({ systemPrompt, globalSystemPrompt, globalConstraints });
+      const systemContent = buildCadTasksSystemContent({ globalSystemPrompt, globalConstraints });
       const bomMessages: ChatMessage[] = buildCadBomMessages({ systemContent, planJson, svg2d });
       const imagesMessages: ChatMessage[] = buildCadImagesMessages({ systemContent, planJson, svg2d });
 
@@ -526,7 +711,8 @@ export function ChatPanel({
           setMessages(prev => {
             const last = prev[prev.length - 1];
             if (last?.role !== 'assistant') return prev;
-            const next = last.content ? `${last.content}\n\n（已中断）` : "（已中断）";
+            const abortedText = trText("（已中断）", "(Aborted)");
+            const next = last.content ? `${last.content}\n\n${abortedText}` : abortedText;
             return [...prev.slice(0, -1), { role: 'assistant', content: next }];
           });
         }
@@ -569,55 +755,315 @@ export function ChatPanel({
       }, chatModel, controller.signal);
       updater.flush();
       
-      if (fullResponse) {
-        // Match XML
-        const xmlMatch = fullResponse.match(/```xml\n([\s\S]*?)\n```/);
-        if (xmlMatch && xmlMatch[1]) {
-          const xml = xmlMatch[1];
-          onCodeAction?.(xml, 'flow');
-        }
+      let flowRoutedBaseMessages: ChatMessage[] | null = null;
+      let flowSelectedAgent: "patch" | "replace" | null = null;
 
-        // Match Python (not used by CAD; CAD uses background agents)
-        const pyMatch = fullResponse.match(/```python\n([\s\S]*?)\n```/);
-        if (pyMatch && pyMatch[1] && workspaceId !== "cad") {
-          onCodeAction?.(pyMatch[1], 'cad');
-        }
+      if (fullResponse && workspaceId === "flow") {
+        const resolveFlowAgentFromRouteText = (text: string): "patch" | "replace" | null => {
+          const trimmed = String(text || "").trim();
+          if (!trimmed) return null;
 
-        if (workspaceId === "cad") {
-          const jsMatch = fullResponse.match(/```(javascript|js)\n([\s\S]*?)\n```/);
-          if (jsMatch && jsMatch[2]) {
-            onCodeAction?.(jsMatch[2], 'cad');
-          }
-        }
-        
-        // Match SVG (for CAD)
-        const svgMatch = fullResponse.match(/```svg\n([\s\S]*?)\n```/);
-        if (svgMatch && svgMatch[1]) {
-           onCodeAction?.(svgMatch[1], 'cad');
-        }
+          let content = trimmed;
+          const fenceMatch = content.match(/```[a-zA-Z]*\s*([\s\S]*?)```/);
+          if (fenceMatch && fenceMatch[1]) content = fenceMatch[1].trim();
+          content = content.replace(/\s+/g, "");
 
-        // Match JSON (PPT/CAD)
-        const jsonRegex = /```json\s*([\s\S]*?)```/g;
-        let m: RegExpExecArray | null;
-        while ((m = jsonRegex.exec(fullResponse))) {
-          const jsonText = String(m[1] || "").trim();
+          if (!/^[1-2]$/.test(content)) return null;
+          return content === "1" ? "patch" : "replace";
+        };
+
+        const agentFromText = resolveFlowAgentFromRouteText(fullResponse);
+        if (agentFromText) {
+          flowSelectedAgent = agentFromText;
+
+          setMessages((prev) => {
+            const last = prev[prev.length - 1];
+            if (last?.role === "assistant") return [...prev.slice(0, -1), { role: "assistant", content: "" }];
+            return prev;
+          });
+
+          const agentPrompt = flowSelectedAgent === "patch" ? flowPatchAgentPrompt : flowReplaceAgentPrompt;
+          const routedSystemContent = [agentPrompt, globalSystemPrompt, globalConstraints].filter(Boolean).join("\n\n");
+          const routedMessages: ChatMessage[] = [
+            { role: "system", content: routedSystemContent },
+            { role: "user", content: promptContent }
+          ];
+
+          let routedFull = "";
+          const routedUpdater = createThrottledAssistantUpdater();
+          await streamChatMessage(routedMessages, (chunk) => {
+            routedFull = chunk;
+            routedUpdater.push(chunk);
+          }, chatModel, controller.signal);
+          routedUpdater.flush();
+
+          flowRoutedBaseMessages = routedMessages;
+          fullResponse = routedFull;
+        }
+      }
+
+      if (fullResponse && workspaceId === "cad") {
+        let route: { agent?: string } | null = null;
+
+        const resolveCadAgentFromRouteText = (text: string): string | null => {
+          const trimmed = String(text || "").trim();
+          if (!trimmed) return null;
+
+          let content = trimmed;
+          const fenceMatch = content.match(/```[a-zA-Z]*\s*([\s\S]*?)```/);
+          if (fenceMatch && fenceMatch[1]) content = fenceMatch[1].trim();
+          content = content.replace(/\s+/g, "");
+
+          if (!/^[1-5]$/.test(content)) return null;
+
+          return content === "1"
+            ? "cad_plan_agent"
+            : content === "2"
+              ? "cad_svg_generate_agent"
+              : content === "3"
+                ? "cad_svg_patch_agent"
+                : content === "4"
+                  ? "cad_bom_agent"
+                  : "cad_images_agent";
+        };
+
+        const routeJsonRegex = /```json\s*([\s\S]*?)```/g;
+        let rm: RegExpExecArray | null;
+        while ((rm = routeJsonRegex.exec(fullResponse))) {
+          const jsonText = String(rm[1] || "").trim();
           if (!jsonText) continue;
-          
-          if (workspaceId === 'ppt') {
-              try {
-                  const parsed = JSON.parse(jsonText);
-                  if (lastUploadedImagesRef.current.length > 0) {
-                      parsed.uploadedImages = lastUploadedImagesRef.current;
-                      onCodeAction?.(JSON.stringify(parsed), 'ppt');
-                  } else {
-                      onCodeAction?.(jsonText, 'ppt');
-                  }
-              } catch {
-                  onCodeAction?.(jsonText, 'ppt');
-              }
-          } else {
-             onCodeAction?.(jsonText, workspaceId === "cad" ? 'cad' : 'ppt');
+          try {
+            const parsed = JSON.parse(jsonText);
+            if (parsed?.type === "cad_route" && typeof parsed?.agent === "string") {
+              route = { agent: parsed.agent };
+              break;
+            }
+          } catch {
           }
+        }
+
+        if (!route?.agent) {
+          const agentFromText = resolveCadAgentFromRouteText(fullResponse);
+          if (agentFromText) route = { agent: agentFromText };
+        }
+
+        if (route?.agent) {
+          setMessages((prev) => {
+            const last = prev[prev.length - 1];
+            if (last?.role === "assistant") return [...prev.slice(0, -1), { role: "assistant", content: "" }];
+            return prev;
+          });
+
+          const buildCadNextStepGuide = (args: {
+            agent: string;
+            beforeHasPlan: boolean;
+            beforeHasSvg2d: boolean;
+            producedHasPlan: boolean;
+            producedHasSvg2d: boolean;
+            producedHasImages: boolean;
+            producedHasBom: boolean;
+          }) => {
+            if (args.producedHasPlan && !args.beforeHasPlan) {
+              return trText(
+                "需求方案已输出。若满意，回复“生成2D平面图”；若不满意，请直接说需要修改的点。",
+                'The plan is ready. If it looks good, reply "Generate 2D floorplan". If not, tell me what to change.'
+              );
+            }
+            if (args.producedHasSvg2d && !args.beforeHasSvg2d) {
+              return trText(
+                "2D 平面图已生成。若需要微调请直接说明；若满意，回复“生成装修图”。",
+                'The 2D floorplan is generated. Tell me edits if needed; otherwise reply "Generate renders".'
+              );
+            }
+            if (args.producedHasImages) {
+              return trText(
+                "装修图已开始生成/已更新。下一步回复“生成物料清单（BOM）”。如需改风格/材质/预算，也可以先说修改点再重新出图。",
+                "Renders are being generated/updated. Next, reply \"Generate BOM\". If you want to change style/material/budget, tell me first and I’ll regenerate."
+              );
+            }
+            if (args.producedHasBom) {
+              return trText(
+                "物料清单已生成。你可以继续优化方案/2D/风格，或直接导出（左上角 CSV / SVG / PDF）。",
+                "BOM is generated. You can refine the plan/2D/style, or export (CSV / SVG / PDF in the top-left)."
+              );
+            }
+            if (args.agent === "cad_svg_patch_agent") {
+              return trText(
+                "已按你的要求修改 2D。若满意，回复“生成装修图”；否则继续描述需要怎么改。",
+                '2D has been patched. If OK, reply "Generate renders"; otherwise describe further edits.'
+              );
+            }
+            return "";
+          };
+
+          const runCadTaskMessages = async (taskMessages: ChatMessage[]) => {
+            let taskFull = "";
+            const taskUpdater = createThrottledAssistantUpdater();
+            await streamChatMessage(taskMessages, (chunk) => {
+              taskFull = chunk;
+              taskUpdater.push(chunk);
+            }, chatModel, controller.signal);
+            taskUpdater.flush();
+            return taskFull;
+          };
+
+          const emitCadJson = (text: string) => {
+            const match = text.match(/```json\s*([\s\S]*?)```/);
+            const jsonText = match ? match[1].trim() : text.trim();
+            if (!jsonText.startsWith("{")) return;
+            onCodeAction?.(jsonText, "cad");
+          };
+
+          const agent = String(route.agent || "").trim();
+          const beforeHasPlan = !!cadContext?.plan;
+          const beforeHasSvg2d = !!(typeof cadContext?.svg2d === "string" && cadContext.svg2d.trim());
+          const planJson = cadContext?.plan ? JSON.stringify(cadContext.plan) : "";
+          const svg2d = cadContext?.svg2d || "";
+
+          if (agent === "cad_bom_agent" || agent === "cad_images_agent") {
+            const systemContentTasks = buildCadTasksSystemContent({ globalSystemPrompt, globalConstraints });
+            const taskMessages =
+              agent === "cad_bom_agent"
+                ? buildCadBomMessages({ systemContent: systemContentTasks, planJson, svg2d })
+                : buildCadImagesMessages({ systemContent: systemContentTasks, planJson, svg2d });
+
+            const taskFull = await runCadTaskMessages(taskMessages);
+            if (taskFull) {
+              emitCadJson(taskFull);
+              if (agent === "cad_bom_agent") {
+                const fallback = parseMarkdownBomTable(taskFull);
+                if (fallback) onCodeAction?.(JSON.stringify(fallback), "cad");
+              }
+              const producedHasPlan = /"type"\s*:\s*"cad_plan"/.test(taskFull);
+              const producedHasSvg2d = /```svg[\s\S]*?```/.test(taskFull);
+              const producedHasImages = /"type"\s*:\s*"cad_images"/.test(taskFull);
+              const producedHasBom = /"type"\s*:\s*"cad_bom"/.test(taskFull);
+              const guide = buildCadNextStepGuide({
+                agent,
+                beforeHasPlan,
+                beforeHasSvg2d,
+                producedHasPlan,
+                producedHasSvg2d,
+                producedHasImages,
+                producedHasBom,
+              });
+              if (guide) updateLastAssistant(`${taskFull}\n\n${guide}`);
+            }
+            return;
+          }
+
+          const agentPrompt =
+            agent === "cad_plan_agent"
+              ? CAD_PLAN_AGENT_PROMPT
+              : agent === "cad_svg_generate_agent"
+                ? CAD_SVG_GENERATE_AGENT_PROMPT
+                : agent === "cad_svg_patch_agent"
+                  ? CAD_SVG_PATCH_AGENT_PROMPT
+                  : "";
+
+          if (!agentPrompt) {
+            updateLastAssistant(trText(`未识别的 CAD 子智能体：${agent}`, `Unrecognized CAD sub-agent: ${agent}`));
+            return;
+          }
+
+          const routedSystemContent = [agentPrompt, globalSystemPrompt, globalConstraints].filter(Boolean).join("\n\n");
+          const routedMessages: ChatMessage[] = [
+            { role: "system", content: routedSystemContent },
+            { role: "user", content: promptContent }
+          ];
+
+          let routedFull = "";
+          const routedUpdater = createThrottledAssistantUpdater();
+          await streamChatMessage(routedMessages, (chunk) => {
+            routedFull = chunk;
+            routedUpdater.push(chunk);
+          }, chatModel, controller.signal);
+          routedUpdater.flush();
+
+          if (routedFull) {
+            const svgMatch = routedFull.match(/```svg\n([\s\S]*?)\n```/);
+            if (svgMatch && svgMatch[1]) onCodeAction?.(svgMatch[1], "cad");
+
+            const jsonRegex = /```json\s*([\s\S]*?)```/g;
+            let jm: RegExpExecArray | null;
+            while ((jm = jsonRegex.exec(routedFull))) {
+              const jsonText = String(jm[1] || "").trim();
+              if (!jsonText) continue;
+              onCodeAction?.(jsonText, "cad");
+            }
+
+            const producedHasPlan = /"type"\s*:\s*"cad_plan"/.test(routedFull);
+            const producedHasSvg2d = /```svg[\s\S]*?```/.test(routedFull);
+            const producedHasImages = /"type"\s*:\s*"cad_images"/.test(routedFull);
+            const producedHasBom = /"type"\s*:\s*"cad_bom"/.test(routedFull);
+            const guide = buildCadNextStepGuide({
+              agent,
+              beforeHasPlan,
+              beforeHasSvg2d,
+              producedHasPlan,
+              producedHasSvg2d,
+              producedHasImages,
+              producedHasBom,
+            });
+            if (guide) updateLastAssistant(`${routedFull}\n\n${guide}`);
+          }
+          return;
+        }
+      }
+
+      if (fullResponse) {
+        let { flowPatchFound, flowRetryError } =
+          await handleAssistantResponse(fullResponse);
+
+        let flowRetryMessagesBase: ChatMessage[] = flowRoutedBaseMessages ? [...flowRoutedBaseMessages] : apiMessages;
+        let flowRetryAgent: "patch" | "replace" | null = flowSelectedAgent;
+
+        while (
+          workspaceId === "flow" &&
+          flowPatchFound &&
+          flowRetryError &&
+          !controller.signal.aborted &&
+          flowAutoRetryCountRef.current < MAX_FLOW_AUTO_RETRY
+        ) {
+          flowAutoRetryCountRef.current += 1;
+          const forceReplace = flowAutoRetryCountRef.current >= MAX_FLOW_AUTO_RETRY;
+
+          if (forceReplace && flowRetryAgent === "patch") {
+            flowRetryAgent = "replace";
+            const routedSystemContent = [flowReplaceAgentPrompt, globalSystemPrompt, globalConstraints].filter(Boolean).join("\n\n");
+            flowRetryMessagesBase = [
+              { role: "system", content: routedSystemContent },
+              { role: "user", content: promptContent }
+            ];
+          }
+
+          const retryPrompt = buildFlowRetryPrompt(flowRetryError, forceReplace);
+          const retryMessages: ChatMessage[] = [
+            ...flowRetryMessagesBase,
+            { role: "assistant", content: fullResponse },
+            { role: "user", content: retryPrompt },
+          ];
+
+          setMessages((prev) => [...prev, { role: "assistant", content: "" }]);
+
+          let retryFull = "";
+          const retryUpdater = createThrottledAssistantUpdater();
+          await streamChatMessage(
+            retryMessages,
+            (chunk) => {
+              retryFull = chunk;
+              retryUpdater.push(chunk);
+            },
+            chatModel,
+            controller.signal,
+          );
+          retryUpdater.flush();
+
+          fullResponse = retryFull;
+          flowRetryMessagesBase = retryMessages;
+          const processed = await handleAssistantResponse(fullResponse);
+          flowPatchFound = processed.flowPatchFound;
+          flowRetryError = processed.flowRetryError;
         }
       }
 
@@ -626,19 +1072,24 @@ export function ChatPanel({
         setMessages(prev => {
           const last = prev[prev.length - 1];
           if (last?.role === 'assistant') {
-            const next = last.content ? `${last.content}\n\n（已中断）` : "（已中断）";
+            const abortedText = trText("（已中断）", "(Aborted)");
+            const next = last.content ? `${last.content}\n\n${abortedText}` : abortedText;
             return [...prev.slice(0, -1), { role: 'assistant', content: next }];
           }
-          return [...prev, { role: 'assistant', content: "（已中断）" }];
+          return [...prev, { role: 'assistant', content: trText("（已中断）", "(Aborted)") }];
         });
         return;
       }
       setMessages(prev => {
         const last = prev[prev.length - 1];
+        const errorText = trText(
+          "抱歉，遇到错误。请检查设置中的 API Key 是否正确。",
+          "Sorry, an error occurred. Please check whether the API key in Settings is correct."
+        );
         if (last.role === 'assistant' && !last.content) {
-            return [...prev.slice(0, -1), { role: 'assistant', content: "抱歉，遇到错误。请检查设置中的 API Key 是否正确。" }];
+            return [...prev.slice(0, -1), { role: 'assistant', content: errorText }];
         }
-        return [...prev, { role: 'assistant', content: "抱歉，遇到错误。请检查设置中的 API Key 是否正确。" }];
+        return [...prev, { role: 'assistant', content: errorText }];
       });
     } finally {
       setIsLoading(false);
@@ -657,9 +1108,17 @@ export function ChatPanel({
     const globalConstraints = typeof window !== 'undefined' ? localStorage.getItem(constraintsKey) || '' : '';
     const globalSystemPrompt = config.systemPrompt || '';
     const systemContent = [systemPrompt, globalSystemPrompt, globalConstraints].filter(Boolean).join('\n\n');
+    const lastUserText = String(baseMessages[baseMessages.length - 1]?.content || "");
+    const flowContextText =
+      workspaceId === "flow" && typeof flowContext?.xml === "string" && flowContext.xml.trim()
+        ? `Current diagram XML:\n\n\`\`\`xml\n${flowContext.xml}\n\`\`\``
+        : "";
+    const promptContent = [lastUserText, flowContextText].filter(Boolean).join("\n\n");
+
     const apiMessages: ChatMessage[] = [
       { role: 'system', content: systemContent },
-      ...baseMessages
+      ...baseMessages.slice(0, -1),
+      { role: "user", content: promptContent }
     ];
 
     setIsLoading(true);
@@ -679,22 +1138,106 @@ export function ChatPanel({
       updater.flush();
 
       if (fullResponse) {
-        const xmlMatch = fullResponse.match(/```xml\n([\s\S]*?)\n```/);
-        if (xmlMatch && xmlMatch[1]) onCodeAction?.(xmlMatch[1], 'flow');
+        let flowRoutedBaseMessages: ChatMessage[] | null = null;
+        let flowSelectedAgent: "patch" | "replace" | null = null;
 
-        const pyMatch = fullResponse.match(/```python\n([\s\S]*?)\n```/);
-        if (pyMatch && pyMatch[1] && workspaceId !== "cad") onCodeAction?.(pyMatch[1], 'cad');
+        if (workspaceId === "flow") {
+          const resolveFlowAgentFromRouteText = (text: string): "patch" | "replace" | null => {
+            const trimmed = String(text || "").trim();
+            if (!trimmed) return null;
 
-        if (workspaceId === "cad") {
-          const jsMatch = fullResponse.match(/```(javascript|js)\n([\s\S]*?)\n```/);
-          if (jsMatch && jsMatch[2]) onCodeAction?.(jsMatch[2], 'cad');
+            let content = trimmed;
+            const fenceMatch = content.match(/```[a-zA-Z]*\s*([\s\S]*?)```/);
+            if (fenceMatch && fenceMatch[1]) content = fenceMatch[1].trim();
+            content = content.replace(/\s+/g, "");
+
+            if (!/^[1-2]$/.test(content)) return null;
+            return content === "1" ? "patch" : "replace";
+          };
+
+          const agentFromText = resolveFlowAgentFromRouteText(fullResponse);
+          if (agentFromText) {
+            flowSelectedAgent = agentFromText;
+
+            setMessages((prev) => {
+              const last = prev[prev.length - 1];
+              if (last?.role === "assistant") return [...prev.slice(0, -1), { role: "assistant", content: "" }];
+              return prev;
+            });
+
+            const agentPrompt = flowSelectedAgent === "patch" ? flowPatchAgentPrompt : flowReplaceAgentPrompt;
+            const routedSystemContent = [agentPrompt, globalSystemPrompt, globalConstraints].filter(Boolean).join("\n\n");
+            const routedMessages: ChatMessage[] = [
+              { role: "system", content: routedSystemContent },
+              { role: "user", content: promptContent }
+            ];
+
+            let routedFull = "";
+            const routedUpdater = createThrottledAssistantUpdater();
+            await streamChatMessage(routedMessages, (chunk) => {
+              routedFull = chunk;
+              routedUpdater.push(chunk);
+            }, chatModel, controller.signal);
+            routedUpdater.flush();
+
+            flowRoutedBaseMessages = routedMessages;
+            fullResponse = routedFull;
+          }
         }
 
-        const svgMatch = fullResponse.match(/```svg\n([\s\S]*?)\n```/);
-        if (svgMatch && svgMatch[1]) onCodeAction?.(svgMatch[1], 'cad');
+        let { flowPatchFound, flowRetryError } =
+          await handleAssistantResponse(fullResponse);
 
-        const jsonMatch = fullResponse.match(/```json\n([\s\S]*?)\n```/);
-        if (jsonMatch && jsonMatch[1]) onCodeAction?.(jsonMatch[1], workspaceId === "cad" ? 'cad' : 'ppt');
+        let flowRetryMessagesBase: ChatMessage[] = flowRoutedBaseMessages ? [...flowRoutedBaseMessages] : apiMessages;
+        let flowRetryAgent: "patch" | "replace" | null = flowSelectedAgent;
+
+        while (
+          workspaceId === "flow" &&
+          flowPatchFound &&
+          flowRetryError &&
+          !controller.signal.aborted &&
+          flowAutoRetryCountRef.current < MAX_FLOW_AUTO_RETRY
+        ) {
+          flowAutoRetryCountRef.current += 1;
+          const forceReplace = flowAutoRetryCountRef.current >= MAX_FLOW_AUTO_RETRY;
+
+          if (forceReplace && flowRetryAgent === "patch") {
+            flowRetryAgent = "replace";
+            const routedSystemContent = [flowReplaceAgentPrompt, globalSystemPrompt, globalConstraints].filter(Boolean).join("\n\n");
+            flowRetryMessagesBase = [
+              { role: "system", content: routedSystemContent },
+              { role: "user", content: promptContent }
+            ];
+          }
+
+          const retryPrompt = buildFlowRetryPrompt(flowRetryError, forceReplace);
+          const retryMessages: ChatMessage[] = [
+            ...flowRetryMessagesBase,
+            { role: "assistant", content: fullResponse },
+            { role: "user", content: retryPrompt },
+          ];
+
+          setMessages((prev) => [...prev, { role: "assistant", content: "" }]);
+
+          let retryFull = "";
+          const retryUpdater = createThrottledAssistantUpdater();
+          await streamChatMessage(
+            retryMessages,
+            (chunk) => {
+              retryFull = chunk;
+              retryUpdater.push(chunk);
+            },
+            chatModel,
+            controller.signal,
+          );
+          retryUpdater.flush();
+
+          fullResponse = retryFull;
+          flowRetryMessagesBase = retryMessages;
+          const processed = await handleAssistantResponse(fullResponse);
+          flowPatchFound = processed.flowPatchFound;
+          flowRetryError = processed.flowRetryError;
+        }
       }
     } catch (error) {
       if ((error as any)?.name === "AbortError" || (error as any)?.name === "APIUserAbortError") {
@@ -729,6 +1272,7 @@ export function ChatPanel({
     if (base.length === 0) return;
     const last = base[base.length - 1];
     if (last.role !== 'user') return;
+    flowAutoRetryCountRef.current = 0;
     await runTextChat(base);
   };
 
@@ -756,6 +1300,7 @@ export function ChatPanel({
     const base = [...messages.slice(0, messageIndex), updatedUser];
     setInput("");
     setFiles([]);
+    flowAutoRetryCountRef.current = 0;
     await runTextChat(base);
   };
 
@@ -768,12 +1313,12 @@ export function ChatPanel({
 
   if (collapsed) {
       return (
-          <div className={cn("h-full border-l border-border/60 bg-background/60 backdrop-blur flex flex-col items-center py-4 gap-4 w-full", className)}>
-              <Button variant="ghost" size="icon" onClick={onToggleCollapse} title="展开聊天">
-                  <SidebarOpen className="w-5 h-5 text-muted-foreground" />
+          <div className={cn("h-full border-l border-border/60 bg-gradient-to-b from-background/70 to-background/40 backdrop-blur flex flex-col items-center py-4 gap-4 w-full", className)}>
+              <Button variant="ghost" size="icon" onClick={onToggleCollapse} title={t(uiLang, "chat.expand")} className="rounded-xl">
+                  <PanelRightOpen className="w-5 h-5 text-muted-foreground" />
               </Button>
               <div className="flex-1" />
-              <Button variant="ghost" size="icon" onClick={() => setShowGlobalConstraints(true)} title="全局约束">
+              <Button variant="ghost" size="icon" onClick={() => setShowGlobalConstraints(true)} title={t(uiLang, "chat.globalConstraints")} className="rounded-xl">
                   <Settings2 className="w-5 h-5 text-muted-foreground" />
               </Button>
           </div>
@@ -781,9 +1326,9 @@ export function ChatPanel({
   }
 
   return (
-    <div className={cn("flex flex-col h-full bg-background/60 backdrop-blur border-l border-border/60", className)}>
+    <div className={cn("flex flex-col h-full bg-gradient-to-b from-background/70 to-background/40 backdrop-blur border-l border-border/60", className)}>
       {/* Header */}
-      <div className="h-14 px-5 border-b border-border/60 flex items-center justify-between bg-background/70 backdrop-blur-md supports-[backdrop-filter]:bg-background/60 z-10 shadow-sm">
+      <div className="h-14 px-5 border-b border-border/60 flex items-center justify-between bg-background/60 backdrop-blur-md supports-[backdrop-filter]:bg-background/50 z-10 shadow-sm">
         <div className="flex items-center gap-2 font-medium">
           <Bot className="w-5 h-5 text-primary" />
           <span>{title}</span>
@@ -793,8 +1338,8 @@ export function ChatPanel({
               variant="ghost"
               size="icon"
               onClick={startNewChat}
-              className="h-8 w-8 text-muted-foreground hover:text-foreground"
-              title="新开对话"
+              className="h-8 w-8 text-muted-foreground hover:text-foreground rounded-xl"
+              title={t(uiLang, "chat.newChatTitle")}
             >
               <Plus className="w-4 h-4" />
             </Button>
@@ -803,8 +1348,8 @@ export function ChatPanel({
                   variant="ghost"
                   size="icon"
                   onClick={() => setShowHistory(true)}
-                  className="h-8 w-8 text-muted-foreground hover:text-foreground"
-                  title="版本历史"
+                  className="h-8 w-8 text-muted-foreground hover:text-foreground rounded-xl"
+                  title={t(uiLang, "chat.historyTitle")}
               >
                   <History className="w-4 h-4" />
               </Button>
@@ -813,8 +1358,8 @@ export function ChatPanel({
                 variant="ghost" 
                 size="icon" 
                 onClick={() => setShowResetWarning(true)}
-                className="h-8 w-8 text-muted-foreground hover:text-destructive transition-colors"
-                title="清空对话"
+                className="h-8 w-8 text-muted-foreground hover:text-destructive transition-colors rounded-xl"
+                title={t(uiLang, "chat.clearChatTitle")}
             >
                 <Trash2 className="w-4 h-4" />
             </Button>
@@ -823,10 +1368,11 @@ export function ChatPanel({
                   variant="ghost"
                   size="icon"
                   onClick={onToggleCollapse}
-                  title={collapseLocked ? "PPT 生成完成前不能收起聊天" : "收起聊天"}
+                  title={collapseLocked ? t(uiLang, "chat.collapseLocked") : t(uiLang, "chat.collapse")}
                   disabled={collapseLocked}
+                  className="rounded-xl"
                 >
-                    <SidebarClose className="w-4 h-4 text-muted-foreground" />
+                    <PanelRightClose className="w-4 h-4 text-muted-foreground" />
                 </Button>
             )}
         </div>
@@ -845,7 +1391,7 @@ export function ChatPanel({
       </div>
 
       {/* Input */}
-      <div className="p-4 bg-background/50 backdrop-blur relative z-20">
+      <div className="p-4 bg-background/40 backdrop-blur relative z-20">
         <ChatInput 
             input={input}
             setInput={setInput}

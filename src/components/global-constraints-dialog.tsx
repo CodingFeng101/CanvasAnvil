@@ -9,6 +9,8 @@ import {
     DialogTitle,
 } from "@/components/ui/dialog"
 import { Textarea } from "@/components/ui/textarea"
+import { useUiLanguage } from "@/lib/use-ui-language";
+import { t } from "@/lib/i18n";
 
 export const STORAGE_GLOBAL_CONSTRAINTS_KEY = "unified-ai-workspace-global-constraints"
 
@@ -24,6 +26,7 @@ export function GlobalConstraintsDialog({
     workspaceId
 }: GlobalConstraintsDialogProps) {
     const [constraints, setConstraints] = useState("")
+    const uiLang = useUiLanguage();
     
     // Determine the actual storage key
     const storageKey = workspaceId 
@@ -46,22 +49,32 @@ export function GlobalConstraintsDialog({
         <Dialog open={open} onOpenChange={onOpenChange}>
             <DialogContent className="sm:max-w-[500px]">
                 <DialogHeader>
-                    <DialogTitle>全局规则约束 ({workspaceId === 'flow' ? '流程图' : workspaceId === 'cad' ? 'CAD设计' : workspaceId === 'ppt' ? 'PPT演示' : '通用'})</DialogTitle>
+                    <DialogTitle>
+                        {t(uiLang, "constraints.title")} (
+                        {workspaceId === 'flow'
+                            ? (uiLang === "zh" ? '流程图' : 'Flow')
+                            : workspaceId === 'cad'
+                              ? (uiLang === "zh" ? 'CAD设计' : 'CAD')
+                              : workspaceId === 'ppt'
+                                ? (uiLang === "zh" ? 'PPT演示' : 'PPT')
+                                : (uiLang === "zh" ? '通用' : 'General')}
+                        )
+                    </DialogTitle>
                     <DialogDescription>
-                        设置适用于当前工作区的全局系统提示词。
+                        {t(uiLang, "constraints.desc")}
                     </DialogDescription>
                 </DialogHeader>
                 <div className="grid gap-4 py-4">
                     <Textarea
                         value={constraints}
                         onChange={(e) => setConstraints(e.target.value)}
-                        placeholder="例如：始终使用中文回答，代码注释必须详细..."
+                        placeholder={t(uiLang, "constraints.placeholder")}
                         className="min-h-[200px]"
                     />
                 </div>
                 <DialogFooter>
                     <Button onClick={handleSave}>
-                        保存
+                        {t(uiLang, "common.save")}
                     </Button>
                 </DialogFooter>
             </DialogContent>

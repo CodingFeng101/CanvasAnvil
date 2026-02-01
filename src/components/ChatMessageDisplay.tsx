@@ -38,6 +38,7 @@ import remarkGfm from 'remark-gfm';
 import { Reasoning, ReasoningContent, ReasoningTrigger } from "@/components/ai-elements/reasoning";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { CodeBlock } from "@/components/ui/code-block";
+import { useUiLanguage } from "@/lib/use-ui-language";
 import { cn } from "@/lib/utils";
 
 // Types
@@ -212,6 +213,8 @@ export function ChatMessageDisplay({
     status = "idle",
     onDisplayChart
 }: ChatMessageDisplayProps) {
+    const uiLang = useUiLanguage();
+    const tr = (zh: string, en: string) => (uiLang === "zh" ? zh : en);
     const scrollRootRef = useRef<HTMLDivElement>(null);
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
@@ -227,8 +230,25 @@ export function ChatMessageDisplay({
             await navigator.clipboard.writeText(text);
             setCopiedMessageId(messageId);
             setTimeout(() => setCopiedMessageId(null), 2000);
-        } catch (err) {
-            console.error("Failed to copy:", err);
+        } catch (_err) {
+            const textarea = document.createElement("textarea");
+            textarea.value = text;
+            textarea.style.position = "fixed";
+            textarea.style.left = "-9999px";
+            textarea.style.opacity = "0";
+            document.body.appendChild(textarea);
+
+            try {
+                textarea.select();
+                const ok = document.execCommand("copy");
+                if (!ok) throw new Error("Copy command failed");
+                setCopiedMessageId(messageId);
+                setTimeout(() => setCopiedMessageId(null), 2000);
+            } catch (fallbackErr) {
+                console.error("Failed to copy message:", fallbackErr);
+            } finally {
+                document.body.removeChild(textarea);
+            }
         }
     };
 
@@ -313,8 +333,12 @@ export function ChatMessageDisplay({
                 <div className="py-5 px-5 space-y-5">
                     {messages.map((message, messageIndex) => {
                     const userMessageText = message.role === "user" ? getMessageTextContent(message) : "";
-                    const isLastAssistantMessage = message.role === "assistant" && messageIndex === messages.length - 1;
-                    const isLastUserMessage = message.role === "user" && messageIndex === messages.length - 1;
+                    const isLastAssistantMessage =
+                        message.role === "assistant" &&
+                        (messageIndex === messages.length - 1 || messages.slice(messageIndex + 1).every((m) => m.role !== "assistant"));
+                    const isLastUserMessage =
+                        message.role === "user" &&
+                        (messageIndex === messages.length - 1 || messages.slice(messageIndex + 1).every((m) => m.role !== "user"));
                     const isEditing = editingMessageId === message.id;
 
                     return (
@@ -330,21 +354,21 @@ export function ChatMessageDisplay({
                                             <div className="w-5 h-5 rounded-full bg-blue-600 flex items-center justify-center">
                                                 <Cpu className="w-3 h-3 text-white" />
                                             </div>
-                                            <span className="text-xs font-medium text-muted-foreground">AI 助手</span>
+                                            <span className="text-xs font-medium text-muted-foreground">{tr("AI 助手", "AI Assistant")}</span>
                                         </>
                                     ) : (
                                         <>
-                                            <span className="text-xs font-medium text-muted-foreground">You</span>
+                                            <span className="text-xs font-medium text-muted-foreground">{tr("你", "You")}</span>
                                         </>
                                     )}
                                 </div>
 
                                 {/* Content Bubble */}
                                 <div className={cn(
-                                    "relative px-4 py-3 text-sm leading-relaxed shadow-sm break-words overflow-hidden",
+                                    "relative px-4 py-3 text-sm leading-relaxed break-words overflow-hidden border border-border/50 bg-background/70 backdrop-blur-md shadow-sm transition-shadow hover:shadow-md",
                                     message.role === "user" 
-                                        ? "bg-white dark:bg-zinc-800 border border-border/40 text-foreground rounded-2xl rounded-tr-sm w-full"
-                                        : "bg-white dark:bg-zinc-800 border border-border/40 text-foreground rounded-2xl rounded-tl-sm w-full"
+                                        ? "text-foreground rounded-2xl rounded-tr-sm w-full"
+                                        : "text-foreground rounded-2xl rounded-tl-sm w-full"
                                 )}>
                                     
                                     {/* Reasoning Parts */}
@@ -390,7 +414,7 @@ export function ChatMessageDisplay({
                                                             onClick={() => setEditingMessageId(null)}
                                                             className="px-3 py-1 text-xs rounded bg-muted hover:bg-muted/80 text-foreground"
                                                         >
-                                                            取消
+                                                            {tr("取消", "Cancel")}
                                                         </button>
                                                         <button
                                                             onClick={() => {
@@ -401,7 +425,7 @@ export function ChatMessageDisplay({
                                                             }}
                                                             className="px-3 py-1 text-xs rounded bg-primary hover:bg-primary/90 text-primary-foreground"
                                                         >
-                                                            重新发送
+                                                            {tr("重新发送", "Resend")}
                                                         </button>
                                                     </div>
                                                 </div>
@@ -444,7 +468,7 @@ export function ChatMessageDisplay({
                                                                 )}
                                                             >
                                                                 <PIcon className="h-3.5 w-3.5 text-red-600 dark:text-red-200 mr-1" />
-                                                                {t.title ? `第 ${t.n} 页：${t.title}` : `第 ${t.n} 页`}
+                                                                {t.title ? tr(`第 ${t.n} 页：${t.title}`, `Slide ${t.n}: ${t.title}`) : tr(`第 ${t.n} 页`, `Slide ${t.n}`)}
                                                             </span>
                                                         ))}
                                                     </div>
@@ -492,12 +516,12 @@ export function ChatMessageDisplay({
                                                             >
                                                                 {parts.map((p, j) => {
                                                                     if (p.type === "text") return <span key={`${idx}-t-${j}`}>{p.text}</span>;
-                                                                    const label = p.title ? `第 ${p.n} 页：${p.title}` : `第 ${p.n} 页`;
+                                                                    const label = p.title ? tr(`第 ${p.n} 页：${p.title}`, `Slide ${p.n}: ${p.title}`) : tr(`第 ${p.n} 页`, `Slide ${p.n}`);
                                                                     return (
                                                                         <span
                                                                             key={`${idx}-ppt-${j}`}
                                                                             className="mx-1 inline-flex items-center gap-1.5 rounded-full border border-red-200 bg-red-50 px-2 py-0.5 text-xs font-medium text-red-700 dark:border-red-400/30 dark:bg-red-950/40 dark:text-red-200 align-middle"
-                                                                            title={`幻灯片 · ${label}`}
+                                                                            title={tr(`幻灯片 · ${label}`, `Slide · ${label}`)}
                                                                         >
                                                                             <PIcon className="h-3.5 w-3.5 text-red-600 dark:text-red-200" />
                                                                             {label}
@@ -594,50 +618,60 @@ export function ChatMessageDisplay({
                                     {isLastAssistantMessage && status === "streaming" && (
                                         <div className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
                                             <Loader2 className="h-3 w-3 animate-spin" />
-                                            <span>Thinking...</span>
+                                            <span>{tr("思考中...", "Thinking...")}</span>
                                         </div>
                                     )}
                                 </div>
 
                                 {/* Actions */}
-                                <div className="flex items-center gap-1 mt-1 opacity-0 group-hover:opacity-100 transition-opacity px-1">
-                                    {message.role === "user" && !isEditing && (
+                                <div className="flex items-center gap-1 mt-2 px-1">
+                                    {message.role === "user" && !isEditing && userMessageText && (
                                         <>
+                                            {onEditMessage && isLastUserMessage && (
+                                                <button
+                                                    type="button"
+                                                    onClick={() => {
+                                                        setEditingMessageId(message.id);
+                                                        setEditText(getUserOriginalText(message));
+                                                    }}
+                                                    className="p-1.5 rounded-lg text-muted-foreground/60 hover:text-foreground hover:bg-muted transition-colors"
+                                                    title={tr("编辑", "Edit")}
+                                                >
+                                                    <Pencil className="h-3.5 w-3.5" />
+                                                </button>
+                                            )}
                                             <button
-                                                onClick={() => {
-                                                    setEditingMessageId(message.id);
-                                                    setEditText(getUserOriginalText(message));
-                                                }}
-                                                className="p-1 rounded hover:bg-muted text-muted-foreground"
-                                                title="Edit"
-                                            >
-                                                <Pencil className="h-3 w-3" />
-                                            </button>
-                                            <button
+                                                type="button"
                                                 onClick={() => copyMessageToClipboard(message.id, getUserOriginalText(message))}
-                                                className="p-1 rounded hover:bg-muted text-muted-foreground"
-                                                title="Copy"
+                                                className="p-1.5 rounded-lg text-muted-foreground/60 hover:text-foreground hover:bg-muted transition-colors"
+                                                title={tr("复制", "Copy")}
                                             >
-                                                {copiedMessageId === message.id ? <Check className="h-3 w-3 text-green-500" /> : <Copy className="h-3 w-3" />}
+                                                {copiedMessageId === message.id ? <Check className="h-3.5 w-3.5 text-green-500" /> : <Copy className="h-3.5 w-3.5" />}
                                             </button>
                                         </>
                                     )}
                                     {message.role === "assistant" && (
                                         <>
                                             <button
+                                                type="button"
                                                 onClick={() => copyMessageToClipboard(message.id, getMessageTextContent(message))}
-                                                className="p-1 rounded hover:bg-muted text-muted-foreground"
-                                                title="Copy"
+                                                className={`p-1.5 rounded-lg transition-colors ${
+                                                    copiedMessageId === message.id
+                                                        ? "text-green-600 bg-green-100 dark:bg-green-950/30"
+                                                        : "text-muted-foreground/60 hover:text-foreground hover:bg-muted"
+                                                }`}
+                                                title={tr("复制", "Copy")}
                                             >
-                                                {copiedMessageId === message.id ? <Check className="h-3 w-3 text-green-500" /> : <Copy className="h-3 w-3" />}
+                                                {copiedMessageId === message.id ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
                                             </button>
-                                            {onRegenerate && (
+                                            {onRegenerate && isLastAssistantMessage && (
                                                 <button
+                                                    type="button"
                                                     onClick={() => onRegenerate(messageIndex)}
-                                                    className="p-1 rounded hover:bg-muted text-muted-foreground"
-                                                    title="Regenerate"
+                                                    className="p-1.5 rounded-lg text-muted-foreground/60 hover:text-foreground hover:bg-muted transition-colors"
+                                                    title={tr("重新生成", "Regenerate")}
                                                 >
-                                                    <RotateCcw className="h-3 w-3" />
+                                                    <RotateCcw className="h-3.5 w-3.5" />
                                                 </button>
                                             )}
                                         </>
@@ -657,7 +691,7 @@ export function ChatMessageDisplay({
                     className="absolute bottom-4 right-4 z-20 inline-flex items-center gap-1 rounded-full border border-border bg-background/90 backdrop-blur px-3 py-1.5 text-xs text-foreground shadow-md hover:bg-background"
                 >
                     <ChevronDown className="w-3.5 h-3.5" />
-                    回到底部
+                    {tr("回到底部", "Back to bottom")}
                 </button>
             )}
         </div>

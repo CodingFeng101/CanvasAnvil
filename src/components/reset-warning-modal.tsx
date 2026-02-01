@@ -8,6 +8,8 @@ import {
     DialogHeader,
     DialogTitle,
 } from "@/components/ui/dialog"
+import { t } from "@/lib/i18n";
+import { useUiLanguage } from "@/lib/use-ui-language";
 
 interface ResetWarningModalProps {
     open: boolean
@@ -20,21 +22,22 @@ export function ResetWarningModal({
     onOpenChange,
     onClear,
 }: ResetWarningModalProps) {
+    const uiLang = useUiLanguage();
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
             <DialogContent>
                 <DialogHeader>
-                    <DialogTitle>清空对话</DialogTitle>
+                    <DialogTitle>{t(uiLang, "reset.title")}</DialogTitle>
                     <DialogDescription>
-                        确定要清空所有对话记录吗？此操作无法撤销。
+                        {t(uiLang, "reset.desc")}
                     </DialogDescription>
                 </DialogHeader>
                 <DialogFooter>
                     <Button variant="outline" onClick={() => onOpenChange(false)}>
-                        取消
+                        {t(uiLang, "common.cancel")}
                     </Button>
                     <Button variant="destructive" onClick={onClear}>
-                        清空
+                        {t(uiLang, "common.clear")}
                     </Button>
                 </DialogFooter>
             </DialogContent>

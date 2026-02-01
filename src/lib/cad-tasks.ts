@@ -1,10 +1,7 @@
 import type { ChatMessage } from "@/lib/ai-client";
 
-import cadTasksSystemHint from "../../agent/cad/tasks-system-hint.md?raw";
 import cadBomPromptTemplate from "../../agent/cad/bom-prompt.md?raw";
 import cadImagesPromptTemplate from "../../agent/cad/images-prompt.md?raw";
-
-export const CAD_TASKS_SYSTEM_HINT = cadTasksSystemHint;
 
 function applyTemplate(template: string, vars: Record<string, string>) {
   let out = String(template || "");
@@ -29,13 +26,10 @@ export function buildCadImagesPrompt(args: { planJson: string; svg2d: string }) 
 }
 
 export function buildCadTasksSystemContent(args: {
-  systemPrompt: string;
   globalSystemPrompt: string;
   globalConstraints: string;
 }) {
-  return [args.systemPrompt, args.globalSystemPrompt, args.globalConstraints, CAD_TASKS_SYSTEM_HINT]
-    .filter(Boolean)
-    .join("\n\n");
+  return [args.globalSystemPrompt, args.globalConstraints].filter(Boolean).join("\n\n");
 }
 
 export function buildCadBomMessages(args: {
@@ -59,4 +53,3 @@ export function buildCadImagesMessages(args: {
     { role: "user", content: buildCadImagesPrompt({ planJson: args.planJson, svg2d: args.svg2d }) },
   ];
 }
-

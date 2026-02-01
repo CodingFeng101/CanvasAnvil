@@ -8,6 +8,8 @@ import {
 import { Button } from '@/components/ui/button';
 import { Clock, RotateCcw, FileCode, Trash2 } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { useUiLanguage } from "@/lib/use-ui-language";
+import { t } from "@/lib/i18n";
 
 export interface HistoryItem {
     id: string;
@@ -32,6 +34,7 @@ export function HistoryDialog({
     onRestore,
     onClear,
 }: HistoryDialogProps) {
+    const uiLang = useUiLanguage();
     const formatDate = (ts: number) => {
         return new Date(ts).toLocaleString();
     };
@@ -43,7 +46,7 @@ export function HistoryDialog({
                     <div className="flex items-center justify-between gap-3">
                         <DialogTitle className="flex items-center gap-2">
                             <Clock className="w-5 h-5 text-muted-foreground" />
-                            版本历史
+                            {t(uiLang, "history.title")}
                         </DialogTitle>
                         {history.length > 0 && onClear && (
                             <Button
@@ -53,7 +56,7 @@ export function HistoryDialog({
                                 className="gap-1 text-xs"
                             >
                                 <Trash2 className="w-3.5 h-3.5" />
-                                清空
+                                {t(uiLang, "history.clear")}
                             </Button>
                         )}
                     </div>
@@ -63,7 +66,7 @@ export function HistoryDialog({
                     {history.length === 0 ? (
                         <div className="text-center p-8 text-muted-foreground text-sm flex flex-col items-center gap-2">
                             <Clock className="w-8 h-8 opacity-20" />
-                            <p>暂无历史记录</p>
+                            <p>{t(uiLang, "history.empty")}</p>
                         </div>
                     ) : (
                         <ScrollArea className="h-[400px] pr-4">
@@ -81,7 +84,7 @@ export function HistoryDialog({
                                                 <FileCode className="w-3 h-3" />
                                                 <span>{item.type.toUpperCase()}</span>
                                                 <span>•</span>
-                                                <span>{item.content.length} chars</span>
+                                                <span>{t(uiLang, "history.chars", { n: item.content.length })}</span>
                                             </div>
                                         </div>
                                         
@@ -95,7 +98,7 @@ export function HistoryDialog({
                                             className="opacity-0 group-hover:opacity-100 transition-opacity gap-1 text-xs"
                                         >
                                             <RotateCcw className="w-3 h-3" />
-                                            恢复
+                                            {t(uiLang, "history.restore")}
                                         </Button>
                                     </div>
                                 ))}

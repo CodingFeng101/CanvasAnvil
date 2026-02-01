@@ -1,13 +1,12 @@
 import React, { useMemo, useRef, useState } from 'react';
-import { Highlight, themes } from "prism-react-renderer";
+import { Highlight, themes, type Language } from "prism-react-renderer";
 import { ChevronRight, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 
 interface CodeBlockProps {
     code: string;
     language?: string;
-    isStreaming?: boolean; // New prop to indicate if content is actively streaming
+    isStreaming?: boolean;
     blockId?: string;
 }
 
@@ -21,20 +20,49 @@ export function CodeBlock({ code, language = "xml", isStreaming = false, blockId
     const preRef = useRef<HTMLPreElement | null>(null);
     const normalizedLanguage = useMemo(() => (language || "text").toLowerCase(), [language]);
     const normalizedCode = useMemo(() => String(code ?? ""), [code]);
+    const prismLanguage = useMemo<Language>(() => {
+        const lang = normalizedLanguage;
+        if (lang === "svg") return "xml";
+        if (lang === "yml") return "yaml";
+        if (lang === "shell" || lang === "sh" || lang === "zsh") return "bash";
+        if (lang === "ts") return "typescript";
+        if (lang === "tsx") return "tsx";
+        if (lang === "js") return "javascript";
+        if (lang === "md") return "markdown";
+        const allowed = new Set([
+            "text",
+            "xml",
+            "json",
+            "javascript",
+            "typescript",
+            "tsx",
+            "jsx",
+            "python",
+            "bash",
+            "yaml",
+            "markdown",
+            "css",
+            "html",
+        ]);
+        if (allowed.has(lang)) return lang as Language;
+        return "text";
+    }, [normalizedLanguage]);
     
+    const setOpen = (open: boolean) => {
+        setIsOpen(open);
+        if (blockId) openStateById.set(blockId, open);
+    };
+
     return (
-        <Collapsible
-            open={isOpen}
-            onOpenChange={(open) => {
-                setIsOpen(open);
-                if (blockId) openStateById.set(blockId, open);
-            }}
-            className="w-full my-2 border border-border/50 rounded-lg bg-zinc-50 overflow-hidden group shadow-sm"
-        >
-            <CollapsibleTrigger className="flex items-center gap-2 w-full p-2.5 cursor-pointer hover:bg-zinc-100 transition-colors text-xs font-medium text-zinc-600 select-none bg-zinc-100/70">
-                <ChevronRight className={cn("w-4 h-4 transition-transform duration-200", isOpen && "rotate-90")} />
+        <div className="w-full my-2 border border-border/50 rounded-lg bg-zinc-50 dark:bg-zinc-900/40 overflow-hidden shadow-sm">
+            <button
+                type="button"
+                onClick={() => setOpen(!isOpen)}
+                className="flex items-center gap-2 w-full p-2.5 cursor-pointer hover:bg-zinc-100 dark:hover:bg-zinc-800/40 transition-colors text-xs font-medium text-zinc-600 dark:text-zinc-300 select-none bg-zinc-100/70 dark:bg-zinc-900/60"
+            >
+                <ChevronRight className={cn("w-4 h-4 transition-transform duration-200 text-zinc-600 dark:text-zinc-300", isOpen && "rotate-90")} />
                 
-                <span className="uppercase font-semibold tracking-wider text-zinc-700">{normalizedLanguage}</span>
+                <span className="uppercase font-semibold tracking-wider text-zinc-700 dark:text-zinc-200">{normalizedLanguage}</span>
                 
                 {isStreaming ? (
                     <div className="flex items-center gap-2 ml-auto">
@@ -44,14 +72,13 @@ export function CodeBlock({ code, language = "xml", isStreaming = false, blockId
                 ) : (
                     <span className="ml-auto text-[10px] opacity-70 font-mono">{normalizedCode.length} chars</span>
                 )}
-            </CollapsibleTrigger>
+            </button>
             
-            <CollapsibleContent>
+            {isOpen && (
                 <div className="p-0 border-t border-border/50">
-                     <div className="overflow-hidden w-full bg-zinc-50">
-                        <Highlight theme={themes.github} code={normalizedCode} language={normalizedLanguage as any}>
+                     <div className="overflow-hidden w-full bg-zinc-50 dark:bg-zinc-900/40">
+                        <Highlight theme={themes.github} code={normalizedCode} language={prismLanguage}>
                             {({
-                                className: _className,
                                 style,
                                 tokens,
                                 getLineProps,
@@ -98,7 +125,7 @@ export function CodeBlock({ code, language = "xml", isStreaming = false, blockId
                         </Highlight>
                     </div>
                 </div>
-            </CollapsibleContent>
-        </Collapsible>
+            )}
+        </div>
     );
 }

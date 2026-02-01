@@ -3,21 +3,30 @@ import { createPortal } from 'react-dom';
 import { Settings, X, Save } from 'lucide-react';
 import { getAIConfig, saveAIConfig, AIConfig } from '@/lib/ai-client';
 import { Button } from '@/components/ui/button';
-import { cn } from '@/lib/utils';
+import { getUiLanguage, setUiLanguage, type UiLanguage } from "@/lib/ui-language";
+import { t } from "@/lib/i18n";
 
 export function SettingsDialog() {
   const [isOpen, setIsOpen] = useState(false);
   const [config, setConfig] = useState<AIConfig>(getAIConfig());
+  const [uiLang, setUiLang] = useState<UiLanguage>(() => getUiLanguage());
 
   // Reload config when dialog opens
   useEffect(() => {
     if (isOpen) {
       setConfig(getAIConfig());
+      setUiLang(getUiLanguage());
     }
   }, [isOpen]);
 
+  useEffect(() => {
+    if (!isOpen) return;
+    setUiLanguage(uiLang);
+  }, [uiLang, isOpen]);
+
   const handleSave = () => {
     saveAIConfig(config);
+    setUiLanguage(uiLang);
     setIsOpen(false);
   };
 
@@ -28,7 +37,7 @@ export function SettingsDialog() {
         size="icon"
         onClick={() => setIsOpen(true)}
         className="text-muted-foreground hover:text-foreground"
-        title="设置"
+        title={t(uiLang, "settings.buttonTitle")}
       >
         <Settings className="w-5 h-5" />
       </Button>
@@ -38,8 +47,8 @@ export function SettingsDialog() {
           <div className="bg-background rounded-xl shadow-2xl w-full max-w-md border border-border/50 flex flex-col max-h-[90vh] animate-in zoom-in-95 duration-200 overflow-hidden">
             <div className="flex items-center justify-between p-6 border-b border-border/50 bg-muted/10">
               <div>
-                <h2 className="text-lg font-semibold text-foreground tracking-tight">配置设置</h2>
-                <p className="text-xs text-muted-foreground mt-1">配置 AI 模型参数与 API 密钥</p>
+                <h2 className="text-lg font-semibold text-foreground tracking-tight">{t(uiLang, "settings.title")}</h2>
+                <p className="text-xs text-muted-foreground mt-1">{t(uiLang, "settings.subtitle")}</p>
               </div>
               <Button variant="ghost" size="icon" onClick={() => setIsOpen(false)} className="h-8 w-8 rounded-full hover:bg-muted/50">
                 <X className="w-4 h-4" />
@@ -47,6 +56,26 @@ export function SettingsDialog() {
             </div>
             
             <div className="p-6 space-y-5 overflow-y-auto">
+              <div className="flex items-center justify-between gap-3">
+                <div className="text-sm font-medium text-foreground">{t(uiLang, "settings.language")}</div>
+                <div className="flex items-center rounded-lg border border-border/60 bg-muted/10 p-1">
+                  <Button
+                    variant={uiLang === "zh" ? "secondary" : "ghost"}
+                    className="h-8 px-3 rounded-md"
+                    onClick={() => setUiLang("zh")}
+                  >
+                    中文
+                  </Button>
+                  <Button
+                    variant={uiLang === "en" ? "secondary" : "ghost"}
+                    className="h-8 px-3 rounded-md"
+                    onClick={() => setUiLang("en")}
+                  >
+                    English
+                  </Button>
+                </div>
+              </div>
+
               <div className="space-y-2">
                 <label className="text-sm font-medium text-foreground flex items-center gap-2">
                   API Key
@@ -74,7 +103,7 @@ export function SettingsDialog() {
 
               <div className="grid grid-cols-1 gap-5 pt-2">
                 <div className="space-y-2">
-                  <label className="text-sm font-medium text-foreground">对话模型 (Chat Model)</label>
+                  <label className="text-sm font-medium text-foreground">{t(uiLang, "settings.chatModel")}</label>
                   <input 
                     type="text" 
                     value={config.chatModel}
@@ -85,7 +114,7 @@ export function SettingsDialog() {
                 </div>
 
                 <div className="space-y-2">
-                  <label className="text-sm font-medium text-foreground">绘图模型 (Image Model)</label>
+                  <label className="text-sm font-medium text-foreground">{t(uiLang, "settings.imageModel")}</label>
                   <input 
                     type="text" 
                     value={config.imageModel}
@@ -103,14 +132,14 @@ export function SettingsDialog() {
                 onClick={() => setIsOpen(false)}
                 className="rounded-lg hover:bg-muted"
               >
-                取消
+                {t(uiLang, "common.cancel")}
               </Button>
               <Button 
                 onClick={handleSave}
                 className="gap-2 rounded-lg shadow-sm"
               >
                 <Save className="w-4 h-4" />
-                保存
+                {t(uiLang, "common.save")}
               </Button>
             </div>
           </div>

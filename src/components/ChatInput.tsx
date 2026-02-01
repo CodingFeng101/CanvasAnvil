@@ -1,10 +1,12 @@
-import React, { useRef, useEffect, useMemo, useState } from 'react';
+import React, { useRef, useEffect, useMemo, useState, useCallback } from 'react';
 import { Send, FileText, ImageIcon, Settings2, Square } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { ButtonWithTooltip } from '@/components/button-with-tooltip';
 import { FilePreviewList } from '@/components/file-preview-list';
 import { useFileProcessor } from '@/lib/use-file-processor';
+import { t } from "@/lib/i18n";
+import { useUiLanguage } from "@/lib/use-ui-language";
 
 type RichInputSegment =
     | { type: "text"; text: string }
@@ -51,6 +53,7 @@ export function ChatInput({
     clearKey,
     uploadMode = "all"
 }: ChatInputProps) {
+    const uiLang = useUiLanguage();
     const textareaRef = useRef<HTMLTextAreaElement>(null);
     const richRef = useRef<HTMLDivElement>(null);
     const richSavedRangeRef = useRef<Range | null>(null);
@@ -82,13 +85,50 @@ export function ChatInput({
         }
     };
 
-    // Auto-resize textarea
+    const autoResizeTextarea = useCallback(() => {
+        if (isRich) return;
+        const el = textareaRef.current;
+        if (!el) return;
+        el.style.height = 'auto';
+        el.style.height = `${Math.min(el.scrollHeight, 200)}px`;
+    }, [isRich]);
+
+    useEffect(() => {
+        autoResizeTextarea();
+    }, [input, isRich, placeholder, autoResizeTextarea]);
+
     useEffect(() => {
         if (isRich) return;
-        if (!textareaRef.current) return;
-        textareaRef.current.style.height = 'auto';
-        textareaRef.current.style.height = `${Math.min(textareaRef.current.scrollHeight, 200)}px`;
-    }, [input]);
+        const el = textareaRef.current;
+        if (!el) return;
+
+        let raf = 0;
+        const schedule = () => {
+            if (raf) cancelAnimationFrame(raf);
+            raf = requestAnimationFrame(() => {
+                raf = 0;
+                autoResizeTextarea();
+            });
+        };
+
+        schedule();
+
+        if (typeof ResizeObserver !== "undefined") {
+            const ro = new ResizeObserver(() => schedule());
+            ro.observe(el);
+            ro.observe(el.parentElement ?? el);
+            return () => {
+                if (raf) cancelAnimationFrame(raf);
+                ro.disconnect();
+            };
+        }
+
+        window.addEventListener("resize", schedule);
+        return () => {
+            if (raf) cancelAnimationFrame(raf);
+            window.removeEventListener("resize", schedule);
+        };
+    }, [isRich, autoResizeTextarea]);
 
     useEffect(() => {
         if (focusKey === undefined) return;
@@ -498,7 +538,7 @@ export function ChatInput({
                 <div className="flex items-center gap-1">
                     {onOpenGlobalConstraints && (
                         <ButtonWithTooltip
-                            tooltipContent="规则"
+                            tooltipContent={t(uiLang, "chat.rules")}
                             variant="ghost"
                             size="icon"
                             onClick={onOpenGlobalConstraints}
@@ -510,7 +550,7 @@ export function ChatInput({
 
                     {(uploadMode === "all" || uploadMode === "imagesOnly") && (
                         <ButtonWithTooltip
-                            tooltipContent="上传图片"
+                            tooltipContent={t(uiLang, "chat.uploadImage")}
                             variant="ghost"
                             size="icon"
                             onClick={handleImageUpload}
@@ -522,7 +562,7 @@ export function ChatInput({
                     
                     {(uploadMode === "all" || uploadMode === "filesOnly") && (
                         <ButtonWithTooltip
-                            tooltipContent="上传文件"
+                            tooltipContent={t(uiLang, "chat.uploadFile")}
                             variant="ghost"
                             size="icon"
                             onClick={handleFileUpload}
@@ -538,21 +578,20 @@ export function ChatInput({
                     const hasFiles = files.length > 0;
                     if (isLoading) {
                         return (
-                            <Button
-                                type="button"
-                                variant="destructive"
-                                size="sm"
+                            <ButtonWithTooltip
+                                tooltipContent={t(uiLang, "chat.stop")}
+                                variant="outline"
+                                size="icon"
                                 onClick={(e) => {
                                     e.preventDefault();
                                     onStop?.();
                                 }}
                                 disabled={!onStop}
-                                className="h-9 px-4 rounded-xl font-medium shadow-sm"
-                                aria-label="停止生成"
+                                className="h-9 w-9 rounded-xl border-red-200 bg-red-50 text-red-600 hover:bg-red-100 hover:text-red-700 dark:border-red-900/50 dark:bg-red-950/40 dark:text-red-300 dark:hover:bg-red-950/60"
+                                aria-label={t(uiLang, "chat.stop")}
                             >
-                                <Square className="h-4 w-4 fill-current mr-1.5" />
-                                停止
-                            </Button>
+                                <Square className="h-4 w-4 fill-current" />
+                            </ButtonWithTooltip>
                         );
                     }
                     return (
@@ -568,7 +607,7 @@ export function ChatInput({
                             aria-label="发送"
                         >
                             <Send className="h-4 w-4 mr-1.5" />
-                            发送
+                            {t(uiLang, "chat.send")}
                         </Button>
                     );
                 })()}

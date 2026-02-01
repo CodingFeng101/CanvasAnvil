@@ -7,19 +7,21 @@ import { PptWorkspace } from '@/components/workspaces/PptWorkspace';
 import { SettingsDialog } from '@/components/SettingsDialog';
 import { Layers, FileCode, Presentation, Layout } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { DRAWIO_SYSTEM_PROMPT, CAD_SYSTEM_PROMPT, PPT_SYSTEM_PROMPT } from "@/lib/system-prompts";
-import pptPreReadyConstraints from "../agent/ppt/pre-ready-constraints.md?raw";
+import { DRAWIO_SYSTEM_PROMPT, CAD_SYSTEM_PROMPT, PPT_OUTLINE_EDIT_SYSTEM_PROMPT, PPT_SLIDES_EDIT_SYSTEM_PROMPT } from "@/lib/system-prompts";
 import { generateImage, getAIConfig, type ChatMessage } from '@/lib/ai-client';
-import { Toaster } from 'sonner';
+import { Toaster, toast } from 'sonner';
 import { LandingPage } from '@/pages/LandingPage';
 import { HistoryItem } from '@/components/history-dialog';
 import { Button } from "@/components/ui/button";
+import { getUiLanguage, setUiLanguage, type UiLanguage } from "@/lib/ui-language";
+import { t } from "@/lib/i18n";
 
 type WorkspaceType = 'flow' | 'cad' | 'ppt';
 
 const HISTORY_STORAGE_KEY = 'unified-ai-workspace-history';
 const CAD_WORKSPACE_STORAGE_KEY = 'unified-ai-workspace-cad-state-v1';
 const FLOW_WORKSPACE_STORAGE_KEY = 'unified-ai-workspace-flow-state-v1';
+const PPT_WORKSPACE_STORAGE_KEY = "unified-ai-workspace-ppt-state-v1";
 
 class ErrorBoundary extends React.Component<{ children: React.ReactNode }, { error: Error | null }> {
   state: { error: Error | null } = { error: null };
@@ -43,10 +45,10 @@ class ErrorBoundary extends React.Component<{ children: React.ReactNode }, { err
             </div>
             <div className="flex items-center gap-2">
               <Button variant="default" onClick={() => window.location.reload()}>
-                刷新页面
+                {t(getUiLanguage(), "app.refresh")}
               </Button>
               <Button variant="outline" onClick={() => this.setState({ error: null })}>
-                尝试继续
+                {t(getUiLanguage(), "app.tryContinue")}
               </Button>
             </div>
           </div>
@@ -58,6 +60,18 @@ class ErrorBoundary extends React.Component<{ children: React.ReactNode }, { err
 }
 
 function App() {
+  const [uiLang, setUiLang] = useState<UiLanguage>(() => getUiLanguage());
+
+  useEffect(() => {
+    setUiLanguage(uiLang);
+  }, [uiLang]);
+
+  useEffect(() => {
+    const onLang = () => setUiLang(getUiLanguage());
+    window.addEventListener("ui-language-changed", onLang as any);
+    return () => window.removeEventListener("ui-language-changed", onLang as any);
+  }, []);
+
   const initialFlowState = (() => {
     if (typeof window === "undefined") return null;
     try {
@@ -118,6 +132,7 @@ function App() {
   });
   const [pptIncomingEdit, setPptIncomingEdit] = useState<{ id: string; payload: string } | null>(null);
   const [pptDraftSlides, setPptDraftSlides] = useState<Array<{ id: string; slideId: string; title: string; json: string; kind: "outline" | "slide_image"; imageUrl?: string }>>([]);
+  const [pptResetTick, setPptResetTick] = useState(0);
   const cadImageObjectUrlsRef = useRef<string[]>([]);
 
   // Chat History Management (Per Workspace)
@@ -199,6 +214,7 @@ function App() {
   const [isChatCollapsed, setIsChatCollapsed] = useState(false);
   const chatPanelRef = useRef<PanelImperativeHandle | null>(null);
   const [pptReady, setPptReady] = useState(false);
+  const [pptStage, setPptStage] = useState<"outline" | "slides">("outline");
   const pptChatLocked = activeWorkspace === "ppt" && !pptReady;
 
   useEffect(() => {
@@ -235,23 +251,23 @@ function App() {
   const chatUi = (() => {
     if (activeWorkspace === "flow") {
       return {
-        title: "流程图助手",
-        placeholder: "描述流程…"
+        title: t(uiLang, "workspace.flow.title"),
+        placeholder: t(uiLang, "workspace.flow.placeholder")
       };
     }
     if (activeWorkspace === "cad") {
       return {
-        title: "CAD 助手",
-        placeholder: "描述 CAD…"
+        title: t(uiLang, "workspace.cad.title"),
+        placeholder: t(uiLang, "workspace.cad.placeholder")
       };
     }
     if (activeWorkspace === "ppt") {
       return {
-        title: "PPT 助手",
-        placeholder: "描述 PPT…"
+        title: t(uiLang, "workspace.ppt.title"),
+        placeholder: t(uiLang, "workspace.ppt.placeholder")
       };
     }
-    return { title: "AI 助手", placeholder: undefined as any };
+    return { title: t(uiLang, "workspace.default.title"), placeholder: undefined as any };
   })();
 
   const handleAddToChat = (code: string, type: 'xml' | 'python' | 'json' = 'xml', name: string = 'attachment') => {
@@ -306,8 +322,7 @@ function App() {
       case 'flow': return DRAWIO_SYSTEM_PROMPT;
       case 'cad': return CAD_SYSTEM_PROMPT;
       case 'ppt': {
-        if (pptReady) return PPT_SYSTEM_PROMPT;
-        return `${PPT_SYSTEM_PROMPT}\n\n${pptPreReadyConstraints}`.trim();
+        return pptStage === "slides" ? PPT_SLIDES_EDIT_SYSTEM_PROMPT : PPT_OUTLINE_EDIT_SYSTEM_PROMPT;
       }
       default: return DRAWIO_SYSTEM_PROMPT;
     }
@@ -373,14 +388,142 @@ function App() {
   };
 
   const applyStringEdits = (source: string, edits: { search: string; replace: string }[]) => {
-      let out = source;
-      for (const e of edits) {
-          if (!e || typeof e.search !== "string" || typeof e.replace !== "string") continue;
-          if (!e.search) continue;
-          if (!out.includes(e.search)) continue;
-          out = out.replace(e.search, e.replace);
+      if (!Array.isArray(edits) || edits.length === 0) {
+          throw new Error("Empty patch edits");
       }
+
+      let out = source;
+
+      for (const e of edits) {
+          if (!e || typeof e.search !== "string" || typeof e.replace !== "string") {
+              throw new Error("Invalid patch edit item");
+          }
+          const search = e.search;
+          const replace = e.replace;
+          if (!search) {
+              throw new Error("Empty search pattern in patch edit");
+          }
+          if (!out.includes(search)) {
+              throw new Error("Search pattern not found in current content");
+          }
+          out = out.replace(search, replace);
+      }
+
       return out;
+  };
+
+  const validateDrawioXml = (xml: string): string | null => {
+    const text = String(xml || "").trim();
+    if (!text) return "XML 为空";
+
+    let doc: Document;
+    try {
+      const parser = new DOMParser();
+      doc = parser.parseFromString(text, "text/xml");
+    } catch {
+      return "XML 解析失败";
+    }
+
+    const parseError = doc.querySelector("parsererror");
+    if (parseError) {
+      return "XML 不合法：包含语法错误或未转义字符（例如 < > & \"）";
+    }
+
+    const rootEl = doc.querySelector("mxGraphModel > root");
+    if (!rootEl) {
+      return "XML 结构不正确：缺少 <mxGraphModel><root>...</root></mxGraphModel>";
+    }
+
+    const allCells = Array.from(rootEl.querySelectorAll("mxCell"));
+    if (allCells.length === 0) {
+      return "XML 结构不正确：<root> 下没有 mxCell";
+    }
+
+    const notDirectChildren = allCells
+      .filter((c) => c.parentElement !== rootEl)
+      .map((c) => c.getAttribute("id") || "unknown");
+    if (notDirectChildren.length > 0) {
+      return `XML 结构不正确：所有 mxCell 必须是 <root> 的直接子元素（例如 ${notDirectChildren.slice(0, 3).join(", ")}）`;
+    }
+
+    const nestedCells = allCells
+      .filter((c) => c.parentElement?.tagName === "mxCell")
+      .map((c) => c.getAttribute("id") || "unknown");
+    if (nestedCells.length > 0) {
+      return `XML 结构不正确：mxCell 不能嵌套（例如 ${nestedCells.slice(0, 3).join(", ")}）`;
+    }
+
+    const ids = new Set<string>();
+    const duplicateIds: string[] = [];
+    const orphanCells: string[] = [];
+    const parentRefs: Array<{ id: string; parent: string }> = [];
+    const edges: Array<{ id: string; source: string | null; target: string | null }> = [];
+
+    for (const cell of allCells) {
+      const id = cell.getAttribute("id") || "";
+      const parent = cell.getAttribute("parent");
+      const isEdge = cell.getAttribute("edge") === "1";
+
+      if (!id) return "XML 结构不正确：mxCell 缺少必需的 id 属性";
+      if (ids.has(id)) duplicateIds.push(id);
+      else ids.add(id);
+
+      if (id !== "0") {
+        if (!parent) orphanCells.push(id);
+        else parentRefs.push({ id, parent });
+      }
+
+      if (isEdge) {
+        edges.push({
+          id,
+          source: cell.getAttribute("source"),
+          target: cell.getAttribute("target"),
+        });
+      }
+    }
+
+    if (duplicateIds.length > 0) {
+      return `XML 结构不正确：mxCell id 重复（例如 ${duplicateIds.slice(0, 3).join(", ")}）`;
+    }
+    if (orphanCells.length > 0) {
+      return `XML 结构不正确：缺少 parent 属性（例如 ${orphanCells.slice(0, 3).join(", ")}）`;
+    }
+
+    const cell0 = allCells.find((c) => c.getAttribute("id") === "0") || null;
+    const cell1 = allCells.find((c) => c.getAttribute("id") === "1") || null;
+    if (!cell0 || !cell1) {
+      return 'XML 结构不正确：必须包含 <mxCell id="0"/> 与 <mxCell id="1" parent="0"/>';
+    }
+    if (cell0.getAttribute("parent")) {
+      return 'XML 结构不正确：<mxCell id="0"/> 不应包含 parent 属性';
+    }
+    if (cell1.getAttribute("parent") !== "0") {
+      return 'XML 结构不正确：<mxCell id="1" parent="0"/> 的 parent 必须为 "0"';
+    }
+
+    const badParents = parentRefs.filter((p) => !ids.has(p.parent));
+    if (badParents.length > 0) {
+      const details = badParents
+        .slice(0, 3)
+        .map((p) => `${p.id}(parent:${p.parent})`)
+        .join(", ");
+      return `XML 结构不正确：parent 引用不存在（例如 ${details}）`;
+    }
+
+    const invalidConnections: string[] = [];
+    for (const edge of edges) {
+      if (edge.source && !ids.has(edge.source)) {
+        invalidConnections.push(`${edge.id}(source:${edge.source})`);
+      }
+      if (edge.target && !ids.has(edge.target)) {
+        invalidConnections.push(`${edge.id}(target:${edge.target})`);
+      }
+    }
+    if (invalidConnections.length > 0) {
+      return `XML 结构不正确：连线 source/target 引用不存在（例如 ${invalidConnections.slice(0, 3).join(", ")}）`;
+    }
+
+    return null;
   };
 
   if (showLanding) {
@@ -410,7 +553,7 @@ function App() {
             )}
           >
             <Layers className="w-4 h-4" />
-            流程图
+            {t(uiLang, "nav.flow")}
           </button>
           <button
             onClick={() => setActiveWorkspace('cad')}
@@ -422,7 +565,7 @@ function App() {
             )}
           >
             <FileCode className="w-4 h-4" />
-            CAD设计
+            {t(uiLang, "nav.cad")}
           </button>
           <button
             onClick={() => setActiveWorkspace('ppt')}
@@ -434,7 +577,7 @@ function App() {
             )}
           >
             <Presentation className="w-4 h-4" />
-            PPT演示
+            {t(uiLang, "nav.ppt")}
           </button>
         </div>
 
@@ -447,7 +590,11 @@ function App() {
       <div className="flex-1 overflow-hidden relative">
         <ErrorBoundary>
           <ResizablePanelGroup orientation="horizontal" className="h-full" style={{ height: '100%' }}>
-          <ResizablePanel defaultSize={pptChatLocked ? "100%" : "68%"} minSize="30%">
+          <ResizablePanel
+            defaultSize={pptChatLocked ? "100%" : "68%"}
+            minSize="30%"
+            className={cn("transition-[flex-grow,flex-basis] duration-300 ease-in-out will-change-[flex-grow,flex-basis]")}
+          >
             <div className="h-full w-full relative bg-muted/20">
               {activeWorkspace === 'flow' && (
                 <FlowchartWorkspace
@@ -481,9 +628,20 @@ function App() {
               )}
               {activeWorkspace === 'ppt' && (
                 <PptWorkspace
+                  key={`ppt-${pptResetTick}`}
                   onAddToChat={(code, name) => handleAddToChat(code, 'json', name)}
                   onPptReadyChange={setPptReady}
+                  onPptStageChange={setPptStage}
                   incomingEdit={pptIncomingEdit}
+                  onIncomingEditHandled={() => setPptIncomingEdit(null)}
+                  onResetWorkspace={() => {
+                    setPptIncomingEdit(null);
+                    setPptDraftSlides([]);
+                    setPptReady(false);
+                    setPptStage("outline");
+                    try { localStorage.removeItem(PPT_WORKSPACE_STORAGE_KEY); } catch {}
+                    setPptResetTick((x) => x + 1);
+                  }}
                 />
               )}
             </div>
@@ -502,7 +660,7 @@ function App() {
                 collapsible={!pptChatLocked}
                 collapsedSize="56px"
                 onResize={(panelSize) => setIsChatCollapsed(panelSize.inPixels <= 80)}
-                className={cn("transition-all duration-300")}
+                className={cn("transition-[flex-grow,flex-basis] duration-300 ease-in-out will-change-[flex-grow,flex-basis]")}
               >
                 <ChatPanel
                   key={activeWorkspace}
@@ -524,16 +682,109 @@ function App() {
                   pptDraftSlides={activeWorkspace === "ppt" ? pptDraftSlides : []}
                   onRemovePptDraftSlide={(id) => setPptDraftSlides(prev => prev.filter(s => s.id !== id))}
                   onClearPptDraftSlides={() => setPptDraftSlides([])}
+                  onClearWorkspace={() => {
+                    if (activeWorkspace === "flow") {
+                      setGeneratedXml(undefined);
+                      try { localStorage.removeItem(FLOW_WORKSPACE_STORAGE_KEY); } catch {}
+                    }
+                    if (activeWorkspace === "cad") {
+                      setCad2dSvg(undefined);
+                      setCadPlan(null);
+                      setCadImages([]);
+                      setCadImagesLoading(false);
+                      setCadBom(null);
+                      setCadFocusPanel(null);
+                      try { localStorage.removeItem(CAD_WORKSPACE_STORAGE_KEY); } catch {}
+                      try { localStorage.removeItem("unified-ai-workspace-cad-renders-v1"); } catch {}
+                    }
+                    if (activeWorkspace === "ppt") {
+                      setPptIncomingEdit(null);
+                      setPptDraftSlides([]);
+                      setPptReady(false);
+                      setPptStage("outline");
+                      try { localStorage.removeItem(PPT_WORKSPACE_STORAGE_KEY); } catch {}
+                      setPptResetTick((x) => x + 1);
+                    }
+                    setVersionHistories((prev) => ({ ...prev, [activeWorkspace]: [] }));
+                  }}
                   history={versionHistories[activeWorkspace]}
                   onRestore={(item) => handleRestore(activeWorkspace, item)}
                   onClearVersionHistory={() => {
                     setVersionHistories(prev => ({ ...prev, [activeWorkspace]: [] }));
                   }}
                   cadContext={activeWorkspace === "cad" ? { plan: cadPlan, svg2d: cad2dSvg } : undefined}
+                  flowContext={activeWorkspace === "flow" ? { xml: generatedXml } : undefined}
                   onCodeAction={(code, type) => {
                     if (type === 'flow') {
-                      setGeneratedXml(code);
-                      addToHistory(code, 'xml');
+                      const raw = String(code || "");
+                      const trimmed = raw.trim();
+                      if (!trimmed) return { ok: false, retry: false, error: "Empty input" };
+
+                      if (trimmed.startsWith("{")) {
+                        const tryParseJson = (text: string) => {
+                          try {
+                            return JSON.parse(text);
+                          } catch {
+                            const start = text.indexOf("{");
+                            const end = text.lastIndexOf("}");
+                            if (start >= 0 && end > start) {
+                              try {
+                                return JSON.parse(text.slice(start, end + 1));
+                              } catch {
+                              }
+                            }
+                            return null;
+                          }
+                        };
+
+                        try {
+                          const parsed = tryParseJson(trimmed);
+                          if (!parsed) return;
+                          if (parsed?.type === "flow_patch" && parsed?.target === "drawio_xml") {
+                            const current = generatedXml || "";
+                            if (parsed?.mode === "replace" && typeof parsed.full === "string") {
+                              const err = validateDrawioXml(parsed.full);
+                              if (err) {
+                                toast.error(`XML 校验失败：${err}。请让 AI 修复后重试，或重新生成 mode=replace。`);
+                                return { ok: false, retry: true, error: err };
+                              }
+                              setGeneratedXml(parsed.full);
+                              addToHistory(parsed.full, "xml");
+                              return { ok: true };
+                            }
+                            if (parsed?.mode === "patch" && Array.isArray(parsed.edits)) {
+                              try {
+                                const next = applyStringEdits(current, parsed.edits);
+                                const err = validateDrawioXml(next);
+                                if (err) {
+                                  toast.error(`XML 校验失败：${err}。请让 AI 改用 mode=replace，或修复后重试。`);
+                                  return { ok: false, retry: true, error: err };
+                                }
+                                setGeneratedXml(next);
+                                addToHistory(next, "xml");
+                                return { ok: true };
+                              } catch (e) {
+                                const msg = e instanceof Error ? e.message : String(e);
+                                toast.error(`补丁应用失败：${msg}。请让 AI 改用 mode=replace，或从当前 XML 精确复制 search 片段。`);
+                                return { ok: false, retry: true, error: msg };
+                              }
+                            }
+                          }
+                          if (typeof parsed?.type === "string") {
+                            return;
+                          }
+                        } catch {
+                          return;
+                        }
+                      }
+                      const err = validateDrawioXml(raw);
+                      if (err) {
+                        toast.error(`XML 校验失败：${err}。请让 AI 修复后重试。`);
+                        return { ok: false, retry: true, error: err };
+                      }
+                      setGeneratedXml(raw);
+                      addToHistory(raw, 'xml');
+                      return { ok: true };
                     } else if (type === 'cad') {
                       const raw = String(code || "");
                       const trimmed = raw.trim();
@@ -664,9 +915,14 @@ function App() {
                                 return;
                               }
                               if (mode === "patch" && Array.isArray(parsed.edits)) {
-                                const next = applyStringEdits(current, parsed.edits);
-                                setCad2dSvg(next);
-                                addToHistory(next, 'svg');
+                                try {
+                                  const next = applyStringEdits(current, parsed.edits);
+                                  setCad2dSvg(next);
+                                  addToHistory(next, 'svg');
+                                } catch (e) {
+                                  const msg = e instanceof Error ? e.message : String(e);
+                                  toast.error(`补丁应用失败：${msg}。请让 AI 改用 mode=replace，或从当前内容精确复制 search 片段。`);
+                                }
                                 return;
                               }
                             }
@@ -689,6 +945,7 @@ function App() {
                         console.error("Failed to parse PPT JSON", e);
                       }
                     }
+                    return { ok: true };
                   }}
                 />
               </ResizablePanel>
