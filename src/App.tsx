@@ -850,9 +850,11 @@ function App() {
                                 const results: { title: string; url: string; prompt: string }[] = [];
 
                                 const presetRenderPrompt = [
-                                  "photorealistic interior render, ultra realistic materials, high quality lighting",
-                                  "clean composition, no watermark, no text overlay",
-                                  "natural proportions, realistic textures, detailed shadows, global illumination"
+                                  "orthographic 2D technical construction drawing sheet, CAD-like linework",
+                                  "black and white printing, clean readable annotations, clear dimension text",
+                                  "include drawing border/frame and bottom-right title block",
+                                  "no perspective, no 3D, no photorealism",
+                                  "no watermark, no logo, no decorative typography"
                                 ].join(", ");
 
                                 const planText = cadPlan ? JSON.stringify(cadPlan) : "";
@@ -864,7 +866,7 @@ function App() {
                                 const planShort = planText.length > maxPlanChars ? planText.slice(0, maxPlanChars) : planText;
                                 const svgShort = svgText.length > maxSvgChars ? svgText.slice(0, maxSvgChars) : svgText;
 
-                                const list = items.slice(0, 6);
+                                const list = items.slice(0, 7);
                                 const batchSize = 3;
                                 for (let i = 0; i < list.length; i += batchSize) {
                                   const batch = list.slice(i, i + batchSize);
@@ -879,7 +881,7 @@ function App() {
                                         "2D SVG:",
                                         svgShort,
                                         "",
-                                        "Shot:",
+                                        "Sheet:",
                                         p.prompt
                                       ].filter(Boolean).join("\n");
                                       const url = await generateImage({ prompt: fullPrompt });

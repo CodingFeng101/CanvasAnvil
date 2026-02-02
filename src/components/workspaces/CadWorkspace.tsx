@@ -253,7 +253,7 @@ export function CadWorkspace({ onAddToChat, svg2d, plan, images = [], imagesLoad
         const fixed = (bom.columns || []).map((_, i) => esc(arr[i] ?? ""));
         rows.push(fixed.join(","));
       }
-      const csv = rows.join("\r\n");
+      const csv = `\uFEFF${rows.join("\r\n")}`;
       downloadBlob(new Blob([csv], { type: "text/csv;charset=utf-8" }), `bom-${Date.now()}.csv`);
     } finally {
       setIsExporting(false);

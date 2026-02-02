@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Bot, Trash2, History, Settings2, PanelRightClose, PanelRightOpen, Plus } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { streamChatMessage, ChatMessage, getAIConfig } from '@/lib/ai-client';
+import { streamChatMessage, generateChatMessage, ChatMessage, getAIConfig } from '@/lib/ai-client';
 import { DRAWIO_SYSTEM_PROMPT } from '@/lib/system-prompts';
 import { Button } from '@/components/ui/button';
 import { ChatInput } from '@/components/ChatInput';
@@ -10,7 +10,7 @@ import { GlobalConstraintsDialog, STORAGE_GLOBAL_CONSTRAINTS_KEY } from '@/compo
 import { HistoryDialog, HistoryItem } from '@/components/history-dialog';
 import { ResetWarningModal } from '@/components/reset-warning-modal';
 import { useFileProcessor } from '@/lib/use-file-processor';
-import { buildCadBomMessages, buildCadImagesMessages, buildCadTasksSystemContent } from '@/lib/cad-tasks';
+import { buildCadBomMessages, buildCadImagesMasterMessages, buildCadImagesSheetMessages, buildCadTasksSystemContent } from '@/lib/cad-tasks';
 import { CAD_PLAN_AGENT_PROMPT, CAD_SVG_GENERATE_AGENT_PROMPT, CAD_SVG_PATCH_AGENT_PROMPT } from '@/lib/cad-agents';
 import flowPatchAgentPrompt from "../../agent/flow/patch.md?raw";
 import flowReplaceAgentPrompt from "../../agent/flow/replace.md?raw";
@@ -207,7 +207,10 @@ export function ChatPanel({
       if (!/^\s*\|?(\s*:?-+:?\s*\|)+\s*:?-+:?\s*\|?\s*$/.test(sep)) continue;
 
       const parseRow = (line: string) => {
-        const trimmed = line.trim();
+        const trimmed = line
+          .trim()
+          .replace(/^[-*+]\s+/, "")
+          .replace(/^\d+\.\s+/, "");
         const body = trimmed.startsWith("|") ? trimmed.slice(1) : trimmed;
         const body2 = body.endsWith("|") ? body.slice(0, -1) : body;
         return body2.split("|").map((c) => c.trim());
@@ -665,9 +668,11 @@ export function ChatPanel({
       const constraintsKey = workspaceId ? `${STORAGE_GLOBAL_CONSTRAINTS_KEY}-${workspaceId}` : STORAGE_GLOBAL_CONSTRAINTS_KEY;
       const globalConstraints = typeof window !== 'undefined' ? localStorage.getItem(constraintsKey) || '' : '';
       const globalSystemPrompt = config.systemPrompt || '';
-      const systemContent = buildCadTasksSystemContent({ globalSystemPrompt, globalConstraints });
+      const systemContent = [buildCadTasksSystemContent({ globalSystemPrompt, globalConstraints }), `UI language: ${uiLang}`]
+        .filter(Boolean)
+        .join("\n\n");
       const bomMessages: ChatMessage[] = buildCadBomMessages({ systemContent, planJson, svg2d });
-      const imagesMessages: ChatMessage[] = buildCadImagesMessages({ systemContent, planJson, svg2d });
+      const masterMessages: ChatMessage[] = buildCadImagesMasterMessages({ systemContent, planJson, svg2d });
 
       setIsLoading(true);
       abortControllerRef.current?.abort();
@@ -699,10 +704,95 @@ export function ChatPanel({
       })();
 
       const imagesTask = (async () => {
-        await streamChatMessage(imagesMessages, (chunk) => {
-          imagesFull = chunk;
-        }, chatModel, controller.signal);
-        if (imagesFull) emitCadJson(imagesFull);
+        const extractJsonText = (text: string) => {
+          const match = String(text || "").match(/```json\s*([\s\S]*?)```/);
+          return match ? match[1].trim() : String(text || "").trim();
+        };
+
+        const tryParseJson = (text: string) => {
+          const normalized = extractJsonText(text);
+          try {
+            return JSON.parse(normalized);
+          } catch {
+            const start = normalized.indexOf("{");
+            const end = normalized.lastIndexOf("}");
+            if (start >= 0 && end > start) {
+              try {
+                return JSON.parse(normalized.slice(start, end + 1));
+              } catch {
+              }
+            }
+            return null;
+          }
+        };
+
+        const fallbackTitlesForOutput = [
+          trText("装修平面布置图", "Renovation Plan Layout"),
+          trText("地面铺装图", "Floor Finish Plan"),
+          trText("顶棚平面图", "Reflected Ceiling Plan"),
+          trText("墙体定位图", "Wall Setting-Out Plan"),
+          trText("机电综合图（强电+弱电+给排水）", "MEP Plan (Electrical + Low Voltage + Plumbing)"),
+          trText("立面索引图+室内立面图", "Elevation Index Plan + Interior Elevations"),
+          trText("节点详图", "Detail Drawings"),
+        ];
+        const fallbackTitlesForPromptEnglish = [
+          "Renovation Plan Layout",
+          "Floor Finish Plan",
+          "Reflected Ceiling Plan",
+          "Wall Setting-Out Plan",
+          "MEP Plan (Electrical + Low Voltage + Plumbing)",
+          "Elevation Index Plan + Interior Elevations",
+          "Detail Drawings",
+        ];
+
+        let masterSchemeJson = "";
+        try {
+          const masterText = await generateChatMessage(masterMessages, chatModel, { signal: controller.signal, timeoutMs: 120000 });
+          const parsedMaster = tryParseJson(masterText);
+          if (parsedMaster?.type === "renovation_scheme_master" && parsedMaster?.global_scheme) {
+            masterSchemeJson = JSON.stringify(parsedMaster, null, 2);
+          }
+        } catch {
+        }
+
+        const imagesSheetMessages = buildCadImagesSheetMessages({ systemContent, planJson, svg2d, masterSchemeJson });
+
+        const settled = await Promise.allSettled(
+          imagesSheetMessages.map((s) =>
+            generateChatMessage(s.messages, chatModel, { signal: controller.signal, timeoutMs: 120000 })
+          )
+        );
+
+        const prompts = settled.map((r, idx) => {
+          const fallbackTitleForOutput = fallbackTitlesForOutput[idx] || trText("装修图", "Drawing");
+          const fallbackTitleForPrompt = fallbackTitlesForPromptEnglish[idx] || "Drawing";
+          const onSheetLanguageRule =
+            uiLang === "zh"
+              ? "All on-sheet labels/notes/title block text must be in Simplified Chinese."
+              : "All on-sheet labels/notes/title block text must be in English.";
+          const fallbackPrompt = `Generate an orthographic 2D technical construction drawing sheet: ${fallbackTitleForPrompt}. Include border, bottom-right title block, scale/units, legend/symbols, key annotations and dimensions, consistent with the provided plan JSON and 2D SVG. ${onSheetLanguageRule}`;
+
+          if (r.status !== "fulfilled") return { title: fallbackTitleForOutput, prompt: fallbackPrompt };
+          const text = String(r.value || "").trim();
+          const parsed = tryParseJson(text);
+
+          if (parsed?.type === "cad_images_sheet" && typeof parsed?.title === "string" && typeof parsed?.prompt === "string") {
+            const p = parsed.prompt.trim();
+            return { title: parsed.title, prompt: p || fallbackPrompt };
+          }
+
+          if (parsed?.type === "cad_images" && Array.isArray(parsed?.prompts) && parsed.prompts.length > 0) {
+            const first = parsed.prompts[0];
+            const title = typeof first?.title === "string" ? first.title : fallbackTitleForOutput;
+            const prompt = typeof first?.prompt === "string" ? first.prompt.trim() : "";
+            return { title, prompt: prompt || fallbackPrompt };
+          }
+
+          return { title: fallbackTitleForOutput, prompt: fallbackPrompt };
+        });
+
+        imagesFull = JSON.stringify({ type: "cad_images", prompts }, null, 2);
+        emitCadJson(imagesFull);
       })();
 
       try {
@@ -920,20 +1010,18 @@ export function ChatPanel({
           const planJson = cadContext?.plan ? JSON.stringify(cadContext.plan) : "";
           const svg2d = cadContext?.svg2d || "";
 
-          if (agent === "cad_bom_agent" || agent === "cad_images_agent") {
-            const systemContentTasks = buildCadTasksSystemContent({ globalSystemPrompt, globalConstraints });
-            const taskMessages =
-              agent === "cad_bom_agent"
-                ? buildCadBomMessages({ systemContent: systemContentTasks, planJson, svg2d })
-                : buildCadImagesMessages({ systemContent: systemContentTasks, planJson, svg2d });
+          if (agent === "cad_bom_agent") {
+            const systemContentTasks = [buildCadTasksSystemContent({ globalSystemPrompt, globalConstraints }), `UI language: ${uiLang}`]
+              .filter(Boolean)
+              .join("\n\n");
+            const taskMessages = buildCadBomMessages({ systemContent: systemContentTasks, planJson, svg2d });
 
             const taskFull = await runCadTaskMessages(taskMessages);
             if (taskFull) {
               emitCadJson(taskFull);
-              if (agent === "cad_bom_agent") {
-                const fallback = parseMarkdownBomTable(taskFull);
-                if (fallback) onCodeAction?.(JSON.stringify(fallback), "cad");
-              }
+              const fallback = parseMarkdownBomTable(taskFull);
+              if (fallback) onCodeAction?.(JSON.stringify(fallback), "cad");
+
               const producedHasPlan = /"type"\s*:\s*"cad_plan"/.test(taskFull);
               const producedHasSvg2d = /```svg[\s\S]*?```/.test(taskFull);
               const producedHasImages = /"type"\s*:\s*"cad_images"/.test(taskFull);
@@ -949,6 +1037,122 @@ export function ChatPanel({
               });
               if (guide) updateLastAssistant(`${taskFull}\n\n${guide}`);
             }
+            return;
+          }
+
+          if (agent === "cad_images_agent") {
+            const systemContentTasks = [buildCadTasksSystemContent({ globalSystemPrompt, globalConstraints }), `UI language: ${uiLang}`]
+              .filter(Boolean)
+              .join("\n\n");
+            const masterMessages: ChatMessage[] = buildCadImagesMasterMessages({ systemContent: systemContentTasks, planJson, svg2d });
+
+            updateLastAssistant(trText("正在生成出图提示词…", "Generating drawing prompts…"));
+
+            const extractJsonText = (text: string) => {
+              const match = String(text || "").match(/```json\s*([\s\S]*?)```/);
+              return match ? match[1].trim() : String(text || "").trim();
+            };
+
+            const tryParseJson = (text: string) => {
+              const normalized = extractJsonText(text);
+              try {
+                return JSON.parse(normalized);
+              } catch {
+                const start = normalized.indexOf("{");
+                const end = normalized.lastIndexOf("}");
+                if (start >= 0 && end > start) {
+                  try {
+                    return JSON.parse(normalized.slice(start, end + 1));
+                  } catch {
+                  }
+                }
+                return null;
+              }
+            };
+
+            const fallbackTitlesForOutput = [
+              trText("装修平面布置图", "Renovation Plan Layout"),
+              trText("地面铺装图", "Floor Finish Plan"),
+              trText("顶棚平面图", "Reflected Ceiling Plan"),
+              trText("墙体定位图", "Wall Setting-Out Plan"),
+              trText("机电综合图（强电+弱电+给排水）", "MEP Plan (Electrical + Low Voltage + Plumbing)"),
+              trText("立面索引图+室内立面图", "Elevation Index Plan + Interior Elevations"),
+              trText("节点详图", "Detail Drawings"),
+            ];
+            const fallbackTitlesForPromptEnglish = [
+              "Renovation Plan Layout",
+              "Floor Finish Plan",
+              "Reflected Ceiling Plan",
+              "Wall Setting-Out Plan",
+              "MEP Plan (Electrical + Low Voltage + Plumbing)",
+              "Elevation Index Plan + Interior Elevations",
+              "Detail Drawings",
+            ];
+
+            let masterSchemeJson = "";
+            try {
+              const masterText = await generateChatMessage(masterMessages, chatModel, { signal: controller.signal, timeoutMs: 120000 });
+              const parsedMaster = tryParseJson(masterText);
+              if (parsedMaster?.type === "renovation_scheme_master" && parsedMaster?.global_scheme) {
+                masterSchemeJson = JSON.stringify(parsedMaster, null, 2);
+              }
+            } catch {
+            }
+
+            const imagesSheetMessages = buildCadImagesSheetMessages({
+              systemContent: systemContentTasks,
+              planJson,
+              svg2d,
+              masterSchemeJson,
+            });
+
+            const settled = await Promise.allSettled(
+              imagesSheetMessages.map((s) =>
+                generateChatMessage(s.messages, chatModel, { signal: controller.signal, timeoutMs: 120000 })
+              )
+            );
+
+            const prompts = settled.map((r, idx) => {
+              const fallbackTitleForOutput = fallbackTitlesForOutput[idx] || trText("装修图", "Drawing");
+              const fallbackTitleForPrompt = fallbackTitlesForPromptEnglish[idx] || "Drawing";
+              const onSheetLanguageRule =
+                uiLang === "zh"
+                  ? "All on-sheet labels/notes/title block text must be in Simplified Chinese."
+                  : "All on-sheet labels/notes/title block text must be in English.";
+              const fallbackPrompt = `Generate an orthographic 2D technical construction drawing sheet: ${fallbackTitleForPrompt}. Include border, bottom-right title block, scale/units, legend/symbols, key annotations and dimensions, consistent with the provided plan JSON and 2D SVG. ${onSheetLanguageRule}`;
+
+              if (r.status !== "fulfilled") return { title: fallbackTitleForOutput, prompt: fallbackPrompt };
+              const text = String(r.value || "").trim();
+              const parsed = tryParseJson(text);
+
+              if (parsed?.type === "cad_images_sheet" && typeof parsed?.title === "string" && typeof parsed?.prompt === "string") {
+                const p = parsed.prompt.trim();
+                return { title: parsed.title, prompt: p || fallbackPrompt };
+              }
+
+              if (parsed?.type === "cad_images" && Array.isArray(parsed?.prompts) && parsed.prompts.length > 0) {
+                const first = parsed.prompts[0];
+                const title = typeof first?.title === "string" ? first.title : fallbackTitleForOutput;
+                const prompt = typeof first?.prompt === "string" ? first.prompt.trim() : "";
+                return { title, prompt: prompt || fallbackPrompt };
+              }
+
+              return { title: fallbackTitleForOutput, prompt: fallbackPrompt };
+            });
+
+            const payload = JSON.stringify({ type: "cad_images", prompts }, null, 2);
+            onCodeAction?.(payload, "cad");
+
+            const guide = buildCadNextStepGuide({
+              agent,
+              beforeHasPlan,
+              beforeHasSvg2d,
+              producedHasPlan: false,
+              producedHasSvg2d: false,
+              producedHasImages: true,
+              producedHasBom: false,
+            });
+            updateLastAssistant(guide || trText("已生成出图任务。", "Drawing tasks generated."));
             return;
           }
 
