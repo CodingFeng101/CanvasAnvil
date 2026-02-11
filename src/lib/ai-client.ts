@@ -14,7 +14,7 @@ export interface AIConfig {
 // Default Configuration
 const DEFAULT_CONFIG: AIConfig = {
   apiKey: "",
-  baseUrl: "https://api.rcouyi.com/v1",
+  baseUrl: "",
   chatModel: "gpt-3.5-turbo",
   imageModel: "gemini-2.5-flash-image-preview",
   systemPrompt: ""
@@ -134,11 +134,19 @@ export function saveAIConfig(config: AIConfig) {
 // OpenAI Client Factory
 function getClient() {
   const config = getAIConfig();
-  return new OpenAI({
+  const baseURL = String(config.baseUrl || "").trim();
+  const clientOptions: {
+    apiKey: string;
+    baseURL?: string;
+    dangerouslyAllowBrowser: true;
+  } = {
     apiKey: config.apiKey || "dummy", // Prevent crash if empty, but calls will fail
-    baseURL: config.baseUrl,
     dangerouslyAllowBrowser: true
-  });
+  };
+  if (baseURL) {
+    clientOptions.baseURL = baseURL;
+  }
+  return new OpenAI(clientOptions);
 }
 
 export interface ChatMessage {
