@@ -90,7 +90,7 @@ export function ChatPanel({
     collapsed = false,
     onToggleCollapse,
     collapseLocked = false,
-    title = "AI 鍔╂墜",
+    title = "AI 助手",
     inputPlaceholder,
     history = [],
     onRestore,
@@ -238,7 +238,7 @@ export function ChatPanel({
     if (!content) return content;
     let next = content.replace(
       /```(?:python|py|python3)\s*[\s\S]*?```/g,
-      trText("锛堝凡鍦ㄥ悗鍙版帹瀵煎畬鎴愶級", "(Processed in the background)")
+      trText("（已在后台处理完成）", "(Processed in the background)")
     );
     next = next
       .split("\n")
@@ -249,7 +249,7 @@ export function ChatPanel({
       const text = String(inner || "").trim();
       if (!text) return full;
       if (text.includes('"type"') && text.includes('"cad_images"')) {
-        return trText("锛堝凡鎻愪氦瑁呬慨鍥剧敓鎴愪换鍔★級", "(CAD drawing generation task submitted)");
+        return trText("（已提交装修图生成任务）", "(CAD drawing generation task submitted)");
       }
       if (text.includes('"type"') && text.includes('"cad_plan"')) {
         try {
@@ -643,7 +643,7 @@ export function ChatPanel({
     setFiles([]); 
     if (workspaceId === "ppt") onClearPptDraftSlides?.();
 
-    if (workspaceId === "cad" && mode === "text" && /(cad_ready_for_export|涓€閿甛s*(鍑哄浘|鐢熸垚)|one[- ]?click)/i.test(normalizedInput)) {
+    if (workspaceId === "cad" && mode === "text" && /(cad_ready_for_export|一键\s*(出图|生成)|one[- ]?click)/i.test(normalizedInput)) {
       const svg2d = cadContext?.svg2d || "";
       const planJson = cadContext?.plan ? JSON.stringify(cadContext.plan) : "";
 
@@ -1163,7 +1163,7 @@ export function ChatPanel({
                   : "";
 
           if (!agentPrompt) {
-            updateLastAssistant(trText(`鏈瘑鍒殑 CAD 瀛愭櫤鑳戒綋锛?{agent}`, `Unrecognized CAD sub-agent: ${agent}`));
+            updateLastAssistant(trText(`未识别的 CAD 子智能体：${agent}`, `Unrecognized CAD sub-agent: ${agent}`));
             return;
           }
 
@@ -1645,3 +1645,4 @@ export function ChatPanel({
     </div>
   );
 }
+

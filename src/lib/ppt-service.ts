@@ -10,21 +10,44 @@ export interface PptPage {
     description?: string;
     note?: string;
     layout?: string;
+    materialLabels?: string[];
     status?: string;
     id?: string;
 }
 
 export interface SlideEditRoutingItem {
-    slideIndex: number;
-    title?: string;
+    slideId: string;
+    kind: "content" | "visual" | "both";
     instruction: string;
 }
+
+type ReferenceFileInput = { filename: string; content: string };
+type ReferenceImageAssetInput = { label: string; caption: string; sourceFile: string; sourcePage?: number };
 
 const PPT_OUTLINE_SYSTEM = String(pptOutlineSystem || "").trim() || `You are a presentation outline generator.
 Return ONLY JSON. Do not wrap in markdown code blocks. Do not include any extra text.`;
 
 const PPT_SLIDES_GENERATE_SYSTEM = String(pptSlidesGenerateSystem || "").trim() || `You are a presentation slide planning agent.
 Return ONLY JSON. Do not include any extra text.`;
+
+const formatReferenceFiles = (referenceFiles?: ReferenceFileInput[]) => {
+    if (!Array.isArray(referenceFiles) || referenceFiles.length === 0) return "";
+    return referenceFiles
+        .slice(0, 5)
+        .map((f, i) => `Reference ${i + 1}: ${f.filename}\n${String(f.content || "").slice(0, 4000)}`)
+        .join("\n\n");
+};
+
+const formatReferenceImageAssets = (assets?: ReferenceImageAssetInput[]) => {
+    if (!Array.isArray(assets) || assets.length === 0) return "";
+    return assets
+        .slice(0, 30)
+        .map((a) => {
+            const pageText = typeof a.sourcePage === "number" ? `, page=${a.sourcePage}` : "";
+            return `- ${a.label}: ${a.caption} (source=${a.sourceFile}${pageText})`;
+        })
+        .join("\n");
+};
 
 const parseJsonLoose = (text: string) => {
     const raw = String(text || "").trim();
@@ -84,6 +107,11 @@ const normalizePages = (value: any): PptPage[] => {
             description: typeof p?.description === "string" ? p.description : "",
             note: typeof p?.note === "string" ? p.note : undefined,
             layout: typeof p?.layout === "string" ? p.layout : undefined,
+            materialLabels: Array.isArray(p?.materialLabels)
+                ? p.materialLabels.map((x: any) => String(x)).filter(Boolean)
+                : Array.isArray(p?.material_labels)
+                    ? p.material_labels.map((x: any) => String(x)).filter(Boolean)
+                    : [],
         }))
         .filter((p: PptPage) => p.title.trim().length > 0);
 };
@@ -118,21 +146,44 @@ const downloadBlob = (data: Uint8Array | ArrayBuffer, mime: string, filename: st
 };
 
 export const pptService = {
-    // 1. Generate Outline
-    generateOutline: async (topic: string): Promise<PptPage[]> => {
-        const prompt = `Create a presentation outline for the topic: "${topic}".
-Return JSON (no extra text). Markdown code block is allowed.
-Return either:
-- a JSON array of slide objects, OR
-- an object with a "slides" array.
+    // A1. PlanFromIdeaAgent
+    generateOutline: async (
+        topic: string,
+        uiLanguage: "zh" | "en" = "zh",
+        referenceFiles?: ReferenceFileInput[],
+        referenceImageAssets?: ReferenceImageAssetInput[]
+    ): Promise<PptPage[]> => {
+        const refText = formatReferenceFiles(referenceFiles);
+        const imageAssetText = formatReferenceImageAssets(referenceImageAssets);
+        const prompt = `PlanFromIdeaAgent
+required:
+- idea_prompt: ${topic}
+- ui_language: ${uiLanguage}
+optional:
+- reference_files_content:
+${refText || "(none)"}
+- reference_image_assets:
+${imageAssetText || "(none)"}
 
-Each slide object:
-{ "title": "Slide title", "content": ["bullet 1", "bullet 2"], "description": "visual description for image generation", "note": "speaker notes (optional)", "layout": "layout hint (optional)" }
-
-Rules:
-- Prefer 6-10 slides unless the topic requires otherwise.
-- Each bullet <= 12 words.
-- description must be concrete (subject, composition, lighting, colors, style).`;
+Generate a complete PptPlan.
+Return JSON only (markdown json block allowed).
+Every slide must include:
+- id
+- title
+- content (array of detailed bullets)
+- description
+- layout
+- note
+- materialLabels (array of labels selected from reference_image_assets, max 3; no label not in assets list)
+Rules for materialLabels:
+- Only assign when truly relevant to this slide.
+- It is valid to return [] for slides that do not need material images.
+Quality requirements:
+- Each slide content should have 4-6 bullets.
+- Each bullet should be specific and informative, not generic placeholders.
+- description should clearly explain visual hierarchy and key visual elements (including placement hints when useful).
+- note should include practical speaking guidance (2-4 concise points).
+`;
 
         const response = await generateChatMessage([
             { role: "system", content: PPT_OUTLINE_SYSTEM },
@@ -141,7 +192,13 @@ Rules:
 
         try {
             const parsed = parseJsonLoose(response);
-            const pages = normalizePages(parsed);
+            const pages = normalizePages(parsed).map((p, i) => ({
+                ...p,
+                id: p.id || `slide-${i + 1}`,
+                note: typeof p.note === "string" ? p.note : "",
+                layout: typeof p.layout === "string" ? p.layout : "",
+                description: typeof p.description === "string" ? p.description : "",
+            }));
             if (pages.length === 0) throw new Error("No outline parsed from AI response");
             return pages;
         } catch (e) {
@@ -150,39 +207,69 @@ Rules:
         }
     },
 
-    generateSlidesFromDescription: async (description: string): Promise<PptPage[]> => {
-        const prompt = `Given the following user description, create a complete slide plan (titles, bullets, and visual descriptions).
+    // B1. PlanFromOutlineAgent
+    generatePlanFromOutline: async (
+        outlineText: string,
+        uiLanguage: "zh" | "en" = "zh",
+        referenceFiles?: ReferenceFileInput[],
+        referenceImageAssets?: ReferenceImageAssetInput[]
+    ): Promise<PptPage[]> => {
+        const refText = formatReferenceFiles(referenceFiles);
+        const imageAssetText = formatReferenceImageAssets(referenceImageAssets);
+        const prompt = `PlanFromOutlineAgent
+required:
+- outline_text:
+${outlineText}
+- ui_language: ${uiLanguage}
+optional:
+- reference_files_content:
+${refText || "(none)"}
+- reference_image_assets:
+${imageAssetText || "(none)"}
 
-User description:
-${description}
-
-Return JSON (no extra text). Markdown code block is allowed.
-Return either:
-- a JSON array of slide objects, OR
-- an object with a "slides" array.
-
-Each slide object:
-{ "title": "Slide title", "content": ["bullet 1", "bullet 2"], "description": "visual description for image generation", "note": "speaker notes (optional)", "layout": "layout hint (optional)" }
-
-Rules:
-- Prefer 6-10 slides unless the description implies otherwise.
-- Bullets are short and specific (<= 12 words each).
-- Descriptions are concrete: subject, composition, lighting, colors, style.
+Generate a complete PptPlan from this outline.
+Return JSON only (markdown json block allowed).
+Every slide must include:
+- id
+- title
+- content
+- description
+- layout
+- note
+- materialLabels (array of labels selected from reference_image_assets, max 3; no label not in assets list)
+Rules for materialLabels:
+- Only assign when truly relevant to this slide.
+- It is valid to return [] for slides that do not need material images.
+Quality requirements:
+- Each slide content should have 4-6 bullets.
+- Each bullet should be specific and informative, not generic placeholders.
+- description should clearly explain visual hierarchy and key visual elements (including placement hints when useful).
+- note should include practical speaking guidance (2-4 concise points).
 `;
-
+        const response = await generateChatMessage([
+            { role: "system", content: PPT_OUTLINE_SYSTEM },
+            { role: "user", content: prompt }
+        ], undefined, { timeoutMs: 120000 });
         try {
-            const response = await generateChatMessage([
-                { role: "system", content: PPT_OUTLINE_SYSTEM },
-                { role: "user", content: prompt }
-            ], undefined, { timeoutMs: 120000 });
             const parsed = parseJsonLoose(response);
-            const pages = normalizePages(parsed);
-            if (pages.length === 0) throw new Error("No slides parsed from AI response");
+            const pages = normalizePages(parsed).map((p, i) => ({
+                ...p,
+                id: p.id || `slide-${i + 1}`,
+                note: typeof p.note === "string" ? p.note : "",
+                layout: typeof p.layout === "string" ? p.layout : "",
+                description: typeof p.description === "string" ? p.description : "",
+            }));
+            if (pages.length === 0) throw new Error("No plan parsed from AI response");
             return pages;
         } catch (e) {
-            console.error("Failed to parse slides from description", e);
+            console.error("Failed to parse plan from outline", e);
             throw e instanceof Error ? e : new Error("Failed to parse AI response");
         }
+    },
+
+    // Backward-compatible alias used by legacy workspace path.
+    generateSlidesFromDescription: async (description: string): Promise<PptPage[]> => {
+        return await pptService.generateOutline(description, "zh");
     },
 
     // 2. Generate Description (Refinement)
@@ -249,21 +336,52 @@ Return JSON only (no extra text).`;
     },
 
     // 3. Generate Image
-    generatePageImage: async (page: PptPage, allPages: PptPage[], templateImage?: string): Promise<string> => {
+    generatePageImage: async (
+        page: PptPage,
+        uiLanguageOrAllPages: "zh" | "en" | PptPage[],
+        templateImageUrl?: string,
+        additionalImagesOrMaterialUrls?: Array<{ url: string; label?: string }> | string[],
+        extraRequirements?: string,
+    ): Promise<string> => {
+        const uiLanguage: "zh" | "en" = Array.isArray(uiLanguageOrAllPages) ? "zh" : uiLanguageOrAllPages;
+        const normalizedAdditional: Array<{ url: string; label?: string }> = Array.isArray(additionalImagesOrMaterialUrls)
+            ? (additionalImagesOrMaterialUrls as any[]).map((x, i) =>
+                typeof x === "string" ? { url: x, label: `MATERIAL_${i + 1}` } : { url: String(x?.url || ""), label: x?.label }
+            ).filter((x) => x.url)
+            : [];
+        const additionalLabelText = normalizedAdditional.length > 0
+            ? normalizedAdditional
+                .map((x, i) => `${i + 1}. ${x.label || `MATERIAL_${i + 1}`}`)
+                .join("\n")
+            : "(none)";
         const prompt = `Design a presentation slide image.
 Title: ${page.title}
 Bullets: ${(page.content || []).join(" | ")}
+Language: ${uiLanguage}
 Visual style: modern, professional, clean layout, high contrast, no watermarks.
 Scene/subject: ${page.description || page.title}
 Format: Landscape 16:9 aspect ratio.
 Rules:
+- MUST follow the template reference image style consistently for this slide.
 - Avoid large paragraphs of text in the image.
 - Prefer diagrammatic/illustrative composition matching the bullets.
+- Uploaded material labels and order (matches additional reference images order exactly):
+${additionalLabelText}
+- If slide description contains token {{image:Name}}, you MUST use the material image whose label is Name.
+- Preserve referenced material image identity exactly: do not redraw, restyle, recolor, or replace with similar content.
+- Keep referenced material aspect ratio and key details intact; avoid cropping away chart/table/flow core content.
+- Follow position instructions in Scene/subject when placing referenced materials (left/right/top/bottom/center/background).
+- If no token is present for a material label, do not force that material into the slide.
+${extraRequirements ? `- Extra requirements: ${extraRequirements}` : ""}
 `;
-        
+        const additionalReferenceImageUrls = Array.isArray(normalizedAdditional)
+            ? normalizedAdditional.map((x) => String(x?.url || "")).filter(Boolean)
+            : [];
+
         return await generateImage({
             prompt,
-            referenceImageUrl: templateImage
+            referenceImageUrl: templateImageUrl,
+            additionalReferenceImageUrls,
         });
     },
 
@@ -294,9 +412,9 @@ Rules:
         });
     },
 
-    routeSlideEdits: async (slides: Array<{ title: string; bullets: string[] }>, feedback: string): Promise<SlideEditRoutingItem[]> => {
+    routeSlideEdits: async (slides: Array<{ id: string; title: string; bullets: string[]; description?: string; layout?: string; note?: string }>, feedback: string): Promise<SlideEditRoutingItem[]> => {
         const slideList = slides
-            .map((s, i) => `${i + 1}. ${s.title} :: ${(s.bullets || []).join(" | ")}`)
+            .map((s, i) => `${i + 1}. id=${s.id}; title=${s.title}; bullets=${(s.bullets || []).join(" | ")}; description=${s.description || ""}; layout=${s.layout || ""}; note=${s.note || ""}`)
             .join("\n");
 
         const prompt = `You are a routing agent for slide edits.
@@ -307,17 +425,17 @@ User feedback:
 ${feedback}
 
 Return ONLY JSON array, each item:
-{
-  "slideIndex": number, // 0-based
-  "instruction": string
-}
+{ "slideId": "slide-2", "kind": "content|visual|both", "instruction": "..." }
 Rules:
 - If feedback mentions multiple slides, split into multiple items.
 - If you are unsure, assign to the most relevant slide.
 - Do not invent new slides.
 `;
 
-        const response = await generateChatMessage([{ role: "user", content: prompt }]);
+        const response = await generateChatMessage([
+            { role: "system", content: PPT_SLIDES_GENERATE_SYSTEM },
+            { role: "user", content: prompt }
+        ]);
         const match = response.match(/\[[\s\S]*\]/);
         if (!match) return [];
         try {
@@ -325,10 +443,11 @@ Rules:
             if (!Array.isArray(parsed)) return [];
             return parsed
                 .map((it: any) => ({
-                    slideIndex: Number(it.slideIndex),
+                    slideId: String(it.slideId || ""),
+                    kind: it.kind === "content" || it.kind === "visual" || it.kind === "both" ? it.kind : "both",
                     instruction: String(it.instruction || ""),
                 }))
-                .filter((it: SlideEditRoutingItem) => Number.isFinite(it.slideIndex) && it.instruction.trim().length > 0);
+                .filter((it: SlideEditRoutingItem) => it.slideId.trim().length > 0 && it.instruction.trim().length > 0);
         } catch {
             return [];
         }

@@ -1,6 +1,6 @@
 ﻿import React, { useState } from "react";
 import { Toaster } from "sonner";
-import { FileCode, Layers, Layout, Presentation } from "lucide-react";
+import { FileCode, Hammer, Layers, Presentation, Square } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { SettingsDialog } from "@/components/SettingsDialog";
 import { LandingPage } from "@/pages/LandingPage";
@@ -89,10 +89,13 @@ function App() {
           className="flex items-center gap-2.5 font-semibold text-lg tracking-tight text-foreground/90 cursor-pointer"
           onClick={() => setShowLanding(true)}
         >
-          <div className="p-1.5 bg-blue-600/10 rounded-lg shadow-sm ring-1 ring-blue-600/20">
-            <Layout className="w-5 h-5 text-blue-600" />
+          <div className="relative p-1.5 bg-blue-600/10 rounded-lg shadow-sm ring-1 ring-blue-600/20">
+            <Square className="w-5 h-5 text-blue-600" />
+            <div className="absolute -bottom-1 -right-1 rounded-full bg-background p-0.5 ring-1 ring-blue-600/25">
+              <Hammer className="w-3 h-3 text-blue-700" />
+            </div>
           </div>
-          <span>Unified AI Workspace</span>
+          <span>CanvasAnvil</span>
         </div>
 
         <div className="flex items-center bg-muted/50 p-1 rounded-xl border border-border/50 shadow-inner">

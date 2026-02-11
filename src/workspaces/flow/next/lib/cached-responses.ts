@@ -657,27 +657,27 @@ export const CACHED_EXAMPLE_RESPONSES: CachedResponse[] = [
                 </mxCell>
                 <mxCell id="model1" parent="1"
                     style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=11;spacingLeft=10;"
-                    value="鈥?GPT-3 (175B)" vertex="1">
+                    value="• GPT-3 (175B)" vertex="1">
                     <mxGeometry height="20" width="90" x="400" y="480" as="geometry" />
                 </mxCell>
                 <mxCell id="model2" parent="1"
                     style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=11;spacingLeft=10;"
-                    value="鈥?LaMDA (137B)" vertex="1">
+                    value="• LaMDA (137B)" vertex="1">
                     <mxGeometry height="20" width="90" x="400" y="500" as="geometry" />
                 </mxCell>
                 <mxCell id="model3" parent="1"
                     style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=11;spacingLeft=10;"
-                    value="鈥?PaLM (540B)" vertex="1">
+                    value="• PaLM (540B)" vertex="1">
                     <mxGeometry height="20" width="90" x="400" y="520" as="geometry" />
                 </mxCell>
                 <mxCell id="model4" parent="1"
                     style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=11;spacingLeft=10;"
-                    value="鈥?Codex" vertex="1">
+                    value="• Codex" vertex="1">
                     <mxGeometry height="20" width="80" x="490" y="480" as="geometry" />
                 </mxCell>
                 <mxCell id="model5" parent="1"
                     style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=11;spacingLeft=10;"
-                    value="鈥?UL2 (20B)" vertex="1">
+                    value="• UL2 (20B)" vertex="1">
                     <mxGeometry height="20" width="80" x="490" y="500" as="geometry" />
                 </mxCell>
                 <mxCell id="model_note" parent="1"
@@ -737,7 +737,7 @@ export const CACHED_EXAMPLE_RESPONSES: CachedResponse[] = [
                 </mxCell>
                 <mxCell id="limit_box" parent="1"
                     style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFEBEE;strokeColor=#C62828;fontSize=10;align=left;spacingLeft=8;"
-                    value="鈥?Requires large models (~100B+)&lt;br&gt;鈥?No guarantee of correct reasoning&lt;br&gt;鈥?Costly to serve in production"
+                    value="• Requires large models (~100B+)&lt;br&gt;• No guarantee of correct reasoning&lt;br&gt;• Costly to serve in production"
                     vertex="1">
                     <mxGeometry height="55" width="200" x="310" y="600" as="geometry" />
                 </mxCell>

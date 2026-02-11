@@ -39,7 +39,7 @@ export function PptWorkspaceShell() {
   >([]);
   const [pptResetTick, setPptResetTick] = useState(0);
   const [pptReady, setPptReady] = useState(false);
-  const [pptStage, setPptStage] = useState<"outline" | "slides">("outline");
+  const [pptStage, setPptStage] = useState<"start" | "outline" | "slides">("start");
 
   const [chatHistory, setChatHistory] = useState<ChatMessage[]>([]);
   const [versionHistory, setVersionHistory] = useState<HistoryItem[]>(() => {
@@ -55,7 +55,8 @@ export function PptWorkspaceShell() {
 
   const [isChatCollapsed, setIsChatCollapsed] = useState(false);
   const chatPanelRef = useRef<PanelImperativeHandle | null>(null);
-  const pptChatLocked = !pptReady;
+  const showPptChat = pptStage === "outline" || pptStage === "slides";
+  const pptChatLocked = !showPptChat || !pptReady;
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -178,7 +179,8 @@ export function PptWorkspaceShell() {
     setPptIncomingEdit(null);
     setPptDraftSlides([]);
     setPptReady(false);
-    setPptStage("outline");
+    setPptStage("start");
+    setChatHistory([]);
     setAttachments([]);
     setVersionHistory([]);
     try {
@@ -212,7 +214,7 @@ export function PptWorkspaceShell() {
         </div>
       </ResizablePanel>
 
-      {!pptChatLocked && (
+      {showPptChat && (
         <>
           <ResizableHandle withHandle className="bg-border/50 hover:bg-primary/50 transition-colors w-1.5" />
           <ResizablePanel
@@ -257,4 +259,3 @@ export function PptWorkspaceShell() {
     </ResizablePanelGroup>
   );
 }
-

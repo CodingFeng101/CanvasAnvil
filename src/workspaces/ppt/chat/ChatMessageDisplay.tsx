@@ -1,4 +1,4 @@
-import React, { useRef, useEffect, useState, useCallback } from 'react';
+﻿import React, { useRef, useEffect, useState, useCallback } from 'react';
 import {
     Check,
     ChevronDown,
@@ -15,24 +15,7 @@ import {
     ThumbsDown,
     ThumbsUp,
     X,
-    Presentation, // Import P icon if available, otherwise we use SVG
 } from "lucide-react";
-
-// Custom P icon component
-const PIcon = ({ className }: { className?: string }) => (
-    <svg 
-        xmlns="http://www.w3.org/2000/svg" 
-        viewBox="0 0 24 24" 
-        fill="none" 
-        stroke="currentColor" 
-        strokeWidth="2" 
-        strokeLinecap="round" 
-        strokeLinejoin="round" 
-        className={className}
-    >
-        <path d="M8 20V4h6a4 4 0 0 1 0 8H8" />
-    </svg>
-);
 import ReactMarkdown from "react-markdown";
 import remarkGfm from 'remark-gfm';
 import { Reasoning, ReasoningContent, ReasoningTrigger } from "@/workspaces/ppt/chat/components/reasoning";
@@ -78,6 +61,16 @@ interface TextSection {
     fileType?: "pdf" | "text";
 }
 
+interface PptEditSlidePatch {
+    id?: string;
+    [key: string]: any;
+}
+
+interface PptToolPayload {
+    type: "ppt_edit" | "ppt_delete" | "ppt_crate";
+    slides: PptEditSlidePatch[];
+}
+
 function splitTextIntoFileSections(text: string): TextSection[] {
     const sections: TextSection[] = [];
     const filePattern = /\[(PDF|File):\s*([^\]]+)\]\n([\s\S]*?)(?=\n\n\[(PDF|File):|$)/g;
@@ -116,18 +109,26 @@ function splitTextIntoFileSections(text: string): TextSection[] {
     return sections;
 }
 
-type PptSlideTag = { n: number; title?: string };
+type PptSlideTag = { n: number; title?: string; kind?: "outline" | "slide_image" };
 
 function extractPptSlideTags(text: string): { tags: PptSlideTag[]; rest: string } {
     const lines = String(text || "").split(/\r?\n/);
     const tags: PptSlideTag[] = [];
     const restLines: string[] = [];
     for (const line of lines) {
-        const m = line.match(/^\[\[PPT_SLIDE\|(\d+)\|(.*)\]\]$/);
+        const m = line.match(/^\[\[PPT_SLIDE\|(\d+)\|([^|]*)\|(outline|slide_image)\]\]$/);
         if (m) {
             const n = Number(m[1]);
             const title = String(m[2] || "").trim();
-            if (!Number.isNaN(n)) tags.push({ n, title: title || undefined });
+            const kind = m[3] as "outline" | "slide_image";
+            if (!Number.isNaN(n)) tags.push({ n, title: title || undefined, kind });
+            continue;
+        }
+        const legacy = line.match(/^\[\[PPT_SLIDE\|(\d+)\|(.*)\]\]$/);
+        if (legacy) {
+            const n = Number(legacy[1]);
+            const title = String(legacy[2] || "").trim();
+            if (!Number.isNaN(n)) tags.push({ n, title: title || undefined, kind: "slide_image" });
             continue;
         }
         restLines.push(line);
@@ -160,7 +161,7 @@ function extractImageTags(text: string): { images: ImageTag[]; rest: string } {
 
 type InlinePptPart =
     | { type: "text"; text: string }
-    | { type: "ppt"; n: number; title?: string };
+    | { type: "ppt"; n: number; title?: string; kind?: "outline" | "slide_image" };
 
 function splitInlinePptTags(text: string): InlinePptPart[] {
     const raw = String(text || "");
@@ -173,7 +174,19 @@ function splitInlinePptTags(text: string): InlinePptPart[] {
         if (before) out.push({ type: "text", text: before });
         const n = Number(m[1]);
         const title = String(m[2] || "").trim();
-        if (!Number.isNaN(n)) out.push({ type: "ppt", n, title: title || undefined });
+        if (!Number.isNaN(n)) {
+            let kind: "outline" | "slide_image" = "slide_image";
+            let normalizedTitle = title;
+            const parts = title.split("|");
+            if (parts.length >= 2) {
+                const maybeKind = parts[parts.length - 1].trim();
+                if (maybeKind === "outline" || maybeKind === "slide_image") {
+                    kind = maybeKind;
+                    normalizedTitle = parts.slice(0, -1).join("|").trim();
+                }
+            }
+            out.push({ type: "ppt", n, title: normalizedTitle || undefined, kind });
+        }
         else out.push({ type: "text", text: m[0] });
         lastIndex = m.index + m[0].length;
     }
@@ -197,6 +210,7 @@ const getUserOriginalText = (message: UIMessage): string => {
     const fullText = getMessageTextContent(message);
     const withoutTags = fullText
         .split(/\r?\n/)
+        .filter((line) => !/^\[\[PPT_SLIDE\|(\d+)\|([^|]*)\|(outline|slide_image)\]\]$/.test(line))
         .filter((line) => !/^\[\[PPT_SLIDE\|(\d+)\|(.*)\]\]$/.test(line))
         .filter((line) => !/^\[\[IMAGE\|([^|]*)\|([\s\S]+)\]\]$/.test(line))
         .join("\n")
@@ -204,6 +218,86 @@ const getUserOriginalText = (message: UIMessage): string => {
     const filePattern = /\n\n\[(PDF|File):\s*[^\]]+\]\n[\s\S]*$/;
     return withoutTags.replace(filePattern, "").trim();
 };
+
+function extractPptToolPayload(text: string): PptToolPayload | null {
+    const raw = String(text || "").trim();
+    if (!raw) return null;
+    const fenced = raw.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
+    const candidate = (fenced?.[1] ?? raw).trim();
+    let parsed: any;
+    try {
+        parsed = JSON.parse(candidate);
+    } catch {
+        return null;
+    }
+    if (Array.isArray(parsed)) {
+        return { type: "ppt_edit", slides: parsed.filter((s: any) => s && typeof s === "object") };
+    }
+    if (!parsed || typeof parsed !== "object") return null;
+    const typeRaw = String((parsed as any).type || "").trim().toLowerCase();
+    const type: "ppt_edit" | "ppt_delete" | "ppt_crate" =
+        typeRaw === "ppt_delete"
+            ? "ppt_delete"
+            : typeRaw === "ppt_crate" || typeRaw === "ppt_create"
+                ? "ppt_crate"
+                : "ppt_edit";
+    const slides = Array.isArray((parsed as any).slides)
+        ? (parsed as any).slides.filter((s: any) => s && typeof s === "object")
+        : [];
+    return slides.length > 0 ? { type, slides } : null;
+}
+
+function getSlideNumber(slide: PptEditSlidePatch, index: number): number {
+    const id = String(slide?.id || "");
+    const m = id.match(/slide-(\d+)/i);
+    if (m) {
+        const n = Number(m[1]);
+        if (!Number.isNaN(n)) return n;
+    }
+    return index + 1;
+}
+
+function slidePatchEntries(slide: PptEditSlidePatch): Array<{ key: string; value: string }> {
+    const keys = ["title", "description", "layout", "note", "content"];
+    const rows: Array<{ key: string; value: string }> = [];
+    for (const key of keys) {
+        if (!(key in slide)) continue;
+        const raw = (slide as any)[key];
+        if (Array.isArray(raw)) {
+            const text = raw.map((x) => String(x || "").trim()).filter(Boolean).join("；");
+            rows.push({ key, value: text || "（空）" });
+            continue;
+        }
+        if (raw && typeof raw === "object") {
+            rows.push({ key, value: JSON.stringify(raw) });
+            continue;
+        }
+        rows.push({ key, value: String(raw ?? "").trim() || "（空）" });
+    }
+    for (const [k, v] of Object.entries(slide)) {
+        if (k === "id" || keys.includes(k)) continue;
+        if (v === undefined) continue;
+        rows.push({ key: k, value: typeof v === "string" ? v : JSON.stringify(v) });
+    }
+    return rows;
+}
+
+function slideFieldLabel(key: string, uiLang: "zh" | "en"): string {
+    const dict: Record<string, { zh: string; en: string }> = {
+        title: { zh: "标题", en: "Title" },
+        description: { zh: "画面描述", en: "Description" },
+        layout: { zh: "布局", en: "Layout" },
+        note: { zh: "备注", en: "Note" },
+        content: { zh: "内容", en: "Content" },
+    };
+    const hit = dict[key];
+    if (hit) return uiLang === "zh" ? hit.zh : hit.en;
+    return key;
+}
+
+function pptToolTypeLabel(type: "ppt_edit" | "ppt_delete" | "ppt_crate"): string {
+    return type;
+}
 
 export function ChatMessageDisplay({
     messages,
@@ -222,6 +316,7 @@ export function ChatMessageDisplay({
     const editTextareaRef = useRef<HTMLTextAreaElement>(null);
     const [editText, setEditText] = useState<string>("");
     const [expandedPdfSections, setExpandedPdfSections] = useState<Record<string, boolean>>({});
+    const [expandedSlideCards, setExpandedSlideCards] = useState<Record<string, boolean>>({});
     const [isAtBottom, setIsAtBottom] = useState(true);
     const scrollRafRef = useRef<number | null>(null);
 
@@ -346,7 +441,12 @@ export function ChatMessageDisplay({
                             key={message.id}
                             className={`flex w-full ${message.role === "user" ? "justify-end" : "justify-start"}`}
                         >
-                            <div className={cn("max-w-[95%] min-w-0 flex flex-col", message.role === "user" ? "items-end" : "items-start")}>
+                            <div
+                                className={cn(
+                                    "min-w-0 flex flex-col",
+                                    message.role === "assistant" ? "w-full max-w-[95%] items-start" : "max-w-[95%] items-end"
+                                )}
+                            >
                                 {/* Role Icon / Header */}
                                 <div className="flex items-center gap-2 mb-1.5 px-1">
                                     {message.role === 'assistant' ? (
@@ -463,11 +563,20 @@ export function ChatMessageDisplay({
                                                                 className={cn(
                                                                     "inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] leading-4",
                                                                     message.role === "user"
-                                                                        ? "border-red-200 bg-red-50 text-red-700 dark:border-red-400/30 dark:bg-red-950/40 dark:text-red-200"
+                                                                        ? t.kind === "outline"
+                                                                            ? "border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-400/30 dark:bg-blue-950/40 dark:text-blue-200"
+                                                                            : "border-red-200 bg-red-50 text-red-700 dark:border-red-400/30 dark:bg-red-950/40 dark:text-red-200"
                                                                         : "border-border bg-muted/40 text-foreground"
                                                                 )}
                                                             >
-                                                                <PIcon className="h-3.5 w-3.5 text-red-600 dark:text-red-200 mr-1" />
+                                                                <span
+                                                                    className={cn(
+                                                                        "mr-1 inline-flex h-4 w-4 items-center justify-center rounded-full text-[10px] font-semibold text-white",
+                                                                        t.kind === "outline" ? "bg-blue-600" : "bg-red-600"
+                                                                    )}
+                                                                >
+                                                                    {t.kind === "outline" ? "T" : "P"}
+                                                                </span>
                                                                 {t.title ? tr(`第 ${t.n} 页：${t.title}`, `Slide ${t.n}: ${t.title}`) : tr(`第 ${t.n} 页`, `Slide ${t.n}`)}
                                                             </span>
                                                         ))}
@@ -516,16 +625,89 @@ export function ChatMessageDisplay({
                                                             >
                                                                 {parts.map((p, j) => {
                                                                     if (p.type === "text") return <span key={`${idx}-t-${j}`}>{p.text}</span>;
+                                                                    const kind = p.kind === "outline" ? "outline" : "slide_image";
                                                                     const label = p.title ? tr(`第 ${p.n} 页：${p.title}`, `Slide ${p.n}: ${p.title}`) : tr(`第 ${p.n} 页`, `Slide ${p.n}`);
                                                                     return (
                                                                         <span
                                                                             key={`${idx}-ppt-${j}`}
-                                                                            className="mx-1 inline-flex items-center gap-1.5 rounded-full border border-red-200 bg-red-50 px-2 py-0.5 text-xs font-medium text-red-700 dark:border-red-400/30 dark:bg-red-950/40 dark:text-red-200 align-middle"
+                                                                            className={cn(
+                                                                                "mx-1 inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-xs font-medium align-middle",
+                                                                                kind === "outline"
+                                                                                    ? "border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-400/30 dark:bg-blue-950/40 dark:text-blue-200"
+                                                                                    : "border-red-200 bg-red-50 text-red-700 dark:border-red-400/30 dark:bg-red-950/40 dark:text-red-200"
+                                                                            )}
                                                                             title={tr(`幻灯片 · ${label}`, `Slide · ${label}`)}
                                                                         >
-                                                                            <PIcon className="h-3.5 w-3.5 text-red-600 dark:text-red-200" />
+                                                                            <span
+                                                                                className={cn(
+                                                                                    "inline-flex h-4 w-4 items-center justify-center rounded-full text-[10px] font-semibold text-white",
+                                                                                    kind === "outline" ? "bg-blue-600" : "bg-red-600"
+                                                                                )}
+                                                                            >
+                                                                                {kind === "outline" ? "T" : "P"}
+                                                                            </span>
                                                                             {label}
                                                                         </span>
+                                                                    );
+                                                                })}
+                                                            </div>
+                                                        );
+                                                    }
+                                                    const pptToolPayload = message.role === "assistant"
+                                                        ? extractPptToolPayload(section.content)
+                                                        : null;
+                                                    if (pptToolPayload && pptToolPayload.slides.length > 0) {
+                                                        return (
+                                                            <div key={idx} className="w-full min-w-0 space-y-2">
+                                                                <div className="inline-flex items-center rounded-md border border-blue-200 bg-blue-50 px-2 py-1 text-[11px] font-medium text-blue-700">
+                                                                    {pptToolTypeLabel(pptToolPayload.type)}
+                                                                </div>
+                                                                {pptToolPayload.slides.map((slide, slideIdx) => {
+                                                                    const slideNumber = getSlideNumber(slide, slideIdx);
+                                                                    const rows = (() => {
+                                                                        if (pptToolPayload.type === "ppt_delete") {
+                                                                            return [
+                                                                                {
+                                                                                    key: "id",
+                                                                                    value: String(slide?.id || tr("未提供", "Missing")),
+                                                                                },
+                                                                            ];
+                                                                        }
+                                                                        return slidePatchEntries(slide);
+                                                                    })();
+                                                                    const cardKey = `${message.id}-ppt-edit-${idx}-${slideIdx}`;
+                                                                    const expanded = expandedSlideCards[cardKey] ?? true;
+                                                                    return (
+                                                                        <div
+                                                                            key={cardKey}
+                                                                            className="w-full min-w-0 overflow-hidden rounded-xl border border-border/60 bg-background/70"
+                                                                        >
+                                                                            <button
+                                                                                type="button"
+                                                                                onClick={() => setExpandedSlideCards((prev) => ({ ...prev, [cardKey]: !expanded }))}
+                                                                                className="flex w-full items-center justify-between px-3 py-2 text-left hover:bg-muted/40"
+                                                                            >
+                                                                                <span className="inline-flex items-center gap-2 text-sm font-medium text-foreground">
+                                                                                    <span className="h-2.5 w-2.5 rounded-full bg-emerald-500" />
+                                                                                    {tr(`第 ${slideNumber} 张幻灯片`, `Slide ${slideNumber}`)}
+                                                                                </span>
+                                                                                {expanded ? <ChevronUp className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
+                                                                            </button>
+                                                                            {expanded && (
+                                                                                <div className="space-y-2 border-t border-border/50 px-3 py-2">
+                                                                                    {rows.map((r, rIdx) => (
+                                                                                        <div key={`${message.id}-ppt-edit-row-${idx}-${slideIdx}-${rIdx}`} className="rounded-lg border border-border/40 bg-muted/20 px-2.5 py-2">
+                                                                                            <div className="mb-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                                                                                                {slideFieldLabel(r.key, uiLang)}
+                                                                                            </div>
+                                                                                            <div className="whitespace-pre-wrap break-words text-sm text-foreground">
+                                                                                                {r.value}
+                                                                                            </div>
+                                                                                        </div>
+                                                                                    ))}
+                                                                                </div>
+                                                                            )}
+                                                                        </div>
                                                                     );
                                                                 })}
                                                             </div>
@@ -536,22 +718,16 @@ export function ChatMessageDisplay({
                                                             "prose prose-sm max-w-none break-words",
                                                             "dark:prose-invert"
                                                         )}>
-                                                            <ReactMarkdown 
+                                                            <ReactMarkdown
                                                                 remarkPlugins={[remarkGfm]}
                                                                 urlTransform={(url) => {
                                                                     const u = String(url || "");
                                                                     if (!u) return "";
                                                                     if (u.startsWith("http://") || u.startsWith("https://")) return u;
                                                                     if (u.startsWith("data:image")) return u;
-                                                                    if (u.startsWith("blob:")) return u;
-                                                                    if (u.startsWith("/files/")) return u;
-                                                                    if (u.startsWith("#")) return u;
                                                                     return "";
                                                                 }}
                                                                 components={{
-                                                                    table({ children }: any) {
-                                                                        return <table className="w-full table-fixed">{children}</table>;
-                                                                    },
                                                                     th({ children, ...props }: any) {
                                                                         return (
                                                                             <th
@@ -575,28 +751,22 @@ export function ChatMessageDisplay({
                                                                     pre({ children }: any) {
                                                                         return <>{children}</>;
                                                                     },
-                                                                    code({node, inline, className, children, ...props}: any) {
-                                                                        const match = /language-(\w+)/.exec(className || '')
-                                                                        // Check if this is the last message and currently streaming
-                                                                        // We only show spinner for the last code block of the last message if streaming
-                                                                        // But technically ReactMarkdown renders progressively.
-                                                                        // We can check if status is streaming and this is the assistant role.
+                                                                    code({ node, inline, className, children, ...props }: any) {
+                                                                        const match = /language-(\w+)/.exec(className || "");
                                                                         const isStreaming = status === "streaming" && isLastAssistantMessage;
                                                                         const language = match?.[1] || "text";
-
                                                                         if (!inline) {
                                                                             const ordinal = codeBlockOrdinal++;
                                                                             return (
                                                                                 <CodeBlock
                                                                                     key={`codeblock-${message.id}-${idx}-${language}-${ordinal}`}
                                                                                     blockId={`${message.id}:${idx}:${language}:${ordinal}`}
-                                                                                    code={String(children).replace(/\n$/, '')}
+                                                                                    code={String(children).replace(/\n$/, "")}
                                                                                     language={language as any}
                                                                                     isStreaming={isStreaming}
                                                                                 />
                                                                             );
                                                                         }
-
                                                                         return (
                                                                             <code className={className} {...props}>
                                                                                 {children}

@@ -297,8 +297,8 @@ ${xml}
                     }
                 }
             } else if (toolCall.toolName === "edit_diagram") {
-                // 浠?LLM 鐨勫伐鍏疯皟鐢ㄥ弬鏁颁腑瑙ｆ瀯鍑?edits 鏁扮粍
-                // 姣忎釜鍏冪礌閮芥槸 { search: 鍘熸潵鐨?XML 鐗囨, replace: 瑕佹浛鎹㈡垚鐨勬柊鐗囨 }
+                // Parse edits from tool-call params.
+                // Each item is { search: original XML snippet, replace: new snippet }.
                 const { edits } = toolCall.input as {
                     edits: Array<{ search: string; replace: string }>
                 }
@@ -306,8 +306,8 @@ ${xml}
                 let currentXml = ""
                 try {
                     console.log("[edit_diagram] Starting...")
-                    // 浼樺厛浣跨敤鍐呭瓨涓紦瀛樼殑 chartXML锛岄伩鍏嶆瘡娆￠兘鍚?draw.io 瀵煎嚭 XML
-                    // 杩欐牱鏇寸ǔ瀹氾紙灏ゅ叾鏄湪杩滅▼鐜锛屾瘮濡?Vercel 涓?iframe 鍙兘鏈夊欢杩燂級
+                    // Prefer cached chart XML to avoid exporting from draw.io each time.
+                    // This is more stable in remote iframe environments.
                     const cachedXML = chartXMLRef.current
                     if (cachedXML) {
                         currentXml = cachedXML
@@ -316,7 +316,7 @@ ${xml}
                             currentXml.length,
                         )
                     } else {
-                        // 濡傛灉娌℃湁缂撳瓨锛堜緥濡傞〉闈㈠垰鍒锋柊锛夛紝閫€鍥炲埌浠?draw.io iframe 瀵煎嚭涓€娆″畬鏁?XML
+                        // Fallback: export full XML from draw.io iframe.
                         console.log(
                             "[edit_diagram] No cached XML, fetching from DrawIO...",
                         )
@@ -327,14 +327,14 @@ ${xml}
                         )
                     }
 
-                    // 鍔ㄦ€佸紩鍏ュ伐鍏峰嚱鏁帮紝鐢?search/replace 瀵瑰師濮?XML 鍋氬眬閮ㄦ浛鎹?
+                    // Apply local search/replace edits against current XML.
                     const { replaceXMLParts } = await import("@/workspaces/flow/next/lib/utils")
                     const editedXml = replaceXMLParts(currentXml, edits)
 
-                    // 鎶婃浛鎹㈠悗鐨?XML 閲嶆柊鍔犺浇鍒扮敾甯冧笂锛屽悓鏃跺仛涓€娆＄粨鏋勬牎楠?
+                    // Reload edited XML and validate.
                     const validationError = onDisplayChart(editedXml)
                     if (validationError) {
-                        // 濡傛灉鏂?XML 闈炴硶锛屽氨鍦ㄨ亰澶╅噷缁欏嚭閿欒淇℃伅锛屾彁绀虹敤鎴?/ 妯″瀷閲嶆柊鐢熸垚
+                        // If XML is invalid, surface the error in chat.
                         console.warn(
                             "[edit_diagram] Validation error:",
                             validationError,
@@ -348,7 +348,7 @@ ${xml}
 Please fix the XML issues. Ensure you are editing exact lines from the current XML.`,
                         })
                     } else {
-                        // 鎴愬姛锛氭洿鏂扮紦瀛樹腑鐨?XML锛屽苟鍦ㄨ亰澶╅噷璁板綍鈥滅紪杈戞垚鍔熲€?
+                        // Success: update cache and log completion.
                         chartXMLRef.current = editedXml
                         addToolOutput({
                             tool: "edit_diagram",
@@ -357,7 +357,7 @@ Please fix the XML issues. Ensure you are editing exact lines from the current X
                         })
                     }
                 } catch (error) {
-                    // 浠讳綍杩愯鏃堕敊璇兘浼氳蛋杩欓噷锛堟瘮濡?search 鏈懡涓€佸瓧绗︿覆鏇挎崲澶辫触绛夛級
+                    // Catch any runtime failure (search miss, replace failure, etc.).
                     console.error("[edit_diagram] Error:", error)
                     addToolOutput({
                         tool: "edit_diagram",

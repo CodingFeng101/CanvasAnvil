@@ -63,6 +63,7 @@ interface ChatPanelProps {
 }
 
 const STORAGE_KEY_PREFIX = 'chat_history_v2_';
+const PPT_WORKSPACE_STORAGE_KEY = "unified-ai-workspace-ppt-state-v1";
 
 // Convert internal ChatMessage to UIMessage
 const toUIMessage = (msg: ChatMessage, index: number): UIMessage => ({
@@ -90,7 +91,7 @@ export function ChatPanel({
     collapsed = false,
     onToggleCollapse,
     collapseLocked = false,
-    title = "AI 鍔╂墜",
+    title = "AI 助手",
     inputPlaceholder,
     history = [],
     onRestore,
@@ -116,13 +117,11 @@ export function ChatPanel({
             }
         }
     }
-    return initialMessages.length > 0 ? initialMessages : [
-        { role: 'assistant', content: t(uiLang, "chat.hello") }
-    ];
+    return initialMessages.length > 0 ? initialMessages : [];
   });
 
   const [input, setInput] = useState('');
-  const [pptInputSegments, setPptInputSegments] = useState<Array<{ type: "text"; text: string } | { type: "ppt"; slideId: string; label: string; tag: string }>>([
+  const [pptInputSegments, setPptInputSegments] = useState<Array<{ type: "text"; text: string } | { type: "ppt"; slideId: string; label: string; tag: string; tokenKind: "outline" | "slide_image" }>>([
     { type: "text", text: "" }
   ]);
   const [isLoading, setIsLoading] = useState(false);
@@ -136,14 +135,14 @@ export function ChatPanel({
   const [pptInputFocusTick, setPptInputFocusTick] = useState(0);
   const prevPptDraftCountRef = useRef(0);
   const prevPptDraftIdsRef = useRef<Set<string>>(new Set());
-  const [pptInsertToken, setPptInsertToken] = useState<{ key: number; slideId: string; label: string; tag: string } | null>(null);
-  const pptInsertQueueRef = useRef<Array<{ slideId: string; title: string; label: string }>>([]);
+  const [pptInsertToken, setPptInsertToken] = useState<{ key: number; slideId: string; label: string; tag: string; tokenKind: "outline" | "slide_image" } | null>(null);
+  const pptInsertQueueRef = useRef<Array<{ slideId: string; title: string; label: string; kind: "outline" | "slide_image" }>>([]);
   const pptInsertBusyRef = useRef(false);
   const [pptClearTick, setPptClearTick] = useState(0);
   const lastUploadedImagesRef = useRef<string[]>([]);
 
   const getPptLabel = (slideId: string, title: string) => {
-    const m = String(slideId || "").match(/(\\d+)/);
+    const m = String(slideId || "").match(/(\d+)/);
     const n = m ? Number(m[1]) : NaN;
     if (!Number.isNaN(n)) {
       return title ? `Slide ${n}: ${title}` : `Slide ${n}`;
@@ -151,12 +150,12 @@ export function ChatPanel({
     return title || slideId;
   };
 
-  const getPptTag = (slideId: string, title: string) => {
-    const m = String(slideId || "").match(/(\\d+)/);
+  const getPptTag = (slideId: string, title: string, kind: "outline" | "slide_image") => {
+    const m = String(slideId || "").match(/(\d+)/);
     const n = m ? Number(m[1]) : NaN;
     if (Number.isNaN(n)) return "";
     const safeTitle = String(title || "").split("|").join(",").split("]]").join("");
-    return `[[PPT_SLIDE|${n}|${safeTitle}]]`;
+    return `[[PPT_SLIDE|${n}|${safeTitle}|${kind}]]`;
   };
 
   const pumpPptInsertQueue = () => {
@@ -164,13 +163,13 @@ export function ChatPanel({
     const next = pptInsertQueueRef.current.shift();
     if (!next) return;
     pptInsertBusyRef.current = true;
-    const tag = getPptTag(next.slideId, next.title);
-    setPptInsertToken({ key: Date.now() + Math.random(), slideId: next.slideId, label: next.label, tag });
+    const tag = getPptTag(next.slideId, next.title, next.kind);
+    setPptInsertToken({ key: Date.now() + Math.random(), slideId: next.slideId, label: next.label, tag, tokenKind: next.kind });
   };
 
-  const enqueuePptToken = (slideId: string, title: string) => {
+  const enqueuePptToken = (slideId: string, title: string, kind: "outline" | "slide_image") => {
     const label = getPptLabel(slideId, title);
-    pptInsertQueueRef.current.push({ slideId, title, label });
+    pptInsertQueueRef.current.push({ slideId, title, label, kind });
     pumpPptInsertQueue();
   };
 
@@ -191,7 +190,7 @@ export function ChatPanel({
     const added = pptDraftSlides.filter((s) => !prevIds.has(s.id));
     prevPptDraftIdsRef.current = nextIds;
     if (added.length === 0) return;
-    for (const s of added) enqueuePptToken(s.slideId, s.title);
+    for (const s of added) enqueuePptToken(s.slideId, s.title, s.kind);
   }, [workspaceId, pptDraftSlides, setInput]);
 
   const parseMarkdownBomTable = (text: string) => {
@@ -238,7 +237,7 @@ export function ChatPanel({
     if (!content) return content;
     let next = content.replace(
       /```(?:python|py|python3)\s*[\s\S]*?```/g,
-      trText("锛堝凡鍦ㄥ悗鍙版帹瀵煎畬鎴愶級", "(Processed in the background)")
+      trText("（已在后台处理完成）", "(Processed in the background)")
     );
     next = next
       .split("\n")
@@ -249,7 +248,7 @@ export function ChatPanel({
       const text = String(inner || "").trim();
       if (!text) return full;
       if (text.includes('"type"') && text.includes('"cad_images"')) {
-        return trText("锛堝凡鎻愪氦瑁呬慨鍥剧敓鎴愪换鍔★級", "(CAD drawing generation task submitted)");
+        return trText("（已提交装修图生成任务）", "(CAD drawing generation task submitted)");
       }
       if (text.includes('"type"') && text.includes('"cad_plan"')) {
         try {
@@ -491,15 +490,59 @@ export function ChatPanel({
     const referencedPptSlideIds = isPpt
       ? new Set(
           pptInputSegments
-            .filter((s): s is { type: "ppt"; slideId: string; label: string; tag: string } => s.type === "ppt")
+            .filter((s): s is { type: "ppt"; slideId: string; label: string; tag: string; tokenKind: "outline" | "slide_image" } => s.type === "ppt")
             .map((s) => s.slideId)
         )
       : new Set<string>();
-    const pptDraftSlidesSnapshotAll = isPpt ? pptDraftSlides.slice(0, 12) : [];
+    const loadAllOutlineSlides = () => {
+      if (!isPpt || typeof window === "undefined") return [] as Array<{ slideId: string; title: string; json: string; kind: "outline" | "slide_image"; imageUrl?: string }>;
+      try {
+        const raw = localStorage.getItem(PPT_WORKSPACE_STORAGE_KEY);
+        const parsed = raw ? JSON.parse(raw) : null;
+        const localSlides = Array.isArray(parsed?.localSlides) ? parsed.localSlides : [];
+        return localSlides
+          .filter((s: any) => s && typeof s.id === "string")
+          .slice(0, 24)
+          .map((s: any) => ({
+            slideId: String(s.id),
+            title: typeof s.title === "string" ? s.title : "",
+            json: JSON.stringify({
+              id: String(s.id),
+              title: typeof s.title === "string" ? s.title : "",
+              content: Array.isArray(s.content) ? s.content : [],
+              description: typeof s.description === "string" ? s.description : "",
+              layout: typeof s.layout === "string" ? s.layout : "",
+              note: typeof s.note === "string" ? s.note : "",
+            }, null, 2),
+            kind: "outline" as const,
+          }));
+      } catch {
+        return [] as Array<{ slideId: string; title: string; json: string; kind: "outline" | "slide_image"; imageUrl?: string }>;
+      }
+    };
+    const pptDraftSlidesSnapshotAll = isPpt ? pptDraftSlides.slice(0, 24) : [];
+    const pptAllOutlineSlides = loadAllOutlineSlides();
+    const mergedAllSlides = isPpt
+      ? (() => {
+          const byId = new Map<string, { slideId: string; title: string; json: string; kind: "outline" | "slide_image"; imageUrl?: string }>();
+          for (const s of pptAllOutlineSlides) byId.set(s.slideId, s);
+          for (const s of pptDraftSlidesSnapshotAll) byId.set(s.slideId, s);
+          return Array.from(byId.values());
+        })()
+      : [];
     const pptDraftSlidesSnapshot =
       isPpt && referencedPptSlideIds.size > 0
-        ? pptDraftSlidesSnapshotAll.filter((s) => referencedPptSlideIds.has(s.slideId))
-        : [];
+        ? mergedAllSlides.filter((s) => referencedPptSlideIds.has(s.slideId))
+        : mergedAllSlides;
+    const hasPptTagInInput = /\[\[PPT_SLIDE\|/.test(rawInput);
+    const autoPptTags =
+      isPpt && !hasPptTagInInput && pptDraftSlidesSnapshot.length > 0
+        ? pptDraftSlidesSnapshot
+            .map((s) => getPptTag(s.slideId, s.title, s.kind))
+            .filter(Boolean)
+            .join("\n")
+        : "";
+    const inputWithAutoTags = [autoPptTags, rawInput].filter(Boolean).join("\n");
     
     // Process files for prompt
     const fileTexts: string[] = [];
@@ -612,7 +655,7 @@ export function ChatPanel({
         : "";
 
     const promptParts = [
-      rawInput,
+      inputWithAutoTags,
       fileTexts.length > 0 ? fileTexts.join("\n\n") : "",
       pptDraftContextText,
       contextAttachmentsText,
@@ -627,9 +670,10 @@ export function ChatPanel({
     const imageTags = currentUploadedImageItems
       .map((it) => `[[IMAGE|${safeTagText(it.name)}|${it.url}]]`)
       .join("\n");
+    const displayInput = hasPptTagInInput ? rawInput : normalizedInput;
     const displayParts = [
       imageTags,
-      rawInput,
+      displayInput,
       displayFileTexts.length > 0 ? displayFileTexts.join("\n\n") : "",
     ].filter(Boolean);
     const displayContent = displayParts.join("\n\n");
@@ -643,7 +687,7 @@ export function ChatPanel({
     setFiles([]); 
     if (workspaceId === "ppt") onClearPptDraftSlides?.();
 
-    if (workspaceId === "cad" && mode === "text" && /(cad_ready_for_export|涓€閿甛s*(鍑哄浘|鐢熸垚)|one[- ]?click)/i.test(normalizedInput)) {
+    if (workspaceId === "cad" && mode === "text" && /(cad_ready_for_export|一键\s*(出图|生成)|one[- ]?click)/i.test(normalizedInput)) {
       const svg2d = cadContext?.svg2d || "";
       const planJson = cadContext?.plan ? JSON.stringify(cadContext.plan) : "";
 
@@ -1163,7 +1207,7 @@ export function ChatPanel({
                   : "";
 
           if (!agentPrompt) {
-            updateLastAssistant(trText(`鏈瘑鍒殑 CAD 瀛愭櫤鑳戒綋锛?{agent}`, `Unrecognized CAD sub-agent: ${agent}`));
+            updateLastAssistant(trText(`未识别的 CAD 子智能体：${agent}`, `Unrecognized CAD sub-agent: ${agent}`));
             return;
           }
 
@@ -1487,7 +1531,7 @@ export function ChatPanel({
     let i = 0;
     for (; i < lines.length; i += 1) {
       const line = lines[i];
-      if (/^\[\[IMAGE\|([^|]*)\|([\s\S]+)\]\]$/.test(line) || /^\[\[PPT_SLIDE\|(\d+)\|(.*)\]\]$/.test(line)) {
+      if (/^\[\[IMAGE\|([^|]*)\|([\s\S]+)\]\]$/.test(line) || /^\[\[PPT_SLIDE\|(\d+)\|([^|]*)\|(outline|slide_image)\]\]$/.test(line) || /^\[\[PPT_SLIDE\|(\d+)\|(.*)\]\]$/.test(line)) {
         prefixTags.push(line);
         continue;
       }
@@ -1612,7 +1656,7 @@ export function ChatPanel({
                                   title="Remove attachment"
                                   aria-label="Remove attachment"
                                 >
-                                  脳
+                                  ×
                                 </button>
                               )}
                             </div>
@@ -1645,3 +1689,4 @@ export function ChatPanel({
     </div>
   );
 }
+

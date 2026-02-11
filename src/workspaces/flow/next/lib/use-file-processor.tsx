@@ -4,9 +4,20 @@ import { useState } from "react"
 import { toast } from "sonner"
 import {
     extractPdfText,
+    extractWordText,
     extractTextFileContent,
+    extractPdfVisualAssets,
+    extractWordVisualAssets,
+    extractLatexZipText,
+    extractLatexZipVisualAssets,
+    extractLatexTarGzText,
+    extractLatexTarGzVisualAssets,
+    type ExtractedVisualAsset,
     isPdfFile,
+    isWordFile,
     isTextFile,
+    isZipFile,
+    isTarGzFile,
     MAX_EXTRACTED_CHARS,
 } from "@/workspaces/flow/next/lib/pdf-utils"
 
@@ -14,6 +25,7 @@ export interface FileData {
     text: string
     charCount: number
     isExtracting: boolean
+    visualAssets?: ExtractedVisualAsset[]
 }
 
 /**
@@ -30,7 +42,8 @@ export function useFileProcessor() {
         // Extract text immediately for new PDF/text files
         for (const file of newFiles) {
             const needsExtraction =
-                (isPdfFile(file) || isTextFile(file)) && !pdfData.has(file)
+                (isPdfFile(file) || isWordFile(file) || isTextFile(file) || isZipFile(file) || isTarGzFile(file)) &&
+                !pdfData.has(file)
             if (needsExtraction) {
                 // Mark as extracting
                 setPdfData((prev) => {
@@ -46,8 +59,21 @@ export function useFileProcessor() {
                 // Extract text asynchronously
                 try {
                     let text: string
+                    let visualAssets: ExtractedVisualAsset[] = []
                     if (isPdfFile(file)) {
                         text = await extractPdfText(file)
+                        visualAssets = await extractPdfVisualAssets(file)
+                    } else if (isWordFile(file)) {
+                        text = await extractWordText(file)
+                        visualAssets = await extractWordVisualAssets(file)
+                    } else if (isZipFile(file)) {
+                        // LaTeX bundle (.zip): parse tex + includegraphics to extract original figures.
+                        text = await extractLatexZipText(file)
+                        visualAssets = await extractLatexZipVisualAssets(file)
+                    } else if (isTarGzFile(file)) {
+                        // LaTeX bundle (.tar.gz/.tgz)
+                        text = await extractLatexTarGzText(file)
+                        visualAssets = await extractLatexTarGzVisualAssets(file)
                     } else {
                         text = await extractTextFileContent(file)
                     }
@@ -74,6 +100,7 @@ export function useFileProcessor() {
                             text,
                             charCount: text.length,
                             isExtracting: false,
+                            visualAssets,
                         })
                         return next
                     })
@@ -104,6 +131,7 @@ export function useFileProcessor() {
     return {
         files,
         pdfData,
+        visualAssets: Array.from(pdfData.values()).flatMap((x) => x.visualAssets || []),
         handleFileChange,
         setFiles, // Export for external control (e.g., clearing files)
     }
