@@ -4,7 +4,6 @@ import {
     ChevronDown,
     ChevronUp,
     Copy,
-    Cpu,
     FileCode,
     FileText,
     Loader2,
@@ -67,7 +66,7 @@ interface PptEditSlidePatch {
 }
 
 interface PptToolPayload {
-    type: "ppt_edit" | "ppt_delete" | "ppt_crate";
+    type: "ppt_edit";
     slides: PptEditSlidePatch[];
 }
 
@@ -208,15 +207,8 @@ const getMessageTextContent = (message: UIMessage): string => {
 
 const getUserOriginalText = (message: UIMessage): string => {
     const fullText = getMessageTextContent(message);
-    const withoutTags = fullText
-        .split(/\r?\n/)
-        .filter((line) => !/^\[\[PPT_SLIDE\|(\d+)\|([^|]*)\|(outline|slide_image)\]\]$/.test(line))
-        .filter((line) => !/^\[\[PPT_SLIDE\|(\d+)\|(.*)\]\]$/.test(line))
-        .filter((line) => !/^\[\[IMAGE\|([^|]*)\|([\s\S]+)\]\]$/.test(line))
-        .join("\n")
-        .trim();
     const filePattern = /\n\n\[(PDF|File):\s*[^\]]+\]\n[\s\S]*$/;
-    return withoutTags.replace(filePattern, "").trim();
+    return fullText.replace(filePattern, "").trim();
 };
 
 function extractPptToolPayload(text: string): PptToolPayload | null {
@@ -235,12 +227,8 @@ function extractPptToolPayload(text: string): PptToolPayload | null {
     }
     if (!parsed || typeof parsed !== "object") return null;
     const typeRaw = String((parsed as any).type || "").trim().toLowerCase();
-    const type: "ppt_edit" | "ppt_delete" | "ppt_crate" =
-        typeRaw === "ppt_delete"
-            ? "ppt_delete"
-            : typeRaw === "ppt_crate" || typeRaw === "ppt_create"
-                ? "ppt_crate"
-                : "ppt_edit";
+    if (typeRaw && typeRaw !== "ppt_edit") return null;
+    const type: "ppt_edit" = "ppt_edit";
     const slides = Array.isArray((parsed as any).slides)
         ? (parsed as any).slides.filter((s: any) => s && typeof s === "object")
         : [];
@@ -295,10 +283,6 @@ function slideFieldLabel(key: string, uiLang: "zh" | "en"): string {
     return key;
 }
 
-function pptToolTypeLabel(type: "ppt_edit" | "ppt_delete" | "ppt_crate"): string {
-    return type;
-}
-
 export function ChatMessageDisplay({
     messages,
     setInput,
@@ -350,29 +334,50 @@ export function ChatMessageDisplay({
     const getViewport = useCallback(() => {
         const root = scrollRootRef.current;
         if (!root) return null;
-        return root.querySelector('[data-radix-scroll-area-viewport]') as HTMLElement | null;
+        return (
+            (root.querySelector('[data-slot="scroll-area-viewport"]') as HTMLElement | null) ||
+            (root.querySelector('[data-radix-scroll-area-viewport]') as HTMLElement | null)
+        );
     }, []);
 
     const scrollToBottom = useCallback((behavior: ScrollBehavior = "auto") => {
         const viewport = getViewport();
-        if (!viewport) return;
+        if (!viewport) {
+            messagesEndRef.current?.scrollIntoView({ behavior });
+            return;
+        }
         viewport.scrollTo({ top: viewport.scrollHeight, behavior });
     }, [getViewport]);
 
     useEffect(() => {
-        const viewport = getViewport();
-        if (!viewport) return;
+        let mounted = true;
+        let cleanup: null | (() => void) = null;
+        let rafId = 0;
 
-        const onScroll = () => {
-            const threshold = 48;
-            const distanceToBottom = viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight;
-            setIsAtBottom(distanceToBottom <= threshold);
+        const bind = () => {
+            if (!mounted) return;
+            const viewport = getViewport();
+            if (!viewport) {
+                rafId = requestAnimationFrame(bind);
+                return;
+            }
+            const onScroll = () => {
+                const threshold = 48;
+                const distanceToBottom = viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight;
+                setIsAtBottom(distanceToBottom <= threshold);
+            };
+            onScroll();
+            viewport.addEventListener("scroll", onScroll, { passive: true });
+            cleanup = () => viewport.removeEventListener("scroll", onScroll as any);
         };
 
-        onScroll();
-        viewport.addEventListener("scroll", onScroll, { passive: true });
-        return () => viewport.removeEventListener("scroll", onScroll as any);
-    }, [getViewport]);
+        bind();
+        return () => {
+            mounted = false;
+            if (rafId) cancelAnimationFrame(rafId);
+            if (cleanup) cleanup();
+        };
+    }, [getViewport, messages.length]);
 
     useEffect(() => {
         return () => {
@@ -435,10 +440,36 @@ export function ChatMessageDisplay({
                         message.role === "user" &&
                         (messageIndex === messages.length - 1 || messages.slice(messageIndex + 1).every((m) => m.role !== "user"));
                     const isEditing = editingMessageId === message.id;
+                    const messageText = getMessageTextContent(message);
+                    const { images: probeImages, rest: probeWithoutImages } = extractImageTags(messageText);
+                    const { tags: probePptTags, rest: probeText } = extractPptSlideTags(probeWithoutImages);
+                    const probeSections = splitTextIntoFileSections(probeText);
+                    const hasProbeText = probeSections.some((s) => s.type === "text" && String(s.content || "").trim().length > 0);
+                    const hasProbeFiles = probeSections.some((s) => s.type === "file" && String(s.content || "").trim().length > 0);
+                    const hasProbePptTool = probeSections.some(
+                        (s) => s.type === "text" && !!extractPptToolPayload(String(s.content || ""))
+                    );
+                    const hasProbeReasoning = (message.parts || []).some(
+                        (p) => p?.type === "reasoning" && String(p.text || "").trim().length > 0
+                    );
+                    const hasRenderableContent =
+                        probeImages.length > 0 ||
+                        probePptTags.length > 0 ||
+                        hasProbeText ||
+                        hasProbeFiles ||
+                        hasProbePptTool ||
+                        hasProbeReasoning;
+                    const isAssistantEmpty = message.role === "assistant" && !hasRenderableContent;
+                    const showPendingIndicator =
+                        message.role === "user" &&
+                        isLastUserMessage &&
+                        (status === "submitted" || status === "streaming");
+
+                    if (isAssistantEmpty) return null;
 
                     return (
+                        <React.Fragment key={message.id}>
                         <div
-                            key={message.id}
                             className={`flex w-full ${message.role === "user" ? "justify-end" : "justify-start"}`}
                         >
                             <div
@@ -447,29 +478,29 @@ export function ChatMessageDisplay({
                                     message.role === "assistant" ? "w-full max-w-[95%] items-start" : "max-w-[95%] items-end"
                                 )}
                             >
-                                {/* Role Icon / Header */}
-                                <div className="flex items-center gap-2 mb-1.5 px-1">
-                                    {message.role === 'assistant' ? (
-                                        <>
-                                            <div className="w-5 h-5 rounded-full bg-blue-600 flex items-center justify-center">
-                                                <Cpu className="w-3 h-3 text-white" />
-                                            </div>
-                                            <span className="text-xs font-medium text-muted-foreground">{tr("AI 助手", "AI Assistant")}</span>
-                                        </>
-                                    ) : (
-                                        <>
-                                            <span className="text-xs font-medium text-muted-foreground">{tr("你", "You")}</span>
-                                        </>
-                                    )}
-                                </div>
-
                                 {/* Content Bubble */}
                                 <div className={cn(
                                     "relative px-4 py-3 text-sm leading-relaxed break-words overflow-hidden border border-border/50 bg-background/70 backdrop-blur-md shadow-sm transition-shadow hover:shadow-md",
                                     message.role === "user" 
-                                        ? "text-foreground rounded-2xl rounded-tr-sm w-full"
+                                        ? "text-foreground rounded-2xl rounded-tr-sm w-full cursor-pointer"
                                         : "text-foreground rounded-2xl rounded-tl-sm w-full"
-                                )}>
+                                )}
+                                role={message.role === "user" && isLastUserMessage && onEditMessage ? "button" : undefined}
+                                tabIndex={message.role === "user" && isLastUserMessage && onEditMessage ? 0 : undefined}
+                                title={message.role === "user" && isLastUserMessage && onEditMessage ? tr("点击编辑", "Click to edit") : undefined}
+                                onClick={() => {
+                                    if (isEditing || message.role !== "user" || !isLastUserMessage || !onEditMessage) return;
+                                    setEditingMessageId(message.id);
+                                    setEditText(getUserOriginalText(message));
+                                }}
+                                onKeyDown={(e) => {
+                                    if (isEditing || message.role !== "user" || !isLastUserMessage || !onEditMessage) return;
+                                    if (e.key === "Enter" || e.key === " ") {
+                                        e.preventDefault();
+                                        setEditingMessageId(message.id);
+                                        setEditText(getUserOriginalText(message));
+                                    }
+                                }}>
                                     
                                     {/* Reasoning Parts */}
                                     {message.parts?.map((part, partIndex) => {
@@ -500,24 +531,60 @@ export function ChatMessageDisplay({
                                         
                                         // Edit Mode
                                         if (isEditing && message.role === "user") {
+                                            const editParts = splitInlinePptTags(editText);
                                             return (
-                                                <div className="flex flex-col gap-2 min-w-[300px]">
-                                                    <textarea
-                                                        ref={editTextareaRef}
-                                                        value={editText}
-                                                        onChange={(e) => setEditText(e.target.value)}
-                                                        className="w-full px-3 py-2 text-sm rounded-md border border-input bg-background text-foreground resize-none focus:outline-none focus:ring-2 focus:ring-primary"
-                                                        rows={4}
-                                                    />
+                                                <div className="flex flex-col gap-2 min-w-[300px]" onClick={(e) => e.stopPropagation()}>
+                                                    <div className="relative w-full">
+                                                        <textarea
+                                                            ref={editTextareaRef}
+                                                            value={editText}
+                                                            onChange={(e) => setEditText(e.target.value)}
+                                                            onClick={(e) => e.stopPropagation()}
+                                                            className="relative z-10 w-full px-3 py-2 text-sm rounded-md border border-input bg-transparent text-transparent caret-foreground resize-none focus:outline-none focus:ring-2 focus:ring-primary"
+                                                            rows={4}
+                                                        />
+                                                        <div className="pointer-events-none absolute inset-0 z-0 overflow-hidden rounded-md border border-input bg-background px-3 py-2 text-sm leading-6 whitespace-pre-wrap break-words text-foreground">
+                                                            {editParts.map((p, i) => {
+                                                                if (p.type === "text") return <span key={`edit-t-${i}`}>{p.text}</span>;
+                                                                const kind = p.kind === "outline" ? "outline" : "slide_image";
+                                                                const label = p.title ? tr(`第 ${p.n} 页：${p.title}`, `Slide ${p.n}: ${p.title}`) : tr(`第 ${p.n} 页`, `Slide ${p.n}`);
+                                                                return (
+                                                                    <span
+                                                                        key={`edit-ppt-${i}`}
+                                                                        className={cn(
+                                                                            "mx-0.5 inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-xs font-medium align-middle",
+                                                                            kind === "outline"
+                                                                                ? "border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-400/30 dark:bg-blue-950/40 dark:text-blue-200"
+                                                                                : "border-red-200 bg-red-50 text-red-700 dark:border-red-400/30 dark:bg-red-950/40 dark:text-red-200"
+                                                                        )}
+                                                                    >
+                                                                        <span
+                                                                            className={cn(
+                                                                                "inline-flex h-4 w-4 items-center justify-center rounded-full text-[10px] font-semibold text-white",
+                                                                                kind === "outline" ? "bg-blue-600" : "bg-red-600"
+                                                                            )}
+                                                                        >
+                                                                            {kind === "outline" ? "T" : "P"}
+                                                                        </span>
+                                                                        {label}
+                                                                    </span>
+                                                                );
+                                                            })}
+                                                        </div>
+                                                    </div>
                                                     <div className="flex justify-end gap-2">
                                                         <button
-                                                            onClick={() => setEditingMessageId(null)}
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                setEditingMessageId(null);
+                                                            }}
                                                             className="px-3 py-1 text-xs rounded bg-muted hover:bg-muted/80 text-foreground"
                                                         >
                                                             {tr("取消", "Cancel")}
                                                         </button>
                                                         <button
-                                                            onClick={() => {
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
                                                                 if (editText.trim() && onEditMessage) {
                                                                     onEditMessage(messageIndex, editText.trim());
                                                                     setEditingMessageId(null);
@@ -659,24 +726,11 @@ export function ChatMessageDisplay({
                                                     if (pptToolPayload && pptToolPayload.slides.length > 0) {
                                                         return (
                                                             <div key={idx} className="w-full min-w-0 space-y-2">
-                                                                <div className="inline-flex items-center rounded-md border border-blue-200 bg-blue-50 px-2 py-1 text-[11px] font-medium text-blue-700">
-                                                                    {pptToolTypeLabel(pptToolPayload.type)}
-                                                                </div>
                                                                 {pptToolPayload.slides.map((slide, slideIdx) => {
                                                                     const slideNumber = getSlideNumber(slide, slideIdx);
-                                                                    const rows = (() => {
-                                                                        if (pptToolPayload.type === "ppt_delete") {
-                                                                            return [
-                                                                                {
-                                                                                    key: "id",
-                                                                                    value: String(slide?.id || tr("未提供", "Missing")),
-                                                                                },
-                                                                            ];
-                                                                        }
-                                                                        return slidePatchEntries(slide);
-                                                                    })();
+                                                                    const rows = slidePatchEntries(slide);
                                                                     const cardKey = `${message.id}-ppt-edit-${idx}-${slideIdx}`;
-                                                                    const expanded = expandedSlideCards[cardKey] ?? true;
+                                                                    const expanded = expandedSlideCards[cardKey] ?? false;
                                                                     return (
                                                                         <div
                                                                             key={cardKey}
@@ -784,13 +838,6 @@ export function ChatMessageDisplay({
                                         );
                                     })()}
 
-                                    {/* Loading Indicator */}
-                                    {isLastAssistantMessage && status === "streaming" && (
-                                        <div className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
-                                            <Loader2 className="h-3 w-3 animate-spin" />
-                                            <span>{tr("思考中...", "Thinking...")}</span>
-                                        </div>
-                                    )}
                                 </div>
 
                                 {/* Actions */}
@@ -849,6 +896,17 @@ export function ChatMessageDisplay({
                                 </div>
                             </div>
                         </div>
+                        {showPendingIndicator && (
+                            <div className="flex w-full justify-start animate-message-in mt-3">
+                                <div className="max-w-[85%] min-w-0">
+                                    <div className="flex items-center gap-2 px-3 py-2 text-xs text-muted-foreground bg-muted/40 rounded-2xl rounded-bl-md">
+                                        <Loader2 className="h-3 w-3 animate-spin" />
+                                        <span>{tr("思考中...", "Thinking...")}</span>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+                        </React.Fragment>
                     );
                     })}
                     <div ref={messagesEndRef} />

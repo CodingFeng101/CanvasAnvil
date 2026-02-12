@@ -15,8 +15,6 @@ import {
     Pencil,
     Plus,
     RotateCcw,
-    ThumbsDown,
-    ThumbsUp,
     X,
 } from "lucide-react"
 import Image from "@/workspaces/flow/next/shims/next-image"
@@ -223,7 +221,6 @@ export function ChatMessageDisplay({
     const [copyFailedMessageId, setCopyFailedMessageId] = useState<
         string | null
     >(null)
-    const [feedback, setFeedback] = useState<Record<string, "good" | "bad">>({})
     const [editingMessageId, setEditingMessageId] = useState<string | null>(
         null,
     )
@@ -259,34 +256,6 @@ export function ChatMessageDisplay({
             } finally {
                 document.body.removeChild(textarea)
             }
-        }
-    }
-
-    const submitFeedback = async (messageId: string, value: "good" | "bad") => {
-        // Toggle off if already selected
-        if (feedback[messageId] === value) {
-            setFeedback((prev) => {
-                const next = { ...prev }
-                delete next[messageId]
-                return next
-            })
-            return
-        }
-
-        setFeedback((prev) => ({ ...prev, [messageId]: value }))
-
-        try {
-            await fetch("/api/log-feedback", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    messageId,
-                    feedback: value,
-                    sessionId,
-                }),
-            })
-        } catch (error) {
-            console.warn("Failed to log feedback:", error)
         }
     }
 
@@ -505,7 +474,7 @@ export function ChatMessageDisplay({
                                         animationDelay: `${messageIndex * 50}ms`,
                                     }}
                                 >
-                                <div className="max-w-[85%] min-w-0">
+                                <div className="max-w-[95%] min-w-0">
                                     {/* Reasoning blocks - displayed first for assistant messages */}
                                     {message.role === "assistant" &&
                                         message.parts?.map(
@@ -882,10 +851,10 @@ export function ChatMessageDisplay({
                                                                 )}
 
                                                         {hasTextContent || message.role !== "user" ? (
-                                                            <div className={message.role === "user" ? "flex items-center justify-end gap-1.5" : ""}>
+                                                            <div className={message.role === "user" ? "flex flex-col items-end gap-1.5" : ""}>
                                                             {message.role === "user" &&
                                                                 !isEditing && (
-                                                                    <div className="flex items-center gap-1 self-center">
+                                                                    <div className="order-2 flex items-center gap-1 self-end">
                                                                         {onEditMessage &&
                                                                             isLastUserMessage && (
                                                                                 <button
@@ -949,10 +918,10 @@ export function ChatMessageDisplay({
                                                                     </div>
                                                                 )}
                                                             <div
-                                                                className={`px-4 py-3 text-sm leading-relaxed ${
+                                                                className={`order-1 w-full px-4 py-3 text-sm leading-relaxed ${
                                                                 message.role ===
                                                                 "user"
-                                                                    ? "bg-primary text-primary-foreground rounded-2xl rounded-br-md shadow-sm"
+                                                                    ? "bg-background text-foreground rounded-2xl rounded-br-md border border-border/50 shadow-sm"
                                                                     : message.role ===
                                                                         "system"
                                                                       ? "bg-destructive/10 text-destructive border border-destructive/20 rounded-2xl rounded-bl-md"
@@ -1059,12 +1028,7 @@ export function ChatMessageDisplay({
                                                                                         return (
                                                                                             <div
                                                                                                 key={`${message.id}-textsection-${partIndex}-${sectionIndex}`}
-                                                                                                className={`prose prose-sm max-w-none break-words [&>*:first-child]:mt-0 [&>*:last-child]:mb-0 ${
-                                                                                                    message.role ===
-                                                                                                    "user"
-                                                                                                        ? "[&_*]:!text-primary-foreground prose-code:bg-white/20"
-                                                                                                        : "dark:prose-invert"
-                                                                                                }`}
+                                                                                                className="prose prose-sm max-w-none break-words [&>*:first-child]:mt-0 [&>*:last-child]:mb-0 dark:prose-invert"
                                                                                             >
                                                                                                 <ReactMarkdown>
                                                                                                     {
@@ -1146,46 +1110,6 @@ export function ChatMessageDisplay({
                                                         <RotateCcw className="h-3.5 w-3.5" />
                                                     </button>
                                                 )}
-                                            {/* Divider */}
-                                            <div className="w-px h-4 bg-border mx-1" />
-                                            {/* Thumbs up */}
-                                            <button
-                                                type="button"
-                                                onClick={() =>
-                                                    submitFeedback(
-                                                        message.id,
-                                                        "good",
-                                                    )
-                                                }
-                                                className={`p-1.5 rounded-lg transition-colors ${
-                                                    feedback[message.id] ===
-                                                    "good"
-                                                        ? "text-green-600 bg-green-100"
-                                                        : "text-muted-foreground/60 hover:text-green-600 hover:bg-green-50"
-                                                }`}
-                                                title={t("message.good")}
-                                            >
-                                                <ThumbsUp className="h-3.5 w-3.5" />
-                                            </button>
-                                            {/* Thumbs down */}
-                                            <button
-                                                type="button"
-                                                onClick={() =>
-                                                    submitFeedback(
-                                                        message.id,
-                                                        "bad",
-                                                    )
-                                                }
-                                                className={`p-1.5 rounded-lg transition-colors ${
-                                                    feedback[message.id] ===
-                                                    "bad"
-                                                        ? "text-red-600 bg-red-100"
-                                                        : "text-muted-foreground/60 hover:text-red-600 hover:bg-red-50"
-                                                }`}
-                                                title={t("message.bad")}
-                                            >
-                                                <ThumbsDown className="h-3.5 w-3.5" />
-                                            </button>
                                         </div>
                                         )}
                                 </div>

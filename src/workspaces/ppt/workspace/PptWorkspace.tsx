@@ -30,6 +30,24 @@ interface PptData {
   slides: SlideData[];
 }
 
+const localizeLayoutHint = (layout: string, lang: "zh" | "en") => {
+  const raw = String(layout || "").trim();
+  if (!raw || lang !== "zh") return raw;
+  const key = raw.toLowerCase().replace(/\s+/g, "");
+  const map: Record<string, string> = {
+    "cover": "封面页",
+    "title+bullets": "标题+要点",
+    "title+bullet": "标题+要点",
+    "two-column": "双栏布局",
+    "twocolumn": "双栏布局",
+    "left-text-right-image": "左文右图",
+    "lefttextrightimage": "左文右图",
+    "title-and-content": "标题+内容",
+    "titleandcontent": "标题+内容",
+  };
+  return map[key] || raw;
+};
+
 interface PptWorkspaceProps {
   data?: PptData;
   onAddToChat?: (json: string, name: string) => void;
@@ -525,9 +543,7 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, onPptStageCh
     }
 
     const toolTypeRaw = String(parsed?.type || "").trim().toLowerCase();
-    const toolType = toolTypeRaw === "ppt_delete" || toolTypeRaw === "ppt_crate" || toolTypeRaw === "ppt_create"
-      ? toolTypeRaw
-      : "ppt_edit";
+    if (toolTypeRaw && toolTypeRaw !== "ppt_edit") return;
 
     const incomingSlides: any[] = Array.isArray(parsed?.slides)
       ? parsed.slides
@@ -540,136 +556,34 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, onPptStageCh
     const uploadedImages: string[] = Array.isArray(parsed?.uploadedImages) ? parsed.uploadedImages : [];
     const existingById = new Map(localSlides.map((s) => [s.id, s] as const));
 
-    const makeUniqueSlideId = (candidate: string, used: Set<string>) => {
-      const base = candidate.trim() || `slide-${used.size + 1}`;
-      if (!used.has(base)) return base;
-      let next = 2;
-      while (used.has(`${base}-${next}`)) next += 1;
-      return `${base}-${next}`;
-    };
-
     const toSlideData = (inc: any, fallbackId: string, source?: SlideData): SlideData => ({
       id: fallbackId,
       title: typeof inc?.title === "string" ? inc.title : (source?.title || tr("幻灯片", "Slide")),
       content: Array.isArray(inc?.content) ? inc.content.map((x: any) => String(x)) : (source?.content || []),
       description: typeof inc?.description === "string" ? inc.description : source?.description,
       note: typeof inc?.note === "string" ? inc.note : source?.note,
-      layout: typeof inc?.layout === "string" ? inc.layout : source?.layout,
+      layout: typeof inc?.layout === "string" ? localizeLayoutHint(inc.layout, uiLang as "zh" | "en") : source?.layout,
     });
-
-    const getCreateAnchor = (inc: any): { beforeId?: string; afterId?: string; position?: number } => {
-      const beforeId = typeof inc?.insertBeforeId === "string"
-        ? inc.insertBeforeId
-        : typeof inc?.beforeId === "string"
-          ? inc.beforeId
-          : typeof inc?.between?.beforeId === "string"
-            ? inc.between.beforeId
-            : undefined;
-      const afterId = typeof inc?.insertAfterId === "string"
-        ? inc.insertAfterId
-        : typeof inc?.afterId === "string"
-          ? inc.afterId
-          : typeof inc?.between?.afterId === "string"
-            ? inc.between.afterId
-            : undefined;
-      const pos = Number(inc?.position);
-      const position = Number.isFinite(pos) ? pos : undefined;
-      return { beforeId, afterId, position };
-    };
 
     let mergedSlides: SlideData[] = localSlides.slice();
     let mergedIncomingSlides = incomingSlides.slice();
+    mergedSlides = (() => {
+      const existing = localSlides.length > 0 ? [...localSlides] : [];
+      const byId = new Map(existing.map((s) => [s.id, s] as const));
+      const order: string[] = existing.map((s) => s.id);
 
-    if (toolType === "ppt_delete") {
-      const deleteIds = new Set(
-        incomingSlides
-          .map((inc) => String(inc?.id || "").trim())
-          .filter(Boolean)
-      );
-      if (deleteIds.size === 0) return;
-
-      mergedSlides = localSlides.filter((slide) => !deleteIds.has(slide.id));
-      mergedIncomingSlides = [];
-
-      setLocalSlides(mergedSlides);
-      setSlideMaterials((prev) => {
-        const next = { ...prev };
-        for (const id of deleteIds) delete next[id];
-        return next;
-      });
-      setGeneratedImages((prev) => {
-        const next = { ...prev };
-        for (const id of deleteIds) delete next[id];
-        return next;
-      });
-      setImageVersions((prev) => {
-        const next = { ...prev };
-        for (const id of deleteIds) delete next[id];
-        return next;
-      });
-      setCurrentImageVersionId((prev) => {
-        const next = { ...prev };
-        for (const id of deleteIds) delete next[id];
-        return next;
-      });
-      setCurrentSlideIndex((prev) => {
-        if (mergedSlides.length === 0) return 0;
-        return Math.max(0, Math.min(prev, mergedSlides.length - 1));
-      });
-      return;
-    }
-
-    if (toolType === "ppt_crate" || toolType === "ppt_create") {
-      const used = new Set(localSlides.map((s) => s.id));
-      const nextSlides = localSlides.slice();
-      const normalizedIncoming: any[] = [];
-
-      for (let i = 0; i < incomingSlides.length; i += 1) {
-        const inc = incomingSlides[i];
-        const requestedId = String(inc?.id || "").trim();
-        const newId = makeUniqueSlideId(requestedId || `slide-${nextSlides.length + 1}`, used);
-        used.add(newId);
-        const slide = toSlideData(inc, newId);
-        const { beforeId, afterId, position } = getCreateAnchor(inc);
-
-        let insertAt = nextSlides.length;
-        if (beforeId) {
-          const idx = nextSlides.findIndex((s) => s.id === beforeId);
-          if (idx >= 0) insertAt = idx;
-        } else if (afterId) {
-          const idx = nextSlides.findIndex((s) => s.id === afterId);
-          if (idx >= 0) insertAt = idx + 1;
-        } else if (position !== undefined) {
-          const maybeZeroBased = position >= 0 && position <= nextSlides.length ? position : position - 1;
-          insertAt = Math.max(0, Math.min(nextSlides.length, Math.floor(maybeZeroBased)));
-        }
-
-        nextSlides.splice(insertAt, 0, slide);
-        normalizedIncoming.push({ ...inc, id: newId });
+      for (const inc of incomingSlides) {
+        const id = String(inc?.id || "");
+        if (!id) continue;
+        const next: SlideData = toSlideData(inc, id, byId.get(id));
+        byId.set(id, next);
+        if (!order.includes(id)) order.push(id);
       }
 
-      mergedSlides = nextSlides;
-      mergedIncomingSlides = normalizedIncoming;
-      setLocalSlides(mergedSlides);
-    } else {
-      mergedSlides = (() => {
-        const existing = localSlides.length > 0 ? [...localSlides] : [];
-        const byId = new Map(existing.map((s) => [s.id, s] as const));
-        const order: string[] = existing.map((s) => s.id);
-
-        for (const inc of incomingSlides) {
-          const id = String(inc?.id || "");
-          if (!id) continue;
-          const next: SlideData = toSlideData(inc, id, byId.get(id));
-          byId.set(id, next);
-          if (!order.includes(id)) order.push(id);
-        }
-
-        return order.map((id) => byId.get(id)!).filter(Boolean);
-      })();
-      mergedIncomingSlides = incomingSlides;
-      setLocalSlides(mergedSlides);
-    }
+      return order.map((id) => byId.get(id)!).filter(Boolean);
+    })();
+    mergedIncomingSlides = incomingSlides;
+    setLocalSlides(mergedSlides);
 
     const allowImageEdits = creationStep === "done";
     if (!allowImageEdits) return;
@@ -1474,7 +1388,7 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, onPptStageCh
             content: Array.isArray(it.content) ? it.content.map((x: any) => String(x)) : [],
             description: typeof it.description === "string" ? it.description : undefined,
             note: typeof it.note === "string" ? it.note : undefined,
-            layout: typeof it.layout === "string" ? it.layout : undefined,
+            layout: typeof it.layout === "string" ? localizeLayoutHint(it.layout, uiLang as "zh" | "en") : undefined,
           }));
         }
       } catch {
@@ -1851,7 +1765,7 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, onPptStageCh
             content: p.content,
             description: p.description || "",
             note: p.note || "",
-            layout: p.layout || "",
+            layout: localizeLayoutHint(p.layout || "", uiLang as "zh" | "en"),
         }));
         const autoMaterial = buildSlideMaterialsFromAutoLabels(pages, slides, referenceVisualAssets);
         setSlideMaterials(autoMaterial.nextMaterials);
@@ -1896,7 +1810,7 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, onPptStageCh
             content: p.content,
             description: p.description,
             note: p.note,
-            layout: p.layout
+            layout: localizeLayoutHint(p.layout || "", uiLang as "zh" | "en")
         }));
         const autoMaterial = buildSlideMaterialsFromAutoLabels(pages, slides, referenceVisualAssets);
         setSlideMaterials(autoMaterial.nextMaterials);
