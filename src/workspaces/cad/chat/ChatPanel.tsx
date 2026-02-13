@@ -11,7 +11,12 @@ import { HistoryDialog, HistoryItem } from '@/workspaces/cad/chat/history-dialog
 import { ResetWarningModal } from '@/workspaces/cad/chat/reset-warning-modal';
 import { useFileProcessor } from '@/lib/use-file-processor';
 import { buildCadBomMessages, buildCadImagesMasterMessages, buildCadImagesSheetMessages, buildCadTasksSystemContent } from '@/lib/cad-tasks';
-import { CAD_PLAN_AGENT_PROMPT, CAD_SVG_GENERATE_AGENT_PROMPT, CAD_SVG_PATCH_AGENT_PROMPT } from '@/lib/cad-agents';
+import {
+  CAD_PLAN_AGENT_PROMPT,
+  CAD_SVG_AGENT_ROUTER_PROMPT,
+  CAD_SVG_FLOW_PATCH_AGENT_PROMPT,
+  CAD_SVG_FLOW_REPLACE_AGENT_PROMPT,
+} from '@/lib/cad-agents';
 import flowPatchAgentPrompt from "../../../../agent/flow/patch.md?raw";
 import flowReplaceAgentPrompt from "../../../../agent/flow/replace.md?raw";
 import { t } from "@/lib/i18n";
@@ -24,7 +29,7 @@ interface Attachment {
   name: string;
 }
 
-type CodeActionResult = { ok: boolean; retry?: boolean; error?: string };
+type CodeActionResult = { ok: boolean; retry?: boolean; error?: string; svg?: string };
 type MaybePromise<T> = T | Promise<T>;
 
 interface ChatPanelProps {
@@ -102,6 +107,11 @@ export function ChatPanel({
 }: ChatPanelProps) {
   const uiLang = useUiLanguage();
   const trText = (zhText: string, enText: string) => (uiLang === "zh" ? zhText : enText);
+  const cadOutputLanguage = uiLang === "zh" ? "Simplified Chinese (zh-CN)" : "English (en)";
+  const cadOutputLanguageInstruction =
+    workspaceId === "cad"
+      ? `Output language: ${cadOutputLanguage}`
+      : "";
   // Persistence key
   const storageKey = `${STORAGE_KEY_PREFIX}${workspaceId}`;
 
@@ -116,9 +126,7 @@ export function ChatPanel({
             }
         }
     }
-    return initialMessages.length > 0 ? initialMessages : [
-        { role: 'assistant', content: t(uiLang, "chat.hello") }
-    ];
+    return initialMessages.length > 0 ? initialMessages : [];
   });
 
   const [input, setInput] = useState('');
@@ -130,6 +138,8 @@ export function ChatPanel({
   const [showResetWarning, setShowResetWarning] = useState(false);
   const flowAutoRetryCountRef = useRef(0);
   const MAX_FLOW_AUTO_RETRY = 3;
+  const cadSvgAutoRetryCountRef = useRef(0);
+  const MAX_CAD_SVG_AUTO_RETRY = 3;
   
   const [files, setFiles] = useState<File[]>([]);
   const abortControllerRef = useRef<AbortController | null>(null);
@@ -236,6 +246,68 @@ export function ChatPanel({
   const sanitizeAssistantContentForDisplay = (content: string) => {
     if (workspaceId !== "cad") return content;
     if (!content) return content;
+    const formatCadPlanForDisplay = (parsed: any) => {
+      if (parsed?.type !== "cad_plan") return null;
+      const plan = parsed?.plan || {};
+      const summary = typeof plan?.summary === "string" ? plan.summary.trim() : "";
+      const style = typeof plan?.style === "string" ? plan.style.trim() : "";
+      const assumptions = Array.isArray(plan?.assumptions) ? plan.assumptions.map((x: any) => String(x || "").trim()).filter(Boolean) : [];
+      const constraints = Array.isArray(plan?.constraints) ? plan.constraints.map((x: any) => String(x || "").trim()).filter(Boolean) : [];
+      const rooms = Array.isArray(plan?.rooms) ? plan.rooms : [];
+
+      const lines: string[] = [];
+      lines.push(trText("### 方案概览", "### Plan Overview"));
+      if (summary) lines.push(summary);
+      if (style) lines.push(trText(`- 设计风格：${style}`, `- Style: ${style}`));
+
+      if (rooms.length > 0) {
+        lines.push("");
+        lines.push(trText("### 空间清单", "### Space Program"));
+        rooms.forEach((r: any, i: number) => {
+          const name = String(r?.name || r?.type || "").trim() || trText(`空间${i + 1}`, `Space ${i + 1}`);
+          const size = String(r?.size || "").trim();
+          const notes = String(r?.notes || "").trim();
+          const head = size ? `${i + 1}. **${name}**（${size}）` : `${i + 1}. **${name}**`;
+          lines.push(head);
+          if (notes) lines.push(`   ${notes}`);
+        });
+      }
+
+      if (assumptions.length > 0) {
+        lines.push("");
+        lines.push(trText("### 设计假设", "### Assumptions"));
+        assumptions.forEach((a: string) => lines.push(`- ${a}`));
+      }
+
+      if (constraints.length > 0) {
+        lines.push("");
+        lines.push(trText("### 关键约束", "### Constraints"));
+        constraints.forEach((c: string) => lines.push(`- ${c}`));
+      }
+
+      return lines.join("\n").trim();
+    };
+
+    const tryParseCadPlanJson = (text: string) => {
+      const raw = String(text || "").trim();
+      if (!raw) return null;
+      try {
+        const parsed = JSON.parse(raw);
+        return formatCadPlanForDisplay(parsed);
+      } catch {
+      }
+      const start = raw.indexOf("{");
+      const end = raw.lastIndexOf("}");
+      if (start >= 0 && end > start) {
+        try {
+          const parsed = JSON.parse(raw.slice(start, end + 1));
+          return formatCadPlanForDisplay(parsed);
+        } catch {
+        }
+      }
+      return null;
+    };
+
     let next = content.replace(
       /```(?:python|py|python3)\s*[\s\S]*?```/g,
       trText("（已在后台处理完成）", "(Processed in the background)")
@@ -245,39 +317,46 @@ export function ChatPanel({
       .filter((line) => !/freecad/i.test(line))
       .join("\n");
     next = next.replace(/(?:^|\n)1\.\s*FreeCAD[\s\S]*?(?=\n\d+\.\s|$)/gi, "\n");
-    return next.replace(/```json\s*([\s\S]*?)```/g, (full, inner) => {
+    next = next.replace(/```json\s*([\s\S]*?)```/g, (full, inner) => {
       const text = String(inner || "").trim();
       if (!text) return full;
+      try {
+        const parsed = JSON.parse(text);
+        if (parsed?.type === "cad_patch" && parsed?.target === "2d_svg") {
+          const mode = String(parsed?.mode || "");
+          if (mode === "replace" && typeof parsed?.full === "string" && parsed.full.trim().startsWith("<svg")) {
+            return `\`\`\`svg\n${parsed.full.trim()}\n\`\`\``;
+          }
+          if (mode === "patch") {
+            return trText("（已执行2D局部修改）", "(2D patch applied)");
+          }
+        }
+      } catch {
+      }
       if (text.includes('"type"') && text.includes('"cad_images"')) {
         return trText("（已提交装修图生成任务）", "(CAD drawing generation task submitted)");
       }
       if (text.includes('"type"') && text.includes('"cad_plan"')) {
-        try {
-          const parsed = JSON.parse(text);
-          if (parsed?.type !== "cad_plan") return full;
-          const plan = parsed?.plan || {};
-          const summary = typeof plan?.summary === "string" ? plan.summary : "";
-          const style = typeof plan?.style === "string" ? plan.style : "";
-          const assumptions = Array.isArray(plan?.assumptions) ? plan.assumptions.map((x: any) => String(x)).filter(Boolean) : [];
-          const constraints = Array.isArray(plan?.constraints) ? plan.constraints.map((x: any) => String(x)).filter(Boolean) : [];
-          const rooms = Array.isArray(plan?.rooms) ? plan.rooms : [];
-
-          const lines: string[] = [];
-          if (summary) lines.push(trText(`Summary: ${summary}`, `Summary: ${summary}`));
-          if (style) lines.push(trText(`Style: ${style}`, `Style: ${style}`));
-          if (rooms.length > 0) {
-            const roomNames = rooms.map((r: any) => String(r?.name || r?.type || "")).filter(Boolean);
-            lines.push(trText(`Spaces: ${roomNames.join(", ")}`, `Spaces: ${roomNames.join(", ")}`));
-          }
-          if (assumptions.length > 0) lines.push(trText(`Assumptions: ${assumptions.join("; ")}`, `Assumptions: ${assumptions.join("; ")}`));
-          if (constraints.length > 0) lines.push(trText(`Constraints: ${constraints.join("; ")}`, `Constraints: ${constraints.join("; ")}`));
-          return lines.length > 0 ? lines.join("\\n") : trText("(Plan generated)", "(Plan generated)");
-        } catch {
-          return trText("(Plan generated)", "(Plan generated)");
-        }
+        const pretty = tryParseCadPlanJson(text);
+        return pretty || trText("（已生成方案）", "(Plan generated)");
       }
       return full;
     });
+
+    const seenSvgBlocks = new Set<string>();
+    next = next.replace(/```svg\s*([\s\S]*?)```/gi, (full, inner) => {
+      const rawSvg = String(inner || "").trim();
+      if (!rawSvg) return full;
+      const normalized = normalizeSvgMarkup(rawSvg) || rawSvg;
+      if (seenSvgBlocks.has(normalized)) return "";
+      seenSvgBlocks.add(normalized);
+      return `\`\`\`svg\n${normalized}\n\`\`\``;
+    });
+
+    // Fallback: if whole message is raw cad_plan JSON (not wrapped in code fences), render as readable text.
+    const prettyWhole = tryParseCadPlanJson(next);
+    if (prettyWhole) return prettyWhole;
+    return next;
   };
 
   const scheduleFrame = (cb: () => void) => {
@@ -345,10 +424,7 @@ export function ChatPanel({
       localStorage.removeItem(storageKey);
     } catch {
     }
-    const newMsgs: ChatMessage[] = [
-        { role: 'assistant', content: t(uiLang, "chat.cleared") }
-    ];
-    setMessages(newMsgs);
+    setMessages([]);
     setShowResetWarning(false);
   };
 
@@ -375,9 +451,79 @@ export function ChatPanel({
     if (!result || typeof result !== "object") return { ok: true } as CodeActionResult;
     const r = result as any;
     if (typeof r.ok === "boolean") {
-      return { ok: r.ok, retry: !!r.retry, error: typeof r.error === "string" ? r.error : undefined } as CodeActionResult;
+      return {
+        ok: r.ok,
+        retry: !!r.retry,
+        error: typeof r.error === "string" ? r.error : undefined,
+        svg: typeof r.svg === "string" ? r.svg : undefined,
+      } as CodeActionResult;
     }
     return { ok: true } as CodeActionResult;
+  };
+
+  const normalizeSvgMarkup = (text: string): string => {
+    const raw = String(text || "").trim();
+    if (!raw) return "";
+    const start = raw.search(/<svg[\s/>]/i);
+    if (start < 0) return "";
+    const tail = raw.slice(start);
+    const end = tail.toLowerCase().lastIndexOf("</svg>");
+    if (end >= 0) return tail.slice(0, end + "</svg>".length).trim();
+    return tail.trim();
+  };
+
+  const extractSvgCodeBlock = (text: string): string => {
+    const raw = String(text || "");
+    const re = /```svg\s*([\s\S]*?)```/gi;
+    let m: RegExpExecArray | null;
+    let last = "";
+    while ((m = re.exec(raw))) {
+      const candidate = normalizeSvgMarkup(m?.[1] || "");
+      if (candidate) last = candidate;
+    }
+    return last;
+  };
+
+  const extractRawSvgBlock = (text: string): string => {
+    const raw = String(text || "");
+    const re = /<svg[\s\S]*?<\/svg>/gi;
+    let m: RegExpExecArray | null;
+    let last = "";
+    while ((m = re.exec(raw))) {
+      const candidate = normalizeSvgMarkup(m?.[0] || "");
+      if (candidate) last = candidate;
+    }
+    return last;
+  };
+
+  const extractReplaceSvgFromCadPatchText = (text: string): string => {
+    const raw = String(text || "");
+    const jsonRegex = /```json\s*([\s\S]*?)```/g;
+    let m: RegExpExecArray | null;
+    while ((m = jsonRegex.exec(raw))) {
+      const jsonText = String(m[1] || "").trim();
+      if (!jsonText) continue;
+      try {
+        const parsed = JSON.parse(jsonText);
+        const full = normalizeSvgMarkup(parsed?.full || "");
+        if (parsed?.type === "cad_patch" && parsed?.target === "2d_svg" && parsed?.mode === "replace" && full) {
+          return full;
+        }
+      } catch {
+      }
+    }
+    const trimmed = raw.trim();
+    if (trimmed.startsWith("{")) {
+      try {
+        const parsed = JSON.parse(trimmed);
+        const full = normalizeSvgMarkup(parsed?.full || "");
+        if (parsed?.type === "cad_patch" && parsed?.target === "2d_svg" && parsed?.mode === "replace" && full) {
+          return full;
+        }
+      } catch {
+      }
+    }
+    return "";
   };
 
   const handleAssistantResponse = async (fullResponse: string) => {
@@ -395,9 +541,19 @@ export function ChatPanel({
       }
     }
 
-    const svgMatch = fullResponse.match(/```svg\n([\s\S]*?)\n```/);
-    if (svgMatch && svgMatch[1]) {
-      await runCodeAction(svgMatch[1], 'cad');
+    if (workspaceId === "cad") {
+      const svgCandidate =
+        extractReplaceSvgFromCadPatchText(fullResponse) ||
+        extractSvgCodeBlock(fullResponse) ||
+        extractRawSvgBlock(fullResponse);
+      if (svgCandidate) {
+        await runCodeAction(svgCandidate, "cad");
+      }
+    } else {
+      const svgText = extractSvgCodeBlock(fullResponse);
+      if (svgText) {
+        await runCodeAction(svgText, "cad");
+      }
     }
 
     let flowPatchFound = false;
@@ -477,6 +633,30 @@ export function ChatPanel({
     ].join("\\n");
   };
 
+  const buildCadSvgRetryPrompt = (errorText: string, forceReplace: boolean) => {
+    const err = String(errorText || "").slice(0, 600);
+    if (uiLang === "en") {
+      return [
+        `The previous cad_patch could not be applied to the current 2D SVG. Reason: ${err}`,
+        "",
+        "Please retry and strictly follow:",
+        "- Output exactly one ```json``` code block with type=cad_patch and target=2d_svg",
+        forceReplace
+          ? "- This time you MUST use mode=replace and output one complete <svg ...>...</svg> in the full field"
+          : "- If exact patch matching is unsafe, use mode=replace and output one complete <svg ...>...</svg> in the full field",
+      ].join("\n");
+    }
+    return [
+      `Previous cad_patch could not be applied to current 2D SVG: ${err}`,
+      "",
+      "Please retry and strictly follow:",
+      "- Output exactly one ```json``` code block with type=cad_patch and target=2d_svg",
+      forceReplace
+        ? "- This time you MUST use mode=replace and output one complete <svg ...>...</svg> in the full field"
+        : "- If exact patch matching is unsafe, use mode=replace and output one complete <svg ...>...</svg> in the full field",
+    ].join("\\n");
+  };
+
   const handleSend = async () => {
     const isPpt = workspaceId === "ppt";
     const rawInput = isPpt
@@ -486,6 +666,7 @@ export function ChatPanel({
       : input;
     if ((!rawInput.trim() && files.length === 0 && attachments.length === 0 && pptDraftSlides.length === 0) || isLoading) return;
     flowAutoRetryCountRef.current = 0;
+    cadSvgAutoRetryCountRef.current = 0;
 
     const normalizedInput = rawInput.trim();
     const referencedPptSlideIds = isPpt
@@ -665,11 +846,11 @@ export function ChatPanel({
       const constraintsKey = workspaceId ? `${STORAGE_GLOBAL_CONSTRAINTS_KEY}-${workspaceId}` : STORAGE_GLOBAL_CONSTRAINTS_KEY;
       const globalConstraints = typeof window !== 'undefined' ? localStorage.getItem(constraintsKey) || '' : '';
       const globalSystemPrompt = config.systemPrompt || '';
-      const systemContent = [buildCadTasksSystemContent({ globalSystemPrompt, globalConstraints }), `UI language: ${uiLang}`]
+      const systemContent = [buildCadTasksSystemContent({ globalSystemPrompt, globalConstraints }), cadOutputLanguageInstruction]
         .filter(Boolean)
         .join("\n\n");
-      const bomMessages: ChatMessage[] = buildCadBomMessages({ systemContent, planJson, svg2d });
-      const masterMessages: ChatMessage[] = buildCadImagesMasterMessages({ systemContent, planJson, svg2d });
+      const bomMessages: ChatMessage[] = buildCadBomMessages({ systemContent, planJson, svg2d, outputLanguage: cadOutputLanguage });
+      const masterMessages: ChatMessage[] = buildCadImagesMasterMessages({ systemContent, planJson, svg2d, outputLanguage: cadOutputLanguage });
 
       setIsLoading(true);
       abortControllerRef.current?.abort();
@@ -752,7 +933,7 @@ export function ChatPanel({
         } catch {
         }
 
-        const imagesSheetMessages = buildCadImagesSheetMessages({ systemContent, planJson, svg2d, masterSchemeJson });
+        const imagesSheetMessages = buildCadImagesSheetMessages({ systemContent, planJson, svg2d, masterSchemeJson, outputLanguage: cadOutputLanguage });
 
         const settled = await Promise.allSettled(
           imagesSheetMessages.map((s) =>
@@ -763,10 +944,7 @@ export function ChatPanel({
         const prompts = settled.map((r, idx) => {
           const fallbackTitleForOutput = fallbackTitlesForOutput[idx] || trText("Drawing", "Drawing");
           const fallbackTitleForPrompt = fallbackTitlesForPromptEnglish[idx] || "Drawing";
-          const onSheetLanguageRule =
-            uiLang === "zh"
-              ? "All on-sheet labels/notes/title block text must be in Simplified Chinese."
-              : "All on-sheet labels/notes/title block text must be in English.";
+          const onSheetLanguageRule = "All on-sheet labels/notes/title block text must be in English.";
           const fallbackPrompt = `Generate an orthographic 2D technical construction drawing sheet: ${fallbackTitleForPrompt}. Include border, bottom-right title block, scale/units, legend/symbols, key annotations and dimensions, consistent with the provided plan JSON and 2D SVG. ${onSheetLanguageRule}`;
 
           if (r.status !== "fulfilled") return { title: fallbackTitleForOutput, prompt: fallbackPrompt };
@@ -824,7 +1002,7 @@ export function ChatPanel({
       const globalConstraints = typeof window !== 'undefined' ? localStorage.getItem(constraintsKey) || '' : '';
       const globalSystemPrompt = config.systemPrompt || '';
       
-      const systemContent = [systemPrompt, globalSystemPrompt, globalConstraints].filter(Boolean).join('\n\n');
+      const systemContent = [systemPrompt, globalSystemPrompt, globalConstraints, cadOutputLanguageInstruction].filter(Boolean).join('\n\n');
 
       const apiMessages: ChatMessage[] = [
         { role: 'system', content: systemContent },
@@ -903,15 +1081,19 @@ export function ChatPanel({
 
           if (!/^[1-5]$/.test(content)) return null;
 
-          return content === "1"
-            ? "cad_plan_agent"
-            : content === "2"
-              ? "cad_svg_generate_agent"
-              : content === "3"
-                ? "cad_svg_patch_agent"
-                : content === "4"
-                  ? "cad_bom_agent"
-                  : "cad_images_agent";
+          if (content === "1") return "cad_plan_agent";
+          if (content === "2") return "cad_svg_agent";
+          if (content === "3") return "cad_bom_agent";
+          if (content === "4") return "cad_images_agent";
+          return "cad_images_agent";
+        };
+
+        const normalizeCadAgentName = (name: string | undefined | null): string | null => {
+          const n = String(name || "").trim();
+          if (!n) return null;
+          if (n === "cad_svg_generate_agent" || n === "cad_svg_patch_agent") return "cad_svg_agent";
+          if (n === "cad_plan_agent" || n === "cad_svg_agent" || n === "cad_bom_agent" || n === "cad_images_agent") return n;
+          return null;
         };
 
         const routeJsonRegex = /```json\s*([\s\S]*?)```/g;
@@ -922,7 +1104,8 @@ export function ChatPanel({
           try {
             const parsed = JSON.parse(jsonText);
             if (parsed?.type === "cad_route" && typeof parsed?.agent === "string") {
-              route = { agent: parsed.agent };
+              const normalized = normalizeCadAgentName(parsed.agent);
+              if (normalized) route = { agent: normalized };
               break;
             }
           } catch {
@@ -931,7 +1114,8 @@ export function ChatPanel({
 
         if (!route?.agent) {
           const agentFromText = resolveCadAgentFromRouteText(fullResponse);
-          if (agentFromText) route = { agent: agentFromText };
+          const normalized = normalizeCadAgentName(agentFromText);
+          if (normalized) route = { agent: normalized };
         }
 
         if (route?.agent) {
@@ -952,32 +1136,32 @@ export function ChatPanel({
           }) => {
             if (args.producedHasPlan && !args.beforeHasPlan) {
               return trText(
-                "The plan is ready. If it looks good, reply \"Generate 2D floorplan\". If not, tell me what to change.",
+                "方案已生成。若满意请回复“生成2D平面图”；不满意请直接说明需要修改的点。",
                 "The plan is ready. If it looks good, reply \"Generate 2D floorplan\". If not, tell me what to change."
               );
             }
             if (args.producedHasSvg2d && !args.beforeHasSvg2d) {
               return trText(
-                "The 2D floorplan is generated. Tell me edits if needed; otherwise reply \"Generate renders\".",
+                "2D 平面图已生成。如需修改请直接说明；满意请回复“生成装修图”。",
                 "The 2D floorplan is generated. Tell me edits if needed; otherwise reply \"Generate renders\"."
               );
             }
             if (args.producedHasImages) {
               return trText(
-                "Renders are being generated or updated. Next, reply \"Generate BOM\".",
+                "装修图正在生成或更新。下一步可回复“生成BOM清单”。",
                 "Renders are being generated or updated. Next, reply \"Generate BOM\"."
               );
             }
             if (args.producedHasBom) {
               return trText(
-                "BOM is generated. You can refine the plan, 2D, or style, or export files.",
+                "BOM 已生成。你可以继续优化方案、2D或风格，或直接导出文件。",
                 "BOM is generated. You can refine the plan, 2D, or style, or export files."
               );
             }
-            if (args.agent === "cad_svg_patch_agent") {
+            if (args.agent === "cad_svg_agent" && args.producedHasSvg2d) {
               return trText(
-                "2D has been patched. If OK, reply \"Generate renders\"; otherwise describe more edits.",
-                "2D has been patched. If OK, reply \"Generate renders\"; otherwise describe more edits."
+                "2D 已更新。若满意请回复“生成装修图”；否则继续描述要修改的内容。",
+                "2D has been updated. If OK, reply \"Generate renders\"; otherwise describe more edits."
               );
             }
             return "";
@@ -1008,10 +1192,10 @@ export function ChatPanel({
           const svg2d = cadContext?.svg2d || "";
 
           if (agent === "cad_bom_agent") {
-            const systemContentTasks = [buildCadTasksSystemContent({ globalSystemPrompt, globalConstraints }), `UI language: ${uiLang}`]
+            const systemContentTasks = [buildCadTasksSystemContent({ globalSystemPrompt, globalConstraints }), cadOutputLanguageInstruction]
               .filter(Boolean)
               .join("\n\n");
-            const taskMessages = buildCadBomMessages({ systemContent: systemContentTasks, planJson, svg2d });
+            const taskMessages = buildCadBomMessages({ systemContent: systemContentTasks, planJson, svg2d, outputLanguage: cadOutputLanguage });
 
             const taskFull = await runCadTaskMessages(taskMessages);
             if (taskFull) {
@@ -1038,10 +1222,10 @@ export function ChatPanel({
           }
 
           if (agent === "cad_images_agent") {
-            const systemContentTasks = [buildCadTasksSystemContent({ globalSystemPrompt, globalConstraints }), `UI language: ${uiLang}`]
+            const systemContentTasks = [buildCadTasksSystemContent({ globalSystemPrompt, globalConstraints }), cadOutputLanguageInstruction]
               .filter(Boolean)
               .join("\n\n");
-            const masterMessages: ChatMessage[] = buildCadImagesMasterMessages({ systemContent: systemContentTasks, planJson, svg2d });
+            const masterMessages: ChatMessage[] = buildCadImagesMasterMessages({ systemContent: systemContentTasks, planJson, svg2d, outputLanguage: cadOutputLanguage });
 
             updateLastAssistant(trText("Generating drawing prompts...", "Generating drawing prompts..."));
 
@@ -1101,6 +1285,7 @@ export function ChatPanel({
               planJson,
               svg2d,
               masterSchemeJson,
+              outputLanguage: cadOutputLanguage,
             });
 
             const settled = await Promise.allSettled(
@@ -1112,10 +1297,7 @@ export function ChatPanel({
             const prompts = settled.map((r, idx) => {
               const fallbackTitleForOutput = fallbackTitlesForOutput[idx] || trText("Drawing", "Drawing");
               const fallbackTitleForPrompt = fallbackTitlesForPromptEnglish[idx] || "Drawing";
-              const onSheetLanguageRule =
-                uiLang === "zh"
-                  ? "All on-sheet labels/notes/title block text must be in Simplified Chinese."
-                  : "All on-sheet labels/notes/title block text must be in English.";
+              const onSheetLanguageRule = "All on-sheet labels/notes/title block text must be in English.";
               const fallbackPrompt = `Generate an orthographic 2D technical construction drawing sheet: ${fallbackTitleForPrompt}. Include border, bottom-right title block, scale/units, legend/symbols, key annotations and dimensions, consistent with the provided plan JSON and 2D SVG. ${onSheetLanguageRule}`;
 
               if (r.status !== "fulfilled") return { title: fallbackTitleForOutput, prompt: fallbackPrompt };
@@ -1153,21 +1335,237 @@ export function ChatPanel({
             return;
           }
 
-          const agentPrompt =
-            agent === "cad_plan_agent"
-              ? CAD_PLAN_AGENT_PROMPT
-              : agent === "cad_svg_generate_agent"
-                ? CAD_SVG_GENERATE_AGENT_PROMPT
-                : agent === "cad_svg_patch_agent"
-                  ? CAD_SVG_PATCH_AGENT_PROMPT
-                  : "";
+          if (agent === "cad_svg_agent") {
+            const resolveCadSvgToolFromRouteText = (text: string): "patch" | "replace" | null => {
+              const trimmed = String(text || "").trim();
+              if (!trimmed) return null;
+
+              let content = trimmed;
+              const fenceMatch = content.match(/```[a-zA-Z]*\s*([\s\S]*?)```/);
+              if (fenceMatch && fenceMatch[1]) content = fenceMatch[1].trim();
+              content = content.replace(/\s+/g, "");
+
+              if (!/^[1-2]$/.test(content)) return null;
+              return content === "1" ? "patch" : "replace";
+            };
+
+            const cadSvgRouterSystemContent = [CAD_SVG_AGENT_ROUTER_PROMPT, globalSystemPrompt, globalConstraints, cadOutputLanguageInstruction]
+              .filter(Boolean)
+              .join("\n\n");
+            const cadSvgRouterMessages: ChatMessage[] = [
+              { role: "system", content: cadSvgRouterSystemContent },
+              { role: "user", content: promptContent }
+            ];
+
+            let cadSvgRouteFull = "";
+            const cadSvgRouteUpdater = createThrottledAssistantUpdater();
+            await streamChatMessage(cadSvgRouterMessages, (chunk) => {
+              cadSvgRouteFull = chunk;
+              cadSvgRouteUpdater.push(chunk);
+            }, chatModel, controller.signal);
+            cadSvgRouteUpdater.flush();
+
+            let cadSvgSelectedTool: "patch" | "replace" | null = resolveCadSvgToolFromRouteText(cadSvgRouteFull);
+            if (!cadSvgSelectedTool) {
+              cadSvgSelectedTool = beforeHasSvg2d ? "patch" : "replace";
+            }
+
+            setMessages((prev) => {
+              const last = prev[prev.length - 1];
+              if (last?.role === "assistant") return [...prev.slice(0, -1), { role: "assistant", content: "" }];
+              return prev;
+            });
+
+            const runCadSvgTool = async (messages: ChatMessage[]) => {
+              let toolFull = "";
+              const toolUpdater = createThrottledAssistantUpdater();
+              await streamChatMessage(messages, (chunk) => {
+                toolFull = chunk;
+                toolUpdater.push(chunk);
+              }, chatModel, controller.signal);
+              toolUpdater.flush();
+
+              let cadPatchFound = false;
+              let cadPatchRetryError: string | null = null;
+              let producedHasSvg2d = false;
+              let appliedSvg = "";
+
+              const jsonRegex = /```json\s*([\s\S]*?)```/g;
+              let jm: RegExpExecArray | null;
+              while ((jm = jsonRegex.exec(toolFull))) {
+                const jsonText = String(jm[1] || "").trim();
+                if (!jsonText) continue;
+
+                let parsed: any = null;
+                try {
+                  parsed = JSON.parse(jsonText);
+                } catch {
+                }
+
+                const isCadPatch = parsed?.type === "cad_patch" && parsed?.target === "2d_svg";
+                if (isCadPatch) cadPatchFound = true;
+
+                const result = await runCodeAction(jsonText, "cad");
+                  if (isCadPatch && result.ok) {
+                    producedHasSvg2d = true;
+                    const normalizedAppliedSvg = normalizeSvgMarkup(result.svg || "");
+                    if (normalizedAppliedSvg) appliedSvg = normalizedAppliedSvg;
+                  }
+                if (isCadPatch && !result.ok && result.retry) {
+                  cadPatchRetryError = result.error || "Unknown error";
+                }
+              }
+
+              if (!cadPatchFound) {
+                const trimmed = String(toolFull || "").trim();
+                if (trimmed.startsWith("{")) {
+                  try {
+                    const rawParsed = JSON.parse(trimmed);
+                    if (rawParsed?.type === "cad_patch" && rawParsed?.target === "2d_svg") {
+                      cadPatchFound = true;
+                      const result = await runCodeAction(trimmed, "cad");
+                        if (result.ok) {
+                          producedHasSvg2d = true;
+                          const normalizedAppliedSvg = normalizeSvgMarkup(result.svg || "");
+                          if (normalizedAppliedSvg) appliedSvg = normalizedAppliedSvg;
+                        }
+                      if (!result.ok && result.retry) cadPatchRetryError = result.error || "Unknown error";
+                    }
+                  } catch {
+                  }
+                }
+              }
+
+              if (!cadPatchFound) {
+                const start = toolFull.indexOf("{");
+                const end = toolFull.lastIndexOf("}");
+                if (start >= 0 && end > start) {
+                  const maybeJson = toolFull.slice(start, end + 1).trim();
+                  try {
+                    const rawParsed = JSON.parse(maybeJson);
+                    if (rawParsed?.type === "cad_patch" && rawParsed?.target === "2d_svg") {
+                      cadPatchFound = true;
+                      const result = await runCodeAction(maybeJson, "cad");
+                        if (result.ok) {
+                          producedHasSvg2d = true;
+                          const normalizedAppliedSvg = normalizeSvgMarkup(result.svg || "");
+                          if (normalizedAppliedSvg) appliedSvg = normalizedAppliedSvg;
+                        }
+                      if (!result.ok && result.retry) cadPatchRetryError = result.error || "Unknown error";
+                    }
+                  } catch {
+                  }
+                }
+              }
+
+              if (!cadPatchFound) {
+                const svgText = extractSvgCodeBlock(toolFull) || extractRawSvgBlock(toolFull);
+                if (svgText) {
+                  const r = await runCodeAction(svgText, "cad");
+                    if (r.ok) {
+                      producedHasSvg2d = true;
+                      appliedSvg = normalizeSvgMarkup(r.svg || "") || svgText;
+                    }
+                  if (!r.ok && r.retry) cadPatchRetryError = r.error || "Unknown error";
+                }
+              }
+
+              if (!producedHasSvg2d) {
+                const fallbackSvg = extractReplaceSvgFromCadPatchText(toolFull) || extractSvgCodeBlock(toolFull) || extractRawSvgBlock(toolFull);
+                if (fallbackSvg) {
+                  const r = await runCodeAction(fallbackSvg, "cad");
+                    if (r.ok) {
+                      producedHasSvg2d = true;
+                      appliedSvg = normalizeSvgMarkup(r.svg || "") || fallbackSvg;
+                    }
+                  if (!r.ok && r.retry) cadPatchRetryError = r.error || "Unknown error";
+                }
+              }
+
+              return { toolFull, cadPatchFound, cadPatchRetryError, producedHasSvg2d, appliedSvg };
+            };
+
+            const getCadSvgToolPrompt = (tool: "patch" | "replace") =>
+              tool === "patch" ? CAD_SVG_FLOW_PATCH_AGENT_PROMPT : CAD_SVG_FLOW_REPLACE_AGENT_PROMPT;
+
+            let cadSvgToolMessagesBase: ChatMessage[] = [
+              { role: "system", content: [getCadSvgToolPrompt(cadSvgSelectedTool), globalSystemPrompt, globalConstraints, cadOutputLanguageInstruction].filter(Boolean).join("\n\n") },
+              { role: "user", content: promptContent }
+            ];
+
+            let cadSvgRun = await runCadSvgTool(cadSvgToolMessagesBase);
+            let cadSvgToolFull = cadSvgRun.toolFull;
+            let cadSvgPatchFound = cadSvgRun.cadPatchFound;
+            let cadSvgRetryError = cadSvgRun.cadPatchRetryError;
+            let producedHasSvg2d = cadSvgRun.producedHasSvg2d;
+            let appliedSvg = cadSvgRun.appliedSvg;
+
+            while (
+              cadSvgSelectedTool === "patch" &&
+              cadSvgPatchFound &&
+              cadSvgRetryError &&
+              !controller.signal.aborted &&
+              cadSvgAutoRetryCountRef.current < MAX_CAD_SVG_AUTO_RETRY
+            ) {
+              cadSvgAutoRetryCountRef.current += 1;
+              const forceReplace = cadSvgAutoRetryCountRef.current >= MAX_CAD_SVG_AUTO_RETRY;
+
+              if (forceReplace && cadSvgSelectedTool === "patch") {
+                cadSvgSelectedTool = "replace";
+                cadSvgToolMessagesBase = [
+                  { role: "system", content: [getCadSvgToolPrompt("replace"), globalSystemPrompt, globalConstraints, cadOutputLanguageInstruction].filter(Boolean).join("\n\n") },
+                  { role: "user", content: promptContent }
+                ];
+              }
+
+              const retryPrompt = buildCadSvgRetryPrompt(cadSvgRetryError, forceReplace);
+              const retryMessages: ChatMessage[] = [
+                ...cadSvgToolMessagesBase,
+                { role: "assistant", content: cadSvgToolFull },
+                { role: "user", content: retryPrompt },
+              ];
+
+              setMessages((prev) => [...prev, { role: "assistant", content: "" }]);
+              cadSvgRun = await runCadSvgTool(retryMessages);
+              cadSvgToolFull = cadSvgRun.toolFull;
+              cadSvgPatchFound = cadSvgRun.cadPatchFound;
+              cadSvgRetryError = cadSvgRun.cadPatchRetryError;
+              producedHasSvg2d = cadSvgRun.producedHasSvg2d;
+              appliedSvg = cadSvgRun.appliedSvg;
+              cadSvgToolMessagesBase = retryMessages;
+            }
+
+            const guide = buildCadNextStepGuide({
+              agent,
+              beforeHasPlan,
+              beforeHasSvg2d,
+              producedHasPlan: false,
+              producedHasSvg2d,
+              producedHasImages: false,
+              producedHasBom: false,
+            });
+            let assistantOutput = cadSvgToolFull;
+            const hasSvgFence = /```svg\s*[\s\S]*?```/i.test(assistantOutput);
+            const hasCadPatchJson = /```json\s*[\s\S]*?"type"\s*:\s*"cad_patch"[\s\S]*?```/i.test(assistantOutput);
+            if (producedHasSvg2d && !hasSvgFence && !hasCadPatchJson) {
+                const svgForDisplay = normalizeSvgMarkup(appliedSvg)
+                  ? normalizeSvgMarkup(appliedSvg)
+                  : extractReplaceSvgFromCadPatchText(cadSvgToolFull) || extractRawSvgBlock(cadSvgToolFull);
+              if (svgForDisplay) assistantOutput = `${assistantOutput}\n\n\`\`\`svg\n${svgForDisplay}\n\`\`\``;
+            }
+            if (guide) updateLastAssistant(`${assistantOutput}\n\n${guide}`);
+            else updateLastAssistant(assistantOutput);
+            return;
+          }
+
+          const agentPrompt = agent === "cad_plan_agent" ? CAD_PLAN_AGENT_PROMPT : "";
 
           if (!agentPrompt) {
             updateLastAssistant(trText(`未识别的 CAD 子智能体：${agent}`, `Unrecognized CAD sub-agent: ${agent}`));
             return;
           }
 
-          const routedSystemContent = [agentPrompt, globalSystemPrompt, globalConstraints].filter(Boolean).join("\n\n");
+          const routedSystemContent = [agentPrompt, globalSystemPrompt, globalConstraints, cadOutputLanguageInstruction].filter(Boolean).join("\n\n");
           const routedMessages: ChatMessage[] = [
             { role: "system", content: routedSystemContent },
             { role: "user", content: promptContent }
@@ -1182,19 +1580,25 @@ export function ChatPanel({
           routedUpdater.flush();
 
           if (routedFull) {
-            const svgMatch = routedFull.match(/```svg\n([\s\S]*?)\n```/);
-            if (svgMatch && svgMatch[1]) onCodeAction?.(svgMatch[1], "cad");
-
             const jsonRegex = /```json\s*([\s\S]*?)```/g;
             let jm: RegExpExecArray | null;
             while ((jm = jsonRegex.exec(routedFull))) {
               const jsonText = String(jm[1] || "").trim();
               if (!jsonText) continue;
-              onCodeAction?.(jsonText, "cad");
+              await runCodeAction(jsonText, "cad");
+            }
+
+            let producedHasSvg2d = false;
+            const svgCandidate =
+              extractReplaceSvgFromCadPatchText(routedFull) ||
+              extractSvgCodeBlock(routedFull) ||
+              extractRawSvgBlock(routedFull);
+            if (svgCandidate) {
+              const svgResult = await runCodeAction(svgCandidate, "cad");
+              producedHasSvg2d = !!svgResult.ok;
             }
 
             const producedHasPlan = /"type"\s*:\s*"cad_plan"/.test(routedFull);
-            const producedHasSvg2d = /```svg[\s\S]*?```/.test(routedFull);
             const producedHasImages = /"type"\s*:\s*"cad_images"/.test(routedFull);
             const producedHasBom = /"type"\s*:\s*"cad_bom"/.test(routedFull);
             const guide = buildCadNextStepGuide({
@@ -1207,6 +1611,7 @@ export function ChatPanel({
               producedHasBom,
             });
             if (guide) updateLastAssistant(`${routedFull}\n\n${guide}`);
+            else updateLastAssistant(routedFull);
           }
           return;
         }
@@ -1308,7 +1713,7 @@ export function ChatPanel({
     const constraintsKey = workspaceId ? `${STORAGE_GLOBAL_CONSTRAINTS_KEY}-${workspaceId}` : STORAGE_GLOBAL_CONSTRAINTS_KEY;
     const globalConstraints = typeof window !== 'undefined' ? localStorage.getItem(constraintsKey) || '' : '';
     const globalSystemPrompt = config.systemPrompt || '';
-    const systemContent = [systemPrompt, globalSystemPrompt, globalConstraints].filter(Boolean).join('\n\n');
+    const systemContent = [systemPrompt, globalSystemPrompt, globalConstraints, cadOutputLanguageInstruction].filter(Boolean).join('\n\n');
     const lastUserText = String(baseMessages[baseMessages.length - 1]?.content || "");
     const flowContextText =
       workspaceId === "flow" && typeof flowContext?.xml === "string" && flowContext.xml.trim()
@@ -1367,7 +1772,7 @@ export function ChatPanel({
             });
 
             const agentPrompt = flowSelectedAgent === "patch" ? flowPatchAgentPrompt : flowReplaceAgentPrompt;
-            const routedSystemContent = [agentPrompt, globalSystemPrompt, globalConstraints].filter(Boolean).join("\n\n");
+            const routedSystemContent = [agentPrompt, globalSystemPrompt, globalConstraints, cadOutputLanguageInstruction].filter(Boolean).join("\n\n");
             const routedMessages: ChatMessage[] = [
               { role: "system", content: routedSystemContent },
               { role: "user", content: promptContent }
@@ -1383,6 +1788,556 @@ export function ChatPanel({
 
             flowRoutedBaseMessages = routedMessages;
             fullResponse = routedFull;
+          }
+        }
+
+        if (fullResponse && workspaceId === "cad") {
+          let route: { agent?: string } | null = null;
+
+          const resolveCadAgentFromRouteText = (text: string): string | null => {
+            const trimmed = String(text || "").trim();
+            if (!trimmed) return null;
+
+            let content = trimmed;
+            const fenceMatch = content.match(/```[a-zA-Z]*\s*([\s\S]*?)```/);
+            if (fenceMatch && fenceMatch[1]) content = fenceMatch[1].trim();
+            content = content.replace(/\s+/g, "");
+
+            if (!/^[1-5]$/.test(content)) return null;
+
+            if (content === "1") return "cad_plan_agent";
+            if (content === "2") return "cad_svg_agent";
+            if (content === "3") return "cad_bom_agent";
+            if (content === "4") return "cad_images_agent";
+            return "cad_images_agent";
+          };
+
+          const normalizeCadAgentName = (name: string | undefined | null): string | null => {
+            const n = String(name || "").trim();
+            if (!n) return null;
+            if (n === "cad_svg_generate_agent" || n === "cad_svg_patch_agent") return "cad_svg_agent";
+            if (n === "cad_plan_agent" || n === "cad_svg_agent" || n === "cad_bom_agent" || n === "cad_images_agent") return n;
+            return null;
+          };
+
+          const routeJsonRegex = /```json\s*([\s\S]*?)```/g;
+          let rm: RegExpExecArray | null;
+          while ((rm = routeJsonRegex.exec(fullResponse))) {
+            const jsonText = String(rm[1] || "").trim();
+            if (!jsonText) continue;
+            try {
+              const parsed = JSON.parse(jsonText);
+              if (parsed?.type === "cad_route" && typeof parsed?.agent === "string") {
+                const normalized = normalizeCadAgentName(parsed.agent);
+                if (normalized) route = { agent: normalized };
+                break;
+              }
+            } catch {
+            }
+          }
+
+          if (!route?.agent) {
+            const agentFromText = resolveCadAgentFromRouteText(fullResponse);
+            const normalized = normalizeCadAgentName(agentFromText);
+            if (normalized) route = { agent: normalized };
+          }
+
+          if (route?.agent) {
+            setMessages((prev) => {
+              const last = prev[prev.length - 1];
+              if (last?.role === "assistant") return [...prev.slice(0, -1), { role: "assistant", content: "" }];
+              return prev;
+            });
+
+            const buildCadNextStepGuide = (args: {
+              agent: string;
+              beforeHasPlan: boolean;
+              beforeHasSvg2d: boolean;
+              producedHasPlan: boolean;
+              producedHasSvg2d: boolean;
+              producedHasImages: boolean;
+              producedHasBom: boolean;
+            }) => {
+              if (args.producedHasPlan && !args.beforeHasPlan) {
+                return trText(
+                  "方案已生成。若满意请回复“生成2D平面图”；不满意请直接说明需要修改的点。",
+                  "The plan is ready. If it looks good, reply \"Generate 2D floorplan\". If not, tell me what to change."
+                );
+              }
+              if (args.producedHasSvg2d && !args.beforeHasSvg2d) {
+                return trText(
+                  "2D 平面图已生成。如需修改请直接说明；满意请回复“生成装修图”。",
+                  "The 2D floorplan is generated. Tell me edits if needed; otherwise reply \"Generate renders\"."
+                );
+              }
+              if (args.producedHasImages) {
+                return trText(
+                  "装修图正在生成或更新。下一步可回复“生成BOM清单”。",
+                  "Renders are being generated or updated. Next, reply \"Generate BOM\"."
+                );
+              }
+              if (args.producedHasBom) {
+                return trText(
+                  "BOM 已生成。你可以继续优化方案、2D或风格，或直接导出文件。",
+                  "BOM is generated. You can refine the plan, 2D, or style, or export files."
+                );
+              }
+              if (args.agent === "cad_svg_agent" && args.producedHasSvg2d) {
+                return trText(
+                  "2D 已更新。若满意请回复“生成装修图”；否则继续描述要修改的内容。",
+                  "2D has been updated. If OK, reply \"Generate renders\"; otherwise describe more edits."
+                );
+              }
+              return "";
+            };
+
+            const runCadTaskMessages = async (taskMessages: ChatMessage[]) => {
+              let taskFull = "";
+              const taskUpdater = createThrottledAssistantUpdater();
+              await streamChatMessage(taskMessages, (chunk) => {
+                taskFull = chunk;
+                taskUpdater.push(chunk);
+              }, chatModel, controller.signal);
+              taskUpdater.flush();
+              return taskFull;
+            };
+
+            const emitCadJson = (text: string) => {
+              const match = text.match(/```json\s*([\s\S]*?)```/);
+              const jsonText = match ? match[1].trim() : text.trim();
+              if (!jsonText.startsWith("{")) return;
+              onCodeAction?.(jsonText, "cad");
+            };
+
+            const agent = String(route.agent || "").trim();
+            const beforeHasPlan = !!cadContext?.plan;
+            const beforeHasSvg2d = !!(typeof cadContext?.svg2d === "string" && cadContext.svg2d.trim());
+            const planJson = cadContext?.plan ? JSON.stringify(cadContext.plan) : "";
+            const svg2d = cadContext?.svg2d || "";
+
+            if (agent === "cad_bom_agent") {
+              const systemContentTasks = [buildCadTasksSystemContent({ globalSystemPrompt, globalConstraints }), cadOutputLanguageInstruction]
+                .filter(Boolean)
+                .join("\n\n");
+              const taskMessages = buildCadBomMessages({ systemContent: systemContentTasks, planJson, svg2d, outputLanguage: cadOutputLanguage });
+
+              const taskFull = await runCadTaskMessages(taskMessages);
+              if (taskFull) {
+                emitCadJson(taskFull);
+                const fallback = parseMarkdownBomTable(taskFull);
+                if (fallback) onCodeAction?.(JSON.stringify(fallback), "cad");
+
+                const producedHasPlan = /"type"\s*:\s*"cad_plan"/.test(taskFull);
+                const producedHasSvg2d = /```svg[\s\S]*?```/.test(taskFull);
+                const producedHasImages = /"type"\s*:\s*"cad_images"/.test(taskFull);
+                const producedHasBom = /"type"\s*:\s*"cad_bom"/.test(taskFull);
+                const guide = buildCadNextStepGuide({
+                  agent,
+                  beforeHasPlan,
+                  beforeHasSvg2d,
+                  producedHasPlan,
+                  producedHasSvg2d,
+                  producedHasImages,
+                  producedHasBom,
+                });
+                if (guide) updateLastAssistant(`${taskFull}\n\n${guide}`);
+              }
+              return;
+            }
+
+            if (agent === "cad_images_agent") {
+              const systemContentTasks = [buildCadTasksSystemContent({ globalSystemPrompt, globalConstraints }), cadOutputLanguageInstruction]
+                .filter(Boolean)
+                .join("\n\n");
+              const masterMessages: ChatMessage[] = buildCadImagesMasterMessages({ systemContent: systemContentTasks, planJson, svg2d, outputLanguage: cadOutputLanguage });
+
+              updateLastAssistant(trText("Generating drawing prompts...", "Generating drawing prompts..."));
+
+              const extractJsonText = (text: string) => {
+                const match = String(text || "").match(/```json\s*([\s\S]*?)```/);
+                return match ? match[1].trim() : String(text || "").trim();
+              };
+
+              const tryParseJson = (text: string) => {
+                const normalized = extractJsonText(text);
+                try {
+                  return JSON.parse(normalized);
+                } catch {
+                  const start = normalized.indexOf("{");
+                  const end = normalized.lastIndexOf("}");
+                  if (start >= 0 && end > start) {
+                    try {
+                      return JSON.parse(normalized.slice(start, end + 1));
+                    } catch {
+                    }
+                  }
+                  return null;
+                }
+              };
+
+              const fallbackTitlesForOutput = [
+                trText("Renovation Plan Layout", "Renovation Plan Layout"),
+                trText("Floor Finish Plan", "Floor Finish Plan"),
+                trText("Reflected Ceiling Plan", "Reflected Ceiling Plan"),
+                trText("Wall Setting-Out Plan", "Wall Setting-Out Plan"),
+                trText("MEP Plan (Electrical + Low Voltage + Plumbing)", "MEP Plan (Electrical + Low Voltage + Plumbing)"),
+                trText("Elevation Index Plan + Interior Elevations", "Elevation Index Plan + Interior Elevations"),
+                trText("Detail Drawings", "Detail Drawings"),
+              ];
+              const fallbackTitlesForPromptEnglish = [
+                "Renovation Plan Layout",
+                "Floor Finish Plan",
+                "Reflected Ceiling Plan",
+                "Wall Setting-Out Plan",
+                "MEP Plan (Electrical + Low Voltage + Plumbing)",
+                "Elevation Index Plan + Interior Elevations",
+                "Detail Drawings",
+              ];
+
+              let masterSchemeJson = "";
+              try {
+                const masterText = await generateChatMessage(masterMessages, chatModel, { signal: controller.signal, timeoutMs: 120000 });
+                const parsedMaster = tryParseJson(masterText);
+                if (parsedMaster?.type === "renovation_scheme_master" && parsedMaster?.global_scheme) {
+                  masterSchemeJson = JSON.stringify(parsedMaster, null, 2);
+                }
+              } catch {
+              }
+
+              const imagesSheetMessages = buildCadImagesSheetMessages({
+                systemContent: systemContentTasks,
+                planJson,
+                svg2d,
+                masterSchemeJson,
+                outputLanguage: cadOutputLanguage,
+              });
+
+              const settled = await Promise.allSettled(
+                imagesSheetMessages.map((s) =>
+                  generateChatMessage(s.messages, chatModel, { signal: controller.signal, timeoutMs: 120000 })
+                )
+              );
+
+              const prompts = settled.map((r, idx) => {
+                const fallbackTitleForOutput = fallbackTitlesForOutput[idx] || trText("Drawing", "Drawing");
+                const fallbackTitleForPrompt = fallbackTitlesForPromptEnglish[idx] || "Drawing";
+                const onSheetLanguageRule = "All on-sheet labels/notes/title block text must be in English.";
+                const fallbackPrompt = `Generate an orthographic 2D technical construction drawing sheet: ${fallbackTitleForPrompt}. Include border, bottom-right title block, scale/units, legend/symbols, key annotations and dimensions, consistent with the provided plan JSON and 2D SVG. ${onSheetLanguageRule}`;
+
+                if (r.status !== "fulfilled") return { title: fallbackTitleForOutput, prompt: fallbackPrompt };
+                const text = String(r.value || "").trim();
+                const parsed = tryParseJson(text);
+
+                if (parsed?.type === "cad_images_sheet" && typeof parsed?.title === "string" && typeof parsed?.prompt === "string") {
+                  const p = parsed.prompt.trim();
+                  return { title: parsed.title, prompt: p || fallbackPrompt };
+                }
+
+                if (parsed?.type === "cad_images" && Array.isArray(parsed?.prompts) && parsed.prompts.length > 0) {
+                  const first = parsed.prompts[0];
+                  const title = typeof first?.title === "string" ? first.title : fallbackTitleForOutput;
+                  const prompt = typeof first?.prompt === "string" ? first.prompt.trim() : "";
+                  return { title, prompt: prompt || fallbackPrompt };
+                }
+
+                return { title: fallbackTitleForOutput, prompt: fallbackPrompt };
+              });
+
+              const payload = JSON.stringify({ type: "cad_images", prompts }, null, 2);
+              onCodeAction?.(payload, "cad");
+
+              const guide = buildCadNextStepGuide({
+                agent,
+                beforeHasPlan,
+                beforeHasSvg2d,
+                producedHasPlan: false,
+                producedHasSvg2d: false,
+                producedHasImages: true,
+                producedHasBom: false,
+              });
+              updateLastAssistant(guide || trText("Drawing tasks generated.", "Drawing tasks generated."));
+              return;
+            }
+
+            if (agent === "cad_svg_agent") {
+              const resolveCadSvgToolFromRouteText = (text: string): "patch" | "replace" | null => {
+                const trimmed = String(text || "").trim();
+                if (!trimmed) return null;
+
+                let content = trimmed;
+                const fenceMatch = content.match(/```[a-zA-Z]*\s*([\s\S]*?)```/);
+                if (fenceMatch && fenceMatch[1]) content = fenceMatch[1].trim();
+                content = content.replace(/\s+/g, "");
+
+                if (!/^[1-2]$/.test(content)) return null;
+                return content === "1" ? "patch" : "replace";
+              };
+
+              const cadSvgRouterSystemContent = [CAD_SVG_AGENT_ROUTER_PROMPT, globalSystemPrompt, globalConstraints, cadOutputLanguageInstruction]
+                .filter(Boolean)
+                .join("\n\n");
+              const cadSvgRouterMessages: ChatMessage[] = [
+                { role: "system", content: cadSvgRouterSystemContent },
+                { role: "user", content: promptContent }
+              ];
+
+              let cadSvgRouteFull = "";
+              const cadSvgRouteUpdater = createThrottledAssistantUpdater();
+              await streamChatMessage(cadSvgRouterMessages, (chunk) => {
+                cadSvgRouteFull = chunk;
+                cadSvgRouteUpdater.push(chunk);
+              }, chatModel, controller.signal);
+              cadSvgRouteUpdater.flush();
+
+              let cadSvgSelectedTool: "patch" | "replace" | null = resolveCadSvgToolFromRouteText(cadSvgRouteFull);
+              if (!cadSvgSelectedTool) {
+                cadSvgSelectedTool = beforeHasSvg2d ? "patch" : "replace";
+              }
+
+              setMessages((prev) => {
+                const last = prev[prev.length - 1];
+                if (last?.role === "assistant") return [...prev.slice(0, -1), { role: "assistant", content: "" }];
+                return prev;
+              });
+
+              const runCadSvgTool = async (messages: ChatMessage[]) => {
+                let toolFull = "";
+                const toolUpdater = createThrottledAssistantUpdater();
+                await streamChatMessage(messages, (chunk) => {
+                  toolFull = chunk;
+                  toolUpdater.push(chunk);
+                }, chatModel, controller.signal);
+                toolUpdater.flush();
+
+                let cadPatchFound = false;
+                let cadPatchRetryError: string | null = null;
+                let producedHasSvg2d = false;
+                let appliedSvg = "";
+
+                const jsonRegex = /```json\s*([\s\S]*?)```/g;
+                let jm: RegExpExecArray | null;
+                while ((jm = jsonRegex.exec(toolFull))) {
+                  const jsonText = String(jm[1] || "").trim();
+                  if (!jsonText) continue;
+
+                  let parsed: any = null;
+                  try {
+                    parsed = JSON.parse(jsonText);
+                  } catch {
+                  }
+
+                  const isCadPatch = parsed?.type === "cad_patch" && parsed?.target === "2d_svg";
+                  if (isCadPatch) cadPatchFound = true;
+
+                  const result = await runCodeAction(jsonText, "cad");
+                  if (isCadPatch && result.ok) {
+                    producedHasSvg2d = true;
+                    const normalizedAppliedSvg = normalizeSvgMarkup(result.svg || "");
+                    if (normalizedAppliedSvg) appliedSvg = normalizedAppliedSvg;
+                  }
+                  if (isCadPatch && !result.ok && result.retry) {
+                    cadPatchRetryError = result.error || "Unknown error";
+                  }
+                }
+
+                if (!cadPatchFound) {
+                  const trimmed = String(toolFull || "").trim();
+                  if (trimmed.startsWith("{")) {
+                    try {
+                      const rawParsed = JSON.parse(trimmed);
+                      if (rawParsed?.type === "cad_patch" && rawParsed?.target === "2d_svg") {
+                        cadPatchFound = true;
+                        const result = await runCodeAction(trimmed, "cad");
+                      if (result.ok) {
+                        producedHasSvg2d = true;
+                        const normalizedAppliedSvg = normalizeSvgMarkup(result.svg || "");
+                        if (normalizedAppliedSvg) appliedSvg = normalizedAppliedSvg;
+                      }
+                        if (!result.ok && result.retry) cadPatchRetryError = result.error || "Unknown error";
+                      }
+                    } catch {
+                    }
+                  }
+                }
+
+                if (!cadPatchFound) {
+                  const start = toolFull.indexOf("{");
+                  const end = toolFull.lastIndexOf("}");
+                  if (start >= 0 && end > start) {
+                    const maybeJson = toolFull.slice(start, end + 1).trim();
+                    try {
+                      const rawParsed = JSON.parse(maybeJson);
+                      if (rawParsed?.type === "cad_patch" && rawParsed?.target === "2d_svg") {
+                        cadPatchFound = true;
+                        const result = await runCodeAction(maybeJson, "cad");
+                      if (result.ok) {
+                        producedHasSvg2d = true;
+                        const normalizedAppliedSvg = normalizeSvgMarkup(result.svg || "");
+                        if (normalizedAppliedSvg) appliedSvg = normalizedAppliedSvg;
+                      }
+                        if (!result.ok && result.retry) cadPatchRetryError = result.error || "Unknown error";
+                      }
+                    } catch {
+                    }
+                  }
+                }
+
+                if (!cadPatchFound) {
+                  const svgText = extractSvgCodeBlock(toolFull) || extractRawSvgBlock(toolFull);
+                  if (svgText) {
+                    const r = await runCodeAction(svgText, "cad");
+                  if (r.ok) {
+                    producedHasSvg2d = true;
+                    appliedSvg = normalizeSvgMarkup(r.svg || "") || svgText;
+                  }
+                    if (!r.ok && r.retry) cadPatchRetryError = r.error || "Unknown error";
+                  }
+                }
+
+                if (!producedHasSvg2d) {
+                  const fallbackSvg = extractReplaceSvgFromCadPatchText(toolFull) || extractSvgCodeBlock(toolFull) || extractRawSvgBlock(toolFull);
+                  if (fallbackSvg) {
+                    const r = await runCodeAction(fallbackSvg, "cad");
+                  if (r.ok) {
+                    producedHasSvg2d = true;
+                    appliedSvg = normalizeSvgMarkup(r.svg || "") || fallbackSvg;
+                  }
+                    if (!r.ok && r.retry) cadPatchRetryError = r.error || "Unknown error";
+                  }
+                }
+
+                return { toolFull, cadPatchFound, cadPatchRetryError, producedHasSvg2d, appliedSvg };
+              };
+
+              const getCadSvgToolPrompt = (tool: "patch" | "replace") =>
+                tool === "patch" ? CAD_SVG_FLOW_PATCH_AGENT_PROMPT : CAD_SVG_FLOW_REPLACE_AGENT_PROMPT;
+
+              let cadSvgToolMessagesBase: ChatMessage[] = [
+                { role: "system", content: [getCadSvgToolPrompt(cadSvgSelectedTool), globalSystemPrompt, globalConstraints, cadOutputLanguageInstruction].filter(Boolean).join("\n\n") },
+                { role: "user", content: promptContent }
+              ];
+
+              let cadSvgRun = await runCadSvgTool(cadSvgToolMessagesBase);
+              let cadSvgToolFull = cadSvgRun.toolFull;
+              let cadSvgPatchFound = cadSvgRun.cadPatchFound;
+              let cadSvgRetryError = cadSvgRun.cadPatchRetryError;
+              let producedHasSvg2d = cadSvgRun.producedHasSvg2d;
+              let appliedSvg = cadSvgRun.appliedSvg;
+
+              while (
+                cadSvgSelectedTool === "patch" &&
+                cadSvgPatchFound &&
+                cadSvgRetryError &&
+                !controller.signal.aborted &&
+                cadSvgAutoRetryCountRef.current < MAX_CAD_SVG_AUTO_RETRY
+              ) {
+                cadSvgAutoRetryCountRef.current += 1;
+                const forceReplace = cadSvgAutoRetryCountRef.current >= MAX_CAD_SVG_AUTO_RETRY;
+
+                if (forceReplace && cadSvgSelectedTool === "patch") {
+                  cadSvgSelectedTool = "replace";
+                  cadSvgToolMessagesBase = [
+                    { role: "system", content: [getCadSvgToolPrompt("replace"), globalSystemPrompt, globalConstraints, cadOutputLanguageInstruction].filter(Boolean).join("\n\n") },
+                    { role: "user", content: promptContent }
+                  ];
+                }
+
+                const retryPrompt = buildCadSvgRetryPrompt(cadSvgRetryError, forceReplace);
+                const retryMessages: ChatMessage[] = [
+                  ...cadSvgToolMessagesBase,
+                  { role: "assistant", content: cadSvgToolFull },
+                  { role: "user", content: retryPrompt },
+                ];
+
+                setMessages((prev) => [...prev, { role: "assistant", content: "" }]);
+                cadSvgRun = await runCadSvgTool(retryMessages);
+                cadSvgToolFull = cadSvgRun.toolFull;
+                cadSvgPatchFound = cadSvgRun.cadPatchFound;
+                cadSvgRetryError = cadSvgRun.cadPatchRetryError;
+                producedHasSvg2d = cadSvgRun.producedHasSvg2d;
+                appliedSvg = cadSvgRun.appliedSvg;
+                cadSvgToolMessagesBase = retryMessages;
+              }
+
+              const guide = buildCadNextStepGuide({
+                agent,
+                beforeHasPlan,
+                beforeHasSvg2d,
+                producedHasPlan: false,
+                producedHasSvg2d,
+                producedHasImages: false,
+                producedHasBom: false,
+              });
+              let assistantOutput = cadSvgToolFull;
+              const hasSvgFence = /```svg\s*[\s\S]*?```/i.test(assistantOutput);
+              const hasCadPatchJson = /```json\s*[\s\S]*?"type"\s*:\s*"cad_patch"[\s\S]*?```/i.test(assistantOutput);
+              if (producedHasSvg2d && !hasSvgFence && !hasCadPatchJson) {
+              const svgForDisplay = normalizeSvgMarkup(appliedSvg)
+                ? normalizeSvgMarkup(appliedSvg)
+                : extractReplaceSvgFromCadPatchText(cadSvgToolFull) || extractRawSvgBlock(cadSvgToolFull);
+                if (svgForDisplay) assistantOutput = `${assistantOutput}\n\n\`\`\`svg\n${svgForDisplay}\n\`\`\``;
+              }
+              if (guide) updateLastAssistant(`${assistantOutput}\n\n${guide}`);
+              else updateLastAssistant(assistantOutput);
+              return;
+            }
+
+            const agentPrompt = agent === "cad_plan_agent" ? CAD_PLAN_AGENT_PROMPT : "";
+
+            if (!agentPrompt) {
+              updateLastAssistant(trText(`未识别的 CAD 子智能体：${agent}`, `Unrecognized CAD sub-agent: ${agent}`));
+              return;
+            }
+
+            const routedSystemContent = [agentPrompt, globalSystemPrompt, globalConstraints, cadOutputLanguageInstruction].filter(Boolean).join("\n\n");
+            const routedMessages: ChatMessage[] = [
+              { role: "system", content: routedSystemContent },
+              { role: "user", content: promptContent }
+            ];
+
+            let routedFull = "";
+            const routedUpdater = createThrottledAssistantUpdater();
+            await streamChatMessage(routedMessages, (chunk) => {
+              routedFull = chunk;
+              routedUpdater.push(chunk);
+            }, chatModel, controller.signal);
+            routedUpdater.flush();
+
+            if (routedFull) {
+              const jsonRegex = /```json\s*([\s\S]*?)```/g;
+              let jm: RegExpExecArray | null;
+              while ((jm = jsonRegex.exec(routedFull))) {
+                const jsonText = String(jm[1] || "").trim();
+                if (!jsonText) continue;
+                await runCodeAction(jsonText, "cad");
+              }
+
+              let producedHasSvg2d = false;
+              const svgCandidate =
+                extractReplaceSvgFromCadPatchText(routedFull) ||
+                extractSvgCodeBlock(routedFull) ||
+                extractRawSvgBlock(routedFull);
+              if (svgCandidate) {
+                const svgResult = await runCodeAction(svgCandidate, "cad");
+                producedHasSvg2d = !!svgResult.ok;
+              }
+
+              const producedHasPlan = /"type"\s*:\s*"cad_plan"/.test(routedFull);
+              const producedHasImages = /"type"\s*:\s*"cad_images"/.test(routedFull);
+              const producedHasBom = /"type"\s*:\s*"cad_bom"/.test(routedFull);
+              const guide = buildCadNextStepGuide({
+                agent,
+                beforeHasPlan,
+                beforeHasSvg2d,
+                producedHasPlan,
+                producedHasSvg2d,
+                producedHasImages,
+                producedHasBom,
+              });
+              if (guide) updateLastAssistant(`${routedFull}\n\n${guide}`);
+              else updateLastAssistant(routedFull);
+            }
+            return;
           }
         }
 
@@ -1474,6 +2429,7 @@ export function ChatPanel({
     const last = base[base.length - 1];
     if (last.role !== 'user') return;
     flowAutoRetryCountRef.current = 0;
+    cadSvgAutoRetryCountRef.current = 0;
     await runTextChat(base);
   };
 
@@ -1502,6 +2458,7 @@ export function ChatPanel({
     setInput("");
     setFiles([]);
     flowAutoRetryCountRef.current = 0;
+    cadSvgAutoRetryCountRef.current = 0;
     await runTextChat(base);
   };
 

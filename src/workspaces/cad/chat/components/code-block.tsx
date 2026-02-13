@@ -1,7 +1,6 @@
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useMemo, useState } from "react";
+import { Check, ChevronDown, ChevronUp, Copy, Cpu, X } from "lucide-react";
 import { Highlight, themes, type Language } from "prism-react-renderer";
-import { ChevronRight, Loader2 } from 'lucide-react';
-import { cn } from '@/lib/utils';
 
 interface CodeBlockProps {
     code: string;
@@ -12,12 +11,40 @@ interface CodeBlockProps {
 
 const openStateById = new Map<string, boolean>();
 
+function formatXmlLike(input: string): string {
+    const source = String(input || "").trim();
+    if (!source) return source;
+
+    const normalized = source.replace(/\r\n/g, "\n").replace(/>\s*</g, ">\n<");
+    const lines = normalized.split("\n");
+    let indent = 0;
+    const unit = "  ";
+
+    return lines
+        .map((line) => line.trim())
+        .filter((line) => line.length > 0)
+        .map((line) => {
+            if (/^<\//.test(line)) indent = Math.max(indent - 1, 0);
+            const formatted = `${unit.repeat(indent)}${line}`;
+
+            const isOpeningTag =
+                /^<[^!?/][^>]*>$/.test(line) &&
+                !/\/>$/.test(line) &&
+                !/^<[^>]+>.*<\/[^>]+>$/.test(line);
+            if (isOpeningTag) indent += 1;
+
+            return formatted;
+        })
+        .join("\n");
+}
+
 export function CodeBlock({ code, language = "xml", isStreaming = false, blockId }: CodeBlockProps) {
-    const [isOpen, setIsOpen] = useState(() => {
+    const [isExpanded, setIsExpanded] = useState(() => {
         if (blockId && openStateById.has(blockId)) return Boolean(openStateById.get(blockId));
-        return false;
+        return true;
     });
-    const preRef = useRef<HTMLPreElement | null>(null);
+    const [copied, setCopied] = useState(false);
+    const [copyFailed, setCopyFailed] = useState(false);
     const normalizedLanguage = useMemo(() => (language || "text").toLowerCase(), [language]);
     const normalizedCode = useMemo(() => String(code ?? ""), [code]);
     const prismLanguage = useMemo<Language>(() => {
@@ -47,83 +74,127 @@ export function CodeBlock({ code, language = "xml", isStreaming = false, blockId
         if (allowed.has(lang)) return lang as Language;
         return "text";
     }, [normalizedLanguage]);
-    
-    const setOpen = (open: boolean) => {
-        setIsOpen(open);
-        if (blockId) openStateById.set(blockId, open);
+
+    const displayCode = useMemo(() => {
+        if (prismLanguage === "xml" || prismLanguage === "html") {
+            return formatXmlLike(normalizedCode);
+        }
+        if (prismLanguage === "json") {
+            try {
+                return JSON.stringify(JSON.parse(normalizedCode), null, 2);
+            } catch {
+                return normalizedCode;
+            }
+        }
+        return normalizedCode;
+    }, [normalizedCode, prismLanguage]);
+    const copyCode = async () => {
+        try {
+            await navigator.clipboard.writeText(normalizedCode);
+            setCopied(true);
+            setCopyFailed(false);
+            setTimeout(() => setCopied(false), 1500);
+        } catch {
+            setCopyFailed(true);
+            setCopied(false);
+            setTimeout(() => setCopyFailed(false), 1500);
+        }
+    };
+
+    const setExpanded = (next: boolean) => {
+        setIsExpanded(next);
+        if (blockId) openStateById.set(blockId, next);
     };
 
     return (
-        <div className="w-full my-2 border border-border/50 rounded-lg bg-zinc-50 dark:bg-zinc-900/40 overflow-hidden shadow-sm">
-            <button
-                type="button"
-                onClick={() => setOpen(!isOpen)}
-                className="flex items-center gap-2 w-full p-2.5 cursor-pointer hover:bg-zinc-100 dark:hover:bg-zinc-800/40 transition-colors text-xs font-medium text-zinc-600 dark:text-zinc-300 select-none bg-zinc-100/70 dark:bg-zinc-900/60"
-            >
-                <ChevronRight className={cn("w-4 h-4 transition-transform duration-200 text-zinc-600 dark:text-zinc-300", isOpen && "rotate-90")} />
-                
-                <span className="uppercase font-semibold tracking-wider text-zinc-700 dark:text-zinc-200">{normalizedLanguage}</span>
-                
-                {isStreaming ? (
-                    <div className="flex items-center gap-2 ml-auto">
-                         <span className="text-[10px] text-blue-600 animate-pulse">Generating code...</span>
-                         <Loader2 className="w-3.5 h-3.5 animate-spin text-blue-600" />
+        <div className="my-3 w-fit max-w-full overflow-hidden rounded-xl border border-border/60 bg-muted/30">
+            <div className="flex items-center justify-between px-4 py-3 bg-muted/50">
+                <div className="flex items-center gap-2">
+                    <div className="w-6 h-6 rounded-md bg-primary/10 flex items-center justify-center">
+                        <Cpu className="w-3.5 h-3.5 text-primary" />
                     </div>
-                ) : (
-                    <span className="ml-auto text-[10px] opacity-70 font-mono">{normalizedCode.length} chars</span>
-                )}
-            </button>
-            
-            {isOpen && (
-                <div className="p-0 border-t border-border/50">
-                     <div className="overflow-hidden w-full bg-zinc-50 dark:bg-zinc-900/40">
-                        <Highlight theme={themes.github} code={normalizedCode} language={prismLanguage}>
-                            {({
-                                style,
-                                tokens,
-                                getLineProps,
-                                getTokenProps,
-                            }) => (
-                                <pre
-                                    ref={preRef}
-                                    className="text-[11px] leading-relaxed overflow-x-hidden overflow-y-auto overscroll-contain max-h-[500px] scrollbar-thin p-3 whitespace-pre-wrap break-words"
-                                    style={{
-                                        ...style,
-                                        fontFamily: "var(--font-mono), ui-monospace, monospace",
-                                        backgroundColor: "transparent",
-                                        margin: 0,
-                                    }}
-                                    onWheelCapture={(e) => {
-                                        const el = preRef.current;
-                                        if (!el) return;
-                                        const atTop = el.scrollTop <= 0;
-                                        const atBottom = el.scrollTop + el.clientHeight >= el.scrollHeight - 1;
-                                        const dy = e.deltaY;
-                                        if (dy > 0 && !atBottom) e.stopPropagation();
-                                        if (dy < 0 && !atTop) e.stopPropagation();
-                                    }}
-                                >
-                                    {tokens.map((line, i) => {
-                                        const lineProps = getLineProps({ line });
-                                        return (
-                                            <div
-                                                key={i}
-                                                {...lineProps}
-                                                className={cn("grid grid-cols-[3.25rem_1fr] gap-0", lineProps?.className)}
-                                            >
-                                                <span className="select-none text-zinc-400 text-right pr-4">{i + 1}</span>
-                                                <span className="min-w-0 whitespace-pre-wrap break-words">
-                                                    {line.map((token, key) => (
-                                                        <span key={key} {...getTokenProps({ token })} />
-                                                    ))}
-                                                </span>
-                                            </div>
-                                        );
-                                    })}
-                                </pre>
+                    <span className="text-sm font-medium text-foreground/80">Generate CAD</span>
+                </div>
+                <div className="flex items-center gap-2">
+                    {isStreaming ? (
+                        <div className="h-4 w-4 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+                    ) : (
+                        <span className="text-xs font-medium text-green-600 bg-green-50 px-2 py-0.5 rounded-full">
+                            Complete
+                        </span>
+                    )}
+                    <button
+                        type="button"
+                        onClick={() => setExpanded(!isExpanded)}
+                        className="p-1 rounded hover:bg-muted transition-colors"
+                    >
+                        {isExpanded ? (
+                            <ChevronUp className="w-4 h-4 text-muted-foreground" />
+                        ) : (
+                            <ChevronDown className="w-4 h-4 text-muted-foreground" />
+                        )}
+                    </button>
+                </div>
+            </div>
+            {isExpanded && (
+                <div className="px-4 py-3 border-t border-border/40 bg-muted/20">
+                    <div className="mb-1 flex items-center justify-between">
+                        <span className="text-[10px] uppercase text-muted-foreground">{normalizedLanguage}</span>
+                        <button
+                            type="button"
+                            onClick={copyCode}
+                            className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[10px] text-muted-foreground hover:bg-muted transition-colors"
+                            title={
+                                copied
+                                    ? "Copied"
+                                    : copyFailed
+                                      ? "Copy failed"
+                                      : "Copy code"
+                            }
+                        >
+                            {copied ? (
+                                <Check className="h-3 w-3 text-green-500" />
+                            ) : copyFailed ? (
+                                <X className="h-3 w-3 text-red-500" />
+                            ) : (
+                                <Copy className="h-3 w-3" />
                             )}
-                        </Highlight>
+                            <span>{copied ? "Copied" : "Copy"}</span>
+                        </button>
                     </div>
+                    <Highlight theme={themes.github} code={displayCode} language={prismLanguage}>
+                        {({
+                            style,
+                            tokens,
+                            getLineProps,
+                            getTokenProps,
+                        }) => (
+                            <pre
+                                className="text-[11px] leading-relaxed overflow-x-auto overflow-y-auto max-h-48 scrollbar-thin whitespace-pre"
+                                style={{
+                                    ...style,
+                                    fontFamily: "var(--font-mono), ui-monospace, monospace",
+                                    backgroundColor: "transparent",
+                                    margin: 0,
+                                    padding: 0,
+                                    wordBreak: "normal",
+                                    whiteSpace: "pre",
+                                }}
+                            >
+                                {tokens.map((line, i) => (
+                                    <div
+                                        key={i}
+                                        {...getLineProps({ line })}
+                                        style={{ wordBreak: "normal" }}
+                                    >
+                                        {line.map((token, key) => (
+                                            <span key={key} {...getTokenProps({ token })} />
+                                        ))}
+                                    </div>
+                                ))}
+                            </pre>
+                        )}
+                    </Highlight>
                 </div>
             )}
         </div>

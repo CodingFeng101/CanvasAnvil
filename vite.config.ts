@@ -112,6 +112,9 @@ function createLocalApiPlugin(): Plugin {
 
 // https://vite.dev/config/
 export default defineConfig({
+  optimizeDeps: {
+    entries: ["index.html"],
+  },
   build: {
     sourcemap: 'hidden',
   },

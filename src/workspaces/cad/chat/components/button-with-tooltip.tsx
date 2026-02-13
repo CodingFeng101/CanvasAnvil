@@ -21,11 +21,15 @@ export function ButtonWithTooltip({
     children,
     ...buttonProps
 }: ButtonWithTooltipProps) {
+    const mergedTitle =
+        typeof buttonProps.title === "string" && buttonProps.title.trim()
+            ? buttonProps.title
+            : tooltipContent;
     return (
         <TooltipProvider>
             <Tooltip>
                 <TooltipTrigger asChild>
-                    <Button {...buttonProps}>{children}</Button>
+                    <Button {...buttonProps} title={mergedTitle}>{children}</Button>
                 </TooltipTrigger>
                 <TooltipContent className="max-w-xs text-wrap">
                     {tooltipContent}

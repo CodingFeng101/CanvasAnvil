@@ -344,10 +344,7 @@ export function ChatPanel({
       localStorage.removeItem(storageKey);
     } catch {
     }
-    const newMsgs: ChatMessage[] = [
-        { role: 'assistant', content: t(uiLang, "chat.cleared") }
-    ];
-    setMessages(newMsgs);
+    setMessages([]);
     setShowResetWarning(false);
   };
 

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+﻿import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Loader2, MessageSquarePlus, Box, Image as ImageIcon, Table2, Download } from 'lucide-react';
 import {
   ContextMenu,
@@ -13,6 +13,7 @@ import { useUiLanguage } from "@/lib/use-ui-language";
 
 interface CadWorkspaceProps {
   onAddToChat?: (code: string) => void;
+  onSvgChange?: (svg: string) => void;
   svg2d?: string;
   plan?: any;
   images?: { title: string; url: string }[];
@@ -21,9 +22,95 @@ interface CadWorkspaceProps {
   focusPanel?: "2d" | "renders" | "bom" | null;
 }
 
-export function CadWorkspace({ onAddToChat, svg2d, plan, images = [], imagesLoading = false, bom, focusPanel }: CadWorkspaceProps) {
+const RENDER_SLOT_TITLES = [
+  "Renovation Plan Layout",
+  "Floor Finish Plan",
+  "Reflected Ceiling Plan",
+  "Wall Setting-Out Plan",
+  "MEP Plan (Electrical + Low Voltage + Plumbing)",
+  "Elevation Index Plan + Interior Elevations",
+  "Detail Drawings",
+];
+
+const EMPTY_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 1000"></svg>`;
+const EMPTY_SENTINEL = "__EMPTY_SVG__";
+const ENABLE_EDITOR_AUTOSYNC = false;
+
+const normalizeSvgMarkup = (text: string) => {
+  const raw = String(text || "").trim();
+  if (!raw) return "";
+  const start = raw.search(/<svg[\s/>]/i);
+  if (start < 0) return "";
+  const tail = raw.slice(start);
+  const end = tail.toLowerCase().lastIndexOf("</svg>");
+  if (end >= 0) return tail.slice(0, end + "</svg>".length).trim();
+  return tail.trim();
+};
+
+const NON_CONTENT_PARENTS = new Set([
+  "defs",
+  "marker",
+  "pattern",
+  "clippath",
+  "mask",
+  "symbol",
+]);
+
+const DRAWABLE_SELECTOR = [
+  "path",
+  "rect",
+  "circle",
+  "ellipse",
+  "line",
+  "polyline",
+  "polygon",
+  "text",
+  "image",
+  "use",
+  "foreignObject",
+].join(",");
+
+const isEffectivelyEmptySvg = (text: string) => {
+  const normalized = normalizeSvgMarkup(text);
+  if (!normalized) return true;
+  if (
+    normalized === normalizeSvgMarkup(EMPTY_SVG) ||
+    /^<svg\b[^>]*>\s*<\/svg>$/i.test(normalized)
+  ) {
+    return true;
+  }
+
+  if (typeof DOMParser === "undefined") return false;
+  try {
+    const doc = new DOMParser().parseFromString(normalized, "image/svg+xml");
+    if (doc.querySelector("parsererror")) return false;
+    const svg = doc.documentElement;
+    if (!svg || svg.nodeName.toLowerCase() !== "svg") return false;
+
+    const nodes = svg.querySelectorAll(DRAWABLE_SELECTOR);
+    for (const node of Array.from(nodes)) {
+      let parent = node.parentElement;
+      let inNonContent = false;
+      while (parent) {
+        const name = parent.tagName.toLowerCase();
+        if (NON_CONTENT_PARENTS.has(name)) {
+          inNonContent = true;
+          break;
+        }
+        parent = parent.parentElement;
+      }
+      if (!inNonContent) return false;
+    }
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+export function CadWorkspace({ onAddToChat, onSvgChange, svg2d, plan, images = [], imagesLoading = false, bom, focusPanel }: CadWorkspaceProps) {
   const CAD_RENDERS_STORAGE_KEY = "unified-ai-workspace-cad-renders-v1";
   const [svgContent, setSvgContent] = useState<string | null>(null);
+  const [isSvgEditorReady, setIsSvgEditorReady] = useState(false);
   const [viewMode, setViewMode] = useState<"2d" | "renders" | "bom">("2d");
   const [previewImage, setPreviewImage] = useState<{ title: string; url: string } | null>(null);
   const [isExporting, setIsExporting] = useState(false);
@@ -34,7 +121,7 @@ export function CadWorkspace({ onAddToChat, svg2d, plan, images = [], imagesLoad
       const parsed = raw ? JSON.parse(raw) : [];
       if (!Array.isArray(parsed)) return [];
       return parsed
-        .filter((x: any) => x && typeof x.url === "string" && !String(x.url).startsWith("blob:"))
+        .filter((x: any) => x && typeof x.url === "string")
         .map((x: any) => ({
           title: typeof x.title === "string" ? x.title : "",
           url: String(x.url),
@@ -43,15 +130,121 @@ export function CadWorkspace({ onAddToChat, svg2d, plan, images = [], imagesLoad
       return [];
     }
   });
+
   const uiLang = useUiLanguage();
+  const svgEditorIframeRef = useRef<HTMLIFrameElement | null>(null);
+  const latestLoadedSvgRef = useRef<string>("");
+  const svgEditorRequestSeedRef = useRef(0);
+  const svgEditorPendingRef = useRef<Map<string, (svg: string) => void>>(new Map());
+  const lastCanvasRecoverAtRef = useRef(0);
 
   useEffect(() => {
     if (typeof svg2d === "string") {
-      setSvgContent(svg2d);
+      const normalized = normalizeSvgMarkup(svg2d);
+      setSvgContent(normalized || null);
+      if (isSvgEditorReady) {
+        if (normalized) {
+          loadSvgToEditorWithRetry(normalized);
+          latestLoadedSvgRef.current = normalized;
+        } else {
+          postToSvgEditor({ type: "cad_svg_editor_clear" });
+          latestLoadedSvgRef.current = EMPTY_SENTINEL;
+        }
+      }
       return;
     }
     setSvgContent(null);
-  }, [svg2d]);
+    if (isSvgEditorReady) {
+      postToSvgEditor({ type: "cad_svg_editor_clear" });
+      latestLoadedSvgRef.current = EMPTY_SENTINEL;
+    }
+  }, [svg2d, isSvgEditorReady]);
+
+  const postToSvgEditor = (payload: Record<string, unknown>) => {
+    const win = svgEditorIframeRef.current?.contentWindow;
+    if (!win) return false;
+    win.postMessage(payload, window.location.origin);
+    return true;
+  };
+
+  const loadSvgToEditorWithRetry = (svg: string) => {
+    const normalized = normalizeSvgMarkup(svg);
+    if (!normalized) return false;
+    const sent = postToSvgEditor({ type: "cad_svg_editor_load", svg: normalized });
+    if (!sent) return false;
+    const retryDelays = [120, 420, 1000, 2000, 3500, 5000];
+    for (const delay of retryDelays) {
+      window.setTimeout(() => {
+        postToSvgEditor({ type: "cad_svg_editor_load", svg: normalized });
+      }, delay);
+    }
+    return true;
+  };
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const onMessage = (event: MessageEvent) => {
+      if (event.origin !== window.location.origin) return;
+      const data = event.data;
+      if (!data || typeof data !== "object") return;
+      const type = String((data as any).type || "");
+
+      if (type === "cad_svg_editor_ready") {
+        setIsSvgEditorReady(true);
+        const next = normalizeSvgMarkup(typeof svgContent === "string" ? svgContent : "");
+        if (next) {
+          loadSvgToEditorWithRetry(next);
+          latestLoadedSvgRef.current = next;
+        } else {
+          postToSvgEditor({ type: "cad_svg_editor_clear" });
+          latestLoadedSvgRef.current = EMPTY_SENTINEL;
+        }
+        return;
+      }
+
+      if (type === "cad_svg_editor_export_response") {
+        const requestId = String((data as any).requestId || "");
+        const resolver = svgEditorPendingRef.current.get(requestId);
+        if (!resolver) return;
+        svgEditorPendingRef.current.delete(requestId);
+        resolver(String((data as any).svg || ""));
+        return;
+      }
+
+      if (type === "cad_svg_editor_load_result") {
+        const ok = Boolean((data as any).ok);
+        if (ok) return;
+        const next = normalizeSvgMarkup(typeof svgContent === "string" ? svgContent : "");
+        if (!next) return;
+        window.setTimeout(() => {
+          loadSvgToEditorWithRetry(next);
+        }, 100);
+      }
+    };
+
+    window.addEventListener("message", onMessage);
+    return () => {
+      window.removeEventListener("message", onMessage);
+      svgEditorPendingRef.current.clear();
+    };
+  }, [svgContent]);
+
+  useEffect(() => {
+    const next = normalizeSvgMarkup(typeof svgContent === "string" ? svgContent : "");
+    if (!isSvgEditorReady) return;
+    if (next) {
+      if (latestLoadedSvgRef.current === next) return;
+      if (loadSvgToEditorWithRetry(next)) {
+        latestLoadedSvgRef.current = next;
+      }
+      return;
+    }
+
+    if (latestLoadedSvgRef.current === EMPTY_SENTINEL) return;
+    if (postToSvgEditor({ type: "cad_svg_editor_clear" })) {
+      latestLoadedSvgRef.current = EMPTY_SENTINEL;
+    }
+  }, [isSvgEditorReady, svgContent]);
 
   useEffect(() => {
     if (!Array.isArray(images) || images.length === 0) {
@@ -82,19 +275,22 @@ export function CadWorkspace({ onAddToChat, svg2d, plan, images = [], imagesLoad
       const mapped = await Promise.all(
         images.map(async (it) => {
           const rawUrl = typeof (it as any)?.url === "string" ? String((it as any).url) : "";
-          if (!rawUrl) return null;
+          if (!rawUrl) {
+            return {
+              title: typeof (it as any)?.title === "string" ? String((it as any).title) : "",
+              url: "",
+            };
+          }
           const title = typeof (it as any)?.title === "string" ? String((it as any).title) : "";
           if (rawUrl.startsWith("blob:")) {
             const dataUrl = await blobUrlToDataUrl(rawUrl);
-            if (!dataUrl) return null;
-            return { title, url: dataUrl };
+            return { title, url: dataUrl || "" };
           }
           return { title, url: rawUrl };
         })
       );
       if (cancelled) return;
-      const cleaned = mapped.filter(Boolean) as Array<{ title: string; url: string }>;
-      setLocalImages(cleaned);
+      setLocalImages(mapped.slice(0, 7));
     })();
 
     return () => {
@@ -105,7 +301,9 @@ export function CadWorkspace({ onAddToChat, svg2d, plan, images = [], imagesLoad
   useEffect(() => {
     if (typeof window === "undefined") return;
     try {
-      const stable = localImages.filter((x) => x && typeof x.url === "string" && !x.url.startsWith("blob:")).slice(0, 30);
+      const stable = localImages
+        .filter((x) => x && typeof x.url === "string" && x.url && !x.url.startsWith("blob:"))
+        .slice(0, 30);
       localStorage.setItem(CAD_RENDERS_STORAGE_KEY, JSON.stringify(stable));
     } catch {
     }
@@ -124,6 +322,69 @@ export function CadWorkspace({ onAddToChat, svg2d, plan, images = [], imagesLoad
     }
   }, [plan, svg2d, images, bom, focusPanel]);
 
+  const requestSvgFromEditor = async (opts?: { preferFallbackOnEmpty?: boolean }) => {
+    const fallback = normalizeSvgMarkup(String(svgContent || svg2d || ""));
+    if (!isSvgEditorReady) return fallback;
+
+    const requestId = `cad-svg-export-${Date.now()}-${svgEditorRequestSeedRef.current++}`;
+    return await new Promise<string>((resolve) => {
+      const timer = window.setTimeout(() => {
+        svgEditorPendingRef.current.delete(requestId);
+        resolve(fallback);
+      }, 2500);
+
+      svgEditorPendingRef.current.set(requestId, (svg: string) => {
+        window.clearTimeout(timer);
+        const text = normalizeSvgMarkup(svg || "");
+        if (opts?.preferFallbackOnEmpty) {
+          if (text && isEffectivelyEmptySvg(text) && fallback) {
+            resolve(fallback);
+            return;
+          }
+          resolve(text || fallback);
+          return;
+        }
+        resolve(text);
+      });
+
+      const posted = postToSvgEditor({ type: "cad_svg_editor_export_request", requestId });
+      if (!posted) {
+        window.clearTimeout(timer);
+        svgEditorPendingRef.current.delete(requestId);
+        resolve(fallback);
+      }
+    });
+  };
+
+  useEffect(() => {
+    if (!ENABLE_EDITOR_AUTOSYNC) return;
+    if (!isSvgEditorReady || viewMode !== "2d") return;
+    const timer = window.setInterval(() => {
+      void (async () => {
+        const next = String(await requestSvgFromEditor({ preferFallbackOnEmpty: false }) || "").trim();
+        if (!normalizeSvgMarkup(next)) return;
+        const current = normalizeSvgMarkup(typeof svgContent === "string" ? svgContent : "");
+        const isEmptyCanvas = isEffectivelyEmptySvg(next);
+        if (isEmptyCanvas && !current) {
+          return;
+        }
+        if (isEmptyCanvas && current) {
+          const now = Date.now();
+          if (now - lastCanvasRecoverAtRef.current > 1000) {
+            lastCanvasRecoverAtRef.current = now;
+            loadSvgToEditorWithRetry(current);
+          }
+          return;
+        }
+        if (next === String(svgContent || "").trim()) return;
+        setSvgContent(next);
+        latestLoadedSvgRef.current = next;
+        onSvgChange?.(next);
+      })();
+    }, 1800);
+    return () => window.clearInterval(timer);
+  }, [isSvgEditorReady, viewMode, svgContent, onSvgChange]);
+
   const downloadBlob = (blob: Blob, filename: string) => {
     const link = document.createElement("a");
     const url = URL.createObjectURL(blob);
@@ -136,10 +397,11 @@ export function CadWorkspace({ onAddToChat, svg2d, plan, images = [], imagesLoad
   };
 
   const exportSvg = async () => {
-    if (!svg2d || isExporting) return;
+    const source = await requestSvgFromEditor({ preferFallbackOnEmpty: true });
+    if (!source || isExporting) return;
     setIsExporting(true);
     try {
-      const blob = new Blob([svg2d], { type: "image/svg+xml;charset=utf-8" });
+      const blob = new Blob([source], { type: "image/svg+xml;charset=utf-8" });
       downloadBlob(blob, `floorplan-${Date.now()}.svg`);
     } finally {
       setIsExporting(false);
@@ -183,36 +445,47 @@ export function CadWorkspace({ onAddToChat, svg2d, plan, images = [], imagesLoad
     }
   };
 
-  const exportSvgAsPdf = async () => {
-    if (!svg2d || isExporting) return;
+  const exportSvgAsJpg = async () => {
+    const source = await requestSvgFromEditor({ preferFallbackOnEmpty: true });
+    if (!source || isExporting) return;
     setIsExporting(true);
     try {
-      const pngDataUrl = await svgToPngDataUrl(svg2d, 1600);
+      const pngDataUrl = await svgToPngDataUrl(source, 1600);
       if (!pngDataUrl) return;
-      const base64 = pngDataUrl.split(",")[1] || "";
+      const img = new Image();
+      const loaded = new Promise<void>((resolve, reject) => {
+        img.onload = () => resolve();
+        img.onerror = reject;
+      });
+      img.src = pngDataUrl;
+      await loaded;
+      const canvas = document.createElement("canvas");
+      canvas.width = img.naturalWidth || 1600;
+      canvas.height = img.naturalHeight || 900;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return;
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      const jpgDataUrl = canvas.toDataURL("image/jpeg", 0.92);
+      const base64 = jpgDataUrl.split(",")[1] || "";
+      if (!base64) return;
       const bytes = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
-      const pdfDoc = await PDFDocument.create();
-      const img = await pdfDoc.embedPng(bytes);
-      const page = pdfDoc.addPage([960, 540]);
-      const scale = Math.min(960 / img.width, 540 / img.height);
-      const w = img.width * scale;
-      const h = img.height * scale;
-      page.drawImage(img, { x: (960 - w) / 2, y: (540 - h) / 2, width: w, height: h });
-      const pdfBytes = await pdfDoc.save();
-      downloadBlob(new Blob([pdfBytes], { type: "application/pdf" }), `floorplan-${Date.now()}.pdf`);
+      downloadBlob(new Blob([bytes], { type: "image/jpeg" }), `floorplan-${Date.now()}.jpg`);
     } catch (e) {
-      console.error("Export SVG->PDF failed", e);
+      console.error("Export SVG->JPG failed", e);
     } finally {
       setIsExporting(false);
     }
   };
 
   const exportRendersPdf = async () => {
-    if (localImages.length === 0 || isExporting) return;
+    const downloadable = localImages.filter((x) => x?.url);
+    if (downloadable.length === 0 || isExporting) return;
     setIsExporting(true);
     try {
       const pdfDoc = await PDFDocument.create();
-      for (const it of localImages) {
+      for (const it of downloadable) {
         const res = await fetch(it.url);
         if (!res.ok) continue;
         const buf = await res.arrayBuffer();
@@ -259,7 +532,19 @@ export function CadWorkspace({ onAddToChat, svg2d, plan, images = [], imagesLoad
       setIsExporting(false);
     }
   };
-  
+
+  const renderSlots = useMemo(() => {
+    return RENDER_SLOT_TITLES.map((fallbackTitle, idx) => {
+      const item = localImages[idx];
+      return {
+        title: item?.title || fallbackTitle,
+        url: item?.url || "",
+      };
+    });
+  }, [localImages]);
+
+  const hasRenderImages = localImages.some((x) => !!x?.url);
+
   return (
     <ContextMenu>
       <ContextMenuTrigger className="w-full h-full bg-muted/20 relative overflow-hidden">
@@ -269,7 +554,7 @@ export function CadWorkspace({ onAddToChat, svg2d, plan, images = [], imagesLoad
             variant={viewMode === "2d" ? "default" : "outline"}
             className="h-7 px-2 text-xs gap-1"
             onClick={() => setViewMode("2d")}
-            disabled={!svgContent}
+            title={uiLang === "zh" ? "查看2D平面图" : "View 2D plan"}
           >
             <Box className="w-3.5 h-3.5" />
             2D
@@ -279,6 +564,7 @@ export function CadWorkspace({ onAddToChat, svg2d, plan, images = [], imagesLoad
             variant={viewMode === "renders" ? "default" : "outline"}
             className="h-7 px-2 text-xs gap-1"
             onClick={() => setViewMode("renders")}
+            title={uiLang === "zh" ? "查看装修图" : "View renders"}
           >
             <ImageIcon className="w-3.5 h-3.5" />
             {uiLang === "zh" ? "装修图" : "Renders"}
@@ -288,6 +574,7 @@ export function CadWorkspace({ onAddToChat, svg2d, plan, images = [], imagesLoad
             variant={viewMode === "bom" ? "default" : "outline"}
             className="h-7 px-2 text-xs gap-1"
             onClick={() => setViewMode("bom")}
+            title={uiLang === "zh" ? "查看物料清单" : "View BOM"}
           >
             <Table2 className="w-3.5 h-3.5" />
             {uiLang === "zh" ? "物料" : "BOM"}
@@ -295,31 +582,31 @@ export function CadWorkspace({ onAddToChat, svg2d, plan, images = [], imagesLoad
           <div className="h-4 w-px bg-border/60 mx-1" />
           {viewMode === "2d" && (
             <>
-              <Button size="sm" variant="outline" className="h-7 px-2 text-xs gap-1" onClick={exportSvg} disabled={!svg2d || isExporting}>
+              <Button size="sm" variant="outline" className="h-7 px-2 text-xs gap-1" onClick={exportSvg} disabled={!svgContent || isExporting} title={uiLang === "zh" ? "导出SVG" : "Export SVG"}>
                 <Download className="w-3.5 h-3.5" />
                 SVG
               </Button>
-              <Button size="sm" variant="outline" className="h-7 px-2 text-xs gap-1" onClick={exportSvgAsPdf} disabled={!svg2d || isExporting}>
+              <Button size="sm" variant="outline" className="h-7 px-2 text-xs gap-1" onClick={exportSvgAsJpg} disabled={!svgContent || isExporting} title={uiLang === "zh" ? "导出JPG" : "Export JPG"}>
                 <Download className="w-3.5 h-3.5" />
-                PDF
+                JPG
               </Button>
             </>
           )}
           {viewMode === "renders" && (
-            <Button size="sm" variant="outline" className="h-7 px-2 text-xs gap-1" onClick={exportRendersPdf} disabled={localImages.length === 0 || isExporting}>
+            <Button size="sm" variant="outline" className="h-7 px-2 text-xs gap-1" onClick={exportRendersPdf} disabled={!hasRenderImages || isExporting} title={uiLang === "zh" ? "导出装修图PDF" : "Export renders PDF"}>
               <Download className="w-3.5 h-3.5" />
               PDF
             </Button>
           )}
           {viewMode === "bom" && (
-            <Button size="sm" variant="outline" className="h-7 px-2 text-xs gap-1" onClick={exportBomCsv} disabled={!bom || isExporting}>
+            <Button size="sm" variant="outline" className="h-7 px-2 text-xs gap-1" onClick={exportBomCsv} disabled={!bom || isExporting} title={uiLang === "zh" ? "导出BOM CSV" : "Export BOM CSV"}>
               <Download className="w-3.5 h-3.5" />
               CSV
             </Button>
           )}
         </div>
 
-        {!svgContent && (
+        {!svgContent && viewMode !== "2d" && (
           <div className="w-full h-full flex items-center justify-center">
             <div className="text-center text-muted-foreground">
               <p className="mb-2">{uiLang === "zh" ? "暂无 CAD 内容" : "No CAD content yet"}</p>
@@ -333,54 +620,57 @@ export function CadWorkspace({ onAddToChat, svg2d, plan, images = [], imagesLoad
         )}
 
         <div className="w-full h-full pt-16 p-6">
-          {viewMode === "2d" && svgContent && (
-            <div className="w-full h-full bg-white shadow-sm rounded-xl overflow-hidden border border-border/50 p-6 flex items-center justify-center">
-              <div className="w-full h-full overflow-auto" dangerouslySetInnerHTML={{ __html: svgContent }} />
+          {viewMode === "2d" && (
+            <div className="w-full h-full bg-white shadow-sm rounded-xl overflow-hidden border border-border/50">
+              <iframe
+                ref={svgEditorIframeRef}
+                title="CAD SVG Editor"
+                src="/svg-editor.html"
+                className="h-full w-full border-0"
+                onLoad={() => setIsSvgEditorReady(false)}
+              />
             </div>
           )}
 
           {viewMode === "renders" && (
             <div className="w-full h-full bg-white dark:bg-zinc-900 shadow-sm rounded-xl overflow-auto border border-border/50 p-4">
-              {imagesLoading && localImages.length === 0 ? (
-                <div className="h-full w-full flex items-center justify-center text-muted-foreground text-sm gap-2">
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  <span>{uiLang === "zh" ? "正在生成装修图…" : "Generating renders…"}</span>
-                </div>
-              ) : localImages.length === 0 ? (
-                <div className="h-full w-full flex items-center justify-center text-muted-foreground text-sm">
-                  {uiLang === "zh" ? "暂无装修图" : "No renders yet"}
-                </div>
-              ) : (
-                <div className="grid gap-4 grid-cols-1 md:grid-cols-2 xl:grid-cols-3">
-                  {localImages.map((img, idx) => (
-                    <div key={`${img.url}-${idx}`} className="rounded-xl border border-border/50 overflow-hidden bg-background">
-                      <div className="px-3 py-2 text-xs text-muted-foreground flex items-center justify-between gap-2">
-                        <ImageIcon className="w-4 h-4" />
-                        <span className="truncate flex-1">{img.title}</span>
-                        <div className="flex items-center gap-1">
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-7 w-7"
-                            onClick={() => setPreviewImage(img)}
-                            title={uiLang === "zh" ? "查看" : "View"}
-                          >
-                            <ImageIcon className="w-4 h-4" />
+              <div className="grid gap-4 grid-cols-1 md:grid-cols-2 xl:grid-cols-3">
+                {renderSlots.map((img, idx) => (
+                  <div key={`${img.title}-${idx}`} className="rounded-xl border border-border/50 overflow-hidden bg-background">
+                    <div className="px-3 py-2 text-xs text-muted-foreground flex items-center justify-between gap-2">
+                      <ImageIcon className="w-4 h-4" />
+                      <span className="truncate flex-1">{img.title}</span>
+                      <div className="flex items-center gap-1">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7"
+                          onClick={() => img.url && setPreviewImage(img)}
+                          disabled={!img.url}
+                          title={uiLang === "zh" ? "查看" : "View"}
+                        >
+                          <ImageIcon className="w-4 h-4" />
+                        </Button>
+                        <a href={img.url || "#"} download={`${img.title || "render"}.png`} className="inline-flex">
+                          <Button variant="ghost" size="icon" className="h-7 w-7" disabled={!img.url} title={uiLang === "zh" ? "下载" : "Download"}>
+                            <Download className="w-4 h-4" />
                           </Button>
-                          <a href={img.url} download={`${img.title || "render"}.png`} className="inline-flex">
-                            <Button variant="ghost" size="icon" className="h-7 w-7" title={uiLang === "zh" ? "下载" : "Download"}>
-                              <Download className="w-4 h-4" />
-                            </Button>
-                          </a>
-                        </div>
-                      </div>
-                      <div className="aspect-video bg-muted/20 cursor-pointer" onClick={() => setPreviewImage(img)}>
-                        <img src={img.url} alt={img.title} className="w-full h-full object-cover" />
+                        </a>
                       </div>
                     </div>
-                  ))}
-                </div>
-              )}
+                    <div className="aspect-video bg-muted/20">
+                      {img.url ? (
+                        <img src={img.url} alt={img.title} className="w-full h-full object-cover cursor-pointer" onClick={() => setPreviewImage(img)} />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center text-xs text-muted-foreground gap-2">
+                          {imagesLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}
+                          <span>{imagesLoading ? (uiLang === "zh" ? "生成中" : "Generating") : (uiLang === "zh" ? "待生成" : "Pending")}</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
           )}
 
@@ -421,9 +711,12 @@ export function CadWorkspace({ onAddToChat, svg2d, plan, images = [], imagesLoad
 
       <ContextMenuContent>
         <ContextMenuItem
-          onClick={() => {
+          onClick={async () => {
             if (!onAddToChat) return;
-            if (viewMode === "2d" && svgContent) onAddToChat(svgContent);
+            if (viewMode === "2d") {
+              const latest = await requestSvgFromEditor({ preferFallbackOnEmpty: true });
+              if (latest) onAddToChat(latest);
+            }
             else if (viewMode === "renders" && localImages.length > 0) onAddToChat(JSON.stringify({ type: "cad_images", prompts: localImages }, null, 2));
             else if (viewMode === "bom" && bom) onAddToChat(JSON.stringify({ type: "cad_bom", columns: bom.columns, rows: bom.rows }, null, 2));
             else if (plan) onAddToChat(JSON.stringify(plan, null, 2));
@@ -445,7 +738,7 @@ export function CadWorkspace({ onAddToChat, svg2d, plan, images = [], imagesLoad
               <div className="space-y-3">
                 <div className="flex items-center justify-end">
                   <a href={previewImage.url} download={`${previewImage.title || "render"}.png`} className="inline-flex">
-                    <Button variant="outline" size="sm" className="h-8 px-3 text-xs">
+                    <Button variant="outline" size="sm" className="h-8 px-3 text-xs" title={uiLang === "zh" ? "下载图片" : "Download image"}>
                       <Download className="w-4 h-4 mr-1" />
                       {uiLang === "zh" ? "下载图片" : "Download image"}
                     </Button>

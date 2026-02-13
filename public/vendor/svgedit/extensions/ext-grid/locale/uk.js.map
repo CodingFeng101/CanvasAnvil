@@ -1,0 +1,1 @@
+{"version":3,"file":"uk.js","sources":["../../../../../src/editor/extensions/ext-grid/locale/uk.js"],"sourcesContent":["export default {\r\n  name: 'Сітка',\r\n  buttons: [\r\n    {\r\n      title: 'Показати/Заковати Сітку'\r\n    }\r\n  ]\r\n}\r\n"],"names":[],"mappings":"AAAA,MAAA,KAAe;AAAA,EACb,MAAM;AAAA,EACN,SAAS;AAAA,IACP;AAAA,MACE,OAAO;AAAA,IACb;AAAA,EACA;AACA;"}

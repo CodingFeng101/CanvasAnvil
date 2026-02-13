@@ -33,10 +33,10 @@ export function ResetWarningModal({
                     </DialogDescription>
                 </DialogHeader>
                 <DialogFooter>
-                    <Button variant="outline" onClick={() => onOpenChange(false)}>
+                    <Button variant="outline" onClick={() => onOpenChange(false)} title={t(uiLang, "common.cancel")}>
                         {t(uiLang, "common.cancel")}
                     </Button>
-                    <Button variant="destructive" onClick={onClear}>
+                    <Button variant="destructive" onClick={onClear} title={t(uiLang, "common.clear")}>
                         {t(uiLang, "common.clear")}
                     </Button>
                 </DialogFooter>

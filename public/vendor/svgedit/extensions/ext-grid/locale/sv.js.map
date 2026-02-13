@@ -1,0 +1,1 @@
+{"version":3,"file":"sv.js","sources":["../../../../../src/editor/extensions/ext-grid/locale/sv.js"],"sourcesContent":["export default {\r\n  name: 'Visa rutnät',\r\n  buttons: [\r\n    {\r\n      title: 'Visa/dölj rutnät'\r\n    }\r\n  ]\r\n}\r\n"],"names":[],"mappings":"AAAA,MAAA,KAAe;AAAA,EACb,MAAM;AAAA,EACN,SAAS;AAAA,IACP;AAAA,MACE,OAAO;AAAA,IACb;AAAA,EACA;AACA;"}

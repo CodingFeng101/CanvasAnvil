@@ -54,6 +54,7 @@ export function HistoryDialog({
                                 variant="ghost"
                                 onClick={onClear}
                                 className="gap-1 text-xs"
+                                title={t(uiLang, "history.clear")}
                             >
                                 <Trash2 className="w-3.5 h-3.5" />
                                 {t(uiLang, "history.clear")}
@@ -96,6 +97,7 @@ export function HistoryDialog({
                                                 onToggleHistory(false);
                                             }}
                                             className="opacity-0 group-hover:opacity-100 transition-opacity gap-1 text-xs"
+                                            title={t(uiLang, "history.restore")}
                                         >
                                             <RotateCcw className="w-3 h-3" />
                                             {t(uiLang, "history.restore")}

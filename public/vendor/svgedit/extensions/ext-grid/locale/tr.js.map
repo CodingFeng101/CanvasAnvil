@@ -1,0 +1,1 @@
+{"version":3,"file":"tr.js","sources":["../../../../../src/editor/extensions/ext-grid/locale/tr.js"],"sourcesContent":["export default {\r\n  name: 'Izgarayı Görüntüle',\r\n  buttons: [\r\n    {\r\n      title: 'Izgara Göster/Gizle'\r\n    }\r\n  ]\r\n}\r\n"],"names":[],"mappings":"AAAA,MAAA,KAAe;AAAA,EACb,MAAM;AAAA,EACN,SAAS;AAAA,IACP;AAAA,MACE,OAAO;AAAA,IACb;AAAA,EACA;AACA;"}

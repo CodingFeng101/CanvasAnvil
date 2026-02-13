@@ -23,12 +23,21 @@ type Attachment = {
   name: string;
 };
 
-type CodeActionResult = { ok: boolean; retry?: boolean; error?: string };
+type CodeActionResult = { ok: boolean; retry?: boolean; error?: string; svg?: string };
 
 const CAD_WORKSPACE_STORAGE_KEY = "unified-ai-workspace-cad-state-v1";
 const CAD_RENDERS_STORAGE_KEY = "unified-ai-workspace-cad-renders-v1";
 const CAD_HISTORY_STORAGE_KEY = "unified-ai-workspace-history-cad-v1";
 const CAD_CHAT_STORAGE_KEY = "chat_history_v2_cad";
+const CAD_RENDER_SLOT_TITLES = [
+  "Renovation Plan Layout",
+  "Floor Finish Plan",
+  "Reflected Ceiling Plan",
+  "Wall Setting-Out Plan",
+  "MEP Plan (Electrical + Low Voltage + Plumbing)",
+  "Elevation Index Plan + Interior Elevations",
+  "Detail Drawings",
+];
 
 const tryParseJson = (text: string) => {
   try {
@@ -46,6 +55,17 @@ const tryParseJson = (text: string) => {
   }
 };
 
+const normalizeSvgMarkup = (text: string) => {
+  const raw = String(text || "").trim();
+  if (!raw) return "";
+  const start = raw.search(/<svg[\s/>]/i);
+  if (start < 0) return "";
+  const tail = raw.slice(start);
+  const end = tail.toLowerCase().lastIndexOf("</svg>");
+  if (end >= 0) return tail.slice(0, end + "</svg>".length).trim();
+  return tail.trim();
+};
+
 function applyStringEdits(source: string, edits: { search: string; replace: string }[]) {
   if (!Array.isArray(edits) || edits.length === 0) throw new Error("Empty patch edits");
   let out = source;
@@ -59,6 +79,44 @@ function applyStringEdits(source: string, edits: { search: string; replace: stri
   }
   return out;
 }
+
+const extractLatestSvgFromText = (text: string) => {
+  const raw = String(text || "");
+  let latest = "";
+
+  const svgFence = /```svg\s*([\s\S]*?)```/gi;
+  let fenceMatch: RegExpExecArray | null;
+  while ((fenceMatch = svgFence.exec(raw))) {
+    const normalized = normalizeSvgMarkup(String(fenceMatch[1] || ""));
+    if (normalized) latest = normalized;
+  }
+
+  if (latest) return latest;
+
+  const rawSvg = /<svg[\s\S]*?<\/svg>/gi;
+  let svgMatch: RegExpExecArray | null;
+  while ((svgMatch = rawSvg.exec(raw))) {
+    const normalized = normalizeSvgMarkup(String(svgMatch[0] || ""));
+    if (normalized) latest = normalized;
+  }
+
+  if (latest) return latest;
+
+  const jsonFence = /```json\s*([\s\S]*?)```/gi;
+  let jsonMatch: RegExpExecArray | null;
+  while ((jsonMatch = jsonFence.exec(raw))) {
+    try {
+      const parsed = JSON.parse(String(jsonMatch[1] || ""));
+      const normalized = normalizeSvgMarkup(String(parsed?.full || ""));
+      if (parsed?.type === "cad_patch" && parsed?.target === "2d_svg" && normalized) {
+        latest = normalized;
+      }
+    } catch {
+    }
+  }
+
+  return latest;
+};
 
 export function CadWorkspaceShell() {
   const uiLang = useUiLanguage();
@@ -161,6 +219,24 @@ export function CadWorkspaceShell() {
     cadImageObjectUrlsRef.current = nextObjectUrls;
   }, [cadImages]);
 
+  useEffect(() => {
+    if (!Array.isArray(chatHistory) || chatHistory.length === 0) return;
+
+    for (let i = chatHistory.length - 1; i >= 0; i -= 1) {
+      const msg = chatHistory[i];
+      if (!msg || msg.role !== "assistant" || typeof msg.content !== "string") continue;
+      const svg = extractLatestSvgFromText(msg.content);
+      if (!svg) continue;
+
+      const current = normalizeSvgMarkup(String(cad2dSvg || ""));
+      if (svg === current) return;
+      setCad2dSvg(svg);
+      setCadFocusPanel("2d");
+      addToHistory(svg, "svg");
+      return;
+    }
+  }, [chatHistory, cad2dSvg]);
+
   const toggleCollapse = () => {
     const panel = chatPanelRef.current;
     if (!panel) return;
@@ -200,8 +276,11 @@ export function CadWorkspaceShell() {
         if (parsed?.type === "cad_images") {
           const next = Array.isArray(parsed.prompts)
             ? parsed.prompts
-                .filter((p: any) => p && typeof p.title === "string" && typeof p.url === "string")
-                .map((p: any) => ({ title: p.title, url: p.url }))
+                .slice(0, 7)
+                .map((p: any, idx: number) => ({
+                  title: typeof p?.title === "string" ? p.title : CAD_RENDER_SLOT_TITLES[idx] || "Drawing",
+                  url: typeof p?.url === "string" ? p.url : "",
+                }))
             : [];
           if (next.length > 0) setCadImages(next);
         }
@@ -243,11 +322,13 @@ export function CadWorkspaceShell() {
     const trimmed = raw.trim();
     if (!trimmed) return { ok: false, retry: false, error: "Empty input" };
 
-    if (trimmed.startsWith("<svg")) {
-      setCad2dSvg(raw);
+    const isDirectSvgPayload = /^(?:<\?xml[\s\S]*?\?>\s*)?<svg[\s/>]/i.test(trimmed);
+    const normalizedRawSvg = isDirectSvgPayload ? normalizeSvgMarkup(raw) : "";
+    if (isDirectSvgPayload && normalizedRawSvg) {
+      setCad2dSvg(normalizedRawSvg);
       setCadFocusPanel("2d");
-      addToHistory(raw, "svg");
-      return { ok: true };
+      addToHistory(normalizedRawSvg, "svg");
+      return { ok: true, svg: normalizedRawSvg };
     }
 
     if (!trimmed.startsWith("{")) return { ok: true };
@@ -280,13 +361,19 @@ export function CadWorkspaceShell() {
           title: typeof p?.title === "string" ? p.title : "View",
           prompt: typeof p?.prompt === "string" ? p.prompt : "",
         }))
-        .filter((p: any) => p.prompt);
+        .filter((p: any) => p.prompt)
+        .slice(0, 7);
 
       setCadFocusPanel("renders");
       setCadImagesLoading(true);
-      setCadImages([]);
+      setCadImages(
+        Array.from({ length: 7 }).map((_, idx) => ({
+          title: items[idx]?.title || CAD_RENDER_SLOT_TITLES[idx] || `Drawing ${idx + 1}`,
+          url: "",
+        })),
+      );
       try {
-        const results: { title: string; url: string; prompt: string }[] = [];
+        const results: Array<{ title: string; url: string; prompt: string } | null> = new Array(items.length).fill(null);
         const presetRenderPrompt = [
           "orthographic 2D technical construction drawing sheet, CAD-like linework",
           "black and white printing, clean readable annotations, clear dimension text",
@@ -324,18 +411,28 @@ export function CadWorkspaceShell() {
               return url ? { title: p.title, url, prompt: p.prompt } : null;
             }),
           );
-          for (const s of settled) {
-            if (s.status === "fulfilled" && s.value?.url) results.push(s.value);
+          for (let bi = 0; bi < settled.length; bi += 1) {
+            const s = settled[bi];
+            const globalIdx = i + bi;
+            if (s.status === "fulfilled" && s.value?.url) results[globalIdx] = s.value;
           }
         }
 
-        const final = results.map((r) => ({ title: r.title, url: r.url }));
+        const final = Array.from({ length: 7 }).map((_, idx) => ({
+          title: items[idx]?.title || CAD_RENDER_SLOT_TITLES[idx] || `Drawing ${idx + 1}`,
+          url: results[idx]?.url || "",
+        }));
         setCadImages(final);
-        addToHistory(JSON.stringify({ type: "cad_images", prompts: results }), "json");
+        addToHistory(JSON.stringify({ type: "cad_images", prompts: final }, null, 2), "json");
       } catch (e) {
         console.error("CAD image generation failed", e);
         toast.error("CAD image generation failed");
-        setCadImages([]);
+        setCadImages(
+          Array.from({ length: 7 }).map((_, idx) => ({
+            title: items[idx]?.title || CAD_RENDER_SLOT_TITLES[idx] || `Drawing ${idx + 1}`,
+            url: "",
+          })),
+        );
       } finally {
         setCadImagesLoading(false);
         setCadFocusPanel("renders");
@@ -346,16 +443,22 @@ export function CadWorkspaceShell() {
     if (parsed?.type === "cad_patch" && parsed?.target === "2d_svg") {
       const mode = parsed?.mode;
       if (mode === "replace" && typeof parsed.full === "string") {
-        setCad2dSvg(parsed.full);
-        addToHistory(parsed.full, "svg");
-        return { ok: true };
+        const normalizedFull = normalizeSvgMarkup(parsed.full);
+        if (!normalizedFull) return { ok: false, retry: false, error: "Invalid replace svg" };
+        setCad2dSvg(normalizedFull);
+        setCadFocusPanel("2d");
+        addToHistory(normalizedFull, "svg");
+        return { ok: true, svg: normalizedFull };
       }
       if (mode === "patch" && Array.isArray(parsed.edits)) {
         try {
           const next = applyStringEdits(cad2dSvg || "", parsed.edits);
-          setCad2dSvg(next);
-          addToHistory(next, "svg");
-          return { ok: true };
+          const normalizedNext = normalizeSvgMarkup(next);
+          if (!normalizedNext) return { ok: false, retry: true, error: "Patch result is not valid svg" };
+          setCad2dSvg(normalizedNext);
+          setCadFocusPanel("2d");
+          addToHistory(normalizedNext, "svg");
+          return { ok: true, svg: normalizedNext };
         } catch (e) {
           const msg = e instanceof Error ? e.message : String(e);
           toast.error(`Patch apply failed: ${msg}`);
@@ -400,6 +503,10 @@ export function CadWorkspaceShell() {
         <div className="h-full w-full relative bg-muted/20">
           <CadWorkspace
             svg2d={cad2dSvg}
+            onSvgChange={(nextSvg) => {
+              setCad2dSvg(nextSvg);
+              addToHistory(nextSvg, "svg");
+            }}
             plan={cadPlan}
             images={cadImages}
             imagesLoading={cadImagesLoading}
@@ -449,4 +556,3 @@ export function CadWorkspaceShell() {
     </ResizablePanelGroup>
   );
 }
-

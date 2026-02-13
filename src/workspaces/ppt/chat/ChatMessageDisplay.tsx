@@ -303,6 +303,9 @@ export function ChatMessageDisplay({
     const [expandedSlideCards, setExpandedSlideCards] = useState<Record<string, boolean>>({});
     const [isAtBottom, setIsAtBottom] = useState(true);
     const scrollRafRef = useRef<number | null>(null);
+    const userScrolledUpRef = useRef(false);
+    const lastScrollTopRef = useRef(0);
+    const lastMessageCountRef = useRef(0);
 
     const copyMessageToClipboard = async (messageId: string, text: string) => {
         try {
@@ -361,14 +364,33 @@ export function ChatMessageDisplay({
                 rafId = requestAnimationFrame(bind);
                 return;
             }
+            const threshold = 24;
             const onScroll = () => {
-                const threshold = 48;
                 const distanceToBottom = viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight;
-                setIsAtBottom(distanceToBottom <= threshold);
+                const nearBottom = distanceToBottom <= threshold;
+                const currentTop = viewport.scrollTop;
+                const scrollingUp = currentTop < lastScrollTopRef.current;
+                lastScrollTopRef.current = currentTop;
+
+                if (nearBottom) userScrolledUpRef.current = false;
+                else if (scrollingUp) userScrolledUpRef.current = true;
+
+                setIsAtBottom(nearBottom);
             };
+            const onWheel = (event: WheelEvent) => {
+                if (event.deltaY < 0) {
+                    userScrolledUpRef.current = true;
+                    setIsAtBottom(false);
+                }
+            };
+            lastScrollTopRef.current = viewport.scrollTop;
             onScroll();
             viewport.addEventListener("scroll", onScroll, { passive: true });
-            cleanup = () => viewport.removeEventListener("scroll", onScroll as any);
+            viewport.addEventListener("wheel", onWheel, { passive: true });
+            cleanup = () => {
+                viewport.removeEventListener("scroll", onScroll as any);
+                viewport.removeEventListener("wheel", onWheel as any);
+            };
         };
 
         bind();
@@ -389,8 +411,12 @@ export function ChatMessageDisplay({
     }, []);
 
     useEffect(() => {
-        if (!isAtBottom) return;
+        if (!isAtBottom || userScrolledUpRef.current) return;
         if (scrollRafRef.current !== null) return;
+        const previousCount = lastMessageCountRef.current;
+        const currentCount = messages.length;
+        const messageCountChanged = currentCount !== previousCount;
+        if (!messageCountChanged && status === "streaming") return;
         const behavior: ScrollBehavior = status === "streaming" ? "auto" : "smooth";
         const schedule = (cb: () => void) => {
             if (typeof requestAnimationFrame === "function") return requestAnimationFrame(cb);
@@ -401,7 +427,8 @@ export function ChatMessageDisplay({
             scrollRafRef.current = null;
             scrollToBottom(behavior);
         });
-    }, [messages, status, isAtBottom, scrollToBottom]);
+        lastMessageCountRef.current = currentCount;
+    }, [messages.length, status, isAtBottom, scrollToBottom]);
 
     useEffect(() => {
         if (editingMessageId && editTextareaRef.current) {
@@ -428,7 +455,16 @@ export function ChatMessageDisplay({
     }, [messages, onDisplayChart]);
 
     return (
-        <div ref={scrollRootRef} className="h-full w-full relative">
+        <div
+            ref={scrollRootRef}
+            className="h-full w-full relative"
+            onWheelCapture={(e) => {
+                if (e.deltaY < 0) {
+                    userScrolledUpRef.current = true;
+                    setIsAtBottom(false);
+                }
+            }}
+        >
             <ScrollArea className="h-full w-full scrollbar-thin">
                 <div className="py-5 px-5 space-y-5">
                     {messages.map((message, messageIndex) => {
@@ -915,7 +951,11 @@ export function ChatMessageDisplay({
             {!isAtBottom && messages.length > 0 && (
                 <button
                     type="button"
-                    onClick={() => scrollToBottom("smooth")}
+                    onClick={() => {
+                        userScrolledUpRef.current = false;
+                        setIsAtBottom(true);
+                        scrollToBottom("smooth");
+                    }}
                     className="absolute bottom-4 right-4 z-20 inline-flex items-center gap-1 rounded-full border border-border bg-background/90 backdrop-blur px-3 py-1.5 text-xs text-foreground shadow-md hover:bg-background"
                 >
                     <ChevronDown className="w-3.5 h-3.5" />

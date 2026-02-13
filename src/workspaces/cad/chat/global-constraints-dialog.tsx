@@ -73,7 +73,7 @@ export function GlobalConstraintsDialog({
                     />
                 </div>
                 <DialogFooter>
-                    <Button onClick={handleSave}>
+                    <Button onClick={handleSave} title={t(uiLang, "common.save")}>
                         {t(uiLang, "common.save")}
                     </Button>
                 </DialogFooter>

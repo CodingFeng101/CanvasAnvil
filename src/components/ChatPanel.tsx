@@ -116,9 +116,7 @@ export function ChatPanel({
             }
         }
     }
-    return initialMessages.length > 0 ? initialMessages : [
-        { role: 'assistant', content: t(uiLang, "chat.hello") }
-    ];
+    return initialMessages.length > 0 ? initialMessages : [];
   });
 
   const [input, setInput] = useState('');
@@ -348,10 +346,7 @@ export function ChatPanel({
       localStorage.removeItem(storageKey);
     } catch {
     }
-    const newMsgs: ChatMessage[] = [
-        { role: 'assistant', content: t(uiLang, "chat.cleared") }
-    ];
-    setMessages(newMsgs);
+    setMessages([]);
     setShowResetWarning(false);
   };
 

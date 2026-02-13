@@ -4,7 +4,6 @@ import {
     ChevronDown,
     ChevronUp,
     Copy,
-    Cpu,
     FileCode,
     FileText,
     Loader2,
@@ -346,23 +345,7 @@ export function ChatMessageDisplay({
                             key={message.id}
                             className={`flex w-full ${message.role === "user" ? "justify-end" : "justify-start"}`}
                         >
-                            <div className={cn("max-w-[95%] min-w-0 flex flex-col", message.role === "user" ? "items-end" : "items-start")}>
-                                {/* Role Icon / Header */}
-                                <div className="flex items-center gap-2 mb-1.5 px-1">
-                                    {message.role === 'assistant' ? (
-                                        <>
-                                            <div className="w-5 h-5 rounded-full bg-blue-600 flex items-center justify-center">
-                                                <Cpu className="w-3 h-3 text-white" />
-                                            </div>
-                                            <span className="text-xs font-medium text-muted-foreground">{tr("AI 助手", "AI Assistant")}</span>
-                                        </>
-                                    ) : (
-                                        <>
-                                            <span className="text-xs font-medium text-muted-foreground">{tr("你", "You")}</span>
-                                        </>
-                                    )}
-                                </div>
-
+                            <div className={cn("w-[92%] md:w-[85%] max-w-[92%] md:max-w-[85%] min-w-0 flex flex-col", message.role === "user" ? "items-end" : "items-start")}>
                                 {/* Content Bubble */}
                                 <div className={cn(
                                     "relative px-4 py-3 text-sm leading-relaxed break-words overflow-hidden border border-border/50 bg-background/70 backdrop-blur-md shadow-sm transition-shadow hover:shadow-md",

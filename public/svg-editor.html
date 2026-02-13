@@ -1,0 +1,184 @@
+﻿<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CAD SVG Editor</title>
+  <base href="/vendor/svgedit/" />
+  <link rel="stylesheet" href="/vendor/svgedit/svgedit.css" />
+  <style>
+    html, body {
+      margin: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: #5f6467;
+    }
+    #svgedit-container {
+      width: 100vw;
+      height: 100vh;
+    }
+  </style>
+</head>
+<body>
+  <div id="svgedit-container"></div>
+
+  <script type="module">
+    import Editor from "/vendor/svgedit/Editor.js";
+
+    const container = document.getElementById("svgedit-container");
+    const editor = new Editor(container);
+    const EMPTY_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1000" viewBox="0 0 1600 1000"></svg>`;
+
+    editor.setConfig({
+      allowInitialUserOverride: true,
+      extensions: [],
+      noDefaultExtensions: false,
+      userExtensions: [],
+      no_save_warning: true,
+      imgPath: "/vendor/svgedit/images",
+      extPath: "/vendor/svgedit/extensions"
+    });
+
+    editor.init();
+
+    const origin = window.location.origin;
+
+    const post = (payload) => {
+      if (!window.parent || window.parent === window) return;
+      window.parent.postMessage(payload, origin);
+    };
+
+    const normalizeIncomingSvg = (value) => {
+      const raw = String(value || "").trim();
+      if (!raw) return "";
+      const start = raw.search(/<svg[\s/>]/i);
+      if (start < 0) return "";
+
+      let text = raw.slice(start).trim();
+      const lower = text.toLowerCase();
+      const end = lower.lastIndexOf("</svg>");
+      if (end >= 0) {
+        text = text.slice(0, end + "</svg>".length).trim();
+      }
+
+      try {
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(text, "image/svg+xml");
+        if (doc.querySelector("parsererror")) return text;
+
+        const svgEl = doc.documentElement?.nodeName?.toLowerCase() === "svg"
+          ? doc.documentElement
+          : doc.querySelector("svg");
+        if (!svgEl) return text;
+
+        if (!svgEl.getAttribute("xmlns")) {
+          svgEl.setAttribute("xmlns", "http://www.w3.org/2000/svg");
+        }
+        if (!svgEl.getAttribute("xmlns:xlink")) {
+          svgEl.setAttribute("xmlns:xlink", "http://www.w3.org/1999/xlink");
+        }
+
+        const width = svgEl.getAttribute("width");
+        const height = svgEl.getAttribute("height");
+        const viewBox = svgEl.getAttribute("viewBox");
+        if (!width || !height) {
+          const parts = String(viewBox || "")
+            .trim()
+            .split(/[\s,]+/)
+            .map((n) => Number(n));
+          if (parts.length === 4 && Number.isFinite(parts[2]) && Number.isFinite(parts[3]) && parts[2] > 0 && parts[3] > 0) {
+            if (!width) svgEl.setAttribute("width", String(parts[2]));
+            if (!height) svgEl.setAttribute("height", String(parts[3]));
+          } else {
+            if (!width) svgEl.setAttribute("width", "1600");
+            if (!height) svgEl.setAttribute("height", "1000");
+          }
+        }
+
+        if (!viewBox) {
+          const w = Number(svgEl.getAttribute("width"));
+          const h = Number(svgEl.getAttribute("height"));
+          if (Number.isFinite(w) && Number.isFinite(h) && w > 0 && h > 0) {
+            svgEl.setAttribute("viewBox", `0 0 ${w} ${h}`);
+          }
+        }
+
+        const xml = new XMLSerializer().serializeToString(svgEl);
+        return String(xml || "").trim() || text;
+      } catch {
+        return text;
+      }
+    };
+
+    const getCurrentSvg = () => {
+      const raw = String(editor?.svgCanvas?.getSvgString?.() || "").trim();
+      return /^<svg[\s/>]/i.test(raw) ? raw : "";
+    };
+
+    const loadSvg = async (svg) => {
+      const text = normalizeIncomingSvg(svg);
+      if (!text) return false;
+
+      try {
+        await editor.loadFromString(text, { noAlert: true });
+        return true;
+      } catch (e) {
+        try {
+          const ok = editor?.svgCanvas?.setSvgString?.(text);
+          if (ok !== false) return true;
+        } catch {
+        }
+        console.error("Failed to load SVG", e);
+        return false;
+      }
+    };
+
+    const clearSvg = async () => {
+      try {
+        if (typeof editor?.svgCanvas?.clear === "function") {
+          editor.svgCanvas.clear();
+          return;
+        }
+      } catch (e) {
+        console.error("Failed to clear SVG canvas directly", e);
+      }
+      await loadSvg(EMPTY_SVG);
+    };
+
+    editor.ready(() => {
+      post({ type: "cad_svg_editor_ready" });
+    });
+
+    window.addEventListener("message", async (event) => {
+      if (event.origin !== origin) return;
+      const data = event.data;
+      if (!data || typeof data !== "object") return;
+      const type = String(data.type || "");
+
+      if (type === "cad_svg_editor_load") {
+        const ok = await loadSvg(data.svg);
+        post({
+          type: "cad_svg_editor_load_result",
+          ok: !!ok
+        });
+        return;
+      }
+
+      if (type === "cad_svg_editor_clear") {
+        await clearSvg();
+        return;
+      }
+
+      if (type === "cad_svg_editor_export_request") {
+        const requestId = String(data.requestId || "");
+        post({
+          type: "cad_svg_editor_export_response",
+          requestId,
+          svg: getCurrentSvg(),
+        });
+      }
+    });
+  </script>
+</body>
+</html>

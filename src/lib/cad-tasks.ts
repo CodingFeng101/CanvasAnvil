@@ -18,11 +18,13 @@ function applyTemplate(template: string, vars: Record<string, string>) {
   return out;
 }
 
-export function buildCadBomPrompt(args: { planJson: string; svg2d: string }) {
-  return applyTemplate(cadBomPromptTemplate, {
+export function buildCadBomPrompt(args: { planJson: string; svg2d: string; outputLanguage?: string }) {
+  const base = applyTemplate(cadBomPromptTemplate, {
     planJson: String(args.planJson || ""),
     svg2d: String(args.svg2d || ""),
   });
+  if (!args.outputLanguage) return base;
+  return `${base}\n\nOutput language: ${args.outputLanguage}`;
 }
 
 export function buildCadTasksSystemContent(args: {
@@ -36,10 +38,11 @@ export function buildCadBomMessages(args: {
   systemContent: string;
   planJson: string;
   svg2d: string;
+  outputLanguage?: string;
 }): ChatMessage[] {
   return [
     { role: "system", content: args.systemContent },
-    { role: "user", content: buildCadBomPrompt({ planJson: args.planJson, svg2d: args.svg2d }) },
+    { role: "user", content: buildCadBomPrompt({ planJson: args.planJson, svg2d: args.svg2d, outputLanguage: args.outputLanguage }) },
   ];
 }
 
@@ -47,16 +50,16 @@ export function buildCadImagesMasterMessages(args: {
   systemContent: string;
   planJson: string;
   svg2d: string;
+  outputLanguage?: string;
 }): ChatMessage[] {
+  const base = applyTemplate(cadImagesMasterRenovationSchemeTemplate, {
+    planJson: String(args.planJson || ""),
+    svg2d: String(args.svg2d || ""),
+  });
+  const withLang = args.outputLanguage ? `${base}\n\nOutput language: ${args.outputLanguage}` : base;
   return [
     { role: "system", content: args.systemContent },
-    {
-      role: "user",
-      content: applyTemplate(cadImagesMasterRenovationSchemeTemplate, {
-        planJson: String(args.planJson || ""),
-        svg2d: String(args.svg2d || ""),
-      }),
-    },
+    { role: "user", content: withLang },
   ];
 }
 
@@ -65,6 +68,7 @@ export function buildCadImagesSheetMessages(args: {
   planJson: string;
   svg2d: string;
   masterSchemeJson?: string;
+  outputLanguage?: string;
 }): Array<{ sheetId: string; messages: ChatMessage[] }> {
   const sheets: Array<{ sheetId: string; template: string }> = [
     { sheetId: "renovation_plan_layout", template: cadRenovationPlanLayoutTemplate },
@@ -82,11 +86,14 @@ export function buildCadImagesSheetMessages(args: {
       { role: "system", content: args.systemContent },
       {
         role: "user",
-        content: applyTemplate(s.template, {
-          planJson: String(args.planJson || ""),
-          svg2d: String(args.svg2d || ""),
-          masterSchemeJson: String(args.masterSchemeJson || ""),
-        }),
+        content: (() => {
+          const base = applyTemplate(s.template, {
+            planJson: String(args.planJson || ""),
+            svg2d: String(args.svg2d || ""),
+            masterSchemeJson: String(args.masterSchemeJson || ""),
+          });
+          return args.outputLanguage ? `${base}\n\nOutput language: ${args.outputLanguage}` : base;
+        })(),
       },
     ],
   }));
