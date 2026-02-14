@@ -123,6 +123,27 @@ export function SettingsDialog() {
                     placeholder="gemini-2.5-flash-image-preview"
                   />
                 </div>
+
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-foreground flex items-center gap-2">
+                    MinerU Token (optional)
+                    <a
+                      href="https://mineru.net/"
+                      target="_blank"
+                      rel="noreferrer noopener"
+                      className="text-xs text-blue-600 hover:text-blue-500 underline underline-offset-2 font-normal"
+                    >
+                      Get token
+                    </a>
+                  </label>
+                  <input
+                    type="password"
+                    value={config.fileParserApiToken || ""}
+                    onChange={(e) => setConfig({ ...config, fileParserApiToken: e.target.value })}
+                    className="flex h-10 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:ring-offset-0 disabled:cursor-not-allowed disabled:opacity-50 transition-all shadow-sm"
+                    placeholder="Leave empty to use local extraction (default)"
+                  />
+                </div>
               </div>
             </div>
 

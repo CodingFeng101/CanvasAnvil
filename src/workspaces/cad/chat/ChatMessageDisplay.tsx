@@ -4,12 +4,14 @@ import {
     ChevronDown,
     ChevronUp,
     Copy,
+    Cpu,
     FileCode,
     FileText,
     Loader2,
     Minus,
     Pencil,
     Plus,
+    Play,
     RotateCcw,
     ThumbsDown,
     ThumbsUp,
@@ -45,6 +47,7 @@ export interface UIMessage {
 interface ChatMessageDisplayProps {
     messages: UIMessage[];
     setInput: (input: string) => void;
+    onApplyCode?: (code: string, language?: string) => void | boolean | Promise<void | boolean>;
     onRegenerate?: (messageIndex: number) => void;
     onEditMessage?: (messageIndex: number, newText: string) => void;
     status?: "streaming" | "submitted" | "idle" | "error" | "ready";
@@ -68,6 +71,18 @@ interface PptEditSlidePatch {
 interface PptToolPayload {
     type: "ppt_edit";
     slides: PptEditSlidePatch[];
+}
+
+interface CadPatchEdit {
+    search: string;
+    replace: string;
+}
+
+interface CadPatchToolPayload {
+    type: "cad_patch";
+    target: "2d_svg";
+    mode: "patch";
+    edits: CadPatchEdit[];
 }
 
 function splitTextIntoFileSections(text: string): TextSection[] {
@@ -204,31 +219,51 @@ function splitMarkdownAndCodeBlocks(text: string): MarkdownSegment[] {
     if (!raw) return [];
 
     const segments: MarkdownSegment[] = [];
-    const fencePattern = /```([^\n`]*)\n?([\s\S]*?)```/g;
-    let lastIndex = 0;
-    let match: RegExpExecArray | null;
-
     const pushMarkdown = (value: string) => {
         const normalized = value.replace(/^\n+|\n+$/g, "");
         if (normalized.trim().length === 0) return;
         segments.push({ type: "markdown", content: normalized });
     };
 
-    while ((match = fencePattern.exec(raw)) !== null) {
-        pushMarkdown(raw.slice(lastIndex, match.index));
+    let cursor = 0;
+    while (cursor < raw.length) {
+        const open = raw.indexOf("```", cursor);
+        if (open < 0) {
+            pushMarkdown(raw.slice(cursor));
+            break;
+        }
 
-        const language = String(match[1] || "text")
+        pushMarkdown(raw.slice(cursor, open));
+
+        const infoStart = open + 3;
+        const infoEnd = raw.indexOf("\n", infoStart);
+        const hasInfoLine = infoEnd >= 0;
+        const info = hasInfoLine ? raw.slice(infoStart, infoEnd) : raw.slice(infoStart);
+        const language = String(info || "")
             .trim()
             .split(/\s+/)[0]
             .toLowerCase() || "text";
-        const code = String(match[2] || "")
+        const codeStart = hasInfoLine ? infoEnd + 1 : infoStart;
+        const close = raw.indexOf("```", codeStart);
+        if (close < 0) {
+            // Streaming case: opening fence arrived but closing fence not yet emitted.
+            const code = hasInfoLine
+                ? String(raw.slice(codeStart))
+                      .replace(/\r\n/g, "\n")
+                      .replace(/\n$/, "")
+                : "";
+            segments.push({ type: "code", language, code });
+            cursor = raw.length;
+            break;
+        }
+
+        const code = String(raw.slice(codeStart, close))
             .replace(/\r\n/g, "\n")
             .replace(/\n$/, "");
         segments.push({ type: "code", language, code });
-        lastIndex = match.index + match[0].length;
+        cursor = close + 3;
     }
 
-    pushMarkdown(raw.slice(lastIndex));
     if (segments.length === 0 && raw.trim().length > 0) {
         segments.push({ type: "markdown", content: raw.trim() });
     }
@@ -273,6 +308,36 @@ function extractPptToolPayload(text: string): PptToolPayload | null {
         ? (parsed as any).slides.filter((s: any) => s && typeof s === "object")
         : [];
     return slides.length > 0 ? { type, slides } : null;
+}
+
+function extractCadPatchToolPayload(text: string): CadPatchToolPayload | null {
+    const raw = String(text || "").trim();
+    if (!raw) return null;
+    const fenced = raw.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
+    const candidate = String(fenced?.[1] ?? raw).trim();
+    let parsed: any;
+    try {
+        parsed = JSON.parse(candidate);
+    } catch {
+        return null;
+    }
+    if (!parsed || typeof parsed !== "object") return null;
+    if (String(parsed?.type || "").trim() !== "cad_patch") return null;
+    if (String(parsed?.target || "").trim() !== "2d_svg") return null;
+    if (String(parsed?.mode || "").trim() !== "patch") return null;
+    const edits = Array.isArray(parsed?.edits)
+        ? parsed.edits
+              .filter(
+                  (e: any) =>
+                      e &&
+                      typeof e === "object" &&
+                      typeof e.search === "string" &&
+                      typeof e.replace === "string"
+              )
+              .map((e: any) => ({ search: String(e.search), replace: String(e.replace) }))
+        : [];
+    if (edits.length === 0) return null;
+    return { type: "cad_patch", target: "2d_svg", mode: "patch", edits };
 }
 
 function getSlideNumber(slide: PptEditSlidePatch, index: number): number {
@@ -323,9 +388,47 @@ function slideFieldLabel(key: string, uiLang: "zh" | "en"): string {
     return key;
 }
 
+function CadPatchEditsDisplay({ edits }: { edits: CadPatchEdit[] }) {
+    return (
+        <div className="space-y-3">
+            {edits.map((edit, index) => (
+                <div
+                    key={`${(edit.search || "").slice(0, 40)}-${(edit.replace || "").slice(0, 40)}-${index}`}
+                    className="rounded-lg border border-border/50 overflow-hidden bg-background/50"
+                >
+                    <div className="px-3 py-1.5 bg-muted/40 border-b border-border/30 flex items-center gap-2">
+                        <span className="text-xs font-medium text-muted-foreground">Change {index + 1}</span>
+                    </div>
+                    <div className="divide-y divide-border/30">
+                        <div className="px-3 py-2">
+                            <div className="flex items-center gap-1.5 mb-1.5">
+                                <Minus className="w-3 h-3 text-red-500" />
+                                <span className="text-[10px] font-medium text-red-600 uppercase tracking-wide">Remove</span>
+                            </div>
+                            <pre className="text-[11px] font-mono text-red-700 bg-red-50 rounded px-2 py-1.5 overflow-x-auto whitespace-pre-wrap break-all">
+                                {edit.search}
+                            </pre>
+                        </div>
+                        <div className="px-3 py-2">
+                            <div className="flex items-center gap-1.5 mb-1.5">
+                                <Plus className="w-3 h-3 text-green-500" />
+                                <span className="text-[10px] font-medium text-green-600 uppercase tracking-wide">Add</span>
+                            </div>
+                            <pre className="text-[11px] font-mono text-green-700 bg-green-50 rounded px-2 py-1.5 overflow-x-auto whitespace-pre-wrap break-all">
+                                {edit.replace}
+                            </pre>
+                        </div>
+                    </div>
+                </div>
+            ))}
+        </div>
+    );
+}
+
 export function ChatMessageDisplay({
     messages,
     setInput,
+    onApplyCode,
     onRegenerate,
     onEditMessage,
     status = "idle",
@@ -341,6 +444,7 @@ export function ChatMessageDisplay({
     const [editText, setEditText] = useState<string>("");
     const [expandedPdfSections, setExpandedPdfSections] = useState<Record<string, boolean>>({});
     const [expandedSlideCards, setExpandedSlideCards] = useState<Record<string, boolean>>({});
+    const [expandedCadPatchCards, setExpandedCadPatchCards] = useState<Record<string, boolean>>({});
     const [isAtBottom, setIsAtBottom] = useState(true);
     const scrollRafRef = useRef<number | null>(null);
     const userScrolledUpRef = useRef(false);
@@ -883,6 +987,29 @@ export function ChatMessageDisplay({
                                                                             </td>
                                                                         );
                                                                     },
+                                                                    pre({ children, ...props }: any) {
+                                                                        return (
+                                                                            <pre
+                                                                                {...props}
+                                                                                className={cn(
+                                                                                    "max-w-full overflow-x-hidden whitespace-pre-wrap break-words",
+                                                                                    props?.className
+                                                                                )}
+                                                                            >
+                                                                                {children}
+                                                                            </pre>
+                                                                        );
+                                                                    },
+                                                                    code({ children, className, ...props }: any) {
+                                                                        return (
+                                                                            <code
+                                                                                {...props}
+                                                                                className={cn("whitespace-pre-wrap break-words", className)}
+                                                                            >
+                                                                                {children}
+                                                                            </code>
+                                                                        );
+                                                                    },
                                                                 }}
                                                             >
                                                                 {content}
@@ -920,6 +1047,76 @@ export function ChatMessageDisplay({
                                                                 const code = seg.code || "";
                                                                 if (!code.trim()) return null;
                                                                 const ordinal = codeBlockOrdinal++;
+                                                                const cadPatchPayload = language === "json"
+                                                                    ? extractCadPatchToolPayload(code)
+                                                                    : null;
+                                                                if (cadPatchPayload && cadPatchPayload.edits.length > 0) {
+                                                                    const cardKey = `${message.id}-cad-patch-${idx}-${segIdx}-${ordinal}`;
+                                                                    const expanded = expandedCadPatchCards[cardKey] ?? true;
+                                                                    const isStreamingPatch = status === "streaming" && isLastAssistantMessage;
+                                                                    return (
+                                                                        <div
+                                                                            key={`cad-patch-card-${message.id}-${idx}-${segIdx}-${ordinal}`}
+                                                                            className="my-1 rounded-xl border border-border/60 bg-muted/30 overflow-hidden"
+                                                                        >
+                                                                            <div className="flex items-center justify-between px-4 py-3 bg-muted/50">
+                                                                                <div className="flex items-center gap-2">
+                                                                                    <div className="w-6 h-6 rounded-md bg-primary/10 flex items-center justify-center">
+                                                                                        <Cpu className="w-3.5 h-3.5 text-primary" />
+                                                                                    </div>
+                                                                                    <span className="text-sm font-medium text-foreground/80">
+                                                                                        {tr("Edit Diagram", "Edit Diagram")}
+                                                                                    </span>
+                                                                                </div>
+                                                                                <div className="flex items-center gap-2">
+                                                                                    {isStreamingPatch ? (
+                                                                                        <div className="h-4 w-4 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+                                                                                    ) : (
+                                                                                        <span className="text-xs font-medium text-green-600 bg-green-50 px-2 py-0.5 rounded-full">
+                                                                                            {tr("Complete", "Complete")}
+                                                                                        </span>
+                                                                                    )}
+                                                                                    {onApplyCode && (
+                                                                                        <button
+                                                                                            type="button"
+                                                                                            onClick={() =>
+                                                                                                onApplyCode(
+                                                                                                    JSON.stringify(cadPatchPayload, null, 2),
+                                                                                                    "json"
+                                                                                                )
+                                                                                            }
+                                                                                            className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[10px] text-muted-foreground hover:bg-muted transition-colors"
+                                                                                        >
+                                                                                            <Play className="h-3 w-3" />
+                                                                                            <span>{tr("Apply", "Apply")}</span>
+                                                                                        </button>
+                                                                                    )}
+                                                                                    <button
+                                                                                        type="button"
+                                                                                        onClick={() =>
+                                                                                            setExpandedCadPatchCards((prev) => ({
+                                                                                                ...prev,
+                                                                                                [cardKey]: !expanded,
+                                                                                            }))
+                                                                                        }
+                                                                                        className="p-1 rounded hover:bg-muted transition-colors"
+                                                                                    >
+                                                                                        {expanded ? (
+                                                                                            <ChevronUp className="w-4 h-4 text-muted-foreground" />
+                                                                                        ) : (
+                                                                                            <ChevronDown className="w-4 h-4 text-muted-foreground" />
+                                                                                        )}
+                                                                                    </button>
+                                                                                </div>
+                                                                            </div>
+                                                                            {expanded && (
+                                                                                <div className="px-4 py-3 border-t border-border/40 bg-muted/20">
+                                                                                    <CadPatchEditsDisplay edits={cadPatchPayload.edits} />
+                                                                                </div>
+                                                                            )}
+                                                                        </div>
+                                                                    );
+                                                                }
                                                                 return (
                                                                     <CodeBlock
                                                                         key={`codeblock-${message.id}-${idx}-${segIdx}-${language}-${ordinal}`}
@@ -927,6 +1124,7 @@ export function ChatMessageDisplay({
                                                                         code={code}
                                                                         language={language}
                                                                         isStreaming={status === "streaming" && isLastAssistantMessage}
+                                                                        onApply={onApplyCode}
                                                                     />
                                                                 );
                                                             })}

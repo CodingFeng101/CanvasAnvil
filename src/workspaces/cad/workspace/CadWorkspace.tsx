@@ -23,18 +23,19 @@ interface CadWorkspaceProps {
 }
 
 const RENDER_SLOT_TITLES = [
-  "Renovation Plan Layout",
-  "Floor Finish Plan",
-  "Reflected Ceiling Plan",
-  "Wall Setting-Out Plan",
-  "MEP Plan (Electrical + Low Voltage + Plumbing)",
-  "Elevation Index Plan + Interior Elevations",
-  "Detail Drawings",
+  "装修平面布置图",
+  "地面铺装图",
+  "顶面布置图",
+  "墙体定位图",
+  "机电点位图（强弱电+给排水）",
+  "立面索引图+室内立面图",
+  "节点大样图",
 ];
 
 const EMPTY_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 1000"></svg>`;
 const EMPTY_SENTINEL = "__EMPTY_SVG__";
 const ENABLE_EDITOR_AUTOSYNC = false;
+const SVG_EDITOR_IFRAME_PATH = "/svg-editor.html";
 
 const normalizeSvgMarkup = (text: string) => {
   const raw = String(text || "").trim();
@@ -45,6 +46,31 @@ const normalizeSvgMarkup = (text: string) => {
   const end = tail.toLowerCase().lastIndexOf("</svg>");
   if (end >= 0) return tail.slice(0, end + "</svg>".length).trim();
   return tail.trim();
+};
+
+const unwrapMarkdownStrong = (text: string) => {
+  let out = String(text || "").trim();
+  for (let i = 0; i < 3; i += 1) {
+    const fromAsterisks = out.replace(/^\*\*\s*([\s\S]*?)\s*\*\*$/u, "$1").trim();
+    if (fromAsterisks !== out) {
+      out = fromAsterisks;
+      continue;
+    }
+    const fromUnderscores = out.replace(/^__\s*([\s\S]*?)\s*__$/u, "$1").trim();
+    if (fromUnderscores !== out) {
+      out = fromUnderscores;
+      continue;
+    }
+    break;
+  }
+  return out;
+};
+
+const readBomCellText = (row: any, columns: string[], columnIndex: number) => {
+  const raw = Array.isArray(row) ? row[columnIndex] : row?.[columns[columnIndex]];
+  const text = String(raw ?? "").trim();
+  if (columnIndex === 0) return unwrapMarkdownStrong(text);
+  return text;
 };
 
 const NON_CONTENT_PARENTS = new Set([
@@ -134,6 +160,7 @@ export function CadWorkspace({ onAddToChat, onSvgChange, svg2d, plan, images = [
   const uiLang = useUiLanguage();
   const svgEditorIframeRef = useRef<HTMLIFrameElement | null>(null);
   const latestLoadedSvgRef = useRef<string>("");
+  const desiredSvgRef = useRef<string>("");
   const svgEditorRequestSeedRef = useRef(0);
   const svgEditorPendingRef = useRef<Map<string, (svg: string) => void>>(new Map());
   const lastCanvasRecoverAtRef = useRef(0);
@@ -142,29 +169,53 @@ export function CadWorkspace({ onAddToChat, onSvgChange, svg2d, plan, images = [
     if (typeof svg2d === "string") {
       const normalized = normalizeSvgMarkup(svg2d);
       setSvgContent(normalized || null);
-      if (isSvgEditorReady) {
-        if (normalized) {
-          loadSvgToEditorWithRetry(normalized);
-          latestLoadedSvgRef.current = normalized;
-        } else {
-          postToSvgEditor({ type: "cad_svg_editor_clear" });
-          latestLoadedSvgRef.current = EMPTY_SENTINEL;
-        }
+      desiredSvgRef.current = normalized;
+      if (normalized) {
+        loadSvgToEditorWithRetry(normalized);
+        latestLoadedSvgRef.current = normalized;
+      } else {
+        postToSvgEditor({ type: "cad_svg_editor_clear" });
+        latestLoadedSvgRef.current = EMPTY_SENTINEL;
       }
       return;
     }
     setSvgContent(null);
-    if (isSvgEditorReady) {
-      postToSvgEditor({ type: "cad_svg_editor_clear" });
-      latestLoadedSvgRef.current = EMPTY_SENTINEL;
-    }
-  }, [svg2d, isSvgEditorReady]);
+    desiredSvgRef.current = "";
+    postToSvgEditor({ type: "cad_svg_editor_clear" });
+    latestLoadedSvgRef.current = EMPTY_SENTINEL;
+  }, [svg2d]);
 
   const postToSvgEditor = (payload: Record<string, unknown>) => {
     const win = svgEditorIframeRef.current?.contentWindow;
     if (!win) return false;
     win.postMessage(payload, window.location.origin);
     return true;
+  };
+
+  const handleSvgEditorIframeLoad = () => {
+    setIsSvgEditorReady(false);
+    const iframe = svgEditorIframeRef.current;
+    const win = iframe?.contentWindow;
+    if (!iframe || !win) return;
+    try {
+      const href = String(win.location.href || "");
+      if (!href) return;
+      const url = new URL(href, window.location.origin);
+      const path = String(url.pathname || "");
+      if (path !== SVG_EDITOR_IFRAME_PATH) {
+        iframe.src = SVG_EDITOR_IFRAME_PATH;
+        return;
+      }
+      const next = String(desiredSvgRef.current || "").trim();
+      if (next) {
+        loadSvgToEditorWithRetry(next);
+        latestLoadedSvgRef.current = next;
+      } else {
+        postToSvgEditor({ type: "cad_svg_editor_clear" });
+        latestLoadedSvgRef.current = EMPTY_SENTINEL;
+      }
+    } catch {
+    }
   };
 
   const loadSvgToEditorWithRetry = (svg: string) => {
@@ -191,7 +242,7 @@ export function CadWorkspace({ onAddToChat, onSvgChange, svg2d, plan, images = [
 
       if (type === "cad_svg_editor_ready") {
         setIsSvgEditorReady(true);
-        const next = normalizeSvgMarkup(typeof svgContent === "string" ? svgContent : "");
+        const next = String(desiredSvgRef.current || "").trim();
         if (next) {
           loadSvgToEditorWithRetry(next);
           latestLoadedSvgRef.current = next;
@@ -214,7 +265,7 @@ export function CadWorkspace({ onAddToChat, onSvgChange, svg2d, plan, images = [
       if (type === "cad_svg_editor_load_result") {
         const ok = Boolean((data as any).ok);
         if (ok) return;
-        const next = normalizeSvgMarkup(typeof svgContent === "string" ? svgContent : "");
+        const next = String(desiredSvgRef.current || "").trim();
         if (!next) return;
         window.setTimeout(() => {
           loadSvgToEditorWithRetry(next);
@@ -227,11 +278,11 @@ export function CadWorkspace({ onAddToChat, onSvgChange, svg2d, plan, images = [
       window.removeEventListener("message", onMessage);
       svgEditorPendingRef.current.clear();
     };
-  }, [svgContent]);
+  }, []);
 
   useEffect(() => {
     const next = normalizeSvgMarkup(typeof svgContent === "string" ? svgContent : "");
-    if (!isSvgEditorReady) return;
+    desiredSvgRef.current = next;
     if (next) {
       if (latestLoadedSvgRef.current === next) return;
       if (loadSvgToEditorWithRetry(next)) {
@@ -244,7 +295,7 @@ export function CadWorkspace({ onAddToChat, onSvgChange, svg2d, plan, images = [
     if (postToSvgEditor({ type: "cad_svg_editor_clear" })) {
       latestLoadedSvgRef.current = EMPTY_SENTINEL;
     }
-  }, [isSvgEditorReady, svgContent]);
+  }, [svgContent]);
 
   useEffect(() => {
     if (!Array.isArray(images) || images.length === 0) {
@@ -522,8 +573,7 @@ export function CadWorkspace({ onAddToChat, onSvgChange, svg2d, plan, images = [
       const rows: string[] = [];
       rows.push((bom.columns || []).map(esc).join(","));
       for (const r of bom.rows || []) {
-        const arr = Array.isArray(r) ? r : [];
-        const fixed = (bom.columns || []).map((_, i) => esc(arr[i] ?? ""));
+        const fixed = (bom.columns || []).map((_, i) => esc(readBomCellText(r, bom.columns || [], i)));
         rows.push(fixed.join(","));
       }
       const csv = `\uFEFF${rows.join("\r\n")}`;
@@ -537,7 +587,7 @@ export function CadWorkspace({ onAddToChat, onSvgChange, svg2d, plan, images = [
     return RENDER_SLOT_TITLES.map((fallbackTitle, idx) => {
       const item = localImages[idx];
       return {
-        title: item?.title || fallbackTitle,
+        title: fallbackTitle,
         url: item?.url || "",
       };
     });
@@ -625,9 +675,9 @@ export function CadWorkspace({ onAddToChat, onSvgChange, svg2d, plan, images = [
               <iframe
                 ref={svgEditorIframeRef}
                 title="CAD SVG Editor"
-                src="/svg-editor.html"
+                src={SVG_EDITOR_IFRAME_PATH}
                 className="h-full w-full border-0"
-                onLoad={() => setIsSvgEditorReady(false)}
+                onLoad={handleSvgEditorIframeLoad}
               />
             </div>
           )}
@@ -695,7 +745,7 @@ export function CadWorkspace({ onAddToChat, onSvgChange, svg2d, plan, images = [
                         <tr key={i} className="border-b border-border/40">
                           {bom.columns.map((_, ci) => (
                             <td key={ci} className="py-2 px-2 text-foreground/90 whitespace-normal break-words">
-                              {Array.isArray(r) ? String(r[ci] ?? "") : String(r?.[bom.columns[ci]] ?? "")}
+                              {readBomCellText(r, bom.columns, ci)}
                             </td>
                           ))}
                         </tr>

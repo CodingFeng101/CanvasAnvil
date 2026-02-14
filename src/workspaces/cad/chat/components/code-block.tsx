@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from "react";
-import { Check, ChevronDown, ChevronUp, Copy, Cpu, X } from "lucide-react";
+import { Check, ChevronDown, ChevronUp, Copy, Cpu, Play, X } from "lucide-react";
 import { Highlight, themes, type Language } from "prism-react-renderer";
 
 interface CodeBlockProps {
@@ -7,6 +7,7 @@ interface CodeBlockProps {
     language?: string;
     isStreaming?: boolean;
     blockId?: string;
+    onApply?: (code: string, language: string) => void | boolean | Promise<void | boolean>;
 }
 
 const openStateById = new Map<string, boolean>();
@@ -38,13 +39,16 @@ function formatXmlLike(input: string): string {
         .join("\n");
 }
 
-export function CodeBlock({ code, language = "xml", isStreaming = false, blockId }: CodeBlockProps) {
+export function CodeBlock({ code, language = "xml", isStreaming = false, blockId, onApply }: CodeBlockProps) {
     const [isExpanded, setIsExpanded] = useState(() => {
         if (blockId && openStateById.has(blockId)) return Boolean(openStateById.get(blockId));
         return true;
     });
     const [copied, setCopied] = useState(false);
     const [copyFailed, setCopyFailed] = useState(false);
+    const [applying, setApplying] = useState(false);
+    const [applied, setApplied] = useState(false);
+    const [applyFailed, setApplyFailed] = useState(false);
     const normalizedLanguage = useMemo(() => (language || "text").toLowerCase(), [language]);
     const normalizedCode = useMemo(() => String(code ?? ""), [code]);
     const prismLanguage = useMemo<Language>(() => {
@@ -101,6 +105,29 @@ export function CodeBlock({ code, language = "xml", isStreaming = false, blockId
         }
     };
 
+    const applyCode = async () => {
+        if (!onApply || applying) return;
+        try {
+            setApplying(true);
+            const result = await onApply(normalizedCode, normalizedLanguage);
+            if (result === false) {
+                setApplyFailed(true);
+                setApplied(false);
+                setTimeout(() => setApplyFailed(false), 1500);
+                return;
+            }
+            setApplied(true);
+            setApplyFailed(false);
+            setTimeout(() => setApplied(false), 1500);
+        } catch {
+            setApplyFailed(true);
+            setApplied(false);
+            setTimeout(() => setApplyFailed(false), 1500);
+        } finally {
+            setApplying(false);
+        }
+    };
+
     const setExpanded = (next: boolean) => {
         setIsExpanded(next);
         if (blockId) openStateById.set(blockId, next);
@@ -123,17 +150,39 @@ export function CodeBlock({ code, language = "xml", isStreaming = false, blockId
                             Complete
                         </span>
                     )}
-                    <button
-                        type="button"
-                        onClick={() => setExpanded(!isExpanded)}
-                        className="p-1 rounded hover:bg-muted transition-colors"
-                    >
-                        {isExpanded ? (
-                            <ChevronUp className="w-4 h-4 text-muted-foreground" />
-                        ) : (
-                            <ChevronDown className="w-4 h-4 text-muted-foreground" />
+                    <div className="flex items-center gap-1">
+                        {onApply && (
+                            <button
+                                type="button"
+                                onClick={applyCode}
+                                disabled={applying}
+                                className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[10px] text-muted-foreground hover:bg-muted transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+                                title={applied ? "Applied" : applyFailed ? "Apply failed" : "Apply to canvas"}
+                            >
+                                {applying ? (
+                                    <div className="h-3 w-3 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+                                ) : applied ? (
+                                    <Check className="h-3 w-3 text-green-500" />
+                                ) : applyFailed ? (
+                                    <X className="h-3 w-3 text-red-500" />
+                                ) : (
+                                    <Play className="h-3 w-3" />
+                                )}
+                                <span>{applying ? "Applying" : applied ? "Applied" : "Apply"}</span>
+                            </button>
                         )}
-                    </button>
+                        <button
+                            type="button"
+                            onClick={() => setExpanded(!isExpanded)}
+                            className="p-1 rounded hover:bg-muted transition-colors"
+                        >
+                            {isExpanded ? (
+                                <ChevronUp className="w-4 h-4 text-muted-foreground" />
+                            ) : (
+                                <ChevronDown className="w-4 h-4 text-muted-foreground" />
+                            )}
+                        </button>
+                    </div>
                 </div>
             </div>
             {isExpanded && (

@@ -246,6 +246,7 @@ export function ChatPanel({
   const sanitizeAssistantContentForDisplay = (content: string) => {
     if (workspaceId !== "cad") return content;
     if (!content) return content;
+    const bomUpdatedText = trText("（已更新物料清单）", "(BOM updated)");
     const formatCadPlanForDisplay = (parsed: any) => {
       if (parsed?.type !== "cad_plan") return null;
       const plan = parsed?.plan || {};
@@ -328,8 +329,12 @@ export function ChatPanel({
             return `\`\`\`svg\n${parsed.full.trim()}\n\`\`\``;
           }
           if (mode === "patch") {
-            return trText("（已执行2D局部修改）", "(2D patch applied)");
+            // Keep patch JSON for structured diff rendering in chat UI.
+            return full;
           }
+        }
+        if (parsed?.type === "cad_bom") {
+          return bomUpdatedText;
         }
       } catch {
       }
@@ -356,6 +361,19 @@ export function ChatPanel({
     // Fallback: if whole message is raw cad_plan JSON (not wrapped in code fences), render as readable text.
     const prettyWhole = tryParseCadPlanJson(next);
     if (prettyWhole) return prettyWhole;
+    try {
+      const parsedWhole = JSON.parse(String(next || "").trim());
+      if (
+        parsedWhole?.type === "cad_patch" &&
+        parsedWhole?.target === "2d_svg" &&
+        String(parsedWhole?.mode || "") === "patch" &&
+        Array.isArray(parsedWhole?.edits)
+      ) {
+        return `\`\`\`json\n${JSON.stringify(parsedWhole, null, 2)}\n\`\`\``;
+      }
+      if (parsedWhole?.type === "cad_bom") return bomUpdatedText;
+    } catch {
+    }
     return next;
   };
 
@@ -459,6 +477,21 @@ export function ChatPanel({
       } as CodeActionResult;
     }
     return { ok: true } as CodeActionResult;
+  };
+
+  const applyCodeFromMessage = async (code: string, language?: string) => {
+    const text = String(code || "").trim();
+    if (!text) return false;
+    if (workspaceId === "cad") {
+      const r = await runCodeAction(text, "cad");
+      return !!r.ok;
+    }
+    if (workspaceId === "flow") {
+      const r = await runCodeAction(text, "flow");
+      return !!r.ok;
+    }
+    const r = await runCodeAction(text, "ppt");
+    return !!r.ok;
   };
 
   const normalizeSvgMarkup = (text: string): string => {
@@ -905,13 +938,13 @@ export function ChatPanel({
         };
 
         const fallbackTitlesForOutput = [
-          trText("Renovation Plan Layout", "Renovation Plan Layout"),
-          trText("Floor Finish Plan", "Floor Finish Plan"),
-          trText("Reflected Ceiling Plan", "Reflected Ceiling Plan"),
-          trText("Wall Setting-Out Plan", "Wall Setting-Out Plan"),
-          trText("MEP Plan (Electrical + Low Voltage + Plumbing)", "MEP Plan (Electrical + Low Voltage + Plumbing)"),
-          trText("Elevation Index Plan + Interior Elevations", "Elevation Index Plan + Interior Elevations"),
-          trText("Detail Drawings", "Detail Drawings"),
+          trText("装修平面布置图", "装修平面布置图"),
+          trText("地面铺装图", "地面铺装图"),
+          trText("顶面布置图", "顶面布置图"),
+          trText("墙体定位图", "墙体定位图"),
+          trText("机电点位图（强弱电+给排水）", "机电点位图（强弱电+给排水）"),
+          trText("立面索引图+室内立面图", "立面索引图+室内立面图"),
+          trText("节点大样图", "节点大样图"),
         ];
         const fallbackTitlesForPromptEnglish = [
           "Renovation Plan Layout",
@@ -942,7 +975,7 @@ export function ChatPanel({
         );
 
         const prompts = settled.map((r, idx) => {
-          const fallbackTitleForOutput = fallbackTitlesForOutput[idx] || trText("Drawing", "Drawing");
+          const fallbackTitleForOutput = fallbackTitlesForOutput[idx] || trText("图纸", "图纸");
           const fallbackTitleForPrompt = fallbackTitlesForPromptEnglish[idx] || "Drawing";
           const onSheetLanguageRule = "All on-sheet labels/notes/title block text must be in English.";
           const fallbackPrompt = `Generate an orthographic 2D technical construction drawing sheet: ${fallbackTitleForPrompt}. Include border, bottom-right title block, scale/units, legend/symbols, key annotations and dimensions, consistent with the provided plan JSON and 2D SVG. ${onSheetLanguageRule}`;
@@ -1252,13 +1285,13 @@ export function ChatPanel({
             };
 
             const fallbackTitlesForOutput = [
-              trText("Renovation Plan Layout", "Renovation Plan Layout"),
-              trText("Floor Finish Plan", "Floor Finish Plan"),
-              trText("Reflected Ceiling Plan", "Reflected Ceiling Plan"),
-              trText("Wall Setting-Out Plan", "Wall Setting-Out Plan"),
-              trText("MEP Plan (Electrical + Low Voltage + Plumbing)", "MEP Plan (Electrical + Low Voltage + Plumbing)"),
-              trText("Elevation Index Plan + Interior Elevations", "Elevation Index Plan + Interior Elevations"),
-              trText("Detail Drawings", "Detail Drawings"),
+              trText("装修平面布置图", "装修平面布置图"),
+              trText("地面铺装图", "地面铺装图"),
+              trText("顶面布置图", "顶面布置图"),
+              trText("墙体定位图", "墙体定位图"),
+              trText("机电点位图（强弱电+给排水）", "机电点位图（强弱电+给排水）"),
+              trText("立面索引图+室内立面图", "立面索引图+室内立面图"),
+              trText("节点大样图", "节点大样图"),
             ];
             const fallbackTitlesForPromptEnglish = [
               "Renovation Plan Layout",
@@ -1295,7 +1328,7 @@ export function ChatPanel({
             );
 
             const prompts = settled.map((r, idx) => {
-              const fallbackTitleForOutput = fallbackTitlesForOutput[idx] || trText("Drawing", "Drawing");
+              const fallbackTitleForOutput = fallbackTitlesForOutput[idx] || trText("图纸", "图纸");
               const fallbackTitleForPrompt = fallbackTitlesForPromptEnglish[idx] || "Drawing";
               const onSheetLanguageRule = "All on-sheet labels/notes/title block text must be in English.";
               const fallbackPrompt = `Generate an orthographic 2D technical construction drawing sheet: ${fallbackTitleForPrompt}. Include border, bottom-right title block, scale/units, legend/symbols, key annotations and dimensions, consistent with the provided plan JSON and 2D SVG. ${onSheetLanguageRule}`;
@@ -1976,13 +2009,13 @@ export function ChatPanel({
               };
 
               const fallbackTitlesForOutput = [
-                trText("Renovation Plan Layout", "Renovation Plan Layout"),
-                trText("Floor Finish Plan", "Floor Finish Plan"),
-                trText("Reflected Ceiling Plan", "Reflected Ceiling Plan"),
-                trText("Wall Setting-Out Plan", "Wall Setting-Out Plan"),
-                trText("MEP Plan (Electrical + Low Voltage + Plumbing)", "MEP Plan (Electrical + Low Voltage + Plumbing)"),
-                trText("Elevation Index Plan + Interior Elevations", "Elevation Index Plan + Interior Elevations"),
-                trText("Detail Drawings", "Detail Drawings"),
+                trText("装修平面布置图", "装修平面布置图"),
+                trText("地面铺装图", "地面铺装图"),
+                trText("顶面布置图", "顶面布置图"),
+                trText("墙体定位图", "墙体定位图"),
+                trText("机电点位图（强弱电+给排水）", "机电点位图（强弱电+给排水）"),
+                trText("立面索引图+室内立面图", "立面索引图+室内立面图"),
+                trText("节点大样图", "节点大样图"),
               ];
               const fallbackTitlesForPromptEnglish = [
                 "Renovation Plan Layout",
@@ -2019,7 +2052,7 @@ export function ChatPanel({
               );
 
               const prompts = settled.map((r, idx) => {
-                const fallbackTitleForOutput = fallbackTitlesForOutput[idx] || trText("Drawing", "Drawing");
+                const fallbackTitleForOutput = fallbackTitlesForOutput[idx] || trText("图纸", "图纸");
                 const fallbackTitleForPrompt = fallbackTitlesForPromptEnglish[idx] || "Drawing";
                 const onSheetLanguageRule = "All on-sheet labels/notes/title block text must be in English.";
                 const fallbackPrompt = `Generate an orthographic 2D technical construction drawing sheet: ${fallbackTitleForPrompt}. Include border, bottom-right title block, scale/units, legend/symbols, key annotations and dimensions, consistent with the provided plan JSON and 2D SVG. ${onSheetLanguageRule}`;
@@ -2517,6 +2550,7 @@ export function ChatPanel({
             setInput={setInput} 
             status={isLoading ? "streaming" : "idle"}
             onDisplayChart={(xml) => onCodeAction?.(xml, 'flow')}
+            onApplyCode={applyCodeFromMessage}
             onRegenerate={handleRegenerate}
             onEditMessage={handleEditAndResend}
           />

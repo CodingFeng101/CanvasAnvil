@@ -13,6 +13,7 @@ import {
     Loader2,
     Minus,
     Pencil,
+    Play,
     Plus,
     RotateCcw,
     X,
@@ -30,6 +31,7 @@ import { ScrollArea } from "@/workspaces/flow/next/components/ui/scroll-area"
 import { useLanguage } from "@/workspaces/flow/next/contexts/language-context"
 import {
     convertToLegalXml,
+    replaceXMLParts,
     replaceNodes,
     validateMxCellStructure,
 } from "@/workspaces/flow/next/lib/utils"
@@ -259,6 +261,50 @@ export function ChatMessageDisplay({
         }
     }
 
+    const applyCodeToDiagram = useCallback(
+        async (code: string, language: "xml" | "json"): Promise<boolean> => {
+            const raw = String(code || "").trim()
+            if (!raw) return false
+            const baseXML =
+                chartXML ||
+                `<mxfile><diagram name="Page-1" id="page-1"><mxGraphModel><root><mxCell id="0"/><mxCell id="1" parent="0"/></root></mxGraphModel></diagram></mxfile>`
+            try {
+                if (language === "xml") {
+                    const nextXml = raw.includes("<mxfile")
+                        ? raw
+                        : replaceNodes(baseXML, convertToLegalXml(raw))
+                    const err = onDisplayChart(nextXml, true)
+                    return !err
+                }
+
+                const parsed = JSON.parse(raw)
+                if (parsed?.type === "flow_patch") {
+                    if (String(parsed?.mode || "").trim() === "replace" && typeof parsed?.full === "string") {
+                        const nextXml = String(parsed.full).trim()
+                        if (!nextXml) return false
+                        const err = onDisplayChart(nextXml, true)
+                        return !err
+                    }
+                    if (Array.isArray(parsed?.edits) && parsed.edits.length > 0) {
+                        const editedXml = replaceXMLParts(baseXML, parsed.edits)
+                        const err = onDisplayChart(editedXml, true)
+                        return !err
+                    }
+                }
+                if (parsed?.type === "display_diagram" && typeof parsed?.xml === "string") {
+                    const nextXml = String(parsed.xml).trim()
+                    if (!nextXml) return false
+                    const err = onDisplayChart(nextXml, true)
+                    return !err
+                }
+                return false
+            } catch {
+                return false
+            }
+        },
+        [chartXML, onDisplayChart],
+    )
+
     const handleDisplayChart = useCallback(
         (xml: string) => {
             const currentXml = xml || ""
@@ -408,16 +454,43 @@ export function ChatMessageDisplay({
                 {input && isExpanded && (
                     <div className="px-4 py-3 border-t border-border/40 bg-muted/20">
                         {typeof input === "object" && input.xml ? (
-                            <CodeBlock code={input.xml} language="xml" />
+                            <CodeBlock code={input.xml} language="xml" onApply={applyCodeToDiagram} />
                         ) : typeof input === "object" &&
                           input.edits &&
                           Array.isArray(input.edits) ? (
-                            <EditDiffDisplay edits={input.edits} />
+                            <div className="space-y-2">
+                                <div className="flex justify-end">
+                                    <button
+                                        type="button"
+                                        onClick={() =>
+                                            void applyCodeToDiagram(
+                                                JSON.stringify(
+                                                    {
+                                                        type: "flow_patch",
+                                                        mode: "patch",
+                                                        edits: input.edits,
+                                                    },
+                                                    null,
+                                                    2,
+                                                ),
+                                                "json",
+                                            )
+                                        }
+                                        className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[10px] text-muted-foreground hover:bg-muted transition-colors"
+                                        title="Apply to canvas"
+                                    >
+                                        <Play className="h-3 w-3" />
+                                        <span>Apply</span>
+                                    </button>
+                                </div>
+                                <EditDiffDisplay edits={input.edits} />
+                            </div>
                         ) : typeof input === "object" &&
                           Object.keys(input).length > 0 ? (
                             <CodeBlock
                                 code={JSON.stringify(input, null, 2)}
                                 language="json"
+                                onApply={applyCodeToDiagram}
                             />
                         ) : null}
                     </div>
@@ -1030,7 +1103,31 @@ export function ChatMessageDisplay({
                                                                                                 key={`${message.id}-textsection-${partIndex}-${sectionIndex}`}
                                                                                                 className="prose prose-sm max-w-none break-words [&>*:first-child]:mt-0 [&>*:last-child]:mb-0 dark:prose-invert"
                                                                                             >
-                                                                                                <ReactMarkdown>
+                                                                                                <ReactMarkdown
+                                                                                                    components={{
+                                                                                                        code({ inline, className, children, ...props }: any) {
+                                                                                                            if (inline) {
+                                                                                                                return (
+                                                                                                                    <code className={className} {...props}>
+                                                                                                                        {children}
+                                                                                                                    </code>
+                                                                                                                )
+                                                                                                            }
+                                                                                                            const match = /language-(\w+)/.exec(String(className || ""))
+                                                                                                            const lang = String(match?.[1] || "xml").toLowerCase()
+                                                                                                            const codeText = String(children || "").replace(/\n$/, "")
+                                                                                                            const normalizedLang: "xml" | "json" =
+                                                                                                                lang === "json" ? "json" : "xml"
+                                                                                                            return (
+                                                                                                                <CodeBlock
+                                                                                                                    code={codeText}
+                                                                                                                    language={normalizedLang}
+                                                                                                                    onApply={applyCodeToDiagram}
+                                                                                                                />
+                                                                                                            )
+                                                                                                        },
+                                                                                                    }}
+                                                                                                >
                                                                                                     {
                                                                                                         section.content
                                                                                                     }

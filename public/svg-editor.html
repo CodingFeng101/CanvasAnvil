@@ -29,6 +29,8 @@
     const container = document.getElementById("svgedit-container");
     const editor = new Editor(container);
     const EMPTY_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1000" viewBox="0 0 1600 1000"></svg>`;
+    let editorReady = false;
+    let pendingSvgLoad = "";
 
     editor.setConfig({
       allowInitialUserOverride: true,
@@ -117,8 +119,8 @@
     };
 
     const loadSvg = async (svg) => {
-      const text = normalizeIncomingSvg(svg);
-      if (!text) return false;
+        const text = normalizeIncomingSvg(svg);
+        if (!text) return false;
 
       try {
         await editor.loadFromString(text, { noAlert: true });
@@ -135,18 +137,28 @@
     };
 
     const clearSvg = async () => {
+      const ok = await loadSvg(EMPTY_SVG);
+      if (ok) return;
       try {
         if (typeof editor?.svgCanvas?.clear === "function") {
           editor.svgCanvas.clear();
-          return;
         }
       } catch (e) {
         console.error("Failed to clear SVG canvas directly", e);
       }
-      await loadSvg(EMPTY_SVG);
     };
 
-    editor.ready(() => {
+    const applyPendingLoad = async () => {
+      if (!editorReady) return;
+      const next = String(pendingSvgLoad || "").trim();
+      if (!next) return;
+      pendingSvgLoad = "";
+      await loadSvg(next);
+    };
+
+    editor.ready(async () => {
+      editorReady = true;
+      await applyPendingLoad();
       post({ type: "cad_svg_editor_ready" });
     });
 
@@ -157,7 +169,24 @@
       const type = String(data.type || "");
 
       if (type === "cad_svg_editor_load") {
-        const ok = await loadSvg(data.svg);
+        const normalized = normalizeIncomingSvg(data.svg);
+        if (!normalized) {
+          post({
+            type: "cad_svg_editor_load_result",
+            ok: false
+          });
+          return;
+        }
+        if (!editorReady) {
+          pendingSvgLoad = normalized;
+          post({
+            type: "cad_svg_editor_load_result",
+            ok: true,
+            queued: true
+          });
+          return;
+        }
+        const ok = await loadSvg(normalized);
         post({
           type: "cad_svg_editor_load_result",
           ok: !!ok
@@ -166,6 +195,10 @@
       }
 
       if (type === "cad_svg_editor_clear") {
+        if (!editorReady) {
+          pendingSvgLoad = EMPTY_SVG;
+          return;
+        }
         await clearSvg();
         return;
       }

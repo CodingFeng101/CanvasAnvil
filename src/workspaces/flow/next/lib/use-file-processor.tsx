@@ -8,6 +8,7 @@ import {
     extractTextFileContent,
     extractPdfVisualAssets,
     extractWordVisualAssets,
+    extractThirdPartyVisualAssets,
     extractLatexZipText,
     extractLatexZipVisualAssets,
     extractLatexTarGzText,
@@ -20,6 +21,7 @@ import {
     isTarGzFile,
     MAX_EXTRACTED_CHARS,
 } from "@/workspaces/flow/next/lib/pdf-utils"
+import { getAIConfig } from "@/lib/ai-client"
 
 export interface FileData {
     text: string
@@ -42,7 +44,11 @@ export function useFileProcessor() {
         // Extract text immediately for new PDF/text files
         for (const file of newFiles) {
             const needsExtraction =
-                (isPdfFile(file) || isWordFile(file) || isTextFile(file) || isZipFile(file) || isTarGzFile(file)) &&
+                (isPdfFile(file) ||
+                    isWordFile(file) ||
+                    isTextFile(file) ||
+                    isZipFile(file) ||
+                    isTarGzFile(file)) &&
                 !pdfData.has(file)
             if (needsExtraction) {
                 // Mark as extracting
@@ -58,14 +64,44 @@ export function useFileProcessor() {
 
                 // Extract text asynchronously
                 try {
+                    const aiConfig = getAIConfig()
+                    const parserToken = String(aiConfig.fileParserApiToken || "").trim()
+                    const parserBase = "https://mineru.net"
+                    const supportsThirdParty = isPdfFile(file) || isWordFile(file)
+                    const useThirdPartyVisualParser = Boolean(parserToken) && supportsThirdParty
+
                     let text: string
                     let visualAssets: ExtractedVisualAsset[] = []
                     if (isPdfFile(file)) {
                         text = await extractPdfText(file)
-                        visualAssets = await extractPdfVisualAssets(file)
+                        if (useThirdPartyVisualParser) {
+                            try {
+                                visualAssets = await extractThirdPartyVisualAssets(file, {
+                                    apiBase: parserBase,
+                                    apiToken: parserToken,
+                                })
+                            } catch (e) {
+                                console.error("Third-party parser failed, fallback to local PDF extraction:", e)
+                                visualAssets = await extractPdfVisualAssets(file)
+                            }
+                        } else {
+                            visualAssets = await extractPdfVisualAssets(file)
+                        }
                     } else if (isWordFile(file)) {
                         text = await extractWordText(file)
-                        visualAssets = await extractWordVisualAssets(file)
+                        if (useThirdPartyVisualParser) {
+                            try {
+                                visualAssets = await extractThirdPartyVisualAssets(file, {
+                                    apiBase: parserBase,
+                                    apiToken: parserToken,
+                                })
+                            } catch (e) {
+                                console.error("Third-party parser failed, fallback to local Word extraction:", e)
+                                visualAssets = await extractWordVisualAssets(file)
+                            }
+                        } else {
+                            visualAssets = await extractWordVisualAssets(file)
+                        }
                     } else if (isZipFile(file)) {
                         // LaTeX bundle (.zip): parse tex + includegraphics to extract original figures.
                         text = await extractLatexZipText(file)

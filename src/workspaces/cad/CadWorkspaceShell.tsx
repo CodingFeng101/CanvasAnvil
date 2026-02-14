@@ -30,13 +30,13 @@ const CAD_RENDERS_STORAGE_KEY = "unified-ai-workspace-cad-renders-v1";
 const CAD_HISTORY_STORAGE_KEY = "unified-ai-workspace-history-cad-v1";
 const CAD_CHAT_STORAGE_KEY = "chat_history_v2_cad";
 const CAD_RENDER_SLOT_TITLES = [
-  "Renovation Plan Layout",
-  "Floor Finish Plan",
-  "Reflected Ceiling Plan",
-  "Wall Setting-Out Plan",
-  "MEP Plan (Electrical + Low Voltage + Plumbing)",
-  "Elevation Index Plan + Interior Elevations",
-  "Detail Drawings",
+  "装修平面布置图",
+  "地面铺装图",
+  "顶面布置图",
+  "墙体定位图",
+  "机电点位图（强弱电+给排水）",
+  "立面索引图+室内立面图",
+  "节点大样图",
 ];
 
 const tryParseJson = (text: string) => {
@@ -278,7 +278,7 @@ export function CadWorkspaceShell() {
             ? parsed.prompts
                 .slice(0, 7)
                 .map((p: any, idx: number) => ({
-                  title: typeof p?.title === "string" ? p.title : CAD_RENDER_SLOT_TITLES[idx] || "Drawing",
+                  title: CAD_RENDER_SLOT_TITLES[idx] || `图纸 ${idx + 1}`,
                   url: typeof p?.url === "string" ? p.url : "",
                 }))
             : [];
@@ -350,7 +350,6 @@ export function CadWorkspaceShell() {
       const rows = Array.isArray(parsed.rows) ? parsed.rows : [];
       setCadBom({ columns, rows });
       setCadFocusPanel("bom");
-      addToHistory(JSON.stringify({ type: "cad_bom", columns, rows }), "json");
       return { ok: true };
     }
 
@@ -368,7 +367,7 @@ export function CadWorkspaceShell() {
       setCadImagesLoading(true);
       setCadImages(
         Array.from({ length: 7 }).map((_, idx) => ({
-          title: items[idx]?.title || CAD_RENDER_SLOT_TITLES[idx] || `Drawing ${idx + 1}`,
+          title: CAD_RENDER_SLOT_TITLES[idx] || `图纸 ${idx + 1}`,
           url: "",
         })),
       );
@@ -388,48 +387,93 @@ export function CadWorkspaceShell() {
         const svgShort = svgText.length > 6000 ? svgText.slice(0, 6000) : svgText;
 
         const list = items.slice(0, 7);
-        const batchSize = 3;
-        for (let i = 0; i < list.length; i += batchSize) {
-          const batch = list.slice(i, i + batchSize);
-          const settled = await Promise.allSettled(
-            batch.map(async (p) => {
-              const fullPrompt = [
-                presetRenderPrompt,
-                "",
-                "Plan:",
-                planShort,
-                "",
-                "2D SVG:",
-                svgShort,
-                "",
-                "Sheet:",
-                p.prompt,
-              ]
-                .filter(Boolean)
-                .join("\n");
+        const buildFullPrompt = (sheetPrompt: string) =>
+          [
+            presetRenderPrompt,
+            "",
+            "Plan:",
+            planShort,
+            "",
+            "2D SVG:",
+            svgShort,
+            "",
+            "Sheet:",
+            sheetPrompt,
+          ]
+            .filter(Boolean)
+            .join("\n");
+
+        const wait = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+
+        const generateWithRetry = async (fullPrompt: string, maxRetries: number, retryDelayMs: number) => {
+          for (let attempt = 0; attempt <= maxRetries; attempt += 1) {
+            try {
               const url = await generateImage({ prompt: fullPrompt });
-              return url ? { title: p.title, url, prompt: p.prompt } : null;
-            }),
-          );
-          for (let bi = 0; bi < settled.length; bi += 1) {
-            const s = settled[bi];
-            const globalIdx = i + bi;
-            if (s.status === "fulfilled" && s.value?.url) results[globalIdx] = s.value;
+              if (url) return url;
+            } catch (err) {
+              if (attempt >= maxRetries) {
+                console.error("CAD image generation attempt failed", err);
+              }
+            }
+            if (attempt < maxRetries) {
+              await wait(retryDelayMs * (attempt + 1));
+            }
           }
+          return "";
+        };
+
+        const syncPartialImages = () => {
+          setCadImages(
+            Array.from({ length: 7 }).map((_, idx) => ({
+              title: CAD_RENDER_SLOT_TITLES[idx] || `图纸 ${idx + 1}`,
+              url: results[idx]?.url || "",
+            })),
+          );
+        };
+
+        const runPass = async (indices: number[], batchSize: number, maxRetriesPerItem: number, retryDelayMs: number) => {
+          for (let i = 0; i < indices.length; i += batchSize) {
+            const batch = indices.slice(i, i + batchSize);
+            const settled = await Promise.allSettled(
+              batch.map(async (idx) => {
+                const p = list[idx];
+                if (!p?.prompt) return null;
+                const url = await generateWithRetry(buildFullPrompt(p.prompt), maxRetriesPerItem, retryDelayMs);
+                return url ? { idx, value: { title: p.title, url, prompt: p.prompt } } : null;
+              }),
+            );
+            for (const s of settled) {
+              if (s.status === "fulfilled" && s.value?.idx !== undefined && s.value?.value?.url) {
+                results[s.value.idx] = s.value.value;
+              }
+            }
+            syncPartialImages();
+          }
+        };
+
+        const allIndices = list.map((_, idx) => idx);
+        await runPass(allIndices, 3, 1, 1200);
+        const failedAfterConcurrent = allIndices.filter((idx) => !results[idx]?.url);
+        if (failedAfterConcurrent.length > 0) {
+          await runPass(failedAfterConcurrent, 1, 2, 1800);
         }
 
         const final = Array.from({ length: 7 }).map((_, idx) => ({
-          title: items[idx]?.title || CAD_RENDER_SLOT_TITLES[idx] || `Drawing ${idx + 1}`,
+          title: CAD_RENDER_SLOT_TITLES[idx] || `图纸 ${idx + 1}`,
           url: results[idx]?.url || "",
         }));
         setCadImages(final);
+        const failedCount = list.filter((_, idx) => !results[idx]?.url).length;
+        if (failedCount > 0) {
+          toast.warning(`有 ${failedCount} 张装修图重试后仍失败，请再试一次生成。`);
+        }
         addToHistory(JSON.stringify({ type: "cad_images", prompts: final }, null, 2), "json");
       } catch (e) {
         console.error("CAD image generation failed", e);
         toast.error("CAD image generation failed");
         setCadImages(
           Array.from({ length: 7 }).map((_, idx) => ({
-            title: items[idx]?.title || CAD_RENDER_SLOT_TITLES[idx] || `Drawing ${idx + 1}`,
+            title: CAD_RENDER_SLOT_TITLES[idx] || `图纸 ${idx + 1}`,
             url: "",
           })),
         );
@@ -452,9 +496,14 @@ export function CadWorkspaceShell() {
       }
       if (mode === "patch" && Array.isArray(parsed.edits)) {
         try {
-          const next = applyStringEdits(cad2dSvg || "", parsed.edits);
+          const current = normalizeSvgMarkup(cad2dSvg || "");
+          if (!current) return { ok: false, retry: true, error: "Current 2D SVG is empty, cannot apply patch" };
+          const next = applyStringEdits(current, parsed.edits);
           const normalizedNext = normalizeSvgMarkup(next);
           if (!normalizedNext) return { ok: false, retry: true, error: "Patch result is not valid svg" };
+          if (normalizedNext === current) {
+            return { ok: false, retry: true, error: "Patch produced no visible SVG change" };
+          }
           setCad2dSvg(normalizedNext);
           setCadFocusPanel("2d");
           addToHistory(normalizedNext, "svg");
@@ -477,6 +526,7 @@ export function CadWorkspaceShell() {
     setCadImagesLoading(false);
     setCadBom(null);
     setCadFocusPanel(null);
+    setChatHistory([]);
     setAttachments([]);
     setVersionHistory([]);
     try {

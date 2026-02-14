@@ -8,6 +8,7 @@ export interface AIConfig {
   baseUrl: string;
   chatModel: string;
   imageModel: string;
+  fileParserApiToken?: string;
   systemPrompt?: string;
 }
 
@@ -17,6 +18,7 @@ const DEFAULT_CONFIG: AIConfig = {
   baseUrl: "",
   chatModel: "gpt-3.5-turbo",
   imageModel: "gemini-2.5-flash-image-preview",
+  fileParserApiToken: "",
   systemPrompt: ""
 };
 

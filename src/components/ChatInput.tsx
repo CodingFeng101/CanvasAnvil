@@ -381,8 +381,8 @@ export function ChatInput({
                     multiple
                     accept={
                         uploadMode === "filesOnly"
-                            ? ".pdf,application/pdf,text/*,.txt,.md,.markdown,.json,.csv,.xml,.yaml,.yml,.toml"
-                            : "image/*,.pdf,application/pdf,text/*,.txt,.md,.markdown,.json,.csv,.xml,.yaml,.yml,.toml"
+                            ? ".pdf,.docx,.zip,.tex,.tgz,.tar.gz,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/zip,application/x-zip-compressed,application/gzip,application/x-gzip,text/*,.txt,.md,.markdown,.json,.csv,.xml,.yaml,.yml,.toml"
+                            : "image/*,.pdf,.docx,.zip,.tex,.tgz,.tar.gz,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/zip,application/x-zip-compressed,application/gzip,application/x-gzip,text/*,.txt,.md,.markdown,.json,.csv,.xml,.yaml,.yml,.toml"
                     }
                     className="hidden"
                     ref={fileInputRef}
