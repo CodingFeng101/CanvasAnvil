@@ -8,6 +8,8 @@ import { GET as getConfig } from "./api/routes/config";
 import { POST as postVerifyAccessCode } from "./api/routes/verify-access-code";
 import { POST as postLogFeedback } from "./api/routes/log-feedback";
 import { POST as postLogSave } from "./api/routes/log-save";
+import { POST as postLogFileParser } from "./api/routes/log-file-parser";
+import { POST as postThirdPartyParser } from "./api/routes/third-party-parser";
 import { POST as postChat } from "./api/routes/chat";
 
 type RouteHandler = (request: Request) => Promise<Response>;
@@ -17,6 +19,8 @@ const API_ROUTES: Record<string, RouteHandler> = {
   "POST /api/verify-access-code": postVerifyAccessCode,
   "POST /api/log-feedback": postLogFeedback,
   "POST /api/log-save": postLogSave,
+  "POST /api/log-file-parser": postLogFileParser,
+  "POST /api/third-party-parser": postThirdPartyParser,
   "POST /api/chat": postChat,
 };
 

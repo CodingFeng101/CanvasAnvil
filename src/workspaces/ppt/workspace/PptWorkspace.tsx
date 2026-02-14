@@ -32,20 +32,59 @@ interface PptData {
 
 const localizeLayoutHint = (layout: string, lang: "zh" | "en") => {
   const raw = String(layout || "").trim();
-  if (!raw || lang !== "zh") return raw;
-  const key = raw.toLowerCase().replace(/\s+/g, "");
-  const map: Record<string, string> = {
-    "cover": "封面页",
-    "title+bullets": "标题+要点",
-    "title+bullet": "标题+要点",
-    "two-column": "双栏布局",
-    "twocolumn": "双栏布局",
-    "left-text-right-image": "左文右图",
-    "lefttextrightimage": "左文右图",
-    "title-and-content": "标题+内容",
-    "titleandcontent": "标题+内容",
+  if (!raw) return raw;
+  const key = raw
+    .toLowerCase()
+    .replace(/\s+/g, "")
+    .replace(/[+_/-]/g, "");
+  const map: Record<string, { zh: string; en: string }> = {
+    cover: { zh: "封面页", en: "Cover" },
+    titlebullets: { zh: "标题+要点", en: "Title + Bullets" },
+    titlebullet: { zh: "标题+要点", en: "Title + Bullets" },
+    twocolumn: { zh: "双栏布局", en: "Two-column" },
+    lefttextrightimage: { zh: "左文右图", en: "Left text, right image" },
+    titleandcontent: { zh: "标题+内容", en: "Title + Content" },
+    封面页: { zh: "封面页", en: "Cover" },
+    标题要点: { zh: "标题+要点", en: "Title + Bullets" },
+    双栏布局: { zh: "双栏布局", en: "Two-column" },
+    左文右图: { zh: "左文右图", en: "Left text, right image" },
+    标题内容: { zh: "标题+内容", en: "Title + Content" },
   };
-  return map[key] || raw;
+  const hit = map[key];
+  if (!hit) return raw;
+  return lang === "zh" ? hit.zh : hit.en;
+};
+
+const parseSlideNo = (value: string): number | null => {
+  const raw = String(value || "").trim();
+  if (!raw) return null;
+  const m1 = raw.match(/^(?:slide|page)[\s_-]*(\d+)$/i);
+  if (m1) return Number(m1[1]);
+  const m2 = raw.match(/^第\s*(\d+)\s*页$/i);
+  if (m2) return Number(m2[1]);
+  const m3 = raw.match(/^(\d+)$/);
+  if (m3) return Number(m3[1]);
+  return null;
+};
+
+const normalizeLocalizedSlideTitle = (
+  title: string,
+  uiLang: "zh" | "en",
+  fallbackNo?: number | null
+) => {
+  const raw = String(title || "").trim();
+  const fromTitle = parseSlideNo(raw);
+  const no = fromTitle || (typeof fallbackNo === "number" ? fallbackNo : null);
+  if (uiLang === "zh") {
+    if (/^(?:slide|page)(?:\s|_|-)*\d*$/i.test(raw) || /^slide$/i.test(raw) || /^page$/i.test(raw)) {
+      return no ? `第 ${no} 页` : "幻灯片";
+    }
+    return raw;
+  }
+  if (/^第\s*\d+\s*页$/i.test(raw)) {
+    return no ? `Slide ${no}` : "Slide";
+  }
+  return raw;
 };
 
 interface PptWorkspaceProps {
@@ -251,7 +290,7 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, onPptStageCh
     visualAssets: referenceVisualAssetsRaw,
     handleFileChange: handleReferenceFileChange,
     setFiles: setReferenceUploadFiles
-  } = useFlowFileProcessor();
+  } = useFlowFileProcessor("ppt");
   const [referencePreviewOpen, setReferencePreviewOpen] = useState(false);
   const [referencePreviewFile, setReferencePreviewFile] = useState<ReferenceFile | null>(null);
   const [slideMaterials, setSlideMaterials] = useState<Record<string, SlideMaterialImage[]>>(() => {
@@ -320,7 +359,8 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, onPptStageCh
     if (typeof window === "undefined") return;
     try {
       localStorage.setItem(PPT_TEMPLATE_UPLOADS_KEY, JSON.stringify(uploadedTemplates));
-    } catch {
+    } catch (e) {
+      console.error("Failed to persist uploaded PPT templates", e);
     }
   }, [uploadedTemplates]);
 
@@ -478,7 +518,30 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, onPptStageCh
     await addUploadedTemplates(files);
   };
 
-  const addGeneratedTemplate = (dataUrl: string) => {
+  const toDataUrlIfNeeded = async (url: string) => {
+    const raw = String(url || "").trim();
+    if (!raw) return "";
+    if (raw.startsWith("data:image")) return raw;
+    try {
+      const resp = await fetch(raw);
+      const blob = await resp.blob();
+      return await new Promise<string>((resolve) => {
+        const reader = new FileReader();
+        reader.onerror = () => resolve("");
+        reader.onloadend = () => resolve(typeof reader.result === "string" ? reader.result : "");
+        reader.readAsDataURL(blob);
+      });
+    } catch (e) {
+      console.error("Failed to convert generated template to data url", e);
+      return "";
+    }
+  };
+
+  const addGeneratedTemplate = async (imageUrl: string) => {
+    const dataUrl = await toDataUrlIfNeeded(imageUrl);
+    if (!dataUrl || !dataUrl.startsWith("data:image")) {
+      throw new Error(tr("生成模板持久化失败：无法读取图片数据", "Failed to persist generated template: cannot read image data"));
+    }
     const id = `generated-${Date.now()}-${Math.random().toString(16).slice(2)}`;
     const name = `${tr("AI 模板", "AI Template")}-${Date.now()}`;
     const created: UploadTemplate = { id, name, dataUrl };
@@ -501,7 +564,7 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, onPptStageCh
         alert(tr("模板生成失败，请重试", "Template generation failed. Please retry."));
         return;
       }
-      addGeneratedTemplate(imageUrl);
+      await addGeneratedTemplate(imageUrl);
       setTemplateGeneratorRequirement("");
       setTemplateGeneratorOpen(false);
     } catch (e: any) {
@@ -522,13 +585,29 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, onPptStageCh
 
   const [isApplyingEdits, setIsApplyingEdits] = useState(false);
 
+  const setSlidesKeepingSelection = (nextSlides: SlideData[]) => {
+    const currentId = localSlides[currentSlideIndex]?.id;
+    setLocalSlides(nextSlides);
+    if (!Array.isArray(nextSlides) || nextSlides.length === 0) {
+      setCurrentSlideIndex(0);
+      return;
+    }
+    if (currentId) {
+      const nextIdx = nextSlides.findIndex((s) => s.id === currentId);
+      if (nextIdx >= 0) {
+        setCurrentSlideIndex(nextIdx);
+        return;
+      }
+    }
+    setCurrentSlideIndex((prev) => {
+      const safePrev = Number.isFinite(prev) ? Math.max(0, Math.floor(prev)) : 0;
+      return Math.min(safePrev, nextSlides.length - 1);
+    });
+  };
+
   useEffect(() => {
     if (data && data.slides && data.slides.length > 0) {
-      setLocalSlides(data.slides);
-      // Reset to first slide if new data comes in
-      if (data.slides) {
-          setCurrentSlideIndex(0);
-      }
+      setSlidesKeepingSelection(data.slides);
       setCreationStep('done');
       onPptReadyChange?.(true);
     }
@@ -545,20 +624,49 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, onPptStageCh
     const toolTypeRaw = String(parsed?.type || "").trim().toLowerCase();
     if (toolTypeRaw && toolTypeRaw !== "ppt_edit") return;
 
-    const incomingSlides: any[] = Array.isArray(parsed?.slides)
+    const incomingSlidesRaw: any[] = Array.isArray(parsed?.slides)
       ? parsed.slides
       : Array.isArray(parsed)
         ? parsed
         : [];
 
-    if (incomingSlides.length === 0) return;
+    if (incomingSlidesRaw.length === 0) return;
 
     const uploadedImages: string[] = Array.isArray(parsed?.uploadedImages) ? parsed.uploadedImages : [];
     const existingById = new Map(localSlides.map((s) => [s.id, s] as const));
+    const getCurrentSlideImageUrlById = (slideId: string) => {
+      const versions = imageVersions[slideId] || [];
+      const currentVersion = currentImageVersionId[slideId];
+      const currentUrl = currentVersion ? versions.find((v) => v.id === currentVersion)?.url : generatedImages[slideId];
+      return String(currentUrl || "").trim();
+    };
+
+    const existing = localSlides.length > 0 ? [...localSlides] : [];
+    const resolveIncomingSlideId = (inc: any): string => {
+      const rawId = String(inc?.id || "").trim();
+      if (rawId && existing.some((s) => s.id === rawId)) return rawId;
+      const fromIdNo = parseSlideNo(rawId);
+      if (fromIdNo && existing[fromIdNo - 1]) return existing[fromIdNo - 1].id;
+      const titleNo = parseSlideNo(String(inc?.title || "").trim());
+      if (titleNo && existing[titleNo - 1]) return existing[titleNo - 1].id;
+      return rawId;
+    };
+
+    const incomingSlides: any[] = incomingSlidesRaw
+      .map((inc) => {
+        const resolvedId = resolveIncomingSlideId(inc);
+        if (!resolvedId) return null;
+        return { ...inc, id: resolvedId };
+      })
+      .filter(Boolean);
+
+    if (incomingSlides.length === 0) return;
 
     const toSlideData = (inc: any, fallbackId: string, source?: SlideData): SlideData => ({
       id: fallbackId,
-      title: typeof inc?.title === "string" ? inc.title : (source?.title || tr("幻灯片", "Slide")),
+      title: typeof inc?.title === "string"
+        ? normalizeLocalizedSlideTitle(inc.title, uiLang as "zh" | "en", parseSlideNo(fallbackId))
+        : (source?.title || tr("幻灯片", "Slide")),
       content: Array.isArray(inc?.content) ? inc.content.map((x: any) => String(x)) : (source?.content || []),
       description: typeof inc?.description === "string" ? inc.description : source?.description,
       note: typeof inc?.note === "string" ? inc.note : source?.note,
@@ -568,13 +676,16 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, onPptStageCh
     let mergedSlides: SlideData[] = localSlides.slice();
     let mergedIncomingSlides = incomingSlides.slice();
     mergedSlides = (() => {
-      const existing = localSlides.length > 0 ? [...localSlides] : [];
       const byId = new Map(existing.map((s) => [s.id, s] as const));
       const order: string[] = existing.map((s) => s.id);
 
       for (const inc of incomingSlides) {
         const id = String(inc?.id || "");
         if (!id) continue;
+        if (creationStep === "done" && !byId.has(id)) {
+          // In slide-edit stage, unknown ids should not append new pages.
+          continue;
+        }
         const next: SlideData = toSlideData(inc, id, byId.get(id));
         byId.set(id, next);
         if (!order.includes(id)) order.push(id);
@@ -583,7 +694,7 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, onPptStageCh
       return order.map((id) => byId.get(id)!).filter(Boolean);
     })();
     mergedIncomingSlides = incomingSlides;
-    setLocalSlides(mergedSlides);
+    setSlidesKeepingSelection(mergedSlides);
 
     const allowImageEdits = creationStep === "done";
     if (!allowImageEdits) return;
@@ -599,6 +710,44 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, onPptStageCh
         : typeof inc?.instruction === "string"
           ? inc.instruction
           : "";
+      const styleRefSlideIds = Array.isArray(inc?.styleRefSlideIds)
+        ? inc.styleRefSlideIds
+            .map((x: any) => String(x || "").trim())
+            .filter((x: string) => !!x && x !== id)
+        : [];
+      const styleRefPolicy: "style_only" | "style_and_layout" =
+        inc?.styleRefPolicy === "style_and_layout" ? "style_and_layout" : "style_only";
+      const explicitStyleRefImageUrls = Array.isArray(inc?.styleRefImageUrls)
+        ? inc.styleRefImageUrls
+            .map((x: any) => String(x || "").trim())
+            .filter((x: string) => !!x)
+        : [];
+      const styleRefRefsFromSlides = styleRefSlideIds
+        .map((sid: string) => {
+          const url = getCurrentSlideImageUrlById(sid);
+          if (!url) return null;
+          const safeSid = sid.replace(/[^a-zA-Z0-9_-]/g, "_");
+          return {
+            url,
+            label: `STYLE_REF_SLIDE_${safeSid}`,
+            source: sid,
+          };
+        })
+        .filter(Boolean) as Array<{ url: string; label: string; source: string }>;
+      const explicitStyleRefRefs = explicitStyleRefImageUrls.map((url: string, idx: number) => ({
+        url,
+        label: `STYLE_REF_EXTERNAL_${idx + 1}`,
+        source: `external-${idx + 1}`,
+      }));
+      const styleRefRefs = Array.from(
+        new Map(
+          [...styleRefRefsFromSlides, ...explicitStyleRefRefs].map((x) => [x.url, x] as const)
+        ).values()
+      );
+      const styleRefImageUrls = styleRefRefs.map((x) => x.url);
+      const styleRefMappingText = styleRefRefs.length > 0
+        ? styleRefRefs.map((x, i) => `${i + 1}. ${x.label} => ${x.source}`).join("\n")
+        : "";
 
       const slide = mergedSlides.find((s) => s.id === id);
       if (!slide) continue;
@@ -634,8 +783,26 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, onPptStageCh
             page,
             uiLang as "zh" | "en",
             templateImage || undefined,
-            getSlideMaterialImageRefs(id),
-            kind === "both" && instruction.trim() ? instruction : undefined
+            [
+              ...styleRefRefs.map((x) => ({ url: x.url, label: x.label })),
+              ...getSlideMaterialImageRefs(id),
+            ],
+            [
+              kind === "both" && instruction.trim() ? instruction : "",
+              styleRefImageUrls.length > 0
+                ? (
+                    styleRefPolicy === "style_and_layout"
+                      ? tr(
+                          `风格参考映射如下（标签 => 来源）：\n${styleRefMappingText}\n可参考其视觉风格与版式结构，但禁止复用其文字内容。`,
+                          `Style reference mapping (label => source):\n${styleRefMappingText}\nYou may follow both style and layout, but must not copy their text content.`
+                        )
+                      : tr(
+                          `风格参考映射如下（标签 => 来源）：\n${styleRefMappingText}\n仅参考其视觉风格（配色、质感、氛围），不要复制其版式与文字内容。`,
+                          `Style reference mapping (label => source):\n${styleRefMappingText}\nFollow style only (palette/texture/mood), do not copy their layout or text content.`
+                        )
+                  )
+                : "",
+            ].filter(Boolean).join("\n")
           );
           if (rendered) {
             pushImageVersion(id, rendered, "generated", kind === "both" ? instruction : undefined);
@@ -659,10 +826,25 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, onPptStageCh
         };
         const editedUrl = await pptService.editPageImage(
           page,
-          instruction,
+          [
+            instruction,
+            styleRefImageUrls.length > 0
+              ? (
+                  styleRefPolicy === "style_and_layout"
+                    ? tr(
+                        `附加参考图中，前 ${styleRefImageUrls.length} 张为风格参考图，顺序与映射如下（序号. 标签 => 来源）：\n${styleRefMappingText}\n可参考风格和版式，不可复用文字。`,
+                        `In additional reference images, the first ${styleRefImageUrls.length} are style references. Mapping (index. label => source):\n${styleRefMappingText}\nYou may follow style and layout, but do not copy text.`
+                      )
+                    : tr(
+                        `附加参考图中，前 ${styleRefImageUrls.length} 张为风格参考图，顺序与映射如下（序号. 标签 => 来源）：\n${styleRefMappingText}\n仅参考风格，不可复用版式与文字。`,
+                        `In additional reference images, the first ${styleRefImageUrls.length} are style references. Mapping (index. label => source):\n${styleRefMappingText}\nStyle only, do not copy layout/text.`
+                      )
+                )
+              : "",
+          ].filter(Boolean).join("\n"),
           currentUrl || undefined,
           templateImage || undefined,
-          [...uploadedImages, ...getSlideMaterialImageUrls(id)]
+          Array.from(new Set([...styleRefImageUrls, ...uploadedImages, ...getSlideMaterialImageUrls(id)]))
         );
         if (editedUrl) {
           pushImageVersion(id, editedUrl, "edited", instruction);
@@ -1761,7 +1943,7 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, onPptStageCh
         );
         const slides: SlideData[] = pages.map((p, i) => ({
             id: p.id || `slide-${i + 1}`,
-            title: p.title,
+            title: normalizeLocalizedSlideTitle(p.title, uiLang as "zh" | "en", i + 1),
             content: p.content,
             description: p.description || "",
             note: p.note || "",
@@ -1806,7 +1988,7 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, onPptStageCh
         }
         const slides: SlideData[] = pages.map((p, i) => ({
             id: `slide-${i + 1}`,
-            title: p.title,
+            title: normalizeLocalizedSlideTitle(p.title, uiLang as "zh" | "en", i + 1),
             content: p.content,
             description: p.description,
             note: p.note,
@@ -1848,7 +2030,7 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, onPptStageCh
     }));
 
     try {
-        setProgress({ current: 0, total: pages.length, message: tr("正在生成页面渲染图...", "Rendering slide images...") });
+        setProgress({ current: 0, total: pages.length, message: tr("正在生成幻灯片...", "Generating slides...") });
 
         const imageCounter = { done: 0 };
         const imageTasks = pages.map((_, i) => async () => {
@@ -1870,7 +2052,7 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, onPptStageCh
                  setProgress(prev => ({
                      ...prev,
                      current: imageCounter.done,
-                     message: tr(`正在生成页面渲染图... (${imageCounter.done}/${pages.length})`, `Rendering slide images... (${imageCounter.done}/${pages.length})`)
+                     message: tr(`正在生成幻灯片... (${imageCounter.done}/${pages.length})`, `Generating slides... (${imageCounter.done}/${pages.length})`)
                  }));
              }
         });
@@ -1891,7 +2073,7 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, onPptStageCh
   const handleGenerateImagesOnly = async () => {
       if (localSlides.length === 0) return;
       setCreationStep('generating_images');
-      setProgress({ current: 0, total: localSlides.length, message: tr("正在生成页面渲染图...", "Rendering slide images...") });
+      setProgress({ current: 0, total: localSlides.length, message: tr("正在生成幻灯片...", "Generating slides...") });
 
       const pages: PptPage[] = localSlides.map((s) => ({
           id: s.id,
@@ -1920,7 +2102,7 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, onPptStageCh
               setProgress(prev => ({
                   ...prev,
                   current: imageCounter.done,
-                  message: tr(`正在生成页面渲染图... (${imageCounter.done}/${pages.length})`, `Rendering slide images... (${imageCounter.done}/${pages.length})`)
+                  message: tr(`正在生成幻灯片... (${imageCounter.done}/${pages.length})`, `Generating slides... (${imageCounter.done}/${pages.length})`)
               }));
           }
       });

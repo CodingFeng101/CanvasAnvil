@@ -39,15 +39,38 @@ export function DiagramProvider({ children }: { children: React.ReactNode }) {
     >([])
     const [isDrawioReady, setIsDrawioReady] = useState(false)
     const hasCalledOnLoadRef = useRef(false)
+    const latestSvgRef = useRef<string>("")
     const drawioRef = useRef<DrawIoEmbedRef | null>(null)
     const resolverRef = useRef<((value: string) => void) | null>(null)
     // Track if we're expecting an export for history (user-initiated)
     const expectHistoryExportRef = useRef<boolean>(false)
 
+    const isEffectivelyEmptyDiagramXml = (xml: string) => {
+        const safeXml = String(xml || "").trim()
+        if (!safeXml) return true
+        try {
+            const doc = new DOMParser().parseFromString(safeXml, "text/xml")
+            if (doc.querySelector("parsererror")) return false
+            const cells = Array.from(doc.querySelectorAll("mxCell"))
+            const meaningfulCells = cells.filter((cell) => {
+                const id = String(cell.getAttribute("id") || "")
+                if (id === "0" || id === "1") return false
+                return true
+            })
+            return meaningfulCells.length === 0
+        } catch {
+            return false
+        }
+    }
+
     const pushHistorySnapshot = (xml: string, svg?: string) => {
         const safeXml = String(xml || "").trim()
         if (!safeXml) return
-        const safeSvg = typeof svg === "string" ? svg : latestSvg
+        if (isEffectivelyEmptyDiagramXml(safeXml)) return
+        const safeSvg =
+            typeof svg === "string"
+                ? svg
+                : latestSvgRef.current || latestSvg
         setDiagramHistory((prev) => {
             const last = prev[prev.length - 1]
             if (last && last.xml === safeXml) return prev
@@ -139,6 +162,7 @@ export function DiagramProvider({ children }: { children: React.ReactNode }) {
         const extractedXML = extractDiagramXML(data.data)
         setChartXML(extractedXML)
         setLatestSvg(data.data)
+        latestSvgRef.current = String(data.data || "")
 
         // Only add to history if this was a user-initiated export
         if (expectHistoryExportRef.current) {
@@ -157,6 +181,7 @@ export function DiagramProvider({ children }: { children: React.ReactNode }) {
         // Skip validation for trusted internal template (loadDiagram also sets chartXML)
         loadDiagram(emptyDiagram, true)
         setLatestSvg("")
+        latestSvgRef.current = ""
         setDiagramHistory([])
     }
 

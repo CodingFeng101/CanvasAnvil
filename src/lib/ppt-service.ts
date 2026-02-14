@@ -21,6 +21,42 @@ export interface SlideEditRoutingItem {
     instruction: string;
 }
 
+const normalizeLayoutByLanguage = (layout: string, uiLanguage: "zh" | "en") => {
+    const raw = String(layout || "").trim()
+    if (!raw) return raw
+    const key = raw
+        .toLowerCase()
+        .replace(/\s+/g, "")
+        .replace(/[+_/-]/g, "")
+    const map: Record<string, { zh: string; en: string }> = {
+        cover: { zh: "封面页", en: "Cover" },
+        titlebullets: { zh: "标题+要点", en: "Title + Bullets" },
+        titlebullet: { zh: "标题+要点", en: "Title + Bullets" },
+        twocolumn: { zh: "双栏布局", en: "Two-column" },
+        lefttextrightimage: { zh: "左文右图", en: "Left text, right image" },
+        titleandcontent: { zh: "标题+内容", en: "Title + Content" },
+        封面页: { zh: "封面页", en: "Cover" },
+        标题要点: { zh: "标题+要点", en: "Title + Bullets" },
+        双栏布局: { zh: "双栏布局", en: "Two-column" },
+        左文右图: { zh: "左文右图", en: "Left text, right image" },
+        标题内容: { zh: "标题+内容", en: "Title + Content" },
+    }
+    const hit = map[key]
+    if (!hit) return raw
+    return uiLanguage === "zh" ? hit.zh : hit.en
+}
+
+const normalizeSpeakerNote = (note: string, uiLanguage: "zh" | "en") => {
+    const raw = String(note || "").trim()
+    if (!raw) return raw
+    return raw
+        .replace(/^[\s\-*•\d.、]+/gm, "")
+        .replace(/\n{2,}/g, "\n")
+        .replace(/\n/g, uiLanguage === "zh" ? "，" : ", ")
+        .replace(/\s{2,}/g, " ")
+        .trim()
+}
+
 type ReferenceFileInput = { filename: string; content: string };
 type ReferenceImageAssetInput = { label: string; caption: string; sourceFile: string; sourcePage?: number };
 
@@ -182,7 +218,10 @@ Quality requirements:
 - Each slide content should have 4-6 bullets.
 - Each bullet should be specific and informative, not generic placeholders.
 - description should clearly explain visual hierarchy and key visual elements (including placement hints when useful).
-- note should include practical speaking guidance (2-4 concise points).
+- note must be a coherent speaker script that can be spoken directly (3-6 connected sentences with natural transitions).
+- note must be plain paragraph text, not bullet points and not numbered lists.
+- All slide fields (title/content/description/note) MUST follow ui_language.
+- If ui_language=zh, use Simplified Chinese (except unavoidable proper nouns/acronyms).
 `;
 
         const response = await generateChatMessage([
@@ -195,8 +234,8 @@ Quality requirements:
             const pages = normalizePages(parsed).map((p, i) => ({
                 ...p,
                 id: p.id || `slide-${i + 1}`,
-                note: typeof p.note === "string" ? p.note : "",
-                layout: typeof p.layout === "string" ? p.layout : "",
+                note: typeof p.note === "string" ? normalizeSpeakerNote(p.note, uiLanguage) : "",
+                layout: typeof p.layout === "string" ? normalizeLayoutByLanguage(p.layout, uiLanguage) : "",
                 description: typeof p.description === "string" ? p.description : "",
             }));
             if (pages.length === 0) throw new Error("No outline parsed from AI response");
@@ -244,7 +283,10 @@ Quality requirements:
 - Each slide content should have 4-6 bullets.
 - Each bullet should be specific and informative, not generic placeholders.
 - description should clearly explain visual hierarchy and key visual elements (including placement hints when useful).
-- note should include practical speaking guidance (2-4 concise points).
+- note must be a coherent speaker script that can be spoken directly (3-6 connected sentences with natural transitions).
+- note must be plain paragraph text, not bullet points and not numbered lists.
+- All slide fields (title/content/description/note) MUST follow ui_language.
+- If ui_language=zh, use Simplified Chinese (except unavoidable proper nouns/acronyms).
 `;
         const response = await generateChatMessage([
             { role: "system", content: PPT_OUTLINE_SYSTEM },
@@ -255,8 +297,8 @@ Quality requirements:
             const pages = normalizePages(parsed).map((p, i) => ({
                 ...p,
                 id: p.id || `slide-${i + 1}`,
-                note: typeof p.note === "string" ? p.note : "",
-                layout: typeof p.layout === "string" ? p.layout : "",
+                note: typeof p.note === "string" ? normalizeSpeakerNote(p.note, uiLanguage) : "",
+                layout: typeof p.layout === "string" ? normalizeLayoutByLanguage(p.layout, uiLanguage) : "",
                 description: typeof p.description === "string" ? p.description : "",
             }));
             if (pages.length === 0) throw new Error("No plan parsed from AI response");
@@ -304,6 +346,7 @@ ${currentSlideJson}
 ${refText ? `Reference:\n${refText}\n\n` : ""}Task:
 - Improve bullets (<= 12 words each), and refine description for image generation.
 - Optionally add speaker note and layout hint if helpful.
+- If note is provided, write it as a coherent spoken script (3-6 connected sentences), not bullets.
 - Keep id stable.
 
 Return JSON only (no extra text).`;
@@ -327,8 +370,8 @@ Return JSON only (no extra text).`;
                 title: typeof first.title === "string" ? first.title : page.title,
                 content: Array.isArray(first.content) ? first.content.map((x: any) => String(x)) : page.content,
                 description: typeof first.description === "string" ? first.description : page.description,
-                note: typeof first.note === "string" ? first.note : page.note,
-                layout: typeof first.layout === "string" ? first.layout : page.layout,
+                note: typeof first.note === "string" ? normalizeSpeakerNote(first.note, "zh") : page.note,
+                layout: typeof first.layout === "string" ? normalizeLayoutByLanguage(first.layout, "zh") : page.layout,
             };
         } catch {
             return page;

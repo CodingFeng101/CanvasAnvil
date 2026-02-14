@@ -21,6 +21,7 @@ import flowPatchAgentPrompt from "../../../../agent/flow/patch.md?raw";
 import flowReplaceAgentPrompt from "../../../../agent/flow/replace.md?raw";
 import { t } from "@/lib/i18n";
 import { useUiLanguage } from "@/lib/use-ui-language";
+import { toast } from "sonner";
 
 interface Attachment {
   id: string;
@@ -68,6 +69,85 @@ interface ChatPanelProps {
 }
 
 const STORAGE_KEY_PREFIX = 'chat_history_v2_';
+const CAD_STORAGE_TRUNCATE_SUFFIX = "\n...[truncated]";
+const CAD_STORAGE_DEFAULT_LIMITS = {
+  maxMessages: 50,
+  maxMessageChars: 24000,
+  maxTotalChars: 240000,
+};
+const CAD_STORAGE_FALLBACK_LIMITS = [
+  CAD_STORAGE_DEFAULT_LIMITS,
+  { maxMessages: 30, maxMessageChars: 12000, maxTotalChars: 120000 },
+  { maxMessages: 16, maxMessageChars: 6000, maxTotalChars: 60000 },
+  { maxMessages: 8, maxMessageChars: 3000, maxTotalChars: 30000 },
+];
+
+const normalizeStoredChatMessages = (raw: any): ChatMessage[] => {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .filter((m: any) => m && typeof m === "object")
+    .map((m: any) => {
+      const roleRaw = String(m.role || "");
+      const role: ChatMessage["role"] =
+        roleRaw === "user" || roleRaw === "assistant" || roleRaw === "system"
+          ? roleRaw
+          : "user";
+      const content = typeof m.content === "string" ? m.content : String(m.content ?? "");
+      return { role, content };
+    })
+    .filter((m: ChatMessage) => !!m.content);
+};
+
+const truncateForStorage = (text: string, maxChars: number) => {
+  const value = String(text || "");
+  if (maxChars <= 0) return "";
+  if (value.length <= maxChars) return value;
+  if (maxChars <= CAD_STORAGE_TRUNCATE_SUFFIX.length) {
+    return value.slice(0, maxChars);
+  }
+  return value.slice(0, maxChars - CAD_STORAGE_TRUNCATE_SUFFIX.length) + CAD_STORAGE_TRUNCATE_SUFFIX;
+};
+
+const compactCadMessagesForStorage = (
+  source: ChatMessage[],
+  limits: { maxMessages: number; maxMessageChars: number; maxTotalChars: number },
+): ChatMessage[] => {
+  const maxMessages = Math.max(1, Number(limits.maxMessages) || 1);
+  const maxMessageChars = Math.max(256, Number(limits.maxMessageChars) || 256);
+  const maxTotalChars = Math.max(1024, Number(limits.maxTotalChars) || 1024);
+
+  const normalized = normalizeStoredChatMessages(source).slice(-maxMessages).map((m) => ({
+    role: m.role,
+    content: truncateForStorage(m.content, maxMessageChars),
+  }));
+
+  let totalChars = normalized.reduce((sum, m) => sum + m.content.length, 0);
+  while (normalized.length > 1 && totalChars > maxTotalChars) {
+    const removed = normalized.shift();
+    totalChars -= removed?.content.length || 0;
+  }
+
+  if (normalized.length === 1 && normalized[0].content.length > maxTotalChars) {
+    normalized[0] = {
+      role: normalized[0].role,
+      content: truncateForStorage(normalized[0].content, maxTotalChars),
+    };
+  }
+
+  return normalized;
+};
+
+const persistCadMessagesWithFallback = (storageKey: string, source: ChatMessage[]) => {
+  for (const limits of CAD_STORAGE_FALLBACK_LIMITS) {
+    try {
+      const compacted = compactCadMessagesForStorage(source, limits);
+      localStorage.setItem(storageKey, JSON.stringify(compacted));
+      return true;
+    } catch {
+    }
+  }
+  return false;
+};
 
 // Convert internal ChatMessage to UIMessage
 const toUIMessage = (msg: ChatMessage, index: number): UIMessage => ({
@@ -120,6 +200,10 @@ export function ChatPanel({
         const saved = localStorage.getItem(storageKey);
         if (saved) {
             try {
+                if (workspaceId === "cad") {
+                  const parsed = normalizeStoredChatMessages(JSON.parse(saved));
+                  return compactCadMessagesForStorage(parsed, CAD_STORAGE_DEFAULT_LIMITS);
+                }
                 return JSON.parse(saved);
             } catch (e) {
                 console.error("Failed to parse chat history", e);
@@ -424,9 +508,18 @@ export function ChatPanel({
 
   // Persist messages
   useEffect(() => {
-    localStorage.setItem(storageKey, JSON.stringify(messages));
+    if (typeof window !== "undefined") {
+      if (workspaceId === "cad") {
+        const ok = persistCadMessagesWithFallback(storageKey, messages);
+        if (!ok) {
+          console.error("Failed to persist CAD chat history after fallback trimming.");
+        }
+      } else {
+        localStorage.setItem(storageKey, JSON.stringify(messages));
+      }
+    }
     onMessagesChange?.(messages);
-  }, [messages, storageKey, onMessagesChange]);
+  }, [messages, storageKey, onMessagesChange, workspaceId]);
 
   const clearHistory = () => {
     abortControllerRef.current?.abort();
@@ -483,8 +576,47 @@ export function ChatPanel({
     const text = String(code || "").trim();
     if (!text) return false;
     if (workspaceId === "cad") {
+      const lang = String(language || "").toLowerCase();
+      const hasSvgLanguageHint = lang === "svg" || lang === "xml";
+      const expectsCanvasChange =
+        hasSvgLanguageHint ||
+        /<svg[\s/>]/i.test(text) ||
+        /"type"\s*:\s*"cad_patch"/i.test(text);
+      let parsedType = "";
+      if (text.startsWith("{")) {
+        try {
+          const parsed = JSON.parse(text);
+          parsedType = String(parsed?.type || "").trim().toLowerCase();
+        } catch {
+        }
+      }
       const r = await runCodeAction(text, "cad");
-      return !!r.ok;
+      if (!r.ok) {
+        toast.error(r.error || (uiLang === "zh" ? "应用失败" : "Apply failed"));
+        return false;
+      }
+      if (expectsCanvasChange && !r.svg) {
+        toast.error(uiLang === "zh" ? "未检测到画布更新，请检查补丁内容是否匹配当前SVG。" : "No canvas update detected. Check whether patch matches current SVG.");
+        return false;
+      }
+      if (r.svg) {
+        toast.success(uiLang === "zh" ? "已应用到 2D 画布" : "Applied to 2D canvas");
+        return true;
+      }
+      if (parsedType === "cad_plan") {
+        toast.success(uiLang === "zh" ? "已应用方案数据" : "Plan applied");
+        return true;
+      }
+      if (parsedType === "cad_bom") {
+        toast.success(uiLang === "zh" ? "已应用物料清单" : "BOM applied");
+        return true;
+      }
+      if (parsedType === "cad_images") {
+        toast.success(uiLang === "zh" ? "已应用装修图任务" : "Render task applied");
+        return true;
+      }
+      toast.error(uiLang === "zh" ? "未检测到可应用内容" : "No applicable CAD payload detected");
+      return false;
     }
     if (workspaceId === "flow") {
       const r = await runCodeAction(text, "flow");
@@ -495,7 +627,18 @@ export function ChatPanel({
   };
 
   const normalizeSvgMarkup = (text: string): string => {
-    const raw = String(text || "").trim();
+    const decodeBasicHtmlEntities = (value: string) =>
+      String(value || "")
+        .replace(/&lt;/gi, "<")
+        .replace(/&gt;/gi, ">")
+        .replace(/&quot;/gi, '"')
+        .replace(/&#39;|&apos;/gi, "'")
+        .replace(/&amp;/gi, "&");
+
+    const original = String(text || "").trim();
+    const raw = !/<svg[\s/>]/i.test(original) && /&lt;\s*svg[\s\S]*&gt;/i.test(original)
+      ? decodeBasicHtmlEntities(original).trim()
+      : original;
     if (!raw) return "";
     const start = raw.search(/<svg[\s/>]/i);
     if (start < 0) return "";
@@ -559,6 +702,50 @@ export function ChatPanel({
     return "";
   };
 
+  const hasCadPatchPayloadInText = (text: string): boolean => {
+    const raw = String(text || "");
+    if (!raw.trim()) return false;
+
+    const isCadPatchPayload = (value: any) =>
+      value &&
+      typeof value === "object" &&
+      String(value?.type || "").trim().toLowerCase() === "cad_patch" &&
+      String(value?.target || "").trim().toLowerCase() === "2d_svg";
+
+    const jsonRegex = /```json\s*([\s\S]*?)```/g;
+    let jm: RegExpExecArray | null;
+    while ((jm = jsonRegex.exec(raw))) {
+      const jsonText = String(jm[1] || "").trim();
+      if (!jsonText) continue;
+      try {
+        const parsed = JSON.parse(jsonText);
+        if (isCadPatchPayload(parsed)) return true;
+      } catch {
+      }
+    }
+
+    const trimmed = raw.trim();
+    if (trimmed.startsWith("{")) {
+      try {
+        const parsed = JSON.parse(trimmed);
+        if (isCadPatchPayload(parsed)) return true;
+      } catch {
+      }
+    }
+
+    const start = raw.indexOf("{");
+    const end = raw.lastIndexOf("}");
+    if (start >= 0 && end > start) {
+      try {
+        const parsed = JSON.parse(raw.slice(start, end + 1));
+        if (isCadPatchPayload(parsed)) return true;
+      } catch {
+      }
+    }
+
+    return /"type"\s*:\s*"cad_patch"/i.test(raw) && /"target"\s*:\s*"2d_svg"/i.test(raw);
+  };
+
   const handleAssistantResponse = async (fullResponse: string) => {
     if (!fullResponse) return { flowPatchFound: false, flowRetryError: null as string | null };
 
@@ -575,11 +762,12 @@ export function ChatPanel({
     }
 
     if (workspaceId === "cad") {
+      const hasCadPatchPayload = hasCadPatchPayloadInText(fullResponse);
       const svgCandidate =
         extractReplaceSvgFromCadPatchText(fullResponse) ||
         extractSvgCodeBlock(fullResponse) ||
         extractRawSvgBlock(fullResponse);
-      if (svgCandidate) {
+      if (!hasCadPatchPayload && svgCandidate) {
         await runCodeAction(svgCandidate, "cad");
       }
     } else {
@@ -1503,7 +1691,7 @@ export function ChatPanel({
                 }
               }
 
-              if (!producedHasSvg2d) {
+              if (!producedHasSvg2d && !cadPatchFound) {
                 const fallbackSvg = extractReplaceSvgFromCadPatchText(toolFull) || extractSvgCodeBlock(toolFull) || extractRawSvgBlock(toolFull);
                 if (fallbackSvg) {
                   const r = await runCodeAction(fallbackSvg, "cad");
@@ -1622,11 +1810,12 @@ export function ChatPanel({
             }
 
             let producedHasSvg2d = false;
+            const hasCadPatchPayload = hasCadPatchPayloadInText(routedFull);
             const svgCandidate =
               extractReplaceSvgFromCadPatchText(routedFull) ||
               extractSvgCodeBlock(routedFull) ||
               extractRawSvgBlock(routedFull);
-            if (svgCandidate) {
+            if (!hasCadPatchPayload && svgCandidate) {
               const svgResult = await runCodeAction(svgCandidate, "cad");
               producedHasSvg2d = !!svgResult.ok;
             }
@@ -2227,7 +2416,7 @@ export function ChatPanel({
                   }
                 }
 
-                if (!producedHasSvg2d) {
+                if (!producedHasSvg2d && !cadPatchFound) {
                   const fallbackSvg = extractReplaceSvgFromCadPatchText(toolFull) || extractSvgCodeBlock(toolFull) || extractRawSvgBlock(toolFull);
                   if (fallbackSvg) {
                     const r = await runCodeAction(fallbackSvg, "cad");
@@ -2346,11 +2535,12 @@ export function ChatPanel({
               }
 
               let producedHasSvg2d = false;
+              const hasCadPatchPayload = hasCadPatchPayloadInText(routedFull);
               const svgCandidate =
                 extractReplaceSvgFromCadPatchText(routedFull) ||
                 extractSvgCodeBlock(routedFull) ||
                 extractRawSvgBlock(routedFull);
-              if (svgCandidate) {
+              if (!hasCadPatchPayload && svgCandidate) {
                 const svgResult = await runCodeAction(svgCandidate, "cad");
                 producedHasSvg2d = !!svgResult.ok;
               }
@@ -2619,15 +2809,17 @@ export function ChatPanel({
       </div>
 
       {/* Dialogs */}
-      <HistoryDialog 
-        showHistory={showHistory} 
-        onToggleHistory={setShowHistory} 
-        history={history}
-        onRestore={(item) => onRestore && onRestore(item)}
-        onClear={() => {
-          onClearVersionHistory?.();
-        }}
-      />
+      {!hideHistoryButton && (
+        <HistoryDialog 
+          showHistory={showHistory} 
+          onToggleHistory={setShowHistory} 
+          history={history}
+          onRestore={(item) => onRestore && onRestore(item)}
+          onClear={() => {
+            onClearVersionHistory?.();
+          }}
+        />
+      )}
       <ResetWarningModal
         open={showResetWarning}
         onOpenChange={setShowResetWarning}

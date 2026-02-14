@@ -16,8 +16,10 @@ import { useLanguage } from "@/workspaces/flow/next/contexts/language-context"
 import { getAIConfig } from "@/workspaces/flow/next/lib/ai-config"
 import {
     extractPdfText,
+    extractWordText,
     extractTextFileContent,
     isPdfFile,
+    isWordFile,
     isTextFile,
 } from "@/workspaces/flow/next/lib/pdf-utils"
 import { type FileData, useFileProcessor } from "@/workspaces/flow/next/lib/use-file-processor"
@@ -146,7 +148,7 @@ export default function ChatPanel({
     }
 
     // File processing using extracted hook
-    const { files, pdfData, handleFileChange, setFiles } = useFileProcessor()
+    const { files, pdfData, handleFileChange, setFiles } = useFileProcessor("flow")
 
     const [showHistory, setShowHistory] = useState(false)
     const [, setAccessCodeRequired] = useState(false)
@@ -619,7 +621,7 @@ Please fix the XML issues. Ensure you are editing exact lines from the current X
             try {
                 if (isDrawioReady) {
                     try {
-                        chartXml = await onFetchChart()
+                        chartXml = await onFetchChart(false)
                     } catch (error) {
                         console.warn("Failed to fetch chart data, using current state:", error)
                     }
@@ -915,7 +917,11 @@ Please fix the XML issues. Ensure you are editing exact lines from the current X
             extractedText?: string
         }>
     }> => {
-        let userText = baseText
+        // Remove previously appended file blocks (legacy or previous retries)
+        // to avoid duplicating [File: ...] sections in a new send.
+        let userText = String(baseText || "")
+            .replace(/\n\n\[(PDF|File):\s*[^\]]+\]\n[\s\S]*$/i, "")
+            .trim()
         const uploadedFiles: Array<{
             name: string
             mediaType: string
@@ -923,7 +929,12 @@ Please fix the XML issues. Ensure you are editing exact lines from the current X
             extractedText?: string
         }> = []
 
+        const seenFileKeys = new Set<string>()
         for (const file of files) {
+            const dedupeKey = `${file.name}__${file.size}__${file.lastModified}`
+            if (seenFileKeys.has(dedupeKey)) continue
+            seenFileKeys.add(dedupeKey)
+
             const reader = new FileReader()
             const dataUrl = await new Promise<string>((resolve) => {
                 reader.onload = () => resolve(reader.result as string)
@@ -937,7 +948,7 @@ Please fix the XML issues. Ensure you are editing exact lines from the current X
                 })
                 continue
             }
-            if (isPdfFile(file) || isTextFile(file) || file.name.toLowerCase().endsWith(".docx")) {
+            if (isPdfFile(file) || isTextFile(file) || isWordFile(file)) {
                 const extracted = pdfData.get(file)
                 let extractedText =
                     extracted && !extracted.isExtracting && extracted.text
@@ -950,6 +961,8 @@ Please fix the XML issues. Ensure you are editing exact lines from the current X
                     try {
                         if (isPdfFile(file)) {
                             extractedText = await extractPdfText(file)
+                        } else if (isWordFile(file)) {
+                            extractedText = await extractWordText(file)
                         } else if (isTextFile(file)) {
                             extractedText = await extractTextFileContent(file)
                         }
@@ -967,7 +980,10 @@ Please fix the XML issues. Ensure you are editing exact lines from the current X
                     dataUrl,
                     extractedText,
                 })
-                userText += `\n\n[File: ${file.name}]\n(Uploaded and parsed by backend)`
+                const normalizedExtracted = String(extractedText || "").trim()
+                userText += `\n\n[File: ${file.name}]\n${
+                    normalizedExtracted || "(Failed to read content)"
+                }`
             }
         }
 

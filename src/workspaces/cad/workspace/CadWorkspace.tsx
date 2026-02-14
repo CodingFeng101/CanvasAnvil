@@ -10,6 +10,7 @@ import { Button } from "@/workspaces/cad/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/workspaces/cad/ui/dialog";
 import { PDFDocument } from "pdf-lib";
 import { useUiLanguage } from "@/lib/use-ui-language";
+import { toast } from "sonner";
 
 interface CadWorkspaceProps {
   onAddToChat?: (code: string) => void;
@@ -164,12 +165,15 @@ export function CadWorkspace({ onAddToChat, onSvgChange, svg2d, plan, images = [
   const svgEditorRequestSeedRef = useRef(0);
   const svgEditorPendingRef = useRef<Map<string, (svg: string) => void>>(new Map());
   const lastCanvasRecoverAtRef = useRef(0);
+  const externalSvgApplyAtRef = useRef(0);
+  const EXTERNAL_APPLY_GUARD_MS = 2500;
 
   useEffect(() => {
     if (typeof svg2d === "string") {
       const normalized = normalizeSvgMarkup(svg2d);
       setSvgContent(normalized || null);
       desiredSvgRef.current = normalized;
+      externalSvgApplyAtRef.current = Date.now();
       if (normalized) {
         loadSvgToEditorWithRetry(normalized);
         latestLoadedSvgRef.current = normalized;
@@ -265,6 +269,12 @@ export function CadWorkspace({ onAddToChat, onSvgChange, svg2d, plan, images = [
       if (type === "cad_svg_editor_load_result") {
         const ok = Boolean((data as any).ok);
         if (ok) return;
+        const reason = String((data as any).reason || "").trim();
+        if (reason) {
+          toast.error(uiLang === "zh" ? `SVG加载失败：${reason}` : `SVG load failed: ${reason}`);
+        } else {
+          toast.error(uiLang === "zh" ? "SVG加载失败" : "SVG load failed");
+        }
         const next = String(desiredSvgRef.current || "").trim();
         if (!next) return;
         window.setTimeout(() => {
@@ -412,10 +422,28 @@ export function CadWorkspace({ onAddToChat, onSvgChange, svg2d, plan, images = [
     if (!isSvgEditorReady || viewMode !== "2d") return;
     const timer = window.setInterval(() => {
       void (async () => {
+        // Workspace has been externally cleared: do not rehydrate stale SVG from iframe autosync.
+        const propSvg = normalizeSvgMarkup(typeof svg2d === "string" ? svg2d : "");
+        const current = normalizeSvgMarkup(typeof svgContent === "string" ? svgContent : "");
+        if (!propSvg && !current) {
+          if (latestLoadedSvgRef.current !== EMPTY_SENTINEL) {
+            postToSvgEditor({ type: "cad_svg_editor_clear" });
+            latestLoadedSvgRef.current = EMPTY_SENTINEL;
+          }
+          return;
+        }
+
         const next = String(await requestSvgFromEditor({ preferFallbackOnEmpty: false }) || "").trim();
         if (!normalizeSvgMarkup(next)) return;
-        const current = normalizeSvgMarkup(typeof svgContent === "string" ? svgContent : "");
         const isEmptyCanvas = isEffectivelyEmptySvg(next);
+        const desired = normalizeSvgMarkup(String(desiredSvgRef.current || ""));
+        const now = Date.now();
+        const inExternalApplyGuardWindow = now - externalSvgApplyAtRef.current < EXTERNAL_APPLY_GUARD_MS;
+        if (inExternalApplyGuardWindow && desired && next !== desired) {
+          // Ignore stale readback briefly after external SVG apply.
+          loadSvgToEditorWithRetry(desired);
+          return;
+        }
         if (isEmptyCanvas && !current) {
           return;
         }
@@ -434,7 +462,7 @@ export function CadWorkspace({ onAddToChat, onSvgChange, svg2d, plan, images = [
       })();
     }, 1800);
     return () => window.clearInterval(timer);
-  }, [isSvgEditorReady, viewMode, svgContent, onSvgChange]);
+  }, [isSvgEditorReady, viewMode, svgContent, svg2d, onSvgChange]);
 
   const downloadBlob = (blob: Blob, filename: string) => {
     const link = document.createElement("a");

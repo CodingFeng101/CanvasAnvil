@@ -1467,29 +1467,6 @@ export async function extractWordVisualAssets(
     return assets
 }
 
-const normalizeMineruImagePath = (rawPath: string) => {
-    let p = String(rawPath || "").trim().replace(/^['"]|['"]$/g, "")
-    if (!p) return ""
-    p = p.replace(/\\/g, "/")
-    if (p.startsWith("/")) p = p.slice(1)
-    if (p.startsWith("file/")) p = p.slice(5)
-    if (p.startsWith("files/")) p = p.slice(6)
-    return p
-}
-
-const findZipImageEntry = (zip: JSZip, relPath: string) => {
-    const target = normalizeMineruImagePath(relPath).toLowerCase()
-    if (!target) return null
-    const entries = Object.values(zip.files).filter((f) => !f.dir)
-    const exact = entries.find((e) => String(e.name || "").replace(/\\/g, "/").toLowerCase() === target)
-    if (exact) return exact
-    const suffix = `/${target}`
-    return entries.find((e) => {
-        const name = String(e.name || "").replace(/\\/g, "/").toLowerCase()
-        return name.endsWith(suffix) || name.endsWith(target)
-    }) || null
-}
-
 export async function extractThirdPartyVisualAssets(
     file: File,
     options: { apiToken: string; apiBase?: string; maxAssets?: number; maxWaitMs?: number }
@@ -1499,133 +1476,47 @@ export async function extractThirdPartyVisualAssets(
     const apiBase = String(options.apiBase || "https://mineru.net").trim().replace(/\/+$/, "")
     const maxAssets = Math.max(1, options.maxAssets ?? 10)
     const maxWaitMs = Math.max(5000, options.maxWaitMs ?? 120000)
-
-    const reqHeaders: Record<string, string> = {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
-    }
-
-    const uploadUrlResp = await fetch(`${apiBase}/api/v4/file-urls/batch`, {
+    const fileBuf = new Uint8Array(await file.arrayBuffer())
+    const resp = await fetch("/api/third-party-parser", {
         method: "POST",
-        headers: reqHeaders,
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-            files: [{ name: file.name }],
-            model_version: "vlm",
+            fileName: file.name,
+            fileType: file.type || "",
+            fileBase64: bytesToBase64(fileBuf),
+            apiToken: token,
+            apiBase,
+            maxAssets,
+            maxWaitMs,
         }),
     })
-    if (!uploadUrlResp.ok) {
-        throw new Error(`Third-party parser request failed: ${uploadUrlResp.status}`)
-    }
-    const uploadPayload = await uploadUrlResp.json()
-    if (uploadPayload?.code !== 0) {
-        throw new Error(String(uploadPayload?.msg || "Third-party parser get upload URL failed"))
-    }
-
-    const batchId = String(uploadPayload?.data?.batch_id || "")
-    const uploadUrl = String(uploadPayload?.data?.file_urls?.[0] || "")
-    if (!batchId || !uploadUrl) throw new Error("Third-party parser missing batch id or upload URL")
-
-    const uploadResp = await fetch(uploadUrl, {
-        method: "PUT",
-        body: file,
-    })
-    if (!uploadResp.ok) throw new Error(`Third-party parser upload failed: ${uploadResp.status}`)
-
-    const resultUrl = `${apiBase}/api/v4/extract-results/batch/${batchId}`
-    const start = Date.now()
-    let fullZipUrl = ""
-    while (Date.now() - start < maxWaitMs) {
-        const pollResp = await fetch(resultUrl, { headers: { Authorization: `Bearer ${token}` } })
-        if (!pollResp.ok) throw new Error(`Third-party parser poll failed: ${pollResp.status}`)
-        const pollPayload = await pollResp.json()
-        if (pollPayload?.code !== 0) {
-            throw new Error(String(pollPayload?.msg || "Third-party parser poll returned error"))
+    if (!resp.ok) {
+        let detail = ""
+        try {
+            const errPayload = await resp.json()
+            detail = String(errPayload?.error || "")
+        } catch {
         }
-
-        const extractResult = pollPayload?.data?.extract_result?.[0]
-        const state = String(extractResult?.state || "")
-        if (state === "done") {
-            fullZipUrl = String(extractResult?.full_zip_url || "")
-            break
-        }
-        if (state === "failed") {
-            throw new Error(String(extractResult?.err_msg || "Third-party parser extraction failed"))
-        }
-        await new Promise((r) => setTimeout(r, 2000))
+        throw new Error(
+            `Third-party parser proxy failed: ${resp.status}${detail ? ` - ${detail}` : ""}`,
+        )
     }
-    if (!fullZipUrl) throw new Error("Third-party parser timeout")
-
-    const zipResp = await fetch(fullZipUrl)
-    if (!zipResp.ok) throw new Error(`Third-party parser result download failed: ${zipResp.status}`)
-    const zipArrayBuffer = await zipResp.arrayBuffer()
-    const zip = await JSZip.loadAsync(zipArrayBuffer)
-
-    const markdownEntry =
-        Object.values(zip.files).find((f) => !f.dir && /\.md$/i.test(String(f.name || ""))) || null
-    const markdown = markdownEntry ? await markdownEntry.async("string") : ""
-
-    const usedImageNames = new Set<string>()
-    const assets: ExtractedVisualAsset[] = []
-
-    if (markdown) {
-        const imageRe = /!\[([^\]]*)\]\(([^)]+)\)/g
-        let match: RegExpExecArray | null
-        while ((match = imageRe.exec(markdown))) {
-            if (assets.length >= maxAssets) break
-            const alt = String(match[1] || "").trim()
-            const relPath = String(match[2] || "").trim()
-            if (!relPath || /^https?:\/\//i.test(relPath)) continue
-
-            const entry = findZipImageEntry(zip, relPath)
-            if (!entry) continue
-            const entryName = String(entry.name || "")
-            if (usedImageNames.has(entryName)) continue
-
-            try {
-                const bytes = await entry.async("uint8array")
-                const mime = getMimeByExt(entryName)
-                assets.push({
-                    id: `third-party-${file.name}-${assets.length + 1}`,
-                    sourceFileName: file.name,
-                    sourceType: "third_party",
-                    order: assets.length + 1,
-                    dataUrl: `data:${mime};base64,${bytesToBase64(bytes)}`,
-                    textHint: alt,
-                })
-                usedImageNames.add(entryName)
-            } catch (e) {
-                console.error("Failed to load third-party extracted image", entryName, e)
-            }
-        }
+    const payload = await resp.json()
+    if (!payload?.success) {
+        throw new Error(String(payload?.error || "Third-party parser proxy error"))
     }
-
-    if (assets.length < maxAssets) {
-        const imageEntries = Object.values(zip.files)
-            .filter((f) => !f.dir)
-            .filter((f) => /\.(png|jpg|jpeg|webp|gif|bmp|svg)$/i.test(String(f.name || "")))
-        for (const entry of imageEntries) {
-            if (assets.length >= maxAssets) break
-            const entryName = String(entry.name || "")
-            if (usedImageNames.has(entryName)) continue
-            try {
-                const bytes = await entry.async("uint8array")
-                const mime = getMimeByExt(entryName)
-                assets.push({
-                    id: `third-party-${file.name}-${assets.length + 1}`,
-                    sourceFileName: file.name,
-                    sourceType: "third_party",
-                    order: assets.length + 1,
-                    dataUrl: `data:${mime};base64,${bytesToBase64(bytes)}`,
-                    textHint: "",
-                })
-                usedImageNames.add(entryName)
-            } catch (e) {
-                console.error("Failed to load fallback image from third-party zip", entryName, e)
-            }
-        }
-    }
-
-    return assets
+    const items = Array.isArray(payload?.assets) ? payload.assets : []
+    return items
+        .filter((x: any) => x && typeof x.dataUrl === "string" && x.dataUrl.startsWith("data:image"))
+        .slice(0, maxAssets)
+        .map((x: any, idx: number) => ({
+            id: `third-party-${file.name}-${idx + 1}`,
+            sourceFileName: file.name,
+            sourceType: "third_party",
+            order: idx + 1,
+            dataUrl: String(x.dataUrl),
+            textHint: typeof x.textHint === "string" ? x.textHint : "",
+        }))
 }
 
 

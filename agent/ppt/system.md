@@ -23,6 +23,11 @@ Rules (CRITICAL):
 3. For visual edit requests, set `instruction` on that slide.
 4. Output ONLY one markdown code block.
 5. `ui_language=zh` => Simplified Chinese; `ui_language=en` => English.
+6. If style should reference other slides, you may set:
+   - `styleRefSlideIds`: string[] (e.g. ["slide-2","slide-5"])
+   - `styleRefPolicy`: "style_only" | "style_and_layout"
+   - `styleRefImageUrls`: string[] (optional; explicit reference image URLs when slide IDs are unavailable)
+7. You may edit multiple slides in one response. Each slide can have its own style reference group.
 
 # Output Format
 ```json
@@ -36,7 +41,10 @@ Rules (CRITICAL):
       "description": "...",
       "layout": "...",
       "note": "...",
-      "instruction": "optional, only for visual edit"
+      "instruction": "optional, only for visual edit",
+      "styleRefSlideIds": ["slide-2", "slide-5"],
+      "styleRefPolicy": "style_only",
+      "styleRefImageUrls": ["https://example.com/style-ref-1.png"]
     }
   ]
 }

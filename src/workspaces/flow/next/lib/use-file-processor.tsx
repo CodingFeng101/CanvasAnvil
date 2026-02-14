@@ -30,11 +30,38 @@ export interface FileData {
     visualAssets?: ExtractedVisualAsset[]
 }
 
+type ParserSource = "third_party" | "local" | "third_party_fallback_local"
+
+const reportFileParserSource = async (params: {
+    workspace: "flow" | "ppt" | "unknown"
+    file: File
+    parserSource: ParserSource
+    detail?: string
+}) => {
+    try {
+        await fetch("/api/log-file-parser", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                workspace: params.workspace,
+                fileName: params.file.name,
+                mimeType: params.file.type || "",
+                fileSize: params.file.size || 0,
+                parserSource: params.parserSource,
+                detail: params.detail || "",
+            }),
+            keepalive: true,
+        })
+    } catch (e) {
+        console.warn("Failed to report file parser source", e)
+    }
+}
+
 /**
  * Hook for processing file uploads, especially PDFs and text files.
  * Handles text extraction, character limit validation, and cleanup.
  */
-export function useFileProcessor() {
+export function useFileProcessor(workspace: "flow" | "ppt" | "unknown" = "unknown") {
     const [files, setFiles] = useState<File[]>([])
     const [pdfData, setPdfData] = useState<Map<File, FileData>>(new Map())
 
@@ -68,7 +95,10 @@ export function useFileProcessor() {
                     const parserToken = String(aiConfig.fileParserApiToken || "").trim()
                     const parserBase = "https://mineru.net"
                     const supportsThirdParty = isPdfFile(file) || isWordFile(file)
-                    const useThirdPartyVisualParser = Boolean(parserToken) && supportsThirdParty
+                    // Rule: if MinerU token is configured, prefer third-party parser;
+                    // otherwise use local extraction.
+                    const useThirdPartyVisualParser =
+                        Boolean(parserToken) && supportsThirdParty
 
                     let text: string
                     let visualAssets: ExtractedVisualAsset[] = []
@@ -80,12 +110,30 @@ export function useFileProcessor() {
                                     apiBase: parserBase,
                                     apiToken: parserToken,
                                 })
+                                void reportFileParserSource({
+                                    workspace,
+                                    file,
+                                    parserSource: "third_party",
+                                    detail: "pdf",
+                                })
                             } catch (e) {
                                 console.error("Third-party parser failed, fallback to local PDF extraction:", e)
                                 visualAssets = await extractPdfVisualAssets(file)
+                                void reportFileParserSource({
+                                    workspace,
+                                    file,
+                                    parserSource: "third_party_fallback_local",
+                                    detail: "pdf",
+                                })
                             }
                         } else {
                             visualAssets = await extractPdfVisualAssets(file)
+                            void reportFileParserSource({
+                                workspace,
+                                file,
+                                parserSource: "local",
+                                detail: "pdf",
+                            })
                         }
                     } else if (isWordFile(file)) {
                         text = await extractWordText(file)
@@ -95,12 +143,30 @@ export function useFileProcessor() {
                                     apiBase: parserBase,
                                     apiToken: parserToken,
                                 })
+                                void reportFileParserSource({
+                                    workspace,
+                                    file,
+                                    parserSource: "third_party",
+                                    detail: "word",
+                                })
                             } catch (e) {
                                 console.error("Third-party parser failed, fallback to local Word extraction:", e)
                                 visualAssets = await extractWordVisualAssets(file)
+                                void reportFileParserSource({
+                                    workspace,
+                                    file,
+                                    parserSource: "third_party_fallback_local",
+                                    detail: "word",
+                                })
                             }
                         } else {
                             visualAssets = await extractWordVisualAssets(file)
+                            void reportFileParserSource({
+                                workspace,
+                                file,
+                                parserSource: "local",
+                                detail: "word",
+                            })
                         }
                     } else if (isZipFile(file)) {
                         // LaTeX bundle (.zip): parse tex + includegraphics to extract original figures.

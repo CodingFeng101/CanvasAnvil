@@ -85,6 +85,42 @@ interface CadPatchToolPayload {
     edits: CadPatchEdit[];
 }
 
+function isCadAutoApplyCodeCandidate(language: string, code: string): boolean {
+    const lang = String(language || "").toLowerCase();
+    const text = String(code || "").trim();
+    if (!text) return false;
+
+    if (lang === "json") {
+        try {
+            const parsed = JSON.parse(text);
+            return (
+                String(parsed?.type || "").trim().toLowerCase() === "cad_patch" &&
+                String(parsed?.target || "").trim().toLowerCase() === "2d_svg"
+            );
+        } catch {
+            return false;
+        }
+    }
+
+    return false;
+}
+
+function AutoApplyCodeOnce({
+    onApplyCode,
+    code,
+    language,
+}: {
+    onApplyCode?: (code: string, language?: string) => void | boolean | Promise<void | boolean>;
+    code: string;
+    language?: string;
+}) {
+    useEffect(() => {
+        if (!onApplyCode) return;
+        void onApplyCode(code, language);
+    }, [onApplyCode, code, language]);
+    return null;
+}
+
 function splitTextIntoFileSections(text: string): TextSection[] {
     const sections: TextSection[] = [];
     const filePattern = /\[(PDF|File):\s*([^\]]+)\]\n([\s\S]*?)(?=\n\n\[(PDF|File):|$)/g;
@@ -450,6 +486,7 @@ export function ChatMessageDisplay({
     const userScrolledUpRef = useRef(false);
     const lastScrollTopRef = useRef(0);
     const lastMessageCountRef = useRef(0);
+    const autoAppliedCadPatchCardRef = useRef<Set<string>>(new Set());
 
     const copyMessageToClipboard = async (messageId: string, text: string) => {
         try {
@@ -1054,11 +1091,28 @@ export function ChatMessageDisplay({
                                                                     const cardKey = `${message.id}-cad-patch-${idx}-${segIdx}-${ordinal}`;
                                                                     const expanded = expandedCadPatchCards[cardKey] ?? true;
                                                                     const isStreamingPatch = status === "streaming" && isLastAssistantMessage;
+                                                                    const autoApplyCode = JSON.stringify(cadPatchPayload, null, 2);
+                                                                    const shouldAutoApply =
+                                                                        !!onApplyCode &&
+                                                                        message.role === "assistant" &&
+                                                                        isLastAssistantMessage &&
+                                                                        !isStreamingPatch &&
+                                                                        !autoAppliedCadPatchCardRef.current.has(cardKey);
+                                                                    if (shouldAutoApply) {
+                                                                        autoAppliedCadPatchCardRef.current.add(cardKey);
+                                                                    }
                                                                     return (
                                                                         <div
                                                                             key={`cad-patch-card-${message.id}-${idx}-${segIdx}-${ordinal}`}
                                                                             className="my-1 rounded-xl border border-border/60 bg-muted/30 overflow-hidden"
                                                                         >
+                                                                            {shouldAutoApply && (
+                                                                                <AutoApplyCodeOnce
+                                                                                    onApplyCode={onApplyCode}
+                                                                                    code={autoApplyCode}
+                                                                                    language="json"
+                                                                                />
+                                                                            )}
                                                                             <div className="flex items-center justify-between px-4 py-3 bg-muted/50">
                                                                                 <div className="flex items-center gap-2">
                                                                                     <div className="w-6 h-6 rounded-md bg-primary/10 flex items-center justify-center">
@@ -1118,14 +1172,38 @@ export function ChatMessageDisplay({
                                                                     );
                                                                 }
                                                                 return (
-                                                                    <CodeBlock
-                                                                        key={`codeblock-${message.id}-${idx}-${segIdx}-${language}-${ordinal}`}
-                                                                        blockId={`${message.id}:${idx}:${segIdx}:${language}:${ordinal}`}
-                                                                        code={code}
-                                                                        language={language}
-                                                                        isStreaming={status === "streaming" && isLastAssistantMessage}
-                                                                        onApply={onApplyCode}
-                                                                    />
+                                                                    (() => {
+                                                                        const autoApplyKey = `${message.id}-code-auto-${idx}-${segIdx}-${language}-${ordinal}`;
+                                                                        const shouldAutoApply =
+                                                                            !!onApplyCode &&
+                                                                            message.role === "assistant" &&
+                                                                            isLastAssistantMessage &&
+                                                                            status !== "streaming" &&
+                                                                            isCadAutoApplyCodeCandidate(language, code) &&
+                                                                            !autoAppliedCadPatchCardRef.current.has(autoApplyKey);
+                                                                        if (shouldAutoApply) {
+                                                                            autoAppliedCadPatchCardRef.current.add(autoApplyKey);
+                                                                        }
+                                                                        return (
+                                                                            <React.Fragment key={`codeblock-wrap-${message.id}-${idx}-${segIdx}-${language}-${ordinal}`}>
+                                                                                {shouldAutoApply && (
+                                                                                    <AutoApplyCodeOnce
+                                                                                        onApplyCode={onApplyCode}
+                                                                                        code={code}
+                                                                                        language={language}
+                                                                                    />
+                                                                                )}
+                                                                                <CodeBlock
+                                                                                    key={`codeblock-${message.id}-${idx}-${segIdx}-${language}-${ordinal}`}
+                                                                                    blockId={`${message.id}:${idx}:${segIdx}:${language}:${ordinal}`}
+                                                                                    code={code}
+                                                                                    language={language}
+                                                                                    isStreaming={status === "streaming" && isLastAssistantMessage}
+                                                                                    onApply={onApplyCode}
+                                                                                />
+                                                                            </React.Fragment>
+                                                                        );
+                                                                    })()
                                                                 );
                                                             })}
                                                         </div>

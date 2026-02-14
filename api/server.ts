@@ -4,6 +4,8 @@ import { GET as getConfig } from "./routes/config";
 import { POST as postVerifyAccessCode } from "./routes/verify-access-code";
 import { POST as postLogFeedback } from "./routes/log-feedback";
 import { POST as postLogSave } from "./routes/log-save";
+import { POST as postLogFileParser } from "./routes/log-file-parser";
+import { POST as postThirdPartyParser } from "./routes/third-party-parser";
 import { POST as postChat } from "./routes/chat";
 
 const PORT = Number(process.env.API_PORT || 8787);
@@ -97,6 +99,8 @@ app.get("/api/config", async (_req, res) => {
 app.post("/api/verify-access-code", withHandler(postVerifyAccessCode));
 app.post("/api/log-feedback", withHandler(postLogFeedback));
 app.post("/api/log-save", withHandler(postLogSave));
+app.post("/api/log-file-parser", withHandler(postLogFileParser));
+app.post("/api/third-party-parser", withHandler(postThirdPartyParser));
 app.post("/api/chat", withHandler(postChat));
 
 app.get("/healthz", (_req, res) => {

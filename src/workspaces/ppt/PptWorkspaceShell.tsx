@@ -32,6 +32,7 @@ const PPT_CHAT_STORAGE_KEY = "chat_history_v2_ppt";
 
 export function PptWorkspaceShell() {
   const uiLang = useUiLanguage();
+  const didMountRef = useRef(false);
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [pptIncomingEdit, setPptIncomingEdit] = useState<{ id: string; payload: string } | null>(null);
   const [pptDraftSlides, setPptDraftSlides] = useState<
@@ -65,6 +66,26 @@ export function PptWorkspaceShell() {
     } catch {
     }
   }, [versionHistory]);
+
+  useEffect(() => {
+    if (!didMountRef.current) {
+      didMountRef.current = true;
+      return;
+    }
+    if (pptStage !== "start") return;
+    setChatHistory([]);
+    setAttachments([]);
+    setVersionHistory([]);
+    setPptDraftSlides([]);
+    try {
+      localStorage.removeItem(PPT_CHAT_STORAGE_KEY);
+    } catch {
+    }
+    try {
+      localStorage.removeItem(PPT_HISTORY_STORAGE_KEY);
+    } catch {
+    }
+  }, [pptStage]);
 
   useEffect(() => {
     if (pptChatLocked && isChatCollapsed) {
@@ -189,6 +210,10 @@ export function PptWorkspaceShell() {
     }
     try {
       localStorage.removeItem(PPT_CHAT_STORAGE_KEY);
+    } catch {
+    }
+    try {
+      localStorage.removeItem(PPT_HISTORY_STORAGE_KEY);
     } catch {
     }
     setPptResetTick((x) => x + 1);
