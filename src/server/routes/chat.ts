@@ -1,4 +1,4 @@
-import {
+ï»¿import {
     APICallError,
     convertToModelMessages,
     createUIMessageStream,
@@ -16,14 +16,14 @@ import mammoth from "mammoth"
 import {
     getAIModel,
     supportsPromptCaching,
-} from "../next/lib/ai-providers"
+} from "../../workspaces/flow/next/lib/ai-providers"
 import {
     getTelemetryConfig,
     setTraceInput,
     setTraceOutput,
     wrapWithObserve,
-} from "../next/lib/langfuse"
-import { getSystemPrompt } from "../next/lib/system-prompts"
+} from "../../workspaces/flow/next/lib/langfuse"
+import { getSystemPrompt } from "../../workspaces/flow/next/lib/system-prompts"
 
 export const maxDuration = 300
 
@@ -168,7 +168,7 @@ async function summarizeChunk(
         headers,
         system:
             "You are a strict summarizer. Output only direct summary text, no questions, no instructions.",
-        user: `ÈÎÎñ£º½ö¸ù¾ÝÏÂÊöÎÄ±¾Êä³öÕªÒª£¨<=300×Ö£©¡£½ûÖ¹ÌáÎÊ¡¢½ûÖ¹ÈÃÓÃ»§²¹³äÄÚÈÝ¡¢½ûÖ¹Êä³öÄ£°å»¯¿ÍÌ×¡£\n\nÎÄ±¾£º\n${chunk}`,
+        user: `ä»»åŠ¡ï¼šä»…æ ¹æ®ä¸‹è¿°æ–‡æœ¬è¾“å‡ºæ‘˜è¦ï¼ˆ<=300å­—ï¼‰ã€‚ç¦æ­¢æé—®ã€ç¦æ­¢è®©ç”¨æˆ·è¡¥å……å†…å®¹ã€ç¦æ­¢è¾“å‡ºæ¨¡æ¿åŒ–å®¢å¥—ã€‚\n\næ–‡æœ¬ï¼š\n${chunk}`,
         maxOutputTokens: 600,
         maxChars: 300,
         fallbackSource: chunk,
@@ -181,7 +181,7 @@ function extractiveFallbackSummary(source: string, maxChars: number): string {
         .trim()
     if (!cleaned) return ""
     const sentences = cleaned
-        .split(/(?<=[¡££¡£¿.!?])\s+/)
+        .split(/(?<=[ã€‚ï¼ï¼Ÿ.!?])\s+/)
         .map((s) => s.trim())
         .filter(Boolean)
     const out: string[] = []
@@ -201,13 +201,13 @@ function sanitizeSummaryText(summary: string, fallbackSource: string, maxChars: 
     const text = String(summary || "").trim()
     if (!text) return extractiveFallbackSummary(fallbackSource, maxChars)
     const bannedPatterns = [
-        /ÇëÌá¹©/i,
-        /ÇëÕ³Ìù/i,
-        /ÐèÒªºÏ²¢/i,
-        /ÈçÓÐÆ«ºÃ/i,
-        /Ä¿±ê¶ÁÕß/i,
-        /ÊÇ·ñ±£ÁôÊõÓï/i,
-        /ÊÇ·ñÐèÒªÇ¿µ÷/i,
+        /è¯·æä¾›/i,
+        /è¯·ç²˜è´´/i,
+        /éœ€è¦åˆå¹¶/i,
+        /å¦‚æœ‰åå¥½/i,
+        /ç›®æ ‡è¯»è€…/i,
+        /æ˜¯å¦ä¿ç•™æœ¯è¯­/i,
+        /æ˜¯å¦éœ€è¦å¼ºè°ƒ/i,
         /I can|please provide|paste|preference/i,
     ]
     if (bannedPatterns.some((p) => p.test(text))) {
@@ -220,11 +220,11 @@ function isBadSummaryText(text: string): boolean {
     const t = String(text || "").trim()
     if (!t) return true
     return [
-        /ÇëÌá¹©/i,
-        /ÇëÕ³Ìù/i,
-        /ÐèÒªºÏ²¢/i,
-        /ÈçÓÐÆ«ºÃ/i,
-        /ÊÇ·ñ±£ÁôÊõÓï/i,
+        /è¯·æä¾›/i,
+        /è¯·ç²˜è´´/i,
+        /éœ€è¦åˆå¹¶/i,
+        /å¦‚æœ‰åå¥½/i,
+        /æ˜¯å¦ä¿ç•™æœ¯è¯­/i,
         /please provide|paste/i,
     ].some((p) => p.test(t))
 }
@@ -279,7 +279,7 @@ async function summarizeBlockMethod(args: {
         headers: args.headers,
         system:
             "You produce concise, faithful merged summaries. Output only summary text.",
-        user: `ÈÎÎñ£º½«ÒÔÏÂ·Ö¿éÕªÒªºÏ²¢ÎªÍêÕûÕªÒª£¨<=1000×Ö£©¡£½ûÖ¹ÌáÎÊ¡¢½ûÖ¹ÇëÇó²¹³ä²ÄÁÏ£¬½öÊä³öÕªÒªÕýÎÄ¡£\n\n${merged}`,
+        user: `ä»»åŠ¡ï¼šå°†ä»¥ä¸‹åˆ†å—æ‘˜è¦åˆå¹¶ä¸ºå®Œæ•´æ‘˜è¦ï¼ˆ<=1000å­—ï¼‰ã€‚ç¦æ­¢æé—®ã€ç¦æ­¢è¯·æ±‚è¡¥å……ææ–™ï¼Œä»…è¾“å‡ºæ‘˜è¦æ­£æ–‡ã€‚\n\n${merged}`,
         maxOutputTokens: 1800,
         maxChars: 1000,
         fallbackSource: merged,
@@ -315,7 +315,7 @@ async function summarizeRecursiveMethod(args: {
                     headers: args.headers,
                     system:
                         "You merge summaries into a higher-level summary. Output only summary text.",
-                    user: `ÈÎÎñ£º°ÑÕâ×éÕªÒªÌáÁ¶³É¸ü¸ß²ãÕªÒª£¨<=350×Ö£©¡£½ûÖ¹ÌáÎÊ¡¢½ûÖ¹ÈÃÓÃ»§²¹³ä£¬Ö»Êä³öÕªÒª¡£\n\n${group}`,
+                    user: `ä»»åŠ¡ï¼šæŠŠè¿™ç»„æ‘˜è¦æç‚¼æˆæ›´é«˜å±‚æ‘˜è¦ï¼ˆ<=350å­—ï¼‰ã€‚ç¦æ­¢æé—®ã€ç¦æ­¢è®©ç”¨æˆ·è¡¥å……ï¼Œåªè¾“å‡ºæ‘˜è¦ã€‚\n\n${group}`,
                     maxOutputTokens: 800,
                     maxChars: 350,
                     fallbackSource: group,
@@ -330,7 +330,7 @@ async function summarizeRecursiveMethod(args: {
         headers: args.headers,
         system:
             "You produce final executive summaries with hierarchical fidelity and no hallucination. Output only summary text.",
-        user: `ÈÎÎñ£ºÊä³ö×îÖÕÕªÒª£¨<=1000×Ö£©¡£½ûÖ¹ÌáÎÊ¡¢½ûÖ¹ÇëÇó¸ü¶àÐÅÏ¢£¬½öÊä³öÕªÒªÕýÎÄ¡£\n\n${level.join("\n")}`,
+        user: `ä»»åŠ¡ï¼šè¾“å‡ºæœ€ç»ˆæ‘˜è¦ï¼ˆ<=1000å­—ï¼‰ã€‚ç¦æ­¢æé—®ã€ç¦æ­¢è¯·æ±‚æ›´å¤šä¿¡æ¯ï¼Œä»…è¾“å‡ºæ‘˜è¦æ­£æ–‡ã€‚\n\n${level.join("\n")}`,
         maxOutputTokens: 1800,
         maxChars: 1000,
         fallbackSource: level.join("\n"),
@@ -1066,7 +1066,7 @@ IMPORTANT: Keep edits concise:
 - Each search must contain complete lines (never truncate mid-line)
 - First match only - be specific enough to target the right element
 
-âš ï¸ JSON ESCAPING: Every " inside string values MUST be escaped as \\". Example: x=\\"100\\" y=\\"200\\" - BOTH quotes need backslashes!`,
+éˆ¿ç‹…ç¬ JSON ESCAPING: Every " inside string values MUST be escaped as \\". Example: x=\\"100\\" y=\\"200\\" - BOTH quotes need backslashes!`,
                             inputSchema: z.object({
                                 edits: z
                                     .array(
@@ -1225,6 +1225,7 @@ const observedHandler = wrapWithObserve(safeHandler)
 export async function POST(req: Request) {
     return observedHandler(req)
 }
+
 
 
 

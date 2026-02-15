@@ -81,6 +81,11 @@ const CAD_STORAGE_FALLBACK_LIMITS = [
   { maxMessages: 16, maxMessageChars: 6000, maxTotalChars: 60000 },
   { maxMessages: 8, maxMessageChars: 3000, maxTotalChars: 30000 },
 ];
+const CAD_ROUTER_HISTORY_LIMITS = {
+  maxMessages: 12,
+  maxMessageChars: 3000,
+  maxTotalChars: 18000,
+};
 
 const normalizeStoredChatMessages = (raw: any): ChatMessage[] => {
   if (!Array.isArray(raw)) return [];
@@ -106,6 +111,33 @@ const truncateForStorage = (text: string, maxChars: number) => {
     return value.slice(0, maxChars);
   }
   return value.slice(0, maxChars - CAD_STORAGE_TRUNCATE_SUFFIX.length) + CAD_STORAGE_TRUNCATE_SUFFIX;
+};
+
+const buildCadRouterHistoryContext = (source: ChatMessage[]) => {
+  if (!Array.isArray(source) || source.length === 0) return "";
+
+  const recent = source
+    .filter((m) => m && (m.role === "user" || m.role === "assistant"))
+    .slice(-CAD_ROUTER_HISTORY_LIMITS.maxMessages);
+  if (recent.length === 0) return "";
+
+  let totalChars = 0;
+  const lines: string[] = [];
+  for (const m of recent) {
+    const raw = truncateForStorage(String(m.content || ""), CAD_ROUTER_HISTORY_LIMITS.maxMessageChars);
+    if (!raw) continue;
+
+    const remaining = CAD_ROUTER_HISTORY_LIMITS.maxTotalChars - totalChars;
+    if (remaining <= 0) break;
+
+    const clipped = raw.length > remaining ? truncateForStorage(raw, remaining) : raw;
+    const roleLabel = m.role === "assistant" ? "Assistant" : "User";
+    lines.push(`[${roleLabel}] ${clipped}`);
+    totalChars += clipped.length;
+  }
+
+  if (lines.length === 0) return "";
+  return `Recent chat history (for intent continuity):\n\n${lines.join("\n\n")}`;
 };
 
 const compactCadMessagesForStorage = (
@@ -875,7 +907,7 @@ export function ChatPanel({
       forceReplace
         ? "- This time you MUST use mode=replace and output one complete <svg ...>...</svg> in the full field"
         : "- If exact patch matching is unsafe, use mode=replace and output one complete <svg ...>...</svg> in the full field",
-    ].join("\\n");
+      ].join("\\n");
   };
 
   const handleSend = async () => {
@@ -1012,6 +1044,10 @@ export function ChatPanel({
             .filter(Boolean)
             .join("\n\n")
         : "";
+    const cadHistoryContextText =
+      workspaceId === "cad"
+        ? buildCadRouterHistoryContext(messages)
+        : "";
 
     const promptParts = [
       rawInput,
@@ -1019,7 +1055,8 @@ export function ChatPanel({
       pptDraftContextText,
       contextAttachmentsText,
       flowContextText,
-      cadContextText
+      cadContextText,
+      cadHistoryContextText,
     ].filter(Boolean);
     const promptContent = promptParts.join("\n\n");
     lastUploadedImagesRef.current = currentUploadedImages;
@@ -1941,7 +1978,22 @@ export function ChatPanel({
       workspaceId === "flow" && typeof flowContext?.xml === "string" && flowContext.xml.trim()
         ? `Current diagram XML:\n\n\`\`\`xml\n${flowContext.xml}\n\`\`\``
         : "";
-    const promptContent = [lastUserText, flowContextText].filter(Boolean).join("\n\n");
+    const cadContextText =
+      workspaceId === "cad"
+        ? [
+            cadContext?.plan ? `Current CAD plan:\n\n\`\`\`json\n${JSON.stringify(cadContext.plan, null, 2)}\n\`\`\`` : "",
+            typeof cadContext?.svg2d === "string" && cadContext.svg2d.trim()
+              ? `Current 2D SVG:\n\n\`\`\`svg\n${cadContext.svg2d}\n\`\`\``
+              : "",
+          ]
+            .filter(Boolean)
+            .join("\n\n")
+        : "";
+    const cadHistoryContextText =
+      workspaceId === "cad"
+        ? buildCadRouterHistoryContext(baseMessages.slice(0, -1))
+        : "";
+    const promptContent = [lastUserText, flowContextText, cadContextText, cadHistoryContextText].filter(Boolean).join("\n\n");
 
     const apiMessages: ChatMessage[] = [
       { role: 'system', content: systemContent },

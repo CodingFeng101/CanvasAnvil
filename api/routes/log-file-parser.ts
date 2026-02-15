@@ -1,2 +1,3 @@
-export { POST } from "../../src/workspaces/flow/api/log-file-parser"
+﻿export { POST } from "../../src/server/routes/log-file-parser"
+
 

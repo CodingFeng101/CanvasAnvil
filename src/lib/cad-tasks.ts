@@ -1,14 +1,14 @@
 import type { ChatMessage } from "@/lib/ai-client";
 
 import cadBomPromptTemplate from "../../agent/cad/bom-prompt.md?raw";
-import cadImagesMasterRenovationSchemeTemplate from "../../agent/cad/images-agents/master-renovation-scheme.agent.md?raw";
-import cadRenovationPlanLayoutTemplate from "../../agent/cad/images-agents/renovation-plan-layout.agent.md?raw";
-import cadFloorFinishPlanTemplate from "../../agent/cad/images-agents/floor-finish-plan.agent.md?raw";
-import cadReflectedCeilingPlanTemplate from "../../agent/cad/images-agents/reflected-ceiling-plan.agent.md?raw";
-import cadWallSettingOutPlanTemplate from "../../agent/cad/images-agents/wall-setting-out-plan.agent.md?raw";
-import cadMepPlanTemplate from "../../agent/cad/images-agents/mep-plan.agent.md?raw";
-import cadElevationIndexAndInteriorElevationsTemplate from "../../agent/cad/images-agents/elevation-index-and-interior-elevations.agent.md?raw";
-import cadDetailDrawingsTemplate from "../../agent/cad/images-agents/detail-drawings.agent.md?raw";
+import cadImagesMasterRenovationSchemeTemplate from "../../agent/cad/images-agents/master-renovation-scheme.md?raw";
+import cadRenovationPlanLayoutTemplate from "../../agent/cad/images-agents/renovation-plan-layout.md?raw";
+import cadFloorFinishPlanTemplate from "../../agent/cad/images-agents/floor-finish-plan.md?raw";
+import cadReflectedCeilingPlanTemplate from "../../agent/cad/images-agents/reflected-ceiling-plan.md?raw";
+import cadWallSettingOutPlanTemplate from "../../agent/cad/images-agents/wall-setting-out-plan.md?raw";
+import cadMepPlanTemplate from "../../agent/cad/images-agents/mep-plan.md?raw";
+import cadElevationIndexAndInteriorElevationsTemplate from "../../agent/cad/images-agents/elevation-index-and-interior-elevations.md?raw";
+import cadDetailDrawingsTemplate from "../../agent/cad/images-agents/detail-drawings.md?raw";
 
 function applyTemplate(template: string, vars: Record<string, string>) {
   let out = String(template || "");

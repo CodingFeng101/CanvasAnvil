@@ -1,6 +1,6 @@
-import { randomUUID } from "crypto"
+﻿import { randomUUID } from "crypto"
 import { z } from "zod"
-import { getLangfuseClient } from "../next/lib/langfuse"
+import { getLangfuseClient } from "../../workspaces/flow/next/lib/langfuse"
 
 const feedbackSchema = z.object({
     messageId: z.string().min(1).max(200),
@@ -110,5 +110,6 @@ export async function POST(req: Request) {
         )
     }
 }
+
 
 

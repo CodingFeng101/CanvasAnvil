@@ -1,1 +1,2 @@
-export { POST } from "../../src/workspaces/flow/api/chat"
+﻿export { POST } from "../../src/server/routes/chat"
+

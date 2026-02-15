@@ -1,1 +1,2 @@
-export { GET } from "../../src/workspaces/flow/api/config"
+﻿export { GET } from "../../src/server/routes/config"
+

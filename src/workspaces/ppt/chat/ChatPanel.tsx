@@ -11,7 +11,7 @@ import { HistoryDialog, HistoryItem } from '@/workspaces/ppt/chat/history-dialog
 import { ResetWarningModal } from '@/workspaces/ppt/chat/reset-warning-modal';
 import { useFileProcessor } from '@/lib/use-file-processor';
 import { buildCadBomMessages, buildCadImagesMasterMessages, buildCadImagesSheetMessages, buildCadTasksSystemContent } from '@/lib/cad-tasks';
-import { CAD_PLAN_AGENT_PROMPT, CAD_SVG_GENERATE_AGENT_PROMPT, CAD_SVG_PATCH_AGENT_PROMPT } from '@/lib/cad-agents';
+import { CAD_PLAN_AGENT_PROMPT } from '@/lib/cad-agents';
 import flowPatchAgentPrompt from "../../../../agent/flow/patch.md?raw";
 import flowReplaceAgentPrompt from "../../../../agent/flow/replace.md?raw";
 import { t } from "@/lib/i18n";
@@ -1197,11 +1197,7 @@ export function ChatPanel({
           const agentPrompt =
             agent === "cad_plan_agent"
               ? CAD_PLAN_AGENT_PROMPT
-              : agent === "cad_svg_generate_agent"
-                ? CAD_SVG_GENERATE_AGENT_PROMPT
-                : agent === "cad_svg_patch_agent"
-                  ? CAD_SVG_PATCH_AGENT_PROMPT
-                  : "";
+              : "";
 
           if (!agentPrompt) {
             updateLastAssistant(trText(`未识别的 CAD 子智能体：${agent}`, `Unrecognized CAD sub-agent: ${agent}`));

@@ -1,1 +1,2 @@
-export { POST } from "../../src/workspaces/flow/api/verify-access-code"
+﻿export { POST } from "../../src/server/routes/verify-access-code"
+
