@@ -1,4 +1,4 @@
-import { getUiLanguage, type UiLanguage } from "@/lib/ui-language";
+﻿import { getUiLanguage, type UiLanguage } from "@/lib/ui-language";
 
 type Dict = Record<string, { zh: string; en: string }>;
 
@@ -48,8 +48,8 @@ const dict: Dict = {
   "chat.collapseLocked": { zh: "PPT 生成完成前不能收起聊天", en: "Chat cannot be collapsed while PPT is generating" },
   "chat.collapse": { zh: "收起聊天", en: "Collapse chat" },
 
-  "nav.flow": { zh: "流程图", en: "Flow" },
-  "nav.cad": { zh: "CAD设计", en: "CAD" },
+  "nav.flow": { zh: "流程绘制", en: "Flow" },
+  "nav.cad": { zh: "室内设计", en: "CAD" },
   "nav.ppt": { zh: "PPT演示", en: "PPT" },
 
   "flow.addToChat": { zh: "添加到对话", en: "Add to chat" },

@@ -3,6 +3,7 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { t } from "@/lib/i18n";
 import { useUiLanguage } from "@/lib/use-ui-language";
+import { getCadRenderFallbackTitle } from "@/lib/cad-render-titles";
 import {
   ResizableHandle,
   ResizablePanel,
@@ -27,15 +28,6 @@ type CodeActionResult = { ok: boolean; retry?: boolean; error?: string; svg?: st
 const CAD_WORKSPACE_STORAGE_KEY = "unified-ai-workspace-cad-state-v1";
 const CAD_RENDERS_STORAGE_KEY = "unified-ai-workspace-cad-renders-v1";
 const CAD_CHAT_STORAGE_KEY = "chat_history_v2_cad";
-const CAD_RENDER_SLOT_TITLES = [
-  "装修平面布置图",
-  "地面铺装图",
-  "顶面布置图",
-  "墙体定位图",
-  "机电点位图（强弱电+给排水）",
-  "立面索引图+室内立面图",
-  "节点大样图",
-];
 
 const tryParseJson = (text: string) => {
   try {
@@ -159,8 +151,77 @@ const extractLatestSvgFromText = (text: string) => {
   return latest;
 };
 
+type CadRenderItem = { title: string; url: string };
+
+const normalizeCadRenderItems = (
+  input: any,
+  options?: { allowBlob?: boolean; max?: number },
+): CadRenderItem[] => {
+  const allowBlob = options?.allowBlob === true;
+  const max = typeof options?.max === "number" && options.max > 0 ? options.max : 30;
+  if (!Array.isArray(input)) return [];
+  return input
+    .map((x: any) => ({
+      title: typeof x?.title === "string" ? x.title : "",
+      url: typeof x?.url === "string" ? x.url : "",
+    }))
+    .filter((x: CadRenderItem) => {
+      if (!x.url) return false;
+      if (!allowBlob && x.url.startsWith("blob:")) return false;
+      return true;
+    })
+    .slice(0, max);
+};
+
+const readPersistedCadRenders = (): CadRenderItem[] => {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = localStorage.getItem(CAD_RENDERS_STORAGE_KEY);
+    const parsed = raw ? JSON.parse(raw) : [];
+    return normalizeCadRenderItems(parsed, { allowBlob: false, max: 30 });
+  } catch {
+    return [];
+  }
+};
+
+const blobToDataUrl = async (blob: Blob) =>
+  await new Promise<string>((resolve) => {
+    const reader = new FileReader();
+    reader.onerror = () => resolve("");
+    reader.onloadend = () => resolve(typeof reader.result === "string" ? reader.result : "");
+    reader.readAsDataURL(blob);
+  });
+
+const urlToDataUrl = async (url: string) => {
+  if (typeof window === "undefined") return "";
+  try {
+    const resp = await fetch(url);
+    if (!resp.ok) return "";
+    const blob = await resp.blob();
+    return await blobToDataUrl(blob);
+  } catch {
+    return "";
+  }
+};
+
+const toPersistableRenderUrl = async (url: string) => {
+  const raw = String(url || "").trim();
+  if (!raw) return "";
+  if (raw.startsWith("data:image")) return raw;
+  if (raw.startsWith("blob:")) {
+    const dataUrl = await urlToDataUrl(raw);
+    return dataUrl || "";
+  }
+  if (raw.startsWith("http://") || raw.startsWith("https://")) {
+    const dataUrl = await urlToDataUrl(raw);
+    return dataUrl || raw;
+  }
+  return raw;
+};
+
 export function CadWorkspaceShell() {
   const uiLang = useUiLanguage();
+  const tr = (zh: string, en: string) => (uiLang === "zh" ? zh : en);
   const initialCadState = (() => {
     if (typeof window === "undefined") return null;
     try {
@@ -172,20 +233,21 @@ export function CadWorkspaceShell() {
       return null;
     }
   })();
+  const initialCadRenders = (() => {
+    const fromWorkspaceState = normalizeCadRenderItems(initialCadState?.cadImages, {
+      allowBlob: false,
+      max: 30,
+    });
+    if (fromWorkspaceState.length > 0) return fromWorkspaceState;
+    return readPersistedCadRenders();
+  })();
 
   const [cad2dSvg, setCad2dSvg] = useState<string | undefined>(() => {
     const v = initialCadState?.cad2dSvg;
     return typeof v === "string" ? v : undefined;
   });
   const [cadPlan, setCadPlan] = useState<any>(() => initialCadState?.cadPlan ?? null);
-  const [cadImages, setCadImages] = useState<{ title: string; url: string }[]>(() => {
-    const v = initialCadState?.cadImages;
-    return Array.isArray(v)
-      ? v
-          .filter((x: any) => x && typeof x.title === "string" && typeof x.url === "string")
-          .map((x: any) => ({ title: x.title, url: x.url }))
-      : [];
-  });
+  const [cadImages, setCadImages] = useState<{ title: string; url: string }[]>(() => initialCadRenders);
   const [cadImagesLoading, setCadImagesLoading] = useState(false);
   const [cadBom, setCadBom] = useState<{ columns: string[]; rows: any[] } | null>(() => {
     const v = initialCadState?.cadBom;
@@ -224,7 +286,6 @@ export function CadWorkspaceShell() {
         JSON.stringify({
           cad2dSvg: typeof cad2dSvg === "string" ? cad2dSvg : null,
           cadPlan: cadPlan ?? null,
-          cadImages,
           cadBom,
           cadFocusPanel,
           updatedAt: Date.now(),
@@ -232,7 +293,20 @@ export function CadWorkspaceShell() {
       );
     } catch {
     }
-  }, [cad2dSvg, cadPlan, cadImages, cadBom, cadFocusPanel]);
+  }, [cad2dSvg, cadPlan, cadBom, cadFocusPanel]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      const stable = normalizeCadRenderItems(cadImages, { allowBlob: false, max: 30 });
+      if (stable.length > 0) {
+        localStorage.setItem(CAD_RENDERS_STORAGE_KEY, JSON.stringify(stable));
+      } else {
+        localStorage.removeItem(CAD_RENDERS_STORAGE_KEY);
+      }
+    } catch {
+    }
+  }, [cadImages]);
 
   useEffect(() => {
     const nextObjectUrls = cadImages
@@ -271,7 +345,6 @@ export function CadWorkspaceShell() {
       cad2dSvgRef.current = svg;
       setCad2dSvg(svg);
       setCadFocusPanel("2d");
-      addToHistory(svg, "svg");
       return;
     }
   }, [chatHistory]);
@@ -291,8 +364,6 @@ export function CadWorkspaceShell() {
       setIsChatCollapsed(false);
     }
   };
-
-  const addToHistory = (_content: string, _type: "svg" | "json") => {};
 
   const handleAddToChat = (payload: string) => {
     const trimmed = String(payload || "").trim();
@@ -325,16 +396,17 @@ export function CadWorkspaceShell() {
 
     const raw = String(code || "");
     const trimmed = raw.trim();
-    if (!trimmed) return { ok: false, retry: false, error: "Empty input" };
+    if (!trimmed) return { ok: false, retry: false, error: tr("输入为空", "Empty input") };
 
     const normalizedRawSvg = !trimmed.startsWith("{") ? normalizeSvgMarkup(raw) : "";
     if (normalizedRawSvg) {
       if (!isValidSvgMarkup(normalizedRawSvg)) {
-        toast.warning("SVG may contain XML issues, trying to load anyway");
+        toast.warning(tr("SVG 可能包含 XML 问题，仍将尝试加载", "SVG may contain XML issues, trying to load anyway"));
       }
       if (!hasDrawableSvgContent(normalizedRawSvg)) {
-        toast.error("SVG has no drawable content");
-        return { ok: false, retry: false, error: "SVG has no drawable content" };
+        const msg = tr("SVG 不包含可绘制内容", "SVG has no drawable content");
+        toast.error(msg);
+        return { ok: false, retry: false, error: msg };
       }
       const current = normalizeSvgMarkup(String(cad2dSvgRef.current || ""));
       if (normalizedRawSvg === current) {
@@ -346,26 +418,27 @@ export function CadWorkspaceShell() {
       cad2dSvgRef.current = normalizedRawSvg;
       setCad2dSvg(normalizedRawSvg);
       setCadFocusPanel("2d");
-      addToHistory(normalizedRawSvg, "svg");
       setCadApplyTick((x) => x + 1);
       return { ok: true, svg: normalizedRawSvg };
     }
 
-    if (!trimmed.startsWith("{")) return { ok: false, retry: false, error: "No SVG found in input" };
+    if (!trimmed.startsWith("{")) return { ok: false, retry: false, error: tr("输入中未找到 SVG", "No SVG found in input") };
     const parsed = tryParseJson(trimmed);
-    if (!parsed) return { ok: false, retry: false, error: "Invalid JSON" };
+    if (!parsed) return { ok: false, retry: false, error: tr("JSON 无效", "Invalid JSON") };
     const parsedType = String(parsed?.type || "").trim().toLowerCase();
     const parsedTarget = String(parsed?.target || "").trim().toLowerCase();
     const parsedMode = String(parsed?.mode || "").trim().toLowerCase();
 
     if (parsedType === "cad_plan") {
       setCadPlan(parsed);
-      addToHistory(JSON.stringify(parsed), "json");
       return { ok: true };
     }
 
     if (parsedType === "cad_bom") {
-      const fallbackColumns = ["Category", "Name", "Spec", "Qty", "Unit", "Note"];
+      const fallbackColumns =
+        uiLang === "zh"
+          ? ["类别", "名称", "规格", "数量", "单位", "备注"]
+          : ["Category", "Name", "Spec", "Qty", "Unit", "Note"];
       const columns =
         Array.isArray(parsed.columns) && parsed.columns.length > 0
           ? parsed.columns.map((x: any) => String(x))
@@ -380,7 +453,7 @@ export function CadWorkspaceShell() {
       const prompts = Array.isArray(parsed.prompts) ? parsed.prompts : [];
       const items = prompts
         .map((p: any) => ({
-          title: typeof p?.title === "string" ? p.title : "View",
+          title: typeof p?.title === "string" ? p.title : tr("视图", "View"),
           prompt: typeof p?.prompt === "string" ? p.prompt : "",
         }))
         .filter((p: any) => p.prompt)
@@ -390,7 +463,7 @@ export function CadWorkspaceShell() {
       setCadImagesLoading(true);
       setCadImages(
         Array.from({ length: 7 }).map((_, idx) => ({
-          title: CAD_RENDER_SLOT_TITLES[idx] || `鍥剧焊 ${idx + 1}`,
+          title: getCadRenderFallbackTitle(uiLang, idx),
           url: "",
         })),
       );
@@ -448,7 +521,7 @@ export function CadWorkspaceShell() {
         const syncPartialImages = () => {
           setCadImages(
             Array.from({ length: 7 }).map((_, idx) => ({
-              title: CAD_RENDER_SLOT_TITLES[idx] || `鍥剧焊 ${idx + 1}`,
+              title: getCadRenderFallbackTitle(uiLang, idx),
               url: results[idx]?.url || "",
             })),
           );
@@ -482,21 +555,30 @@ export function CadWorkspaceShell() {
         }
 
         const final = Array.from({ length: 7 }).map((_, idx) => ({
-          title: CAD_RENDER_SLOT_TITLES[idx] || `鍥剧焊 ${idx + 1}`,
+          title: getCadRenderFallbackTitle(uiLang, idx),
           url: results[idx]?.url || "",
         }));
-        setCadImages(final);
+        const persistableFinal = await Promise.all(
+          final.map(async (item) => ({
+            title: item.title,
+            url: await toPersistableRenderUrl(item.url),
+          })),
+        );
+        setCadImages(persistableFinal);
         const failedCount = list.filter((_, idx) => !results[idx]?.url).length;
         if (failedCount > 0) {
-          toast.warning(`${failedCount} render image(s) failed after retries. Please run generation again.`);
+          toast.warning(
+            uiLang === "zh"
+              ? `有 ${failedCount} 张装修图在重试后仍失败，请重新生成。`
+              : `${failedCount} render image(s) failed after retries. Please run generation again.`,
+          );
         }
-        addToHistory(JSON.stringify({ type: "cad_images", prompts: final }, null, 2), "json");
       } catch (e) {
         console.error("CAD image generation failed", e);
-        toast.error("CAD image generation failed");
+        toast.error(tr("装修图生成失败", "CAD image generation failed"));
         setCadImages(
           Array.from({ length: 7 }).map((_, idx) => ({
-            title: CAD_RENDER_SLOT_TITLES[idx] || `鍥剧焊 ${idx + 1}`,
+            title: getCadRenderFallbackTitle(uiLang, idx),
             url: "",
           })),
         );
@@ -511,15 +593,17 @@ export function CadWorkspaceShell() {
       if (parsedMode === "replace" && typeof parsed.full === "string") {
         const normalizedFull = normalizeSvgMarkup(parsed.full);
         if (!normalizedFull) {
-          toast.error("Invalid replace svg");
-          return { ok: false, retry: false, error: "Invalid replace svg" };
+          const msg = tr("replace 模式 SVG 无效", "Invalid replace svg");
+          toast.error(msg);
+          return { ok: false, retry: false, error: msg };
         }
         if (!isValidSvgMarkup(normalizedFull)) {
-          toast.warning("Replace svg may contain XML issues, trying to load anyway");
+          toast.warning(tr("replace SVG 可能包含 XML 问题，仍将尝试加载", "Replace svg may contain XML issues, trying to load anyway"));
         }
         if (!hasDrawableSvgContent(normalizedFull)) {
-          toast.error("Replace svg has no drawable content");
-          return { ok: false, retry: false, error: "Replace svg has no drawable content" };
+          const msg = tr("replace SVG 不包含可绘制内容", "Replace svg has no drawable content");
+          toast.error(msg);
+          return { ok: false, retry: false, error: msg };
         }
         const current = normalizeSvgMarkup(String(cad2dSvgRef.current || ""));
         if (normalizedFull === current) {
@@ -530,7 +614,6 @@ export function CadWorkspaceShell() {
         cad2dSvgRef.current = normalizedFull;
         setCad2dSvg(normalizedFull);
         setCadFocusPanel("2d");
-        addToHistory(normalizedFull, "svg");
         setCadApplyTick((x) => x + 1);
         return { ok: true, svg: normalizedFull };
       }
@@ -538,40 +621,46 @@ export function CadWorkspaceShell() {
         try {
           const current = normalizeSvgMarkup(String(cad2dSvgRef.current || ""));
           if (!current) {
-            toast.error("Current 2D SVG is empty, cannot apply patch");
-            return { ok: false, retry: true, error: "Current 2D SVG is empty, cannot apply patch" };
+            const msg = tr("当前 2D SVG 为空，无法应用补丁", "Current 2D SVG is empty, cannot apply patch");
+            toast.error(msg);
+            return { ok: false, retry: true, error: msg };
           }
           const next = applyStringEdits(current, parsed.edits);
           const normalizedNext = normalizeSvgMarkup(next);
           if (!normalizedNext) {
-            toast.error("Patch result is not valid svg");
-            return { ok: false, retry: true, error: "Patch result is not valid svg" };
+            const msg = tr("补丁结果不是有效 SVG", "Patch result is not valid svg");
+            toast.error(msg);
+            return { ok: false, retry: true, error: msg };
           }
           if (!isValidSvgMarkup(normalizedNext)) {
-            toast.warning("Patch result may contain XML issues, trying to load anyway");
+            toast.warning(tr("补丁结果可能包含 XML 问题，仍将尝试加载", "Patch result may contain XML issues, trying to load anyway"));
           }
           if (!hasDrawableSvgContent(normalizedNext)) {
-            toast.error("Patch result has no drawable content");
-            return { ok: false, retry: true, error: "Patch result has no drawable content" };
+            const msg = tr("补丁结果不包含可绘制内容", "Patch result has no drawable content");
+            toast.error(msg);
+            return { ok: false, retry: true, error: msg };
           }
           if (normalizedNext === current) {
-            toast.warning("Patch produced no visible SVG change");
-            return { ok: false, retry: true, error: "Patch produced no visible SVG change" };
+            const msg = tr("补丁未产生可见 SVG 变化", "Patch produced no visible SVG change");
+            toast.warning(msg);
+            return { ok: false, retry: true, error: msg };
           }
           cad2dSvgRef.current = normalizedNext;
           setCad2dSvg(normalizedNext);
           setCadFocusPanel("2d");
-          addToHistory(normalizedNext, "svg");
           setCadApplyTick((x) => x + 1);
           return { ok: true, svg: normalizedNext };
         } catch (e) {
           const msg = e instanceof Error ? e.message : String(e);
-          toast.error(`Patch apply failed: ${msg}`);
+          const err = uiLang === "zh" ? `补丁应用失败：${msg}` : `Patch apply failed: ${msg}`;
+          toast.error(err);
           return { ok: false, retry: true, error: msg };
         }
       }
-      toast.error(`Unsupported cad_patch mode: ${String(parsedMode || "") || "unknown"}`);
-      return { ok: false, retry: false, error: `Unsupported cad_patch mode: ${String(parsedMode || "") || "unknown"}` };
+      const mode = String(parsedMode || "") || "unknown";
+      const err = uiLang === "zh" ? `不支持的 cad_patch 模式：${mode}` : `Unsupported cad_patch mode: ${mode}`;
+      toast.error(err);
+      return { ok: false, retry: false, error: err };
     }
 
     return { ok: true };
@@ -621,7 +710,6 @@ export function CadWorkspaceShell() {
             onSvgChange={(nextSvg) => {
               cad2dSvgRef.current = nextSvg;
               setCad2dSvg(nextSvg);
-              addToHistory(nextSvg, "svg");
             }}
             plan={cadPlan}
             images={cadImages}

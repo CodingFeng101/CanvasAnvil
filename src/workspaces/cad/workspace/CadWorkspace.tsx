@@ -11,6 +11,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/workspaces/c
 import { PDFDocument } from "pdf-lib";
 import { useUiLanguage } from "@/lib/use-ui-language";
 import { toast } from "sonner";
+import { getCadRenderSlotTitles } from "@/lib/cad-render-titles";
 
 interface CadWorkspaceProps {
   onAddToChat?: (code: string) => void;
@@ -22,16 +23,6 @@ interface CadWorkspaceProps {
   bom?: { columns: string[]; rows: any[] } | null;
   focusPanel?: "2d" | "renders" | "bom" | null;
 }
-
-const RENDER_SLOT_TITLES = [
-  "装修平面布置图",
-  "地面铺装图",
-  "顶面布置图",
-  "墙体定位图",
-  "机电点位图（强弱电+给排水）",
-  "立面索引图+室内立面图",
-  "节点大样图",
-];
 
 const EMPTY_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 1000"></svg>`;
 const EMPTY_SENTINEL = "__EMPTY_SVG__";
@@ -365,7 +356,11 @@ export function CadWorkspace({ onAddToChat, onSvgChange, svg2d, plan, images = [
       const stable = localImages
         .filter((x) => x && typeof x.url === "string" && x.url && !x.url.startsWith("blob:"))
         .slice(0, 30);
-      localStorage.setItem(CAD_RENDERS_STORAGE_KEY, JSON.stringify(stable));
+      if (stable.length > 0) {
+        localStorage.setItem(CAD_RENDERS_STORAGE_KEY, JSON.stringify(stable));
+      } else {
+        localStorage.removeItem(CAD_RENDERS_STORAGE_KEY);
+      }
     } catch {
     }
   }, [localImages]);
@@ -612,14 +607,15 @@ export function CadWorkspace({ onAddToChat, onSvgChange, svg2d, plan, images = [
   };
 
   const renderSlots = useMemo(() => {
-    return RENDER_SLOT_TITLES.map((fallbackTitle, idx) => {
+    const titles = getCadRenderSlotTitles(uiLang);
+    return titles.map((fallbackTitle, idx) => {
       const item = localImages[idx];
       return {
         title: fallbackTitle,
         url: item?.url || "",
       };
     });
-  }, [localImages]);
+  }, [localImages, uiLang]);
 
   const hasRenderImages = localImages.some((x) => !!x?.url);
 
@@ -702,7 +698,7 @@ export function CadWorkspace({ onAddToChat, onSvgChange, svg2d, plan, images = [
             <div className="w-full h-full bg-white shadow-sm rounded-xl overflow-hidden border border-border/50">
               <iframe
                 ref={svgEditorIframeRef}
-                title="CAD SVG Editor"
+                title={uiLang === "zh" ? "CAD SVG 编辑器" : "CAD SVG Editor"}
                 src={SVG_EDITOR_IFRAME_PATH}
                 className="h-full w-full border-0"
                 onLoad={handleSvgEditorIframeLoad}
@@ -729,7 +725,11 @@ export function CadWorkspace({ onAddToChat, onSvgChange, svg2d, plan, images = [
                         >
                           <ImageIcon className="w-4 h-4" />
                         </Button>
-                        <a href={img.url || "#"} download={`${img.title || "render"}.png`} className="inline-flex">
+                        <a
+                          href={img.url || "#"}
+                          download={`${img.title || (uiLang === "zh" ? "装修图" : "render")}.png`}
+                          className="inline-flex"
+                        >
                           <Button variant="ghost" size="icon" className="h-7 w-7" disabled={!img.url} title={uiLang === "zh" ? "下载" : "Download"}>
                             <Download className="w-4 h-4" />
                           </Button>
@@ -815,7 +815,11 @@ export function CadWorkspace({ onAddToChat, onSvgChange, svg2d, plan, images = [
             {previewImage?.url ? (
               <div className="space-y-3">
                 <div className="flex items-center justify-end">
-                  <a href={previewImage.url} download={`${previewImage.title || "render"}.png`} className="inline-flex">
+                  <a
+                    href={previewImage.url}
+                    download={`${previewImage.title || (uiLang === "zh" ? "装修图" : "render")}.png`}
+                    className="inline-flex"
+                  >
                     <Button variant="outline" size="sm" className="h-8 px-3 text-xs" title={uiLang === "zh" ? "下载图片" : "Download image"}>
                       <Download className="w-4 h-4 mr-1" />
                       {uiLang === "zh" ? "下载图片" : "Download image"}

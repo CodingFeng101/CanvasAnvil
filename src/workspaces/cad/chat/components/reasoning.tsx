@@ -7,6 +7,7 @@ import {
     CollapsibleContent,
     CollapsibleTrigger,
 } from "@/workspaces/cad/ui/collapsible"
+import { useUiLanguage } from "@/lib/use-ui-language"
 import { cn } from "@/lib/utils"
 import { Shimmer } from "./shimmer"
 
@@ -111,24 +112,26 @@ export type ReasoningTriggerProps = ComponentProps<
     getThinkingMessage?: (isStreaming: boolean, duration?: number) => ReactNode
 }
 
-const defaultGetThinkingMessage = (isStreaming: boolean, duration?: number) => {
-    if (isStreaming || duration === 0) {
-        return <Shimmer duration={1}>Thinking...</Shimmer>
-    }
-    if (duration === undefined) {
-        return <p>Thought for a few seconds</p>
-    }
-    return <p>Thought for {duration} seconds</p>
-}
-
 export const ReasoningTrigger = memo(
     ({
         className,
         children,
-        getThinkingMessage = defaultGetThinkingMessage,
+        getThinkingMessage,
         ...props
     }: ReasoningTriggerProps) => {
         const { isStreaming, isOpen, duration } = useReasoning()
+        const uiLang = useUiLanguage()
+        const tr = (zhText: string, enText: string) => (uiLang === "zh" ? zhText : enText)
+        const fallbackGetThinkingMessage = (thinking: boolean, durationSec?: number) => {
+            if (thinking || durationSec === 0) {
+                return <Shimmer duration={1}>{tr("思考中...", "Thinking...")}</Shimmer>
+            }
+            if (durationSec === undefined) {
+                return <p>{tr("已思考数秒", "Thought for a few seconds")}</p>
+            }
+            return <p>{tr(`已思考 ${durationSec} 秒`, `Thought for ${durationSec} seconds`)}</p>
+        }
+        const thinkingMessage = (getThinkingMessage || fallbackGetThinkingMessage)(isStreaming, duration)
 
         return (
             <CollapsibleTrigger
@@ -141,7 +144,7 @@ export const ReasoningTrigger = memo(
                 {children ?? (
                     <>
                         <BrainIcon className="size-4" />
-                        {getThinkingMessage(isStreaming, duration)}
+                        {thinkingMessage}
                         <ChevronDownIcon
                             className={cn(
                                 "size-4 transition-transform",

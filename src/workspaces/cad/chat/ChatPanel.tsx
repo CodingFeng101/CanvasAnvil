@@ -17,6 +17,7 @@ import {
   CAD_SVG_FLOW_PATCH_AGENT_PROMPT,
   CAD_SVG_FLOW_REPLACE_AGENT_PROMPT,
 } from '@/lib/cad-agents';
+import { getCadRenderFallbackTitle, getCadRenderSlotTitles } from "@/lib/cad-render-titles";
 import flowPatchAgentPrompt from "../../../../agent/flow/patch.md?raw";
 import flowReplaceAgentPrompt from "../../../../agent/flow/replace.md?raw";
 import { t } from "@/lib/i18n";
@@ -207,7 +208,7 @@ export function ChatPanel({
     collapsed = false,
     onToggleCollapse,
     collapseLocked = false,
-    title = "AI 助手",
+    title,
     inputPlaceholder,
     history = [],
     onRestore,
@@ -219,11 +220,14 @@ export function ChatPanel({
 }: ChatPanelProps) {
   const uiLang = useUiLanguage();
   const trText = (zhText: string, enText: string) => (uiLang === "zh" ? zhText : enText);
+  const panelTitle = title || trText("AI 助手", "AI Assistant");
   const cadOutputLanguage = uiLang === "zh" ? "Simplified Chinese (zh-CN)" : "English (en)";
   const cadOutputLanguageInstruction =
     workspaceId === "cad"
       ? `Output language: ${cadOutputLanguage}`
       : "";
+  const cadRenderFallbackTitles = getCadRenderSlotTitles(uiLang);
+  const cadRenderPromptTitlesEn = getCadRenderSlotTitles("en");
   // Persistence key
   const storageKey = `${STORAGE_KEY_PREFIX}${workspaceId}`;
 
@@ -272,7 +276,7 @@ export function ChatPanel({
     const m = String(slideId || "").match(/(\\d+)/);
     const n = m ? Number(m[1]) : NaN;
     if (!Number.isNaN(n)) {
-      return title ? `Slide ${n}: ${title}` : `Slide ${n}`;
+      return title ? trText(`第 ${n} 页：${title}`, `Slide ${n}: ${title}`) : trText(`第 ${n} 页`, `Slide ${n}`);
     }
     return title || slideId;
   };
@@ -1162,24 +1166,8 @@ export function ChatPanel({
           }
         };
 
-        const fallbackTitlesForOutput = [
-          trText("装修平面布置图", "装修平面布置图"),
-          trText("地面铺装图", "地面铺装图"),
-          trText("顶面布置图", "顶面布置图"),
-          trText("墙体定位图", "墙体定位图"),
-          trText("机电点位图（强弱电+给排水）", "机电点位图（强弱电+给排水）"),
-          trText("立面索引图+室内立面图", "立面索引图+室内立面图"),
-          trText("节点大样图", "节点大样图"),
-        ];
-        const fallbackTitlesForPromptEnglish = [
-          "Renovation Plan Layout",
-          "Floor Finish Plan",
-          "Reflected Ceiling Plan",
-          "Wall Setting-Out Plan",
-          "MEP Plan (Electrical + Low Voltage + Plumbing)",
-          "Elevation Index Plan + Interior Elevations",
-          "Detail Drawings",
-        ];
+        const fallbackTitlesForOutput = cadRenderFallbackTitles;
+        const fallbackTitlesForPromptEnglish = cadRenderPromptTitlesEn;
 
         let masterSchemeJson = "";
         try {
@@ -1200,7 +1188,7 @@ export function ChatPanel({
         );
 
         const prompts = settled.map((r, idx) => {
-          const fallbackTitleForOutput = fallbackTitlesForOutput[idx] || trText("图纸", "图纸");
+          const fallbackTitleForOutput = fallbackTitlesForOutput[idx] || getCadRenderFallbackTitle(uiLang, idx);
           const fallbackTitleForPrompt = fallbackTitlesForPromptEnglish[idx] || "Drawing";
           const onSheetLanguageRule = "All on-sheet labels/notes/title block text must be in English.";
           const fallbackPrompt = `Generate an orthographic 2D technical construction drawing sheet: ${fallbackTitleForPrompt}. Include border, bottom-right title block, scale/units, legend/symbols, key annotations and dimensions, consistent with the provided plan JSON and 2D SVG. ${onSheetLanguageRule}`;
@@ -1234,7 +1222,7 @@ export function ChatPanel({
           setMessages(prev => {
             const last = prev[prev.length - 1];
             if (last?.role !== 'assistant') return prev;
-            const abortedText = trText("(Aborted)", "(Aborted)");
+            const abortedText = trText("（已中止）", "(Aborted)");
             const next = last.content ? `${last.content}\n\n${abortedText}` : abortedText;
             return [...prev.slice(0, -1), { role: 'assistant', content: next }];
           });
@@ -1485,7 +1473,7 @@ export function ChatPanel({
               .join("\n\n");
             const masterMessages: ChatMessage[] = buildCadImagesMasterMessages({ systemContent: systemContentTasks, planJson, svg2d, outputLanguage: cadOutputLanguage });
 
-            updateLastAssistant(trText("Generating drawing prompts...", "Generating drawing prompts..."));
+            updateLastAssistant(trText("正在生成图纸提示词...", "Generating drawing prompts..."));
 
             const extractJsonText = (text: string) => {
               const match = String(text || "").match(/```json\s*([\s\S]*?)```/);
@@ -1509,24 +1497,8 @@ export function ChatPanel({
               }
             };
 
-            const fallbackTitlesForOutput = [
-              trText("装修平面布置图", "装修平面布置图"),
-              trText("地面铺装图", "地面铺装图"),
-              trText("顶面布置图", "顶面布置图"),
-              trText("墙体定位图", "墙体定位图"),
-              trText("机电点位图（强弱电+给排水）", "机电点位图（强弱电+给排水）"),
-              trText("立面索引图+室内立面图", "立面索引图+室内立面图"),
-              trText("节点大样图", "节点大样图"),
-            ];
-            const fallbackTitlesForPromptEnglish = [
-              "Renovation Plan Layout",
-              "Floor Finish Plan",
-              "Reflected Ceiling Plan",
-              "Wall Setting-Out Plan",
-              "MEP Plan (Electrical + Low Voltage + Plumbing)",
-              "Elevation Index Plan + Interior Elevations",
-              "Detail Drawings",
-            ];
+            const fallbackTitlesForOutput = cadRenderFallbackTitles;
+            const fallbackTitlesForPromptEnglish = cadRenderPromptTitlesEn;
 
             let masterSchemeJson = "";
             try {
@@ -1553,7 +1525,7 @@ export function ChatPanel({
             );
 
             const prompts = settled.map((r, idx) => {
-              const fallbackTitleForOutput = fallbackTitlesForOutput[idx] || trText("图纸", "图纸");
+              const fallbackTitleForOutput = fallbackTitlesForOutput[idx] || getCadRenderFallbackTitle(uiLang, idx);
               const fallbackTitleForPrompt = fallbackTitlesForPromptEnglish[idx] || "Drawing";
               const onSheetLanguageRule = "All on-sheet labels/notes/title block text must be in English.";
               const fallbackPrompt = `Generate an orthographic 2D technical construction drawing sheet: ${fallbackTitleForPrompt}. Include border, bottom-right title block, scale/units, legend/symbols, key annotations and dimensions, consistent with the provided plan JSON and 2D SVG. ${onSheetLanguageRule}`;
@@ -1589,7 +1561,7 @@ export function ChatPanel({
               producedHasImages: true,
               producedHasBom: false,
             });
-            updateLastAssistant(guide || trText("Drawing tasks generated.", "Drawing tasks generated."));
+            updateLastAssistant(guide || trText("图纸任务已生成。", "Drawing tasks generated."));
             return;
           }
 
@@ -1937,20 +1909,17 @@ export function ChatPanel({
         setMessages(prev => {
           const last = prev[prev.length - 1];
           if (last?.role === 'assistant') {
-            const abortedText = trText("(Aborted)", "(Aborted)");
+            const abortedText = trText("（已中止）", "(Aborted)");
             const next = last.content ? `${last.content}\n\n${abortedText}` : abortedText;
             return [...prev.slice(0, -1), { role: 'assistant', content: next }];
           }
-          return [...prev, { role: 'assistant', content: trText("(Aborted)", "(Aborted)") }];
+          return [...prev, { role: 'assistant', content: trText("（已中止）", "(Aborted)") }];
         });
         return;
       }
       setMessages(prev => {
         const last = prev[prev.length - 1];
-        const errorText = trText(
-          "Sorry, an error occurred. Please check API key settings.",
-          "Sorry, an error occurred. Please check API key settings."
-        );
+        const errorText = trText("抱歉，发生错误。请检查 API Key 设置。", "Sorry, an error occurred. Please check API key settings.");
         if (last.role === 'assistant' && !last.content) {
             return [...prev.slice(0, -1), { role: 'assistant', content: errorText }];
         }
@@ -2225,7 +2194,7 @@ export function ChatPanel({
                 .join("\n\n");
               const masterMessages: ChatMessage[] = buildCadImagesMasterMessages({ systemContent: systemContentTasks, planJson, svg2d, outputLanguage: cadOutputLanguage });
 
-              updateLastAssistant(trText("Generating drawing prompts...", "Generating drawing prompts..."));
+              updateLastAssistant(trText("正在生成图纸提示词...", "Generating drawing prompts..."));
 
               const extractJsonText = (text: string) => {
                 const match = String(text || "").match(/```json\s*([\s\S]*?)```/);
@@ -2249,24 +2218,8 @@ export function ChatPanel({
                 }
               };
 
-              const fallbackTitlesForOutput = [
-                trText("装修平面布置图", "装修平面布置图"),
-                trText("地面铺装图", "地面铺装图"),
-                trText("顶面布置图", "顶面布置图"),
-                trText("墙体定位图", "墙体定位图"),
-                trText("机电点位图（强弱电+给排水）", "机电点位图（强弱电+给排水）"),
-                trText("立面索引图+室内立面图", "立面索引图+室内立面图"),
-                trText("节点大样图", "节点大样图"),
-              ];
-              const fallbackTitlesForPromptEnglish = [
-                "Renovation Plan Layout",
-                "Floor Finish Plan",
-                "Reflected Ceiling Plan",
-                "Wall Setting-Out Plan",
-                "MEP Plan (Electrical + Low Voltage + Plumbing)",
-                "Elevation Index Plan + Interior Elevations",
-                "Detail Drawings",
-              ];
+              const fallbackTitlesForOutput = cadRenderFallbackTitles;
+              const fallbackTitlesForPromptEnglish = cadRenderPromptTitlesEn;
 
               let masterSchemeJson = "";
               try {
@@ -2293,7 +2246,7 @@ export function ChatPanel({
               );
 
               const prompts = settled.map((r, idx) => {
-                const fallbackTitleForOutput = fallbackTitlesForOutput[idx] || trText("图纸", "图纸");
+                const fallbackTitleForOutput = fallbackTitlesForOutput[idx] || getCadRenderFallbackTitle(uiLang, idx);
                 const fallbackTitleForPrompt = fallbackTitlesForPromptEnglish[idx] || "Drawing";
                 const onSheetLanguageRule = "All on-sheet labels/notes/title block text must be in English.";
                 const fallbackPrompt = `Generate an orthographic 2D technical construction drawing sheet: ${fallbackTitleForPrompt}. Include border, bottom-right title block, scale/units, legend/symbols, key annotations and dimensions, consistent with the provided plan JSON and 2D SVG. ${onSheetLanguageRule}`;
@@ -2329,7 +2282,7 @@ export function ChatPanel({
                 producedHasImages: true,
                 producedHasBom: false,
               });
-              updateLastAssistant(guide || trText("Drawing tasks generated.", "Drawing tasks generated."));
+              updateLastAssistant(guide || trText("图纸任务已生成。", "Drawing tasks generated."));
               return;
             }
 
@@ -2766,7 +2719,7 @@ export function ChatPanel({
       <div className="px-5 py-4 border-b border-border/50">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <span className="text-base font-semibold tracking-tight whitespace-nowrap">{title}</span>
+            <span className="text-base font-semibold tracking-tight whitespace-nowrap">{panelTitle}</span>
           </div>
           <div className="flex items-center gap-1">
             {onToggleCollapse && (
@@ -2811,7 +2764,7 @@ export function ChatPanel({
             historyDisabled={history.length === 0}
             onFilesChange={setFiles}
             files={files}
-                uploadMode={workspaceId === "ppt" ? "imagesOnly" : workspaceId === "cad" ? "filesOnly" : "all"}
+            uploadMode={workspaceId === "ppt" ? "imagesOnly" : workspaceId === "cad" ? "filesOnly" : "all"}
             placeholder={inputPlaceholder}
             focusKey={workspaceId === "ppt" ? pptInputFocusTick : undefined}
             clearKey={workspaceId === "ppt" ? pptClearTick : undefined}
@@ -2842,10 +2795,10 @@ export function ChatPanel({
                                   type="button"
                                   onClick={() => onRemoveAttachment(a.id)}
                                   className="text-muted-foreground/80 hover:text-foreground transition-colors"
-                                  title="Remove attachment"
-                                  aria-label="Remove attachment"
+                                  title={trText("移除附件", "Remove attachment")}
+                                  aria-label={trText("移除附件", "Remove attachment")}
                                 >
-                                  脳
+                                  ×
                                 </button>
                               )}
                             </div>

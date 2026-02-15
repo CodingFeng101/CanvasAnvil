@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from "react";
 import { Check, ChevronDown, ChevronUp, Copy, Cpu, Play, X } from "lucide-react";
 import { Highlight, themes, type Language } from "prism-react-renderer";
+import { useUiLanguage } from "@/lib/use-ui-language";
 
 interface CodeBlockProps {
     code: string;
@@ -46,6 +47,8 @@ export function CodeBlock({
     blockId: _blockId,
     onApply,
 }: CodeBlockProps) {
+    const uiLang = useUiLanguage();
+    const tr = (zhText: string, enText: string) => (uiLang === "zh" ? zhText : enText);
     const [isExpanded, setIsExpanded] = useState(() => {
         if (_blockId && openStateById.has(_blockId)) return Boolean(openStateById.get(_blockId));
         return true;
@@ -147,14 +150,14 @@ export function CodeBlock({
                     <div className="w-6 h-6 rounded-md bg-primary/10 flex items-center justify-center">
                         <Cpu className="w-3.5 h-3.5 text-primary" />
                     </div>
-                    <span className="text-sm font-medium text-foreground/80">Generate CAD</span>
+                    <span className="text-sm font-medium text-foreground/80">{tr("生成 CAD", "Generate CAD")}</span>
                 </div>
                 <div className="flex items-center gap-2">
                     {_isStreaming ? (
                         <div className="h-4 w-4 border-2 border-primary border-t-transparent rounded-full animate-spin" />
                     ) : (
                         <span className="text-xs font-medium text-green-600 bg-green-50 px-2 py-0.5 rounded-full">
-                            Complete
+                            {tr("完成", "Complete")}
                         </span>
                     )}
                     <div className="flex items-center gap-1">
@@ -164,7 +167,7 @@ export function CodeBlock({
                                 onClick={applyCode}
                                 disabled={applying}
                                 className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[10px] text-muted-foreground hover:bg-muted transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
-                                title={applied ? "Applied" : applyFailed ? "Apply failed" : "Apply to canvas"}
+                                title={applied ? tr("已应用", "Applied") : applyFailed ? tr("应用失败", "Apply failed") : tr("应用到画布", "Apply to canvas")}
                             >
                                 {applying ? (
                                     <div className="h-3 w-3 border-2 border-primary border-t-transparent rounded-full animate-spin" />
@@ -175,7 +178,7 @@ export function CodeBlock({
                                 ) : (
                                     <Play className="h-3 w-3" />
                                 )}
-                                <span>{applying ? "Applying" : applied ? "Applied" : "Apply"}</span>
+                                <span>{applying ? tr("应用中", "Applying") : applied ? tr("已应用", "Applied") : tr("应用", "Apply")}</span>
                             </button>
                         )}
                         <button
@@ -202,10 +205,10 @@ export function CodeBlock({
                             className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[10px] text-muted-foreground hover:bg-muted transition-colors"
                             title={
                                 copied
-                                    ? "Copied"
+                                    ? tr("已复制", "Copied")
                                     : copyFailed
-                                      ? "Copy failed"
-                                      : "Copy code"
+                                      ? tr("复制失败", "Copy failed")
+                                      : tr("复制代码", "Copy code")
                             }
                         >
                             {copied ? (
@@ -215,7 +218,7 @@ export function CodeBlock({
                             ) : (
                                 <Copy className="h-3 w-3" />
                             )}
-                            <span>{copied ? "Copied" : "Copy"}</span>
+                            <span>{copied ? tr("已复制", "Copied") : tr("复制", "Copy")}</span>
                         </button>
                     </div>
                     <Highlight theme={themes.github} code={displayCode} language={prismLanguage}>

@@ -1,8 +1,21 @@
 services:
+  api:
+    build:
+      context: ../..
+      dockerfile: deploy/docker/Dockerfile.api
+    environment:
+      API_PORT: 8787
+      API_BODY_LIMIT: 25mb
+    expose:
+      - "8787"
+    restart: unless-stopped
+
   web:
     build:
       context: ../..
       dockerfile: deploy/docker/Dockerfile
+    depends_on:
+      - api
     ports:
       - "8080:80"
-
+    restart: unless-stopped

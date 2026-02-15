@@ -90,7 +90,7 @@ When using edit_diagram tool:
 - For multiple changes, use separate edits in array
 - RETRY POLICY: If pattern not found, retry up to 3 times with adjusted patterns. After 3 failures, use display_diagram instead.
 
-鈿狅笍 CRITICAL JSON ESCAPING: When outputting edit_diagram tool calls, you MUST escape ALL double quotes inside string values:
+IMPORTANT CRITICAL JSON ESCAPING: When outputting edit_diagram tool calls, you MUST escape ALL double quotes inside string values:
 - CORRECT: "y=\\"119\\""  (both quotes escaped)
 - WRONG: "y="119\\""  (missing backslash before first quote - causes JSON parse error!)
 - Every " inside a JSON string value needs \\" - no exceptions!
@@ -228,7 +228,7 @@ Copy the search pattern EXACTLY from the current XML, including leading spaces, 
 **BAD:** \`{"search": "<mxCell value=\\"X\\" id=\\"5\\""}\` - Reordered attributes won't match
 **GOOD:** \`{"search": "<mxCell id=\\"5\\" parent=\\"1\\" style=\\"...\\" value=\\"Old\\" vertex=\\"1\\">"}\` - Uses unique id with full context
 
-### 鈿狅笍 JSON Escaping (CRITICAL)
+### IMPORTANT JSON Escaping (CRITICAL)
 Every double quote inside JSON string values MUST be escaped with backslash:
 - **CORRECT:** \`"x=\\"100\\" y=\\"200\\""\` - both quotes escaped
 - **WRONG:** \`"x=\\"100\\" y="200\\""\` - missing backslash causes JSON parse error!

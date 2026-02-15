@@ -424,7 +424,8 @@ function slideFieldLabel(key: string, uiLang: "zh" | "en"): string {
     return key;
 }
 
-function CadPatchEditsDisplay({ edits }: { edits: CadPatchEdit[] }) {
+function CadPatchEditsDisplay({ edits, uiLang }: { edits: CadPatchEdit[]; uiLang: "zh" | "en" }) {
+    const tr = (zh: string, en: string) => (uiLang === "zh" ? zh : en);
     return (
         <div className="space-y-3">
             {edits.map((edit, index) => (
@@ -433,13 +434,17 @@ function CadPatchEditsDisplay({ edits }: { edits: CadPatchEdit[] }) {
                     className="rounded-lg border border-border/50 overflow-hidden bg-background/50"
                 >
                     <div className="px-3 py-1.5 bg-muted/40 border-b border-border/30 flex items-center gap-2">
-                        <span className="text-xs font-medium text-muted-foreground">Change {index + 1}</span>
+                        <span className="text-xs font-medium text-muted-foreground">
+                            {tr(`修改 ${index + 1}`, `Change ${index + 1}`)}
+                        </span>
                     </div>
                     <div className="divide-y divide-border/30">
                         <div className="px-3 py-2">
                             <div className="flex items-center gap-1.5 mb-1.5">
                                 <Minus className="w-3 h-3 text-red-500" />
-                                <span className="text-[10px] font-medium text-red-600 uppercase tracking-wide">Remove</span>
+                                <span className="text-[10px] font-medium text-red-600 uppercase tracking-wide">
+                                    {tr("删除", "Remove")}
+                                </span>
                             </div>
                             <pre className="text-[11px] font-mono text-red-700 bg-red-50 rounded px-2 py-1.5 overflow-x-auto whitespace-pre-wrap break-all">
                                 {edit.search}
@@ -448,7 +453,9 @@ function CadPatchEditsDisplay({ edits }: { edits: CadPatchEdit[] }) {
                         <div className="px-3 py-2">
                             <div className="flex items-center gap-1.5 mb-1.5">
                                 <Plus className="w-3 h-3 text-green-500" />
-                                <span className="text-[10px] font-medium text-green-600 uppercase tracking-wide">Add</span>
+                                <span className="text-[10px] font-medium text-green-600 uppercase tracking-wide">
+                                    {tr("新增", "Add")}
+                                </span>
                             </div>
                             <pre className="text-[11px] font-mono text-green-700 bg-green-50 rounded px-2 py-1.5 overflow-x-auto whitespace-pre-wrap break-all">
                                 {edit.replace}
@@ -1119,7 +1126,7 @@ export function ChatMessageDisplay({
                                                                                         <Cpu className="w-3.5 h-3.5 text-primary" />
                                                                                     </div>
                                                                                     <span className="text-sm font-medium text-foreground/80">
-                                                                                        {tr("Edit Diagram", "Edit Diagram")}
+                                                                                        {tr("编辑图纸", "Edit Diagram")}
                                                                                     </span>
                                                                                 </div>
                                                                                 <div className="flex items-center gap-2">
@@ -1127,7 +1134,7 @@ export function ChatMessageDisplay({
                                                                                         <div className="h-4 w-4 border-2 border-primary border-t-transparent rounded-full animate-spin" />
                                                                                     ) : (
                                                                                         <span className="text-xs font-medium text-green-600 bg-green-50 px-2 py-0.5 rounded-full">
-                                                                                            {tr("Complete", "Complete")}
+                                                                                            {tr("完成", "Complete")}
                                                                                         </span>
                                                                                     )}
                                                                                     {onApplyCode && (
@@ -1142,7 +1149,7 @@ export function ChatMessageDisplay({
                                                                                             className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[10px] text-muted-foreground hover:bg-muted transition-colors"
                                                                                         >
                                                                                             <Play className="h-3 w-3" />
-                                                                                            <span>{tr("Apply", "Apply")}</span>
+                                                                                            <span>{tr("应用", "Apply")}</span>
                                                                                         </button>
                                                                                     )}
                                                                                     <button
@@ -1165,7 +1172,7 @@ export function ChatMessageDisplay({
                                                                             </div>
                                                                             {expanded && (
                                                                                 <div className="px-4 py-3 border-t border-border/40 bg-muted/20">
-                                                                                    <CadPatchEditsDisplay edits={cadPatchPayload.edits} />
+                                                                                    <CadPatchEditsDisplay edits={cadPatchPayload.edits} uiLang={uiLang} />
                                                                                 </div>
                                                                             )}
                                                                         </div>

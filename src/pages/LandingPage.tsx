@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { motion, AnimatePresence, animate, useMotionValue, useTransform } from 'framer-motion';
-import { Layers, Zap, Layout, Box, Droplet, Brush, FileText } from 'lucide-react';
+import { Layers, Zap, Layout, Box, Droplet, Brush, FileText, Square, Hammer } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { getPdfDocumentFromUrl, renderPdfPageToCanvas } from '@/lib/pdf-utils';
 import { getUiLanguage, setUiLanguage, type UiLanguage } from "@/lib/ui-language";
@@ -102,6 +102,19 @@ export function LandingPage({ onStart }: LandingPageProps) {
 
             {/* Content */}
             <div className="relative z-10 flex-1 flex flex-col">
+                <div className="absolute top-4 left-4 z-20">
+                    <div className="flex items-center gap-2.5">
+                        <div className="relative p-1.5 bg-blue-600/10 rounded-lg shadow-sm ring-1 ring-blue-600/20">
+                            <Square className="w-5 h-5 text-blue-200" />
+                            <div className="absolute -bottom-1 -right-1 rounded-full bg-black/60 p-0.5 ring-1 ring-blue-300/30">
+                                <Hammer className="w-3 h-3 text-blue-100" />
+                            </div>
+                        </div>
+                        <span className="text-xl md:text-2xl font-black tracking-[0.08em] text-transparent bg-clip-text bg-gradient-to-r from-cyan-200 via-white to-blue-300 drop-shadow-[0_0_10px_rgba(96,165,250,0.75)]">
+                            CanvasAnvil
+                        </span>
+                    </div>
+                </div>
                 <div className="absolute top-4 right-4 z-20">
                     <Button
                         variant="secondary"
@@ -666,7 +679,7 @@ function DemoCAD({ uiLang }: { uiLang: UiLanguage }) {
     const [isGenerating, setIsGenerating] = useState(false);
     const tr = (zh: string, en: string) => (uiLang === "zh" ? zh : en);
     const promptSpeed = 30;
-    const promptText = tr("设计一套新中式客厅装修方案，要简约大气", "Design a modern Chinese-style living room renovation, minimal and elegant");
+    const promptText = tr("设计一套新中式室内装修方案，要简约大气", "Design a modern Chinese-style interior renovation plan, minimal and grand");
     const promptHoldMs = Math.max(2000, estimateTypewriterDurationMs(promptText, promptSpeed));
 
     React.useEffect(() => {
@@ -684,16 +697,16 @@ function DemoCAD({ uiLang }: { uiLang: UiLanguage }) {
             // 4s: Show 2D Plan (Duration 3s)
             timeouts.push(setTimeout(() => { setIsGenerating(false); setStep(1); }, promptHoldMs + 2000));
             
-            // 7s: Start Generating BOM (Duration 2s)
+            // 7s: Start Generating Render (Duration 2s)
             timeouts.push(setTimeout(() => setIsGenerating(true), promptHoldMs + 5000));
             
-            // 9s: Show BOM (Duration 3s)
+            // 9s: Show Render (Duration 3s)
             timeouts.push(setTimeout(() => { setIsGenerating(false); setStep(2); }, promptHoldMs + 7000));
 
-            // 12s: Start Generating Render (Duration 2s)
+            // 12s: Start Generating BOM (Duration 2s)
             timeouts.push(setTimeout(() => setIsGenerating(true), promptHoldMs + 10000));
 
-            // 14s: Show Final Render (Duration 3s)
+            // 14s: Show Final BOM (Duration 3s)
             timeouts.push(setTimeout(() => { setIsGenerating(false); setStep(3); }, promptHoldMs + 12000));
             
             // 17s: Loop
@@ -707,8 +720,8 @@ function DemoCAD({ uiLang }: { uiLang: UiLanguage }) {
     // Helper to get generating text
     const getGenState = () => {
         if (step === 0) return { title: tr("正在生成平面方案...", "Generating floor plan..."), sub: tr("AI 布局规划 · 动线分析 · 空间划分", "Layout planning · circulation · zoning") };
-        if (step === 1) return { title: tr("正在生成物料清单...", "Generating BOM..."), sub: tr("空间拆解 · 材料归类 · 数量估算", "Decompose spaces · classify materials · estimate quantities") };
-        if (step === 2) return { title: tr("正在渲染装修效果...", "Rendering design..."), sub: tr("风格匹配 · 材质建议 · 灯光氛围", "Style match · materials · lighting mood") };
+        if (step === 1) return { title: tr("正在渲染装修效果...", "Rendering design..."), sub: tr("风格匹配 · 材质建议 · 灯光氛围", "Style match · materials · lighting mood") };
+        if (step === 2) return { title: tr("正在生成物料清单...", "Generating BOM..."), sub: tr("空间拆解 · 材料归类 · 数量估算", "Decompose spaces · classify materials · estimate quantities") };
         return { title: tr("处理中...", "Processing..."), sub: tr("请稍候", "Please wait") };
     };
 
@@ -779,10 +792,88 @@ function DemoCAD({ uiLang }: { uiLang: UiLanguage }) {
 }
 
 function CadPlan({ step, uiLang }: { step: number; uiLang: UiLanguage }) {
-    if (step === 1) return <CadPlan2D uiLang={uiLang} />;
-    if (step === 2) return <CadBomResult uiLang={uiLang} />;
-    if (step === 3) return <CadRenderResult uiLang={uiLang} />;
+    if (step === 1) return <CadStage2DImage uiLang={uiLang} />;
+    if (step === 2) return <CadStageRenderImage uiLang={uiLang} />;
+    if (step === 3) return <CadStageBomImage uiLang={uiLang} />;
     return null;
+}
+
+const CAD_DEMO_IMAGES = {
+    plan2d: "/cad/2D.png",
+    render: "/cad/render.png",
+    bom: "/cad/bom.png",
+};
+
+function CadStageImageCard({
+    uiLang,
+    src,
+    title,
+    subtitle,
+}: {
+    uiLang: UiLanguage;
+    src: string;
+    title: string;
+    subtitle: string;
+}) {
+    const tr = (zh: string, en: string) => (uiLang === "zh" ? zh : en);
+    return (
+        <motion.div
+            initial={{ opacity: 0, scale: 0.985 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ duration: 0.45, ease: "easeOut" }}
+            className="absolute inset-4 rounded-2xl border border-white/10 bg-white/95 overflow-hidden shadow-[0_20px_80px_rgba(0,0,0,0.45)]"
+        >
+            <div className="h-12 px-4 flex items-center justify-between border-b border-black/10 bg-white">
+                <div className="text-sm font-medium text-black/80">{title}</div>
+                <div className="text-xs text-black/45">{subtitle}</div>
+            </div>
+            <div className="h-[calc(100%-3rem)] bg-zinc-100">
+                <img
+                    src={src}
+                    alt={title}
+                    className="w-full h-full object-contain bg-white"
+                    loading="eager"
+                    draggable={false}
+                />
+            </div>
+            <div className="absolute bottom-3 right-3 rounded-full border border-black/10 bg-white/85 px-2 py-1 text-[10px] text-black/50">
+                {tr("演示图", "Demo")}
+            </div>
+        </motion.div>
+    );
+}
+
+function CadStage2DImage({ uiLang }: { uiLang: UiLanguage }) {
+    return (
+        <CadStageImageCard
+            uiLang={uiLang}
+            src={CAD_DEMO_IMAGES.plan2d}
+            title={uiLang === "zh" ? "2D 平面图" : "2D Floor Plan"}
+            subtitle={uiLang === "zh" ? "需求输入后生成" : "Generated from requirement input"}
+        />
+    );
+}
+
+function CadStageRenderImage({ uiLang }: { uiLang: UiLanguage }) {
+    return (
+        <CadStageImageCard
+            uiLang={uiLang}
+            src={CAD_DEMO_IMAGES.render}
+            title={uiLang === "zh" ? "装修图" : "Render"}
+            subtitle={uiLang === "zh" ? "2D 结束后生成" : "Generated after 2D completion"}
+        />
+    );
+}
+
+function CadStageBomImage({ uiLang }: { uiLang: UiLanguage }) {
+    return (
+        <CadStageImageCard
+            uiLang={uiLang}
+            src={CAD_DEMO_IMAGES.bom}
+            title={uiLang === "zh" ? "物料清单" : "BOM"}
+            subtitle={uiLang === "zh" ? "最终输出" : "Final output"}
+        />
+    );
 }
 
 function CadPlan2D({ uiLang }: { uiLang: UiLanguage }) {

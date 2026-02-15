@@ -1,5 +1,19 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+.npm/
+.yarn/
+
+# Build outputs
+dist/
+dist-ssr/
+build/
+coverage/
+*.tsbuildinfo
+vite.svg
+
 # Logs
-logs
+logs/
 *.log
 npm-debug.log*
 yarn-debug.log*
@@ -7,18 +21,38 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
-node_modules
-dist
-dist-ssr
+# Env / local config
+.env
+.env.*
+!.env.example
 *.local
 
-# Editor directories and files
+# Cache / temp
+.cache/
+.vite/
+.eslintcache
+tmp/
+temp/
+*.tmp
+*.temp
+
+# Local tool workspaces (not project source)
+.tmp-superpowers/
+.trae/
+
+# IDE / editor
 .vscode/*
 !.vscode/extensions.json
-.idea
-.DS_Store
+.idea/
 *.suo
 *.ntvs*
 *.njsproj
 *.sln
 *.sw?
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+Desktop.ini

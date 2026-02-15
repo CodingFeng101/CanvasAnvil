@@ -1066,7 +1066,7 @@ IMPORTANT: Keep edits concise:
 - Each search must contain complete lines (never truncate mid-line)
 - First match only - be specific enough to target the right element
 
-鈿狅笍 JSON ESCAPING: Every " inside string values MUST be escaped as \\". Example: x=\\"100\\" y=\\"200\\" - BOTH quotes need backslashes!`,
+IMPORTANT JSON ESCAPING: Every " inside string values MUST be escaped as \\". Example: x=\\"100\\" y=\\"200\\" - BOTH quotes need backslashes!`,
                             inputSchema: z.object({
                                 edits: z
                                     .array(

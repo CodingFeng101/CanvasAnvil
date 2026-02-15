@@ -4,6 +4,7 @@ import { FileCode, FileText, Loader2, X } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
 import { isPdfFile, isTextFile } from "@/lib/pdf-utils"
 import { type FileData } from "@/lib/use-file-processor"
+import { useUiLanguage } from "@/lib/use-ui-language"
 
 function formatCharCount(count: number): string {
     if (count >= 1000) {
@@ -23,6 +24,8 @@ export function FilePreviewList({
     onRemoveFile,
     pdfData = new Map(),
 }: FilePreviewListProps) {
+    const uiLang = useUiLanguage()
+    const trText = (zhText: string, enText: string) => (uiLang === "zh" ? zhText : enText)
     const [selectedImage, setSelectedImage] = useState<string | null>(null)
     const [imageUrls, setImageUrls] = useState<Map<File, string>>(new Map())
     const imageUrlsRef = useRef<Map<File, string>>(new Map())
@@ -88,13 +91,13 @@ export function FilePreviewList({
                     const isPdf = isPdfFile(file)
                     const isText = isTextFile(file)
                     const secondary = pdfInfo?.isExtracting
-                        ? "Reading..."
+                        ? trText("解析中...", "Reading...")
                         : pdfInfo?.charCount
-                            ? `${formatCharCount(pdfInfo.charCount)} chars`
+                            ? trText(`${formatCharCount(pdfInfo.charCount)} 字符`, `${formatCharCount(pdfInfo.charCount)} chars`)
                             : isPdf
-                                ? "PDF"
+                                ? trText("PDF 文档", "PDF")
                                 : isText
-                                    ? "Text"
+                                    ? trText("文本", "Text")
                                     : ""
                     return (
                         <div key={file.name + index} className="group">
@@ -141,7 +144,7 @@ export function FilePreviewList({
                                     type="button"
                                     onClick={() => onRemoveFile(file)}
                                     className="shrink-0 rounded-md p-1 text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
-                                    aria-label="Remove file"
+                                    aria-label={trText("移除文件", "Remove file")}
                                 >
                                     <X className="h-4 w-4" />
                                 </button>
@@ -160,14 +163,14 @@ export function FilePreviewList({
                     <button
                         className="absolute top-4 right-4 z-10 bg-white rounded-full p-2 hover:bg-gray-200 transition-colors"
                         onClick={() => setSelectedImage(null)}
-                        aria-label="Close"
+                        aria-label={trText("关闭", "Close")}
                     >
                         <X className="h-6 w-6" />
                     </button>
                     <div className="relative w-auto h-auto max-w-[90vw] max-h-[90vh]">
                         <img
                             src={selectedImage}
-                            alt="Full size preview of uploaded diagram or image"
+                            alt={trText("上传图片的全尺寸预览", "Full size preview of uploaded diagram or image")}
                             className="object-contain max-w-full max-h-[90vh] w-auto h-auto"
                             onClick={(e) => e.stopPropagation()}
                         />

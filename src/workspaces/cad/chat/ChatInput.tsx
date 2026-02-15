@@ -57,6 +57,7 @@ export function ChatInput({
     uploadMode = "all"
 }: ChatInputProps) {
     const uiLang = useUiLanguage();
+    const trText = (zhText: string, enText: string) => (uiLang === "zh" ? zhText : enText);
     const textareaRef = useRef<HTMLTextAreaElement>(null);
     const richRef = useRef<HTMLDivElement>(null);
     const richSavedRangeRef = useRef<Range | null>(null);
@@ -414,7 +415,7 @@ export function ChatInput({
                     <div className="relative">
                         {showRichPlaceholder && (
                             <div className="pointer-events-none absolute left-1 top-2 text-[15px] leading-6 text-muted-foreground/60">
-                                {placeholder || "Type your message..."}
+                                {placeholder || trText("请输入消息...", "Type your message...")}
                             </div>
                         )}
                         <div
@@ -522,7 +523,7 @@ export function ChatInput({
                         onChange={(e) => setInput(e.target.value)}
                         onKeyDown={handleKeyDown}
                         onPaste={handlePaste}
-                        placeholder={placeholder || "Type your message..."}
+                        placeholder={placeholder || trText("请输入消息...", "Type your message...")}
                         className={cn(
                             "w-full resize-none bg-transparent border-none px-1 py-2 focus:ring-0 transition-all outline-none text-[15px] leading-6 max-h-[360px] overflow-y-auto min-h-[48px]"
                         )}
