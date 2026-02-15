@@ -1,23 +1,25 @@
 # CanvasAnvil / Unified AI Workspace
 
 一个面向生产场景的多工作台 AI 应用，统一了三类能力：
-- Flow：流程图生成与局部编辑（draw.io XML）
-- CAD：室内装修方案、2D 平面图、装修图与物料清单
-- PPT：演示文稿草稿生成与迭代编辑
+- `Flow`：流程图生成与局部编辑（draw.io XML）
+- `CAD`：室内装修方案、2D 平面图、装修图与物料清单
+- `PPT`：演示文稿草稿生成与迭代编辑
+
+文档版本：
+- 用户版（产品介绍）：[`README.user.md`](README.user.md)
+- 开发者版（当前文档）
 
 ---
 
 ## 项目来源与说明
 
-本项目并非从零开始重复造轮子，而是在优秀开源项目基础上做了工程级集成与优化：
+本项目并非从零开始重复造轮子，而是在优秀开源项目基础上进行了工程级集成与优化：
 
-- Flow 工作台：基于 `next-ai-draw-io` 集成与增强  
-  https://github.com/DayuanJiang/next-ai-draw-io
-- PPT 工作台：基于 `banana-slides` 集成与增强  
-  https://github.com/Anionex/banana-slides.git
+- Flow 工作台：基于 [next-ai-draw-io](https://github.com/DayuanJiang/next-ai-draw-io) 集成与增强
+- PPT 工作台：基于 [banana-slides](https://github.com/Anionex/banana-slides.git) 集成与增强
 - CAD 工作台：本项目自研（架构、Agent 工作流、2D SVG 编辑链路、BOM/装修图链路）
 
-优化方向包含但不限于：
+优化方向包括但不限于：
 - 三工作台统一交互范式（聊天、代码块、一键应用到画布）
 - 更稳定的 Agent 路由与重试机制
 - CAD 专项能力（局部 patch / 全量 replace / BOM / 7 槽装修图）
@@ -49,11 +51,9 @@
 
 ## 技术栈
 
-- 前端：React 18 + TypeScript + Vite
-- UI：Tailwind CSS + Radix + Lucide
-- 图形引擎：
-- Flow：draw.io 集成
-- CAD：SVG-Edit 集成
+- 前端：[React 18](https://react.dev/) + [TypeScript](https://www.typescriptlang.org/) + [Vite](https://vitejs.dev/)
+- UI：[Tailwind CSS](https://tailwindcss.com/) + [Radix UI](https://www.radix-ui.com/) + [Lucide](https://lucide.dev/)
+- 图形引擎：Flow 使用 [draw.io / diagrams.net](https://www.diagrams.net/)；CAD 使用 [SVG-Edit](https://github.com/SVG-Edit/svgedit)
 - 模型接入：可配置多模型（Chat / Image）
 
 ---
@@ -72,8 +72,7 @@ npm install
 npm run dev
 ```
 
-默认地址：
-- `http://localhost:5173`
+默认地址：[http://localhost:5173](http://localhost:5173)
 
 ### 3. 类型检查
 
@@ -113,23 +112,30 @@ npm run build
 └─ README.md
 ```
 
+你也可以直接浏览这些目录：
+- [`agent/`](agent/)
+- [`src/workspaces/flow/`](src/workspaces/flow/)
+- [`src/workspaces/cad/`](src/workspaces/cad/)
+- [`src/workspaces/ppt/`](src/workspaces/ppt/)
+- [`public/`](public/)
+
 ---
 
 ## CAD 工作流（简版）
 
-1. Router 决策子智能体（plan / svg / bom / images）  
-2. `cad_plan_agent` 产出结构化方案  
+1. Router 决策子智能体（plan / svg / bom / images）
+2. `cad_plan_agent` 产出结构化方案
 3. `cad_svg_agent` 产出 `cad_patch`：
-- 局部：`mode=patch` + `edits`
-- 全量：`mode=replace` + `full svg`
-4. `cad_bom_agent` 产出物料清单 JSON  
+   - 局部：`mode=patch` + `edits`
+   - 全量：`mode=replace` + `full svg`
+4. `cad_bom_agent` 产出物料清单 JSON
 5. `cad_images_agent` 产出 7 槽装修图提示词并并发生成
 
 ---
 
 ## 配置说明
 
-模型与接口配置通过应用设置注入（如 API Key、Base URL、模型名）。  
+模型与接口配置通过应用设置注入（如 API Key、Base URL、模型名）。
 请勿在不受信任环境暴露私有密钥。
 
 ---
@@ -137,8 +143,7 @@ npm run build
 ## 致谢
 
 感谢以下开源项目提供基础能力与灵感：
-- `next-ai-draw-io`：https://github.com/DayuanJiang/next-ai-draw-io
-- `banana-slides`：https://github.com/Anionex/banana-slides.git
+- [next-ai-draw-io](https://github.com/DayuanJiang/next-ai-draw-io)
+- [banana-slides](https://github.com/Anionex/banana-slides.git)
 
 本仓库在其基础上进行了面向统一工作流的重构、集成与扩展。
-
