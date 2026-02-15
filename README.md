@@ -1,13 +1,63 @@
-# CanvasAnvil / Unified AI Workspace
+# CanvasAnvil
 
-一个面向生产场景的多工作台 AI 应用，统一了三类能力：
+CanvasAnvil 是一个多工作台 AI 创作平台，用一句需求就能完成从方案到可交付物的生成与迭代。
+
+---
+
+## 能力总览（用户视角）
+
 - `Flow`：流程图生成与局部编辑（draw.io XML）
-- `CAD`：室内装修方案、2D 平面图、装修图与物料清单
+- `CAD`：室内装修方案、2D 平面图、装修图与物料清单（BOM）
 - `PPT`：演示文稿草稿生成与迭代编辑
 
-文档版本：
-- 用户版（产品介绍）：[`README.user.md`](README.user.md)
-- 开发者版（当前文档）
+## 典型使用路径
+
+1. 输入需求
+2. AI 生成初稿
+3. 局部修改与迭代
+4. 导出结果（图纸 / 清单 / 演示稿）
+
+## 产品演示资源
+
+- CAD 演示图（2D）：[`public/cad/2D.png`](public/cad/2D.png)
+- CAD 演示图（装修图）：[`public/cad/render.png`](public/cad/render.png)
+- CAD 演示图（BOM）：[`public/cad/bom.png`](public/cad/bom.png)
+
+## 适用人群
+
+- 需要快速产出业务流程图的产品/运营/研发团队
+- 需要生成装修方案与图纸清单的设计与工程团队
+- 需要高频制作汇报材料的业务与售前团队
+
+---
+
+## 快速开始
+
+### 1) 安装依赖
+
+```bash
+npm install
+```
+
+### 2) 启动开发环境
+
+```bash
+npm run dev
+```
+
+默认地址：[http://localhost:5173](http://localhost:5173)
+
+### 3) 类型检查
+
+```bash
+npm run check
+```
+
+### 4) 生产构建
+
+```bash
+npm run build
+```
 
 ---
 
@@ -20,6 +70,7 @@
 - CAD 工作台：本项目自研（架构、Agent 工作流、2D SVG 编辑链路、BOM/装修图链路）
 
 优化方向包括但不限于：
+
 - 三工作台统一交互范式（聊天、代码块、一键应用到画布）
 - 更稳定的 Agent 路由与重试机制
 - CAD 专项能力（局部 patch / 全量 replace / BOM / 7 槽装修图）
@@ -27,15 +78,17 @@
 
 ---
 
-## 核心能力
+## 核心能力（开发视角）
 
 ### 1) Flow 工作台
+
 - 通过对话生成流程图
 - 支持局部 patch 与全量 replace
 - 支持代码块一键应用到当前画布
 - 支持图形历史快照与恢复
 
 ### 2) CAD 工作台
+
 - 需求分析 -> `cad_plan` 结构化方案
 - 2D SVG 生成与局部修改
 - 装修图提示词与并发出图（含失败重试）
@@ -43,6 +96,7 @@
 - 版本历史聚焦 2D 平面图，不记录 BOM 条目
 
 ### 3) PPT 工作台
+
 - 幻灯片结构化内容生成
 - 面向页级别的增量编辑
 - 图文内容流式生成与迭代
@@ -55,36 +109,6 @@
 - UI：[Tailwind CSS](https://tailwindcss.com/) + [Radix UI](https://www.radix-ui.com/) + [Lucide](https://lucide.dev/)
 - 图形引擎：Flow 使用 [draw.io / diagrams.net](https://www.diagrams.net/)；CAD 使用 [SVG-Edit](https://github.com/SVG-Edit/svgedit)
 - 模型接入：可配置多模型（Chat / Image）
-
----
-
-## 快速开始
-
-### 1. 安装依赖
-
-```bash
-npm install
-```
-
-### 2. 启动开发环境
-
-```bash
-npm run dev
-```
-
-默认地址：[http://localhost:5173](http://localhost:5173)
-
-### 3. 类型检查
-
-```bash
-npm run check
-```
-
-### 4. 生产构建
-
-```bash
-npm run build
-```
 
 ---
 
@@ -113,6 +137,7 @@ npm run build
 ```
 
 你也可以直接浏览这些目录：
+
 - [`agent/`](agent/)
 - [`src/workspaces/flow/`](src/workspaces/flow/)
 - [`src/workspaces/cad/`](src/workspaces/cad/)
@@ -140,9 +165,16 @@ npm run build
 
 ---
 
+## 文档导航
+
+- 部署说明：[`deploy/README.md`](deploy/README.md)
+
+---
+
 ## 致谢
 
 感谢以下开源项目提供基础能力与灵感：
+
 - [next-ai-draw-io](https://github.com/DayuanJiang/next-ai-draw-io)
 - [banana-slides](https://github.com/Anionex/banana-slides.git)
 
