@@ -74,7 +74,6 @@
     "@types/three": "^0.182.0",
     "@vitejs/plugin-react": "^4.4.1",
     "autoprefixer": "^10.4.23",
-    "babel-plugin-react-dev-locator": "^1.0.0",
     "concurrently": "^9.2.1",
     "eslint": "^9.25.0",
     "eslint-plugin-react-hooks": "^5.2.0",
@@ -85,7 +84,6 @@
     "typescript": "~5.8.3",
     "typescript-eslint": "^8.30.1",
     "vite": "^6.3.5",
-    "vite-plugin-trae-solo-badge": "^1.0.0",
     "vite-tsconfig-paths": "^5.1.4"
   }
 }
