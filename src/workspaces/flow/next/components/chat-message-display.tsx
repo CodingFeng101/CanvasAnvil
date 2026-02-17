@@ -1098,39 +1098,87 @@ export function ChatMessageDisplay({
                                                                                         sectionIndex,
                                                                                     ) => {
                                                                                         // Regular text section
-                                                                                        return (
+                                                                                        return message.role ===
+                                                                                            "user" ? (
+                                                                                            <div
+                                                                                                key={`${message.id}-textsection-${partIndex}-${sectionIndex}`}
+                                                                                                className="whitespace-pre-wrap break-words"
+                                                                                            >
+                                                                                                {section.content}
+                                                                                            </div>
+                                                                                        ) : (
                                                                                             <div
                                                                                                 key={`${message.id}-textsection-${partIndex}-${sectionIndex}`}
                                                                                                 className="prose prose-sm max-w-none break-words [&>*:first-child]:mt-0 [&>*:last-child]:mb-0 dark:prose-invert"
                                                                                             >
                                                                                                 <ReactMarkdown
                                                                                                     components={{
-                                                                                                        code({ inline, className, children, ...props }: any) {
-                                                                                                            if (inline) {
+                                                                                                        code({
+                                                                                                            inline,
+                                                                                                            className,
+                                                                                                            children,
+                                                                                                            ...props
+                                                                                                        }: any) {
+                                                                                                            if (
+                                                                                                                inline
+                                                                                                            ) {
                                                                                                                 return (
-                                                                                                                    <code className={className} {...props}>
-                                                                                                                        {children}
+                                                                                                                    <code
+                                                                                                                        className={
+                                                                                                                            className
+                                                                                                                        }
+                                                                                                                        {...props}
+                                                                                                                    >
+                                                                                                                        {
+                                                                                                                            children
+                                                                                                                        }
                                                                                                                     </code>
                                                                                                                 )
                                                                                                             }
-                                                                                                            const match = /language-(\w+)/.exec(String(className || ""))
-                                                                                                            const lang = String(match?.[1] || "xml").toLowerCase()
-                                                                                                            const codeText = String(children || "").replace(/\n$/, "")
-                                                                                                            const normalizedLang: "xml" | "json" =
-                                                                                                                lang === "json" ? "json" : "xml"
+                                                                                                            const match =
+                                                                                                                /language-(\w+)/.exec(
+                                                                                                                    String(
+                                                                                                                        className ||
+                                                                                                                            "",
+                                                                                                                    ),
+                                                                                                                )
+                                                                                                            const lang =
+                                                                                                                String(
+                                                                                                                    match?.[1] ||
+                                                                                                                        "xml",
+                                                                                                                ).toLowerCase()
+                                                                                                            const codeText =
+                                                                                                                String(
+                                                                                                                    children ||
+                                                                                                                        "",
+                                                                                                                ).replace(
+                                                                                                                    /\n$/,
+                                                                                                                    "",
+                                                                                                                )
+                                                                                                            const normalizedLang:
+                                                                                                                | "xml"
+                                                                                                                | "json" =
+                                                                                                                lang ===
+                                                                                                                "json"
+                                                                                                                    ? "json"
+                                                                                                                    : "xml"
                                                                                                             return (
                                                                                                                 <CodeBlock
-                                                                                                                    code={codeText}
-                                                                                                                    language={normalizedLang}
-                                                                                                                    onApply={applyCodeToDiagram}
+                                                                                                                    code={
+                                                                                                                        codeText
+                                                                                                                    }
+                                                                                                                    language={
+                                                                                                                        normalizedLang
+                                                                                                                    }
+                                                                                                                    onApply={
+                                                                                                                        applyCodeToDiagram
+                                                                                                                    }
                                                                                                                 />
                                                                                                             )
                                                                                                         },
                                                                                                     }}
                                                                                                 >
-                                                                                                    {
-                                                                                                        section.content
-                                                                                                    }
+                                                                                                    {section.content}
                                                                                                 </ReactMarkdown>
                                                                                             </div>
                                                                                         )

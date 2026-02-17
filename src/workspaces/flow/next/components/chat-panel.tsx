@@ -1166,7 +1166,7 @@ Please fix the XML issues. Ensure you are editing exact lines from the current X
             </header>
 
             {/* Messages */}
-            <main className="flex-1 w-full overflow-hidden">
+            <main className="flex-1 w-full overflow-hidden min-h-0">
                 <ChatMessageDisplay
                     messages={messages}
                     setInput={setInput}
