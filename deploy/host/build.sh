@@ -1,6 +1,5 @@
-#!/usr/bin/env sh
+#!/usr/bin/env bash
 set -euo pipefail
 
 npm ci
 npm run build
-

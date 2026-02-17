@@ -1,21 +1,17 @@
 services:
-  api:
-    build:
-      context: ../..
-      dockerfile: deploy/docker/Dockerfile.api
-    environment:
-      API_PORT: 8787
-      API_BODY_LIMIT: 25mb
-    expose:
-      - "8787"
-    restart: unless-stopped
-
-  web:
+  app:
     build:
       context: ../..
       dockerfile: deploy/docker/Dockerfile
-    depends_on:
-      - api
+    environment:
+      PORT: 8080
+      API_BODY_LIMIT: 25mb
     ports:
-      - "8080:80"
+      - "8080:8080"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/healthz >/dev/null || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
     restart: unless-stopped

@@ -115,6 +115,7 @@ npm run build
 ## 常用脚本
 
 - `npm run dev`：启动开发服务器
+- `npm start`：生产启动（静态站点 + API）
 - `npm run build`：生产构建
 - `npm run check`：TypeScript 类型检查
 - `npm run lint`：ESLint 检查

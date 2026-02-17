@@ -3,13 +3,26 @@ FROM node:20-alpine AS build
 WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci
+
 COPY . .
 RUN npm run build
 
-FROM nginx:1.27-alpine
+FROM node:20-alpine AS runtime
 
-COPY deploy/docker/nginx.conf /etc/nginx/conf.d/default.conf
-COPY --from=build /app/dist /usr/share/nginx/html
+WORKDIR /app
 
-EXPOSE 80
+COPY package.json package-lock.json ./
+RUN npm ci --omit=dev
+
+COPY api ./api
+COPY src ./src
+COPY dist ./dist
+
+ENV NODE_ENV=production
+ENV PORT=8080
+ENV API_BODY_LIMIT=25mb
+
+EXPOSE 8080
+
+CMD ["npm", "start"]
 
