@@ -1145,7 +1145,7 @@ export function ChatMessageDisplay({
                                                                                                             const lang =
                                                                                                                 String(
                                                                                                                     match?.[1] ||
-                                                                                                                        "xml",
+                                                                                                                        "",
                                                                                                                 ).toLowerCase()
                                                                                                             const codeText =
                                                                                                                 String(
@@ -1157,11 +1157,28 @@ export function ChatMessageDisplay({
                                                                                                                 )
                                                                                                             const normalizedLang:
                                                                                                                 | "xml"
-                                                                                                                | "json" =
+                                                                                                                | "json"
+                                                                                                                | null =
                                                                                                                 lang ===
-                                                                                                                "json"
-                                                                                                                    ? "json"
-                                                                                                                    : "xml"
+                                                                                                                    "json" ||
+                                                                                                                lang ===
+                                                                                                                    "xml"
+                                                                                                                    ? lang
+                                                                                                                    : null
+                                                                                                            if (!normalizedLang) {
+                                                                                                                return (
+                                                                                                                    <pre className="overflow-x-auto whitespace-pre-wrap break-words rounded-md bg-muted/30 px-3 py-2 text-[12px] leading-relaxed">
+                                                                                                                        <code
+                                                                                                                            className={
+                                                                                                                                className
+                                                                                                                            }
+                                                                                                                            {...props}
+                                                                                                                        >
+                                                                                                                            {codeText}
+                                                                                                                        </code>
+                                                                                                                    </pre>
+                                                                                                                )
+                                                                                                            }
                                                                                                             return (
                                                                                                                 <CodeBlock
                                                                                                                     code={
