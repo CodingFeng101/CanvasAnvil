@@ -1,45 +1,59 @@
-# Deploy
+# Deployment Guide
 
-当前部署方式为单服务：一个 Node 进程同时提供静态站点和 `/api/*`。
+Language: [中文](#zh) | [English](#en)
 
-## 目录结构
+---
 
-- `deploy/host/`：主机/裸机部署脚本与 Nginx 反向代理配置
-- `deploy/docker/`：Docker 镜像与 Compose 配置
+<a id="zh"></a>
+## 中文
 
-## Host（主机/裸机）
+当前部署模型是单服务：一个 Node 进程同时提供静态站点与 `/api/*`。
 
-1. 安装依赖并构建
+### 快速开始
 
+| 场景 | 推荐方式 | 命令 |
+| --- | --- | --- |
+| 直接在主机运行 | Host 部署 | `npm ci && npm run build && npm start` |
+| 容器化部署 | Docker Compose（推荐） | `docker compose -f deploy/docker/docker-compose.yml up -d --build` |
+
+默认端口：`8080`  
+默认访问地址：`http://localhost:8080/`
+
+### 目录结构
+
+- `deploy/host/`: 主机/裸机部署脚本和 Nginx 反向代理配置
+- `deploy/docker/`: Dockerfile 与 Compose 配置
+
+### Host 部署
+
+1. 构建
+- Linux/macOS:
+```bash
+bash deploy/host/build.sh
+```
+- Windows PowerShell:
+```powershell
+powershell -ExecutionPolicy Bypass -File deploy/host/build.ps1
+```
+- 或手动执行：
 ```bash
 npm ci
 npm run build
 ```
 
-2. 启动服务
-
+2. 启动
 ```bash
 npm start
 ```
+生产环境建议使用 `pm2` 或 `systemd` 守护。
 
-默认监听：`http://127.0.0.1:8080`
+3. Nginx（可选）
+- 启用 `deploy/host/nginx.conf` 并重载 Nginx
+- 已包含 `client_max_body_size 25m`
+- 已对 `/api/chat` 配置 `proxy_buffering off`
+- 已转发 `/healthz`
 
-可选环境变量：
-
-- `PORT`：服务端口（默认 `8080`）
-- `API_BODY_LIMIT`：API 请求体大小限制（默认 `25mb`）
-- `WEB_DIST_DIR`：静态资源目录（默认 `./dist`）
-
-建议使用 `pm2` 或 `systemd` 守护。
-
-3. （可选）Nginx 反向代理
-
-将 `deploy/host/nginx.conf` 作为站点配置启用，重载 Nginx 后访问即可。该配置已包含：
-
-- `client_max_body_size 25m`（避免文件上传出现 `413 Request Entity Too Large`）
-- `/api/chat` 的 `proxy_buffering off`（保证聊天流式输出实时返回）
-
-## Docker
+### Docker 部署
 
 方式 A：Compose（推荐）
 
@@ -47,22 +61,91 @@ npm start
 docker compose -f deploy/docker/docker-compose.yml up -d --build
 ```
 
-Compose 配置已内置 `/healthz` 健康检查。
-启动后命名示例：
-
-```text
-container: canvasanvil-app
-image: canvasanvil/app:latest
-```
-
-方式 B：直接运行
+方式 B：Docker CLI
 
 ```bash
 docker build -f deploy/docker/Dockerfile -t canvasanvil/app:latest .
 docker run --rm -p 8080:8080 canvasanvil/app:latest
 ```
 
-默认访问：`http://localhost:8080/`
+### 环境变量
 
-Docker 构建使用项目根目录的 `.dockerignore`，避免把 `node_modules/` 等无关内容打进构建上下文。  
-`deploy/docker/Dockerfile` 使用多阶段构建：构建阶段安装完整依赖，运行阶段仅安装生产依赖。
+| 变量 | 默认值 | 说明 |
+| --- | --- | --- |
+| `PORT` | `8080` | 服务监听端口 |
+| `API_BODY_LIMIT` | `25mb` | API 请求体大小限制 |
+| `WEB_DIST_DIR` | `./dist` | 前端静态资源目录 |
+
+---
+
+<a id="en"></a>
+## English
+
+The deployment model is a single service: one Node process serves both static assets and `/api/*`.
+
+### Quick Start
+
+| Scenario | Recommended | Command |
+| --- | --- | --- |
+| Run directly on host | Host deployment | `npm ci && npm run build && npm start` |
+| Containerized deployment | Docker Compose (recommended) | `docker compose -f deploy/docker/docker-compose.yml up -d --build` |
+
+Default port: `8080`  
+Default URL: `http://localhost:8080/`
+
+### Directory Layout
+
+- `deploy/host/`: host/bare-metal scripts and Nginx reverse proxy config
+- `deploy/docker/`: Dockerfile and Compose config
+
+### Host Deployment
+
+1. Build
+- Linux/macOS:
+```bash
+bash deploy/host/build.sh
+```
+- Windows PowerShell:
+```powershell
+powershell -ExecutionPolicy Bypass -File deploy/host/build.ps1
+```
+- Or run manually:
+```bash
+npm ci
+npm run build
+```
+
+2. Run
+```bash
+npm start
+```
+For production, use `pm2` or `systemd` to keep it alive.
+
+3. Nginx (Optional)
+- Enable `deploy/host/nginx.conf` and reload Nginx
+- Includes `client_max_body_size 25m`
+- Sets `proxy_buffering off` for `/api/chat`
+- Proxies `/healthz`
+
+### Docker Deployment
+
+Option A: Compose (recommended)
+
+```bash
+docker compose -f deploy/docker/docker-compose.yml up -d --build
+```
+
+Option B: Docker CLI
+
+```bash
+docker build -f deploy/docker/Dockerfile -t canvasanvil/app:latest .
+docker run --rm -p 8080:8080 canvasanvil/app:latest
+```
+
+### Environment Variables
+
+| Variable | Default | Description |
+| --- | --- | --- |
+| `PORT` | `8080` | service listen port |
+| `API_BODY_LIMIT` | `25mb` | max API request body size |
+| `WEB_DIST_DIR` | `./dist` | static web assets directory |
