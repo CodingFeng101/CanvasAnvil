@@ -1,4 +1,4 @@
-﻿import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { t } from "@/lib/i18n";
@@ -25,8 +25,8 @@ type Attachment = {
 
 type CodeActionResult = { ok: boolean; retry?: boolean; error?: string; svg?: string };
 
-const CAD_WORKSPACE_STORAGE_KEY = "unified-ai-workspace-cad-state-v1";
-const CAD_RENDERS_STORAGE_KEY = "unified-ai-workspace-cad-renders-v1";
+const CAD_WORKSPACE_STORAGE_KEY = "CanvasAnvil-cad-state-v1";
+const CAD_RENDERS_STORAGE_KEY = "CanvasAnvil-cad-renders-v1";
 const CAD_CHAT_STORAGE_KEY = "chat_history_v2_cad";
 
 const tryParseJson = (text: string) => {
@@ -690,7 +690,7 @@ export function CadWorkspaceShell() {
     } catch {
     }
     try {
-      localStorage.removeItem("unified-ai-workspace-history-cad-v1");
+      localStorage.removeItem("CanvasAnvil-history-cad-v1");
     } catch {
     }
     setCadResetTick((x) => x + 1);
@@ -758,4 +758,3 @@ export function CadWorkspaceShell() {
     </ResizablePanelGroup>
   );
 }
-

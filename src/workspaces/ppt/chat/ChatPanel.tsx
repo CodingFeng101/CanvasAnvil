@@ -1,4 +1,4 @@
-﻿import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { PanelRightClose, PanelRightOpen } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { streamChatMessage, generateChatMessage, ChatMessage, getAIConfig } from '@/lib/ai-client';
@@ -63,7 +63,7 @@ interface ChatPanelProps {
 }
 
 const STORAGE_KEY_PREFIX = 'chat_history_v2_';
-const PPT_WORKSPACE_STORAGE_KEY = "unified-ai-workspace-ppt-state-v1";
+const PPT_WORKSPACE_STORAGE_KEY = "CanvasAnvil-ppt-state-v1";
 
 // Convert internal ChatMessage to UIMessage
 const toUIMessage = (msg: ChatMessage, index: number): UIMessage => ({
@@ -1682,4 +1682,3 @@ export function ChatPanel({
     </div>
   );
 }
-

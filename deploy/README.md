@@ -34,8 +34,7 @@ npm start
 
 3. （可选）Nginx 反向代理
 
-将 `deploy/host/nginx.conf` 作为站点配置启用，重载 Nginx 后访问即可。
-该配置已包含：
+将 `deploy/host/nginx.conf` 作为站点配置启用，重载 Nginx 后访问即可。该配置已包含：
 
 - `client_max_body_size 25m`（避免文件上传出现 `413 Request Entity Too Large`）
 - `/api/chat` 的 `proxy_buffering off`（保证聊天流式输出实时返回）
@@ -47,16 +46,23 @@ npm start
 ```bash
 docker compose -f deploy/docker/docker-compose.yml up -d --build
 ```
+
 Compose 配置已内置 `/healthz` 健康检查。
+启动后命名示例：
+
+```text
+container: canvasanvil-app
+image: canvasanvil/app:latest
+```
 
 方式 B：直接运行
 
 ```bash
-docker build -f deploy/docker/Dockerfile -t unified-ai-workspace:latest .
-docker run --rm -p 8080:8080 unified-ai-workspace:latest
+docker build -f deploy/docker/Dockerfile -t canvasanvil/app:latest .
+docker run --rm -p 8080:8080 canvasanvil/app:latest
 ```
 
 默认访问：`http://localhost:8080/`
 
-Docker 构建使用项目根目录的 `.dockerignore`，避免把 `node_modules/` 等无关内容打进构建上下文。
+Docker 构建使用项目根目录的 `.dockerignore`，避免把 `node_modules/` 等无关内容打进构建上下文。  
 `deploy/docker/Dockerfile` 使用多阶段构建：构建阶段安装完整依赖，运行阶段仅安装生产依赖。

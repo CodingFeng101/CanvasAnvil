@@ -1,4 +1,4 @@
-﻿import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Loader2, MessageSquarePlus, Box, Image as ImageIcon, Table2, Download } from 'lucide-react';
 import {
   ContextMenu,
@@ -126,7 +126,7 @@ const isEffectivelyEmptySvg = (text: string) => {
 };
 
 export function CadWorkspace({ onAddToChat, onSvgChange, svg2d, plan, images = [], imagesLoading = false, bom, focusPanel }: CadWorkspaceProps) {
-  const CAD_RENDERS_STORAGE_KEY = "unified-ai-workspace-cad-renders-v1";
+  const CAD_RENDERS_STORAGE_KEY = "CanvasAnvil-cad-renders-v1";
   const [svgContent, setSvgContent] = useState<string | null>(null);
   const [isSvgEditorReady, setIsSvgEditorReady] = useState(false);
   const [viewMode, setViewMode] = useState<"2d" | "renders" | "bom">("2d");

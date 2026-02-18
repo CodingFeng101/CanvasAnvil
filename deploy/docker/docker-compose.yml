@@ -1,5 +1,9 @@
+name: canvasanvil
+
 services:
   app:
+    image: canvasanvil/app:latest
+    container_name: canvasanvil-app
     build:
       context: ../..
       dockerfile: deploy/docker/Dockerfile

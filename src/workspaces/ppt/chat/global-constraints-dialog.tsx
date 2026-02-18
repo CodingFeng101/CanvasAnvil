@@ -12,7 +12,7 @@ import { Textarea } from "@/workspaces/ppt/ui/textarea"
 import { useUiLanguage } from "@/lib/use-ui-language";
 import { t } from "@/lib/i18n";
 
-export const STORAGE_GLOBAL_CONSTRAINTS_KEY = "unified-ai-workspace-global-constraints"
+export const STORAGE_GLOBAL_CONSTRAINTS_KEY = "CanvasAnvil-global-constraints"
 
 interface GlobalConstraintsDialogProps {
     open: boolean
@@ -27,6 +27,14 @@ export function GlobalConstraintsDialog({
 }: GlobalConstraintsDialogProps) {
     const [constraints, setConstraints] = useState("")
     const uiLang = useUiLanguage();
+    const workspaceLabel =
+        workspaceId === "flow"
+            ? "Flow"
+            : workspaceId === "cad"
+              ? "CAD"
+              : workspaceId === "ppt"
+                ? "PPT"
+                : "General"
     
     // Determine the actual storage key
     const storageKey = workspaceId 
@@ -50,15 +58,7 @@ export function GlobalConstraintsDialog({
             <DialogContent className="sm:max-w-[500px]">
                 <DialogHeader>
                     <DialogTitle>
-                        {t(uiLang, "constraints.title")} (
-                        {workspaceId === 'flow'
-                            ? (uiLang === "zh" ? '流程图' : 'Flow')
-                            : workspaceId === 'cad'
-                              ? (uiLang === "zh" ? 'CAD设计' : 'CAD')
-                              : workspaceId === 'ppt'
-                                ? (uiLang === "zh" ? 'PPT演示' : 'PPT')
-                                : (uiLang === "zh" ? '通用' : 'General')}
-                        )
+                        {t(uiLang, "constraints.title")} ({workspaceLabel})
                     </DialogTitle>
                     <DialogDescription>
                         {t(uiLang, "constraints.desc")}
@@ -81,3 +81,4 @@ export function GlobalConstraintsDialog({
         </Dialog>
     )
 }
+

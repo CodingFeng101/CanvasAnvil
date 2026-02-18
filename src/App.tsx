@@ -1,4 +1,4 @@
-﻿import React, { useState } from "react";
+import React, { useState } from "react";
 import { Toaster } from "sonner";
 import { FileCode, Hammer, Layers, Presentation, Square } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -13,8 +13,8 @@ import { CadWorkspaceShell } from "@/workspaces/cad/CadWorkspaceShell";
 import { PptWorkspaceShell } from "@/workspaces/ppt/PptWorkspaceShell";
 
 type WorkspaceType = "flow" | "cad" | "ppt";
-const APP_VIEW_STORAGE_KEY = "unified-ai-workspace-app-view-v1";
-const APP_WORKSPACE_STORAGE_KEY = "unified-ai-workspace-active-workspace-v1";
+const APP_VIEW_STORAGE_KEY = "CanvasAnvil-app-view-v1";
+const APP_WORKSPACE_STORAGE_KEY = "CanvasAnvil-active-workspace-v1";
 
 class ErrorBoundary extends React.Component<{ children: React.ReactNode }, { error: Error | null }> {
   state: { error: Error | null } = { error: null };
@@ -154,3 +154,4 @@ function App() {
 }
 
 export default App;
+

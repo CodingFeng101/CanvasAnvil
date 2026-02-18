@@ -16,7 +16,7 @@ RUN npm ci --omit=dev
 
 COPY api ./api
 COPY src ./src
-COPY dist ./dist
+COPY --from=build /app/dist ./dist
 
 ENV NODE_ENV=production
 ENV PORT=8080
@@ -25,4 +25,3 @@ ENV API_BODY_LIMIT=25mb
 EXPOSE 8080
 
 CMD ["npm", "start"]
-

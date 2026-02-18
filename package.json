@@ -1,5 +1,5 @@
 {
-  "name": "unified-ai-workspace",
+  "name": "canvasanvil",
   "private": true,
   "version": "0.0.0",
   "type": "module",
@@ -87,3 +87,4 @@
     "vite-tsconfig-paths": "^5.1.4"
   }
 }
+

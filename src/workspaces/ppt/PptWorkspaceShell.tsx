@@ -26,8 +26,8 @@ type Attachment = {
 
 type CodeActionResult = { ok: boolean; retry?: boolean; error?: string };
 
-const PPT_WORKSPACE_STORAGE_KEY = "unified-ai-workspace-ppt-state-v1";
-const PPT_HISTORY_STORAGE_KEY = "unified-ai-workspace-history-ppt-v1";
+const PPT_WORKSPACE_STORAGE_KEY = "CanvasAnvil-ppt-state-v1";
+const PPT_HISTORY_STORAGE_KEY = "CanvasAnvil-history-ppt-v1";
 const PPT_CHAT_STORAGE_KEY = "chat_history_v2_ppt";
 
 export function PptWorkspaceShell() {
@@ -284,3 +284,4 @@ export function PptWorkspaceShell() {
     </ResizablePanelGroup>
   );
 }
+

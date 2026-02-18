@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { motion } from "framer-motion";
 import { generateImage, generateChatMessage } from '@/lib/ai-client';
 import { pptService, PptPage } from '@/lib/ppt-service';
@@ -128,7 +128,7 @@ type TemplateItem =
 
 const PPT_TEMPLATE_UPLOADS_KEY = "ppt_template_uploads_v1";
 const PPT_TEMPLATE_HIDDEN_PRESETS_KEY = "ppt_template_hidden_presets_v1";
-const PPT_WORKSPACE_STORAGE_KEY = "unified-ai-workspace-ppt-state-v1";
+const PPT_WORKSPACE_STORAGE_KEY = "CanvasAnvil-ppt-state-v1";
 
 const PRESET_TEMPLATES: PresetTemplate[] = [
   { id: "preset-tech-business", zhName: "科技商务", enName: "Tech Business", path: "/templates/template_b.png" },
@@ -3487,6 +3487,5 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, onPptStageCh
     </div>
   );
 }
-
 
 

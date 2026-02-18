@@ -1,6 +1,6 @@
 export type UiLanguage = "zh" | "en";
 
-const UI_LANG_STORAGE_KEY = "unified-ai-workspace-ui-lang-v1";
+const UI_LANG_STORAGE_KEY = "CanvasAnvil-ui-lang-v1";
 
 export function getUiLanguage(): UiLanguage {
   if (typeof window === "undefined") return "zh";
@@ -25,7 +25,7 @@ export function setUiLanguage(lang: UiLanguage) {
 
 export function detectLanguageFromText(text: string): UiLanguage | null {
   const raw = String(text || "");
-  if (/[一-龥]/.test(raw)) return "zh";
+  if (/[\u4E00-\u9FFF]/.test(raw)) return "zh";
   if (/[A-Za-z]/.test(raw)) return "en";
   return null;
 }
@@ -33,3 +33,4 @@ export function detectLanguageFromText(text: string): UiLanguage | null {
 export function resolveResponseLanguage(args: { userText: string; uiLang: UiLanguage }): UiLanguage {
   return detectLanguageFromText(args.userText) || args.uiLang;
 }
+
