@@ -4,6 +4,16 @@
 
 CanvasAnvil is a multi-workspace AI creation platform that turns a single requirement into deliverables you can iterate on.
 
+## Video Tutorials
+
+- [Watch on Bilibili](https://www.bilibili.com/video/BV1jzZ3BBEHc?vd_source=b6b031f92061ae667eba1185f4782a1c)
+- [Watch on YouTube](https://youtu.be/n3Otj--aLRo)
+- [Watch on Douyin](https://v.douyin.com/JwlwhmE6R40/)
+
+## Try CanvasAnvil
+
+- [Open CanvasAnvil](https://canvasanvil.codingfgd.asia)
+
 ## Capability Overview (User View)
 
 - `Flow`: flowchart generation and partial edits (draw.io XML)

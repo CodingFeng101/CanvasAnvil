@@ -4,6 +4,16 @@ English version: [View English document](README.md)
 
 CanvasAnvil 是一个多工作台 AI 创作平台，用一句需求就能完成从方案到可交付物的生成与迭代。
 
+## 视频教程
+
+- [Bilibili 教程视频](https://www.bilibili.com/video/BV1jzZ3BBEHc?vd_source=b6b031f92061ae667eba1185f4782a1c)
+- [YouTube 教程视频](https://youtu.be/n3Otj--aLRo)
+- [抖音教程视频](https://v.douyin.com/JwlwhmE6R40/)
+
+## 在线使用
+
+- [立即打开 CanvasAnvil](https://canvasanvil.codingfgd.asia)
+
 ## 能力总览（用户视角）
 
 - `Flow`：流程图生成与局部编辑（draw.io XML）
