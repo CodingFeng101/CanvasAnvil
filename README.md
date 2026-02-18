@@ -1,6 +1,6 @@
 # CanvasAnvil
 
-中文版本: [`README.zh-CN.md`](README.zh-CN.md)
+中文版本: [查看中文文档](README.zh-CN.md)
 
 CanvasAnvil is a multi-workspace AI creation platform that turns a single requirement into deliverables you can iterate on.
 
@@ -89,4 +89,4 @@ Key improvements:
 
 ## Docs
 
-- Deployment guide: [`deploy/README.md`](deploy/README.md)
+- Deployment guide: [Open deployment guide](deploy/README.md)

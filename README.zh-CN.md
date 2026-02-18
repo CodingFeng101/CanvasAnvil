@@ -1,6 +1,6 @@
 # CanvasAnvil
 
-English version: [`README.md`](README.md)
+English version: [View English document](README.md)
 
 CanvasAnvil 是一个多工作台 AI 创作平台，用一句需求就能完成从方案到可交付物的生成与迭代。
 
@@ -89,4 +89,4 @@ npm run build
 
 ## 文档导航
 
-- 部署说明：[`deploy/README.zh-CN.md`](deploy/README.zh-CN.md)
+- 部署说明：[查看部署说明](deploy/README.zh-CN.md)

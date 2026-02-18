@@ -1,6 +1,6 @@
 # Deployment Guide
 
-English version: [`README.md`](README.md)
+English version: [View English document](README.md)
 
 当前部署模型是单服务：一个 Node 进程同时提供静态站点与 `/api/*`。
 

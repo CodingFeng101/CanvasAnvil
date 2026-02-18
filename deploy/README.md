@@ -1,6 +1,6 @@
 # Deployment Guide
 
-中文版本: [`README.zh-CN.md`](README.zh-CN.md)
+中文版本: [查看中文文档](README.zh-CN.md)
 
 The deployment model is a single service: one Node process serves both static assets and `/api/*`.
 
