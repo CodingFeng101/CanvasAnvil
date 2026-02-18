@@ -2,7 +2,21 @@
 
 English version: [View English document](README.md)
 
-CanvasAnvil 是一个多工作台 AI 创作平台，用一句需求就能完成从方案到可交付物的生成与迭代。
+CanvasAnvil 是一个多画布 AI 创作平台，用一句需求就能完成从方案到可交付物的生成与迭代。
+
+## 画布预览（GIF）
+
+### Flow 画布
+
+![Flow 画布](public/demos/flow.gif)
+
+### CAD 画布
+
+![CAD 画布](public/demos/cad.gif)
+
+### PPT 画布
+
+![PPT 画布](public/demos/ppt.gif)
 
 ## 视频教程
 
@@ -50,16 +64,16 @@ npm run build
 
 ## 项目来源与说明
 
-- Flow 工作台：基于 [next-ai-draw-io](https://github.com/DayuanJiang/next-ai-draw-io) 集成与增强
-- PPT 工作台：基于 [banana-slides](https://github.com/Anionex/banana-slides.git) 集成与增强
-- CAD 工作台：本项目自研（架构、Agent 工作流、2D SVG 编辑链路、BOM/装修图链路）
+- Flow 画布：基于 [next-ai-draw-io](https://github.com/DayuanJiang/next-ai-draw-io) 集成与增强
+- PPT 画布：基于 [banana-slides](https://github.com/Anionex/banana-slides.git) 集成与增强
+- CAD 画布：本项目自研（架构、Agent 工作流、2D SVG 编辑链路、BOM/装修图链路）
 
 核心优化：
 
-- 三工作台统一交互范式（聊天、代码块、一键应用到画布）
+- 三画布统一交互范式（聊天、代码块、一键应用到画布）
 - 更稳定的 Agent 路由与重试机制
 - CAD 专项能力（局部 patch / 全量 replace / BOM / 7 槽装修图）
-- 跨工作台状态管理、版本管理和导出链路
+- 跨画布状态管理、版本管理和导出链路
 
 ## 核心能力（开发视角）
 
@@ -90,9 +104,9 @@ npm run build
 ├─ public/                     # 静态资源（含 SVG-Edit 等）
 ├─ src/
 │  └─ workspaces/
-│     ├─ flow/                 # 流程图工作台
-│     ├─ cad/                  # CAD 工作台（自研核心）
-│     └─ ppt/                  # PPT 工作台
+│     ├─ flow/                 # Flow 画布
+│     ├─ cad/                  # CAD 画布（自研核心）
+│     └─ ppt/                  # PPT 画布
 ├─ api/                        # API 相关逻辑
 └─ README.md
 ```

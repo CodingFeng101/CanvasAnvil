@@ -2,7 +2,21 @@
 
 中文版本: [查看中文文档](README.zh-CN.md)
 
-CanvasAnvil is a multi-workspace AI creation platform that turns a single requirement into deliverables you can iterate on.
+CanvasAnvil is a multi-canvas AI creation platform that turns a single requirement into deliverables you can iterate on.
+
+## Canvas Previews (GIF)
+
+### Flow Canvas
+
+![Flow canvas](public/demos/flow.gif)
+
+### CAD Canvas
+
+![CAD canvas](public/demos/cad.gif)
+
+### PPT Canvas
+
+![PPT canvas](public/demos/ppt.gif)
 
 ## Video Tutorials
 
@@ -50,16 +64,16 @@ npm run build
 
 ## Origins and Integrations
 
-- Flow workspace: integrated and enhanced from [next-ai-draw-io](https://github.com/DayuanJiang/next-ai-draw-io)
-- PPT workspace: integrated and enhanced from [banana-slides](https://github.com/Anionex/banana-slides.git)
-- CAD workspace: implemented in-house (architecture, agent workflow, 2D SVG editing pipeline, BOM/render pipeline)
+- Flow canvas: integrated and enhanced from [next-ai-draw-io](https://github.com/DayuanJiang/next-ai-draw-io)
+- PPT canvas: integrated and enhanced from [banana-slides](https://github.com/Anionex/banana-slides.git)
+- CAD canvas: implemented in-house (architecture, agent workflow, 2D SVG editing pipeline, BOM/render pipeline)
 
 Key improvements:
 
-- Unified UX across workspaces (chat, code blocks, one-click apply to canvas)
+- Unified UX across canvases (chat, code blocks, one-click apply to canvas)
 - More stable agent routing and retry mechanisms
 - CAD-specific capabilities (patch / replace / BOM / 7-slot render workflow)
-- Cross-workspace state/version/export pipelines
+- Cross-canvas state/version/export pipelines
 
 ## Core Capabilities (Developer View)
 
@@ -90,9 +104,9 @@ Key improvements:
 ├─ public/                     # Static assets (including SVG-Edit)
 ├─ src/
 │  └─ workspaces/
-│     ├─ flow/                 # Flow workspace
-│     ├─ cad/                  # CAD workspace (in-house core)
-│     └─ ppt/                  # PPT workspace
+│     ├─ flow/                 # Flow canvas
+│     ├─ cad/                  # CAD canvas (in-house core)
+│     └─ ppt/                  # PPT canvas
 ├─ api/                        # API logic
 └─ README.md
 ```
