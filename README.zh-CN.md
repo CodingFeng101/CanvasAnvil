@@ -8,15 +8,15 @@ CanvasAnvil 是一个多画布 AI 创作平台，用一句需求就能完成从�
 
 ### Flow 画布
 
-![Flow 画布](public/demos/flow.gif)
+<img src="public/demos/flow.gif" alt="Flow 画布" width="960" />
 
 ### CAD 画布
 
-![CAD 画布](public/demos/cad.gif)
+<img src="public/demos/cad.gif" alt="CAD 画布" width="960" />
 
 ### PPT 画布
 
-![PPT 画布](public/demos/ppt.gif)
+<img src="public/demos/ppt.gif" alt="PPT 画布" width="960" />
 
 ## 视频教程
 
