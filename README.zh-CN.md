@@ -4,19 +4,22 @@ English version: [View English document](README.md)
 
 CanvasAnvil 是一个多画布 AI 创作平台，用一句需求就能完成从方案到可交付物的生成与迭代。
 
-## 画布预览（GIF）
+## 画布预览
 
-### Flow 画布
+<h3 align="center">Flow 画布</h3>
+<p align="center">
+  <img src="public/demos/flow.gif" alt="Flow 画布" width="960" />
+</p>
 
-<img src="public/demos/flow.gif" alt="Flow 画布" width="960" />
+<h3 align="center">CAD 画布</h3>
+<p align="center">
+  <img src="public/demos/cad.gif" alt="CAD 画布" width="960" />
+</p>
 
-### CAD 画布
-
-<img src="public/demos/cad.gif" alt="CAD 画布" width="960" />
-
-### PPT 画布
-
-<img src="public/demos/ppt.gif" alt="PPT 画布" width="960" />
+<h3 align="center">PPT 画布</h3>
+<p align="center">
+  <img src="public/demos/ppt.gif" alt="PPT 画布" width="960" />
+</p>
 
 ## 视频教程
 

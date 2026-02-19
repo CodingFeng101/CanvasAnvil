@@ -4,19 +4,22 @@
 
 CanvasAnvil is a multi-canvas AI creation platform that turns a single requirement into deliverables you can iterate on.
 
-## Canvas Previews (GIF)
+## Canvas Previews
 
-### Flow Canvas
+<h3 align="center">Flow Canvas</h3>
+<p align="center">
+  <img src="public/demos/flow.gif" alt="Flow canvas" width="960" />
+</p>
 
-<img src="public/demos/flow.gif" alt="Flow canvas" width="960" />
+<h3 align="center">CAD Canvas</h3>
+<p align="center">
+  <img src="public/demos/cad.gif" alt="CAD canvas" width="960" />
+</p>
 
-### CAD Canvas
-
-<img src="public/demos/cad.gif" alt="CAD canvas" width="960" />
-
-### PPT Canvas
-
-<img src="public/demos/ppt.gif" alt="PPT canvas" width="960" />
+<h3 align="center">PPT Canvas</h3>
+<p align="center">
+  <img src="public/demos/ppt.gif" alt="PPT canvas" width="960" />
+</p>
 
 ## Video Tutorials
 
