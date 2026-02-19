@@ -30,6 +30,7 @@ CanvasAnvil is a multi-canvas AI creation platform that turns a single requireme
 ## Try CanvasAnvil
 
 - [Open CanvasAnvil](https://canvasanvil.codingfgd.asia)
+- Note: The current server configuration is modest, so the service may occasionally feel slow or laggy. Thanks for your understanding.
 
 ## Capability Overview (User View)
 

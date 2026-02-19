@@ -30,6 +30,7 @@ CanvasAnvil 是一个多画布 AI 创作平台，用一句需求就能完成从�
 ## 在线使用
 
 - [立即打开 CanvasAnvil](https://canvasanvil.codingfgd.asia)
+- 说明：当前服务器配置较低，服务运行时可能会有一定延迟或卡顿，感谢理解。
 
 ## 能力总览（用户视角）
 
