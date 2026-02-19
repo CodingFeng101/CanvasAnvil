@@ -1,0 +1,67 @@
+name: Bug report
+description: Report a reproducible problem
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting a bug. Please provide as much detail as possible.
+  - type: dropdown
+    id: canvas
+    attributes:
+      label: Which canvas is affected?
+      options:
+        - Flow canvas
+        - CAD canvas
+        - PPT canvas
+        - Deployment / Server
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: what_happened
+    attributes:
+      label: What happened?
+      description: Include screenshots or logs when possible.
+      placeholder: Describe the issue.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: Minimal steps that reproduce the bug.
+      placeholder: |
+        1.
+        2.
+        3.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      placeholder: What did you expect to happen?
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version / commit
+      description: Release version (e.g. v0.1.0) or commit hash.
+      placeholder: v0.1.0
+    validations:
+      required: false
+  - type: textarea
+    id: env
+    attributes:
+      label: Environment
+      description: OS, browser, Node version, Docker version, etc.
+      placeholder: |
+        OS:
+        Browser:
+        Node:
+        Docker:
+    validations:
+      required: false

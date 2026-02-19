@@ -1,0 +1,42 @@
+name: Feature request
+description: Suggest an idea or improvement
+title: "[Feature]: "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the suggestion. Please describe the use case and desired behavior.
+  - type: dropdown
+    id: canvas
+    attributes:
+      label: Which canvas is this for?
+      options:
+        - Flow canvas
+        - CAD canvas
+        - PPT canvas
+        - Cross-canvas / Platform
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem statement
+      description: What problem are you trying to solve?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: What would you like to see happen?
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives
+      description: Any alternative solutions or workarounds?
+    validations:
+      required: false
