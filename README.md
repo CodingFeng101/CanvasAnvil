@@ -35,15 +35,16 @@ CanvasAnvil is a multi-canvas AI creation platform that turns a single requireme
 ## Capability Overview (User View)
 
 - `Flow`: flowchart generation and partial edits (draw.io XML)
-- `CAD`: interior design plans, 2D floor plans, render tasks, and BOM
+- `CAD`: interior design planning, analysis boards, 2D floor plans, render tasks, and BOM
 - `PPT`: presentation draft generation and iterative editing
 
 ## Typical Workflow
 
 1. Enter your requirement
-2. Generate a first draft with AI
-3. Apply partial edits and iterate
-4. Export outputs (diagrams / lists / slides)
+2. Generate/iterate on design plan
+3. Generate analysis boards and confirm strategy
+4. Generate and edit 2D floor plan
+5. Export outputs (diagrams / lists / slides)
 
 ## Quick Start
 
@@ -82,7 +83,7 @@ Key improvements:
 ## Core Capabilities (Developer View)
 
 - Flow: chat-driven flowchart generation, patch/replace, one-click apply, snapshot restore
-- CAD: `cad_plan` output, 2D SVG partial updates, concurrent render jobs, BOM export
+- CAD: `cad_plan` output, parallel analysis-board generation, 2D SVG partial updates with analysis-image references, concurrent render jobs, BOM export
 - PPT: structured content generation, page-level incremental edits, streaming iteration
 
 ## Tech Stack

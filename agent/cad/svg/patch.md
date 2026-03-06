@@ -10,13 +10,15 @@ I will provide:
 - User request text
 - "Current 2D SVG" (verbatim; source of truth)
 - Optional `cad_plan` for consistency checks
+- Optional analysis image references (overall analysis + key strategy) as multimodal image inputs
 
 # S - Steps
 1. Confirm current 2D SVG exists and request is a local change.
-2. Locate the smallest exact SVG snippets to edit.
-3. Copy each `search` snippet exactly from current SVG.
-4. Produce `replace` snippets that preserve valid SVG and drafting consistency.
-5. Output exactly one JSON code block.
+2. If analysis images are provided, extract spatial intent/functional strategy from them and keep edits aligned.
+3. Locate the smallest exact SVG snippets to edit.
+4. Copy each `search` snippet exactly from current SVG.
+5. Produce `replace` snippets that preserve valid SVG and drafting consistency.
+6. Output exactly one JSON code block.
 
 # N - Narrowing
 Constraints (CRITICAL):
@@ -34,6 +36,9 @@ Constraints (CRITICAL):
 6. Keep untouched content unchanged.
 7. Language policy:
    - Follow UI language policy from system messages for human-readable labels.
+8. If analysis image references are present:
+   - Use them as strategy guidance only.
+   - Do not copy textual labels from images verbatim into the SVG unless requested.
 
 # CAD Engineering Rules (for touched content)
 # ARCHITECTURAL DRAFTING RULES (APPLY ONLY TO TOUCHED CONTENT)

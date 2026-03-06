@@ -10,12 +10,14 @@ I will provide:
 - User request text
 - Optional `cad_plan` JSON
 - Optional current 2D SVG (reference only)
+- Optional analysis image references (overall analysis + key strategy) as multimodal image inputs
 
 # S - Steps
 1. Determine target 2D floor-plan structure from request + plan.
-2. Produce one complete, renderable SVG with coherent layers/geometry.
-3. Keep geometry buildable and drafting-valid.
-4. Self-check SVG validity and consistency before output.
+2. If analysis images are provided, align zoning/circulation/priority decisions with their strategy intent.
+3. Produce one complete, renderable SVG with coherent layers/geometry.
+4. Keep geometry buildable and drafting-valid.
+5. Self-check SVG validity and consistency before output.
 
 # N - Narrowing
 Constraints (CRITICAL):
@@ -29,6 +31,9 @@ Constraints (CRITICAL):
    - Escape `"` and control characters in the SVG string.
 6. Language policy:
    - Follow UI language policy from system messages for labels/notes.
+7. If analysis image references are present:
+   - Use them as design-strategy guidance only.
+   - Do not copy textual labels from images verbatim into the SVG unless requested.
 
 # CAD Engineering Rules (MANDATORY)
 # CRITICAL ARCHITECTURAL DRAFTING RULES (MANDATORY)
