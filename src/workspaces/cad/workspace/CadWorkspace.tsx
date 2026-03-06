@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+﻿import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Loader2, MessageSquarePlus, Box, Image as ImageIcon, Table2, Download } from 'lucide-react';
 import {
   ContextMenu,
@@ -18,11 +18,15 @@ interface CadWorkspaceProps {
   onSvgChange?: (svg: string) => void;
   svg2d?: string;
   plan?: any;
+  analysisImages?: { title: string; url: string }[];
+  analysisImagesLoading?: boolean;
   images?: { title: string; url: string }[];
   imagesLoading?: boolean;
   bom?: { columns: string[]; rows: any[] } | null;
-  focusPanel?: "2d" | "renders" | "bom" | null;
+  focusPanel?: "analysis" | "2d" | "renders" | "bom" | null;
 }
+
+type ViewMode = "analysis" | "2d" | "renders" | "bom";
 
 const EMPTY_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 1000"></svg>`;
 const EMPTY_SENTINEL = "__EMPTY_SVG__";
@@ -125,11 +129,22 @@ const isEffectivelyEmptySvg = (text: string) => {
   }
 };
 
-export function CadWorkspace({ onAddToChat, onSvgChange, svg2d, plan, images = [], imagesLoading = false, bom, focusPanel }: CadWorkspaceProps) {
+export function CadWorkspace({
+  onAddToChat,
+  onSvgChange,
+  svg2d,
+  plan,
+  analysisImages = [],
+  analysisImagesLoading = false,
+  images = [],
+  imagesLoading = false,
+  bom,
+  focusPanel,
+}: CadWorkspaceProps) {
   const CAD_RENDERS_STORAGE_KEY = "CanvasAnvil-cad-renders-v1";
   const [svgContent, setSvgContent] = useState<string | null>(null);
   const [isSvgEditorReady, setIsSvgEditorReady] = useState(false);
-  const [viewMode, setViewMode] = useState<"2d" | "renders" | "bom">("2d");
+  const [viewMode, setViewMode] = useState<ViewMode>("2d");
   const [previewImage, setPreviewImage] = useState<{ title: string; url: string } | null>(null);
   const [isExporting, setIsExporting] = useState(false);
   const [localImages, setLocalImages] = useState<Array<{ title: string; url: string }>>(() => {
@@ -616,6 +631,19 @@ export function CadWorkspace({ onAddToChat, onSvgChange, svg2d, plan, images = [
       };
     });
   }, [localImages, uiLang]);
+  const analysisSlots = useMemo(() => {
+    const fallbackTitles = [
+      uiLang === "zh" ? "整体方案图" : "Overall Scheme",
+      uiLang === "zh" ? "重点策略图" : "Key Strategy",
+    ];
+    return fallbackTitles.map((fallbackTitle, idx) => {
+      const item = analysisImages[idx];
+      return {
+        title: typeof item?.title === "string" && item.title.trim() ? item.title : fallbackTitle,
+        url: item?.url || "",
+      };
+    });
+  }, [analysisImages, uiLang]);
 
   const hasRenderImages = localImages.some((x) => !!x?.url);
 
@@ -623,6 +651,16 @@ export function CadWorkspace({ onAddToChat, onSvgChange, svg2d, plan, images = [
     <ContextMenu>
       <ContextMenuTrigger className="w-full h-full bg-muted/20 relative overflow-hidden">
         <div className="absolute top-4 left-4 z-20 flex items-center gap-2 bg-background/80 backdrop-blur rounded-xl border border-border/50 px-3 py-2 shadow-sm">
+          <Button
+            size="sm"
+            variant={viewMode === "analysis" ? "default" : "outline"}
+            className="h-7 px-2 text-xs gap-1"
+            onClick={() => setViewMode("analysis")}
+            title={uiLang === "zh" ? "查看分析图" : "View analysis images"}
+          >
+            <ImageIcon className="w-3.5 h-3.5" />
+            {uiLang === "zh" ? "分析图" : "Analysis"}
+          </Button>
           <Button
             size="sm"
             variant={viewMode === "2d" ? "default" : "outline"}
@@ -680,7 +718,7 @@ export function CadWorkspace({ onAddToChat, onSvgChange, svg2d, plan, images = [
           )}
         </div>
 
-        {!svgContent && viewMode !== "2d" && (
+        {!svgContent && viewMode !== "2d" && viewMode !== "analysis" && (
           <div className="w-full h-full flex items-center justify-center">
             <div className="text-center text-muted-foreground">
               <p className="mb-2">{uiLang === "zh" ? "暂无 CAD 内容" : "No CAD content yet"}</p>
@@ -694,6 +732,51 @@ export function CadWorkspace({ onAddToChat, onSvgChange, svg2d, plan, images = [
         )}
 
         <div className="w-full h-full pt-16 p-6">
+          {viewMode === "analysis" && (
+            <div className="w-full h-full bg-white dark:bg-zinc-900 shadow-sm rounded-xl overflow-auto border border-border/50 p-4">
+              <div className="grid gap-4 grid-cols-1 md:grid-cols-2">
+                {analysisSlots.map((img, idx) => (
+                  <div key={`${img.title}-${idx}`} className="rounded-xl border border-border/50 overflow-hidden bg-background">
+                    <div className="px-3 py-2 text-xs text-muted-foreground flex items-center justify-between gap-2">
+                      <ImageIcon className="w-4 h-4" />
+                      <span className="truncate flex-1">{img.title}</span>
+                      <div className="flex items-center gap-1">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7"
+                          onClick={() => setPreviewImage(img)}
+                          title={uiLang === "zh" ? "查看" : "View"}
+                        >
+                          <ImageIcon className="w-4 h-4" />
+                        </Button>
+                        <a
+                          href={img.url || "#"}
+                          download={`${img.title || (uiLang === "zh" ? "分析图" : "analysis")}.png`}
+                          className="inline-flex"
+                        >
+                          <Button variant="ghost" size="icon" className="h-7 w-7" disabled={!img.url} title={uiLang === "zh" ? "下载" : "Download"}>
+                            <Download className="w-4 h-4" />
+                          </Button>
+                        </a>
+                      </div>
+                    </div>
+                    <div className="aspect-video bg-muted/20">
+                      {img.url ? (
+                        <img src={img.url} alt={img.title} className="w-full h-full object-cover cursor-pointer" onClick={() => setPreviewImage(img)} />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center text-xs text-muted-foreground gap-2">
+                          {analysisImagesLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}
+                          <span>{analysisImagesLoading ? (uiLang === "zh" ? "生成中" : "Generating") : (uiLang === "zh" ? "待生成" : "Pending")}</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           {viewMode === "2d" && (
             <div className="w-full h-full bg-white shadow-sm rounded-xl overflow-hidden border border-border/50">
               <iframe
@@ -791,7 +874,8 @@ export function CadWorkspace({ onAddToChat, onSvgChange, svg2d, plan, images = [
         <ContextMenuItem
           onClick={async () => {
             if (!onAddToChat) return;
-            if (viewMode === "2d") {
+            if (viewMode === "analysis") onAddToChat(JSON.stringify({ type: "cad_analysis_images", images: analysisSlots }, null, 2));
+            else if (viewMode === "2d") {
               const latest = await requestSvgFromEditor({ preferFallbackOnEmpty: true });
               if (latest) onAddToChat(latest);
             }

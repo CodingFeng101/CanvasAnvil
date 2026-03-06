@@ -10,7 +10,13 @@ import { STORAGE_GLOBAL_CONSTRAINTS_KEY } from '@/workspaces/cad/chat/global-con
 import { HistoryDialog, HistoryItem } from '@/workspaces/cad/chat/history-dialog';
 import { ResetWarningModal } from '@/workspaces/cad/chat/reset-warning-modal';
 import { useFileProcessor } from '@/lib/use-file-processor';
-import { buildCadBomMessages, buildCadImagesMasterMessages, buildCadImagesSheetMessages, buildCadTasksSystemContent } from '@/lib/cad-tasks';
+import {
+  buildCadAnalysisMessages,
+  buildCadBomMessages,
+  buildCadImagesMasterMessages,
+  buildCadImagesSheetMessages,
+  buildCadTasksSystemContent,
+} from '@/lib/cad-tasks';
 import {
   CAD_PLAN_AGENT_PROMPT,
   CAD_SVG_AGENT_ROUTER_PROMPT,
@@ -62,6 +68,7 @@ interface ChatPanelProps {
   cadContext?: {
     plan?: any;
     svg2d?: string;
+    analysisImages?: Array<{ title: string; url: string }>;
   };
   flowContext?: {
     xml?: string;
@@ -228,6 +235,40 @@ export function ChatPanel({
       : "";
   const cadRenderFallbackTitles = getCadRenderSlotTitles(uiLang);
   const cadRenderPromptTitlesEn = getCadRenderSlotTitles("en");
+  const getCadAnalysisImageRefs = () => {
+    if (workspaceId !== "cad") return [] as Array<{ title: string; url: string }>;
+    const items = Array.isArray(cadContext?.analysisImages) ? cadContext.analysisImages : [];
+    return items
+      .map((item, idx) => ({
+        title:
+          typeof item?.title === "string" && item.title.trim()
+            ? item.title.trim()
+            : uiLang === "zh"
+              ? `分析图${idx + 1}`
+              : `Analysis ${idx + 1}`,
+        url: String(item?.url || "").trim(),
+      }))
+      .filter((item) => !!item.url && (/^data:image\//i.test(item.url) || /^https?:\/\//i.test(item.url)))
+      .slice(0, 2);
+  };
+  const buildCadSvgUserContent = (baseText: string) => {
+    const refs = getCadAnalysisImageRefs();
+    if (refs.length === 0) return baseText;
+    const refList = refs.map((ref, idx) => `${idx + 1}. ${ref.title}`).join("\n");
+    const text = [
+      baseText,
+      trText(
+        `分析图参考（生成2D平面图时必须参考以下图片中的空间关系、功能分区和重点策略；不要照搬图片文字）：\n${refList}`,
+        `Analysis image references (when generating the 2D floorplan, you must reference spatial relationships, functional zoning, and key strategies from the following images; do not copy text labels verbatim):\n${refList}`,
+      ),
+    ]
+      .filter(Boolean)
+      .join("\n\n");
+    return [
+      { type: "text", text },
+      ...refs.map((ref) => ({ type: "image_url", image_url: { url: ref.url } })),
+    ];
+  };
   // Persistence key
   const storageKey = `${STORAGE_KEY_PREFIX}${workspaceId}`;
 
@@ -260,6 +301,7 @@ export function ChatPanel({
   const MAX_FLOW_AUTO_RETRY = 3;
   const cadSvgAutoRetryCountRef = useRef(0);
   const MAX_CAD_SVG_AUTO_RETRY = 3;
+  const cadApprovedPlanRef = useRef<any | null>(null);
   
   const [files, setFiles] = useState<File[]>([]);
   const abortControllerRef = useRef<AbortController | null>(null);
@@ -461,6 +503,9 @@ export function ChatPanel({
       if (text.includes('"type"') && text.includes('"cad_images"')) {
         return trText("（已提交装修图生成任务）", "(CAD drawing generation task submitted)");
       }
+      if (text.includes('"type"') && text.includes('"cad_analysis_images"')) {
+        return trText("（已提交分析图生成任务）", "(Analysis image generation task submitted)");
+      }
       if (text.includes('"type"') && text.includes('"cad_plan"')) {
         const pretty = tryParseCadPlanJson(text);
         return pretty || trText("（已生成方案）", "(Plan generated)");
@@ -560,6 +605,7 @@ export function ChatPanel({
   const clearHistory = () => {
     abortControllerRef.current?.abort();
     abortControllerRef.current = null;
+    cadApprovedPlanRef.current = null;
     setIsLoading(false);
     setInput('');
     setPptInputSegments([{ type: "text", text: "" }]);
@@ -578,6 +624,7 @@ export function ChatPanel({
   const startNewChat = () => {
     abortControllerRef.current?.abort();
     abortControllerRef.current = null;
+    cadApprovedPlanRef.current = null;
     setIsLoading(false);
     setInput('');
     setPptInputSegments([{ type: "text", text: "" }]);
@@ -606,6 +653,109 @@ export function ChatPanel({
       } as CodeActionResult;
     }
     return { ok: true } as CodeActionResult;
+  };
+
+  const extractJsonPayloadText = (text: string) => {
+    const raw = String(text || "").trim();
+    if (!raw) return "";
+    const fenced = raw.match(/```json\s*([\s\S]*?)```/i);
+    if (fenced?.[1]) return String(fenced[1]).trim();
+    return raw;
+  };
+
+  const extractCadPlanPayload = (text: string): any | null => {
+    const raw = String(text || "");
+    const jsonRegex = /```json\s*([\s\S]*?)```/g;
+    let jm: RegExpExecArray | null;
+    while ((jm = jsonRegex.exec(raw))) {
+      const jsonText = String(jm[1] || "").trim();
+      if (!jsonText) continue;
+      try {
+        const parsed = JSON.parse(jsonText);
+        if (parsed?.type === "cad_plan" && parsed?.plan) return parsed;
+      } catch {
+      }
+    }
+    const fallback = extractJsonPayloadText(raw);
+    try {
+      const parsed = JSON.parse(fallback);
+      if (parsed?.type === "cad_plan" && parsed?.plan) return parsed;
+    } catch {
+    }
+    return null;
+  };
+
+  const normalizeAnalysisPromptText = (text: string, fallback: string) => {
+    const raw = String(text || "").trim();
+    if (!raw) return fallback;
+    const fenced = raw.match(/```[a-zA-Z]*\s*([\s\S]*?)```/);
+    const content = fenced?.[1] ? String(fenced[1]).trim() : raw;
+    if (!content) return fallback;
+    try {
+      const parsed = JSON.parse(content);
+      if (typeof parsed?.prompt === "string" && parsed.prompt.trim()) return parsed.prompt.trim();
+    } catch {
+    }
+    const line = content.replace(/\r?\n+/g, " ").trim();
+    return line || fallback;
+  };
+
+  const runCadAutoAnalysisImages = async (args: {
+    planDesign: string;
+    globalSystemPrompt: string;
+    globalConstraints: string;
+    controller: AbortController;
+  }) => {
+    const planDesignVar = String(args.planDesign || "").trim();
+    if (!planDesignVar) return false;
+
+    const systemContentTasks = [buildCadTasksSystemContent({
+      globalSystemPrompt: args.globalSystemPrompt,
+      globalConstraints: args.globalConstraints,
+    }), cadOutputLanguageInstruction]
+      .filter(Boolean)
+      .join("\n\n");
+
+    const analysisMessages = buildCadAnalysisMessages({
+      systemContent: systemContentTasks,
+      planDesign: planDesignVar,
+      outputLanguage: cadOutputLanguage,
+    });
+    const fallbackTitles = [
+      uiLang === "zh" ? "整体方案图" : "Overall Scheme",
+      uiLang === "zh" ? "重点策略图" : "Key Strategy",
+    ];
+    const fallbackPrompts = [
+      uiLang === "zh"
+        ? "室内装修整体分析图板，展示项目目标、空间范围、功能分区、风格方向、用户核心诉求、已知约束与待确认项。采用清晰的模块分区、箭头关系、色块、标签、图标和关键词注释，突出前期方案沟通，不是 CAD 施工图，不包含施工节点与细部做法。"
+        : "Interior renovation overall analysis board, showing project goals, spatial scope, functional zoning, style direction, core user needs, known constraints, and pending confirmations. Clear structure with blocks, arrows, color zones, labels, icons, and keyword callouts. Early-stage design communication style, not a CAD drawing, no construction-detail elements.",
+      uiLang === "zh"
+        ? "室内装修重点策略图板，展示 3 到 7 个核心策略及其主次关系与执行顺序，包括空间利用、动线优化、收纳、风格统一、采光通透、局部改造优先级与预算控制。使用图标、箭头、关系图与色块表达策略，不是 CAD 图，不包含施工细节。"
+        : "Interior renovation key strategy board, showing 3-7 core strategies and their priorities/relations, including space utilization, circulation optimization, storage, style consistency, daylight and openness, local renovation priorities, and budget control. Use icons, arrows, relationship diagrams, and color blocks. Professional communication style, not a CAD drawing, no construction-detail elements.",
+    ];
+
+    const settled = await Promise.allSettled(
+      analysisMessages.map((entry) =>
+        generateChatMessage(entry.messages, chatModel, { signal: args.controller.signal, timeoutMs: 120000 }),
+      ),
+    );
+
+    const prompts = analysisMessages.map((entry, idx) => {
+      const title = fallbackTitles[idx] || (entry.imageId === "overall_analysis" ? "Overall Scheme" : "Key Strategy");
+      const fallbackPrompt = fallbackPrompts[idx] || fallbackPrompts[0];
+      const response = settled[idx];
+      if (response?.status !== "fulfilled") {
+        return { title, prompt: fallbackPrompt };
+      }
+      return {
+        title,
+        prompt: normalizeAnalysisPromptText(response.value, fallbackPrompt),
+      };
+    });
+
+    const payload = JSON.stringify({ type: "cad_analysis_images", prompts }, null, 2);
+    await runCodeAction(payload, "cad");
+    return true;
   };
 
   const applyCodeFromMessage = async (code: string, language?: string) => {
@@ -649,6 +799,10 @@ export function ChatPanel({
       }
       if (parsedType === "cad_images") {
         toast.success(uiLang === "zh" ? "已应用装修图任务" : "Render task applied");
+        return true;
+      }
+      if (parsedType === "cad_analysis_images") {
+        toast.success(uiLang === "zh" ? "已应用分析图任务" : "Analysis task applied");
         return true;
       }
       toast.error(uiLang === "zh" ? "未检测到可应用内容" : "No applicable CAD payload detected");
@@ -1037,13 +1191,19 @@ export function ChatPanel({
         ? `Current diagram XML:\n\n\`\`\`xml\n${flowContext.xml}\n\`\`\``
         : "";
 
+    const effectiveCadPlan = cadApprovedPlanRef.current ?? cadContext?.plan;
     const cadContextText =
       workspaceId === "cad"
         ? [
-            cadContext?.plan ? `Current CAD plan:\n\n\`\`\`json\n${JSON.stringify(cadContext.plan, null, 2)}\n\`\`\`` : "",
+            effectiveCadPlan ? `Current CAD plan:\n\n\`\`\`json\n${JSON.stringify(effectiveCadPlan, null, 2)}\n\`\`\`` : "",
             typeof cadContext?.svg2d === "string" && cadContext.svg2d.trim()
               ? `Current 2D SVG:\n\n\`\`\`svg\n${cadContext.svg2d}\n\`\`\``
               : "",
+            (() => {
+              const refs = getCadAnalysisImageRefs();
+              if (refs.length === 0) return "";
+              return `Current analysis image references:\n${refs.map((ref, idx) => `${idx + 1}. ${ref.title}`).join("\n")}`;
+            })(),
           ]
             .filter(Boolean)
             .join("\n\n")
@@ -1434,7 +1594,8 @@ export function ChatPanel({
           const agent = String(route.agent || "").trim();
           const beforeHasPlan = !!cadContext?.plan;
           const beforeHasSvg2d = !!(typeof cadContext?.svg2d === "string" && cadContext.svg2d.trim());
-          const planJson = cadContext?.plan ? JSON.stringify(cadContext.plan) : "";
+          const effectiveCadPlan = cadApprovedPlanRef.current ?? cadContext?.plan;
+          const planJson = effectiveCadPlan ? JSON.stringify(effectiveCadPlan) : "";
           const svg2d = cadContext?.svg2d || "";
 
           if (agent === "cad_bom_agent") {
@@ -1566,6 +1727,9 @@ export function ChatPanel({
           }
 
           if (agent === "cad_svg_agent") {
+            if (!cadApprovedPlanRef.current && cadContext?.plan) {
+              cadApprovedPlanRef.current = cadContext.plan;
+            }
             const resolveCadSvgToolFromRouteText = (text: string): "patch" | "replace" | null => {
               const trimmed = String(text || "").trim();
               if (!trimmed) return null;
@@ -1720,7 +1884,7 @@ export function ChatPanel({
 
             let cadSvgToolMessagesBase: ChatMessage[] = [
               { role: "system", content: [getCadSvgToolPrompt(cadSvgSelectedTool), globalSystemPrompt, globalConstraints, cadOutputLanguageInstruction].filter(Boolean).join("\n\n") },
-              { role: "user", content: promptContent }
+              { role: "user", content: buildCadSvgUserContent(promptContent) as any }
             ];
 
             let cadSvgRun = await runCadSvgTool(cadSvgToolMessagesBase);
@@ -1744,7 +1908,7 @@ export function ChatPanel({
                 cadSvgSelectedTool = "replace";
                 cadSvgToolMessagesBase = [
                   { role: "system", content: [getCadSvgToolPrompt("replace"), globalSystemPrompt, globalConstraints, cadOutputLanguageInstruction].filter(Boolean).join("\n\n") },
-                  { role: "user", content: promptContent }
+                  { role: "user", content: buildCadSvgUserContent(promptContent) as any }
                 ];
               }
 
@@ -1832,6 +1996,23 @@ export function ChatPanel({
             const producedHasPlan = /"type"\s*:\s*"cad_plan"/.test(routedFull);
             const producedHasImages = /"type"\s*:\s*"cad_images"/.test(routedFull);
             const producedHasBom = /"type"\s*:\s*"cad_bom"/.test(routedFull);
+            let autoAnalysisRan = false;
+            if (agent === "cad_plan_agent" && producedHasPlan && !controller.signal.aborted) {
+              cadApprovedPlanRef.current = null;
+              const latestPlanPayload = extractCadPlanPayload(routedFull);
+              const latestPlanJson = latestPlanPayload ? JSON.stringify(latestPlanPayload) : planJson;
+              if (latestPlanJson) {
+                updateLastAssistant(
+                  `${routedFull}\n\n${trText("方案已更新，正在并发生成整体分析图和重点策略图...", "Plan updated. Generating overall analysis and key strategy images in parallel...")}`,
+                );
+                autoAnalysisRan = await runCadAutoAnalysisImages({
+                  planDesign: latestPlanJson,
+                  globalSystemPrompt,
+                  globalConstraints,
+                  controller,
+                });
+              }
+            }
             const guide = buildCadNextStepGuide({
               agent,
               beforeHasPlan,
@@ -1841,7 +2022,15 @@ export function ChatPanel({
               producedHasImages,
               producedHasBom,
             });
-            if (guide) updateLastAssistant(`${routedFull}\n\n${guide}`);
+            const autoAnalysisGuide =
+              autoAnalysisRan
+                ? trText(
+                    "分析图已按最新方案并发更新。若满意请回复“生成2D平面图”；不满意请继续提出修改意见。",
+                    "Analysis images are refreshed from the latest plan. If satisfied, reply \"Generate 2D floorplan\"; otherwise continue refining requirements.",
+                  )
+                : "";
+            const mergedGuide = [guide, autoAnalysisGuide].filter(Boolean).join("\n\n");
+            if (mergedGuide) updateLastAssistant(`${routedFull}\n\n${mergedGuide}`);
             else updateLastAssistant(routedFull);
           }
           return;
@@ -1947,13 +2136,19 @@ export function ChatPanel({
       workspaceId === "flow" && typeof flowContext?.xml === "string" && flowContext.xml.trim()
         ? `Current diagram XML:\n\n\`\`\`xml\n${flowContext.xml}\n\`\`\``
         : "";
+    const effectiveCadPlan = cadApprovedPlanRef.current ?? cadContext?.plan;
     const cadContextText =
       workspaceId === "cad"
         ? [
-            cadContext?.plan ? `Current CAD plan:\n\n\`\`\`json\n${JSON.stringify(cadContext.plan, null, 2)}\n\`\`\`` : "",
+            effectiveCadPlan ? `Current CAD plan:\n\n\`\`\`json\n${JSON.stringify(effectiveCadPlan, null, 2)}\n\`\`\`` : "",
             typeof cadContext?.svg2d === "string" && cadContext.svg2d.trim()
               ? `Current 2D SVG:\n\n\`\`\`svg\n${cadContext.svg2d}\n\`\`\``
               : "",
+            (() => {
+              const refs = getCadAnalysisImageRefs();
+              if (refs.length === 0) return "";
+              return `Current analysis image references:\n${refs.map((ref, idx) => `${idx + 1}. ${ref.title}`).join("\n")}`;
+            })(),
           ]
             .filter(Boolean)
             .join("\n\n")
@@ -2155,7 +2350,8 @@ export function ChatPanel({
             const agent = String(route.agent || "").trim();
             const beforeHasPlan = !!cadContext?.plan;
             const beforeHasSvg2d = !!(typeof cadContext?.svg2d === "string" && cadContext.svg2d.trim());
-            const planJson = cadContext?.plan ? JSON.stringify(cadContext.plan) : "";
+            const effectiveCadPlan = cadApprovedPlanRef.current ?? cadContext?.plan;
+            const planJson = effectiveCadPlan ? JSON.stringify(effectiveCadPlan) : "";
             const svg2d = cadContext?.svg2d || "";
 
             if (agent === "cad_bom_agent") {
@@ -2287,6 +2483,9 @@ export function ChatPanel({
             }
 
             if (agent === "cad_svg_agent") {
+              if (!cadApprovedPlanRef.current && cadContext?.plan) {
+                cadApprovedPlanRef.current = cadContext.plan;
+              }
               const resolveCadSvgToolFromRouteText = (text: string): "patch" | "replace" | null => {
                 const trimmed = String(text || "").trim();
                 if (!trimmed) return null;
@@ -2441,7 +2640,7 @@ export function ChatPanel({
 
               let cadSvgToolMessagesBase: ChatMessage[] = [
                 { role: "system", content: [getCadSvgToolPrompt(cadSvgSelectedTool), globalSystemPrompt, globalConstraints, cadOutputLanguageInstruction].filter(Boolean).join("\n\n") },
-                { role: "user", content: promptContent }
+                { role: "user", content: buildCadSvgUserContent(promptContent) as any }
               ];
 
               let cadSvgRun = await runCadSvgTool(cadSvgToolMessagesBase);
@@ -2465,7 +2664,7 @@ export function ChatPanel({
                   cadSvgSelectedTool = "replace";
                   cadSvgToolMessagesBase = [
                     { role: "system", content: [getCadSvgToolPrompt("replace"), globalSystemPrompt, globalConstraints, cadOutputLanguageInstruction].filter(Boolean).join("\n\n") },
-                    { role: "user", content: promptContent }
+                    { role: "user", content: buildCadSvgUserContent(promptContent) as any }
                   ];
                 }
 
@@ -2553,6 +2752,23 @@ export function ChatPanel({
               const producedHasPlan = /"type"\s*:\s*"cad_plan"/.test(routedFull);
               const producedHasImages = /"type"\s*:\s*"cad_images"/.test(routedFull);
               const producedHasBom = /"type"\s*:\s*"cad_bom"/.test(routedFull);
+              let autoAnalysisRan = false;
+              if (agent === "cad_plan_agent" && producedHasPlan && !controller.signal.aborted) {
+                cadApprovedPlanRef.current = null;
+                const latestPlanPayload = extractCadPlanPayload(routedFull);
+                const latestPlanJson = latestPlanPayload ? JSON.stringify(latestPlanPayload) : planJson;
+                if (latestPlanJson) {
+                  updateLastAssistant(
+                    `${routedFull}\n\n${trText("方案已更新，正在并发生成整体分析图和重点策略图...", "Plan updated. Generating overall analysis and key strategy images in parallel...")}`,
+                  );
+                  autoAnalysisRan = await runCadAutoAnalysisImages({
+                    planDesign: latestPlanJson,
+                    globalSystemPrompt,
+                    globalConstraints,
+                    controller,
+                  });
+                }
+              }
               const guide = buildCadNextStepGuide({
                 agent,
                 beforeHasPlan,
@@ -2562,7 +2778,15 @@ export function ChatPanel({
                 producedHasImages,
                 producedHasBom,
               });
-              if (guide) updateLastAssistant(`${routedFull}\n\n${guide}`);
+              const autoAnalysisGuide =
+                autoAnalysisRan
+                  ? trText(
+                      "分析图已按最新方案并发更新。若满意请回复“生成2D平面图”；不满意请继续提出修改意见。",
+                      "Analysis images are refreshed from the latest plan. If satisfied, reply \"Generate 2D floorplan\"; otherwise continue refining requirements.",
+                    )
+                  : "";
+              const mergedGuide = [guide, autoAnalysisGuide].filter(Boolean).join("\n\n");
+              if (mergedGuide) updateLastAssistant(`${routedFull}\n\n${mergedGuide}`);
               else updateLastAssistant(routedFull);
             }
             return;
@@ -2658,6 +2882,7 @@ export function ChatPanel({
     if (last.role !== 'user') return;
     flowAutoRetryCountRef.current = 0;
     cadSvgAutoRetryCountRef.current = 0;
+    cadApprovedPlanRef.current = null;
     await runTextChat(base);
   };
 
@@ -2687,6 +2912,7 @@ export function ChatPanel({
     setFiles([]);
     flowAutoRetryCountRef.current = 0;
     cadSvgAutoRetryCountRef.current = 0;
+    cadApprovedPlanRef.current = null;
     await runTextChat(base);
   };
 

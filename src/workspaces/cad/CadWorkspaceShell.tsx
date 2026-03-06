@@ -27,6 +27,7 @@ type CodeActionResult = { ok: boolean; retry?: boolean; error?: string; svg?: st
 
 const CAD_WORKSPACE_STORAGE_KEY = "CanvasAnvil-cad-state-v1";
 const CAD_RENDERS_STORAGE_KEY = "CanvasAnvil-cad-renders-v1";
+const CAD_ANALYSIS_IMAGES_STORAGE_KEY = "CanvasAnvil-cad-analysis-images-v1";
 const CAD_CHAT_STORAGE_KEY = "chat_history_v2_cad";
 
 const tryParseJson = (text: string) => {
@@ -184,6 +185,17 @@ const readPersistedCadRenders = (): CadRenderItem[] => {
   }
 };
 
+const readPersistedCadAnalysisImages = (): CadRenderItem[] => {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = localStorage.getItem(CAD_ANALYSIS_IMAGES_STORAGE_KEY);
+    const parsed = raw ? JSON.parse(raw) : [];
+    return normalizeCadRenderItems(parsed, { allowBlob: false, max: 2 });
+  } catch {
+    return [];
+  }
+};
+
 const blobToDataUrl = async (blob: Blob) =>
   await new Promise<string>((resolve) => {
     const reader = new FileReader();
@@ -241,12 +253,24 @@ export function CadWorkspaceShell() {
     if (fromWorkspaceState.length > 0) return fromWorkspaceState;
     return readPersistedCadRenders();
   })();
+  const initialCadAnalysisImages = (() => {
+    const fromWorkspaceState = normalizeCadRenderItems(initialCadState?.cadAnalysisImages, {
+      allowBlob: false,
+      max: 2,
+    });
+    if (fromWorkspaceState.length > 0) return fromWorkspaceState;
+    return readPersistedCadAnalysisImages();
+  })();
 
   const [cad2dSvg, setCad2dSvg] = useState<string | undefined>(() => {
     const v = initialCadState?.cad2dSvg;
     return typeof v === "string" ? v : undefined;
   });
   const [cadPlan, setCadPlan] = useState<any>(() => initialCadState?.cadPlan ?? null);
+  const [cadAnalysisImages, setCadAnalysisImages] = useState<{ title: string; url: string }[]>(
+    () => initialCadAnalysisImages,
+  );
+  const [cadAnalysisImagesLoading, setCadAnalysisImagesLoading] = useState(false);
   const [cadImages, setCadImages] = useState<{ title: string; url: string }[]>(() => initialCadRenders);
   const [cadImagesLoading, setCadImagesLoading] = useState(false);
   const [cadBom, setCadBom] = useState<{ columns: string[]; rows: any[] } | null>(() => {
@@ -258,10 +282,7 @@ export function CadWorkspaceShell() {
     const rows = Array.isArray((v as any).rows) ? (v as any).rows : [];
     return { columns, rows };
   });
-  const [cadFocusPanel, setCadFocusPanel] = useState<"2d" | "renders" | "bom" | null>(() => {
-    const v = initialCadState?.cadFocusPanel;
-    return v === "2d" || v === "renders" || v === "bom" ? v : null;
-  });
+  const [cadFocusPanel, setCadFocusPanel] = useState<"analysis" | "2d" | "renders" | "bom" | null>("analysis");
 
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [chatHistory, setChatHistory] = useState<ChatMessage[]>([]);
@@ -286,6 +307,7 @@ export function CadWorkspaceShell() {
         JSON.stringify({
           cad2dSvg: typeof cad2dSvg === "string" ? cad2dSvg : null,
           cadPlan: cadPlan ?? null,
+          cadAnalysisImages: normalizeCadRenderItems(cadAnalysisImages, { allowBlob: false, max: 2 }),
           cadBom,
           cadFocusPanel,
           updatedAt: Date.now(),
@@ -293,7 +315,7 @@ export function CadWorkspaceShell() {
       );
     } catch {
     }
-  }, [cad2dSvg, cadPlan, cadBom, cadFocusPanel]);
+  }, [cad2dSvg, cadPlan, cadAnalysisImages, cadBom, cadFocusPanel]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -307,6 +329,19 @@ export function CadWorkspaceShell() {
     } catch {
     }
   }, [cadImages]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      const stable = normalizeCadRenderItems(cadAnalysisImages, { allowBlob: false, max: 2 });
+      if (stable.length > 0) {
+        localStorage.setItem(CAD_ANALYSIS_IMAGES_STORAGE_KEY, JSON.stringify(stable));
+      } else {
+        localStorage.removeItem(CAD_ANALYSIS_IMAGES_STORAGE_KEY);
+      }
+    } catch {
+    }
+  }, [cadAnalysisImages]);
 
   useEffect(() => {
     const nextObjectUrls = cadImages
@@ -446,6 +481,89 @@ export function CadWorkspaceShell() {
       const rows = Array.isArray(parsed.rows) ? parsed.rows : [];
       setCadBom({ columns, rows });
       setCadFocusPanel("bom");
+      return { ok: true };
+    }
+
+    if (parsedType === "cad_analysis_images") {
+      const prompts = Array.isArray(parsed.prompts) ? parsed.prompts : [];
+      const defaultTitles = [
+        uiLang === "zh" ? "整体方案图" : "Overall Scheme",
+        uiLang === "zh" ? "重点策略图" : "Key Strategy",
+      ];
+      const items = prompts
+        .map((p: any, idx: number) => ({
+          title:
+            typeof p?.title === "string" && p.title.trim()
+              ? p.title
+              : defaultTitles[idx] || (uiLang === "zh" ? `分析图${idx + 1}` : `Analysis ${idx + 1}`),
+          prompt: typeof p?.prompt === "string" ? p.prompt : "",
+        }))
+        .filter((p: any) => p.prompt)
+        .slice(0, 2);
+
+      setCadFocusPanel("analysis");
+      setCadAnalysisImagesLoading(true);
+      setCadAnalysisImages(defaultTitles.map((title) => ({ title, url: "" })));
+      try {
+        const wait = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+        const generateWithRetry = async (prompt: string, maxRetries: number, retryDelayMs: number) => {
+          for (let attempt = 0; attempt <= maxRetries; attempt += 1) {
+            try {
+              const url = await generateImage({ prompt });
+              if (url) return url;
+            } catch (err) {
+              if (attempt >= maxRetries) {
+                console.error("CAD analysis image generation attempt failed", err);
+              }
+            }
+            if (attempt < maxRetries) {
+              await wait(retryDelayMs * (attempt + 1));
+            }
+          }
+          return "";
+        };
+
+        const settled = await Promise.allSettled(
+          items.map(async (item) => ({
+            title: item.title,
+            url: await generateWithRetry(item.prompt, 2, 1200),
+          })),
+        );
+
+        const final = defaultTitles.map((title, idx) => {
+          const result = settled[idx];
+          if (result?.status === "fulfilled" && result.value?.url) {
+            return {
+              title: result.value.title || title,
+              url: result.value.url,
+            };
+          }
+          return { title, url: "" };
+        });
+
+        const persistableFinal = await Promise.all(
+          final.map(async (item) => ({
+            title: item.title,
+            url: await toPersistableRenderUrl(item.url),
+          })),
+        );
+        setCadAnalysisImages(persistableFinal);
+        const failedCount = final.filter((x) => !x.url).length;
+        if (failedCount > 0) {
+          toast.warning(
+            uiLang === "zh"
+              ? `有 ${failedCount} 张分析图生成失败，请重试。`
+              : `${failedCount} analysis image(s) failed. Please retry.`,
+          );
+        }
+      } catch (e) {
+        console.error("CAD analysis image generation failed", e);
+        toast.error(tr("分析图生成失败", "Analysis image generation failed"));
+        setCadAnalysisImages(defaultTitles.map((title) => ({ title, url: "" })));
+      } finally {
+        setCadAnalysisImagesLoading(false);
+        setCadFocusPanel("analysis");
+      }
       return { ok: true };
     }
 
@@ -671,10 +789,12 @@ export function CadWorkspaceShell() {
     cad2dSvgRef.current = undefined;
     setCad2dSvg(undefined);
     setCadPlan(null);
+    setCadAnalysisImages([]);
+    setCadAnalysisImagesLoading(false);
     setCadImages([]);
     setCadImagesLoading(false);
     setCadBom(null);
-    setCadFocusPanel(null);
+    setCadFocusPanel("analysis");
     setChatHistory([]);
     setAttachments([]);
     try {
@@ -683,6 +803,10 @@ export function CadWorkspaceShell() {
     }
     try {
       localStorage.removeItem(CAD_RENDERS_STORAGE_KEY);
+    } catch {
+    }
+    try {
+      localStorage.removeItem(CAD_ANALYSIS_IMAGES_STORAGE_KEY);
     } catch {
     }
     try {
@@ -712,6 +836,8 @@ export function CadWorkspaceShell() {
               setCad2dSvg(nextSvg);
             }}
             plan={cadPlan}
+            analysisImages={cadAnalysisImages}
+            analysisImagesLoading={cadAnalysisImagesLoading}
             images={cadImages}
             imagesLoading={cadImagesLoading}
             bom={cadBom}
@@ -750,7 +876,7 @@ export function CadWorkspaceShell() {
             onClearAttachments={() => setAttachments([])}
             onClearWorkspace={clearWorkspace}
             hideHistoryButton
-            cadContext={{ plan: cadPlan, svg2d: cad2dSvg }}
+            cadContext={{ plan: cadPlan, svg2d: cad2dSvg, analysisImages: cadAnalysisImages }}
             onCodeAction={handleCadCodeAction}
           />
         </ResizablePanel>
