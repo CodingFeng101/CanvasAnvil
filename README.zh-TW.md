@@ -1,5 +1,5 @@
-﻿<p align="center">
-  <img src="public/logo.png" alt="CanvasAnvil logo" width="100%" />
+<p align="center">
+  <img src="public/logo.png" alt="CanvasAnvil logo" width="92%" />
 </p>
 
 <h1 align="center">CanvasAnvil</h1>
@@ -17,26 +17,20 @@ CanvasAnvil 是一個多畫布 AI 創作平台，能把單一需求轉換為可�
 
 ## 畫布預覽
 
-<div align="left">
-  <div style="width: 680px;">
-    <h3 align="center">Flow 畫布</h3>
-    <img src="public/demos/flow.gif" alt="Flow 畫布" width="680" />
-  </div>
-</div>
+<table>
+  <tr><td width="680" align="center"><strong>Flow 畫布</strong></td></tr>
+  <tr><td width="680" align="left"><img src="public/demos/flow.gif?raw=1" alt="Flow 畫布" width="680" /></td></tr>
+</table>
 
-<div align="left">
-  <div style="width: 680px;">
-    <h3 align="center">CAD 畫布</h3>
-    <img src="public/demos/cad.gif" alt="CAD 畫布" width="680" />
-  </div>
-</div>
+<table>
+  <tr><td width="680" align="center"><strong>CAD 畫布</strong></td></tr>
+  <tr><td width="680" align="left"><img src="public/demos/cad.gif?raw=1" alt="CAD 畫布" width="680" /></td></tr>
+</table>
 
-<div align="left">
-  <div style="width: 680px;">
-    <h3 align="center">PPT 畫布</h3>
-    <img src="public/demos/ppt.gif" alt="PPT 畫布" width="680" />
-  </div>
-</div>
+<table>
+  <tr><td width="680" align="center"><strong>PPT 畫布</strong></td></tr>
+  <tr><td width="680" align="left"><img src="public/demos/ppt.gif?raw=1" alt="PPT 畫布" width="680" /></td></tr>
+</table>
 
 ## 影片教學
 
@@ -137,7 +131,7 @@ npm run build
 
 - 部署指南：[開啟部署指南](deploy/README.md)
 
-## WeChat
+## 微信
 
 我的微信二維碼如下，歡迎聯繫我。
 

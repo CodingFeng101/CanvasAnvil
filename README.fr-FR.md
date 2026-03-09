@@ -1,5 +1,5 @@
-﻿<p align="center">
-  <img src="public/logo.png" alt="CanvasAnvil logo" width="100%" />
+<p align="center">
+  <img src="public/logo.png" alt="CanvasAnvil logo" width="92%" />
 </p>
 
 <h1 align="center">CanvasAnvil</h1>
@@ -17,26 +17,20 @@ CanvasAnvil est une plateforme IA multi-canvas qui transforme une exigence uniqu
 
 ## Aperçu des canvas
 
-<div align="left">
-  <div style="width: 680px;">
-    <h3 align="center">Canvas Flow</h3>
-    <img src="public/demos/flow.gif" alt="Canvas Flow" width="680" />
-  </div>
-</div>
+<table>
+  <tr><td width="680" align="center"><strong>Canvas Flow</strong></td></tr>
+  <tr><td width="680" align="left"><img src="public/demos/flow.gif?raw=1" alt="Canvas Flow" width="680" /></td></tr>
+</table>
 
-<div align="left">
-  <div style="width: 680px;">
-    <h3 align="center">Canvas CAD</h3>
-    <img src="public/demos/cad.gif" alt="Canvas CAD" width="680" />
-  </div>
-</div>
+<table>
+  <tr><td width="680" align="center"><strong>Canvas CAD</strong></td></tr>
+  <tr><td width="680" align="left"><img src="public/demos/cad.gif?raw=1" alt="Canvas CAD" width="680" /></td></tr>
+</table>
 
-<div align="left">
-  <div style="width: 680px;">
-    <h3 align="center">Canvas PPT</h3>
-    <img src="public/demos/ppt.gif" alt="Canvas PPT" width="680" />
-  </div>
-</div>
+<table>
+  <tr><td width="680" align="center"><strong>Canvas PPT</strong></td></tr>
+  <tr><td width="680" align="left"><img src="public/demos/ppt.gif?raw=1" alt="Canvas PPT" width="680" /></td></tr>
+</table>
 
 ## Tutoriels vidéo
 
@@ -137,7 +131,7 @@ Améliorations clés :
 
 - Guide de déploiement : [Ouvrir le guide de déploiement](deploy/README.md)
 
-## WeChat
+## Contact WeChat
 
 Mon QR code WeChat est ci-dessous, n'hésitez pas à me contacter.
 

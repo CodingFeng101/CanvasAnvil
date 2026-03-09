@@ -1,5 +1,5 @@
-﻿<p align="center">
-  <img src="public/logo.png" alt="CanvasAnvil logo" width="100%" />
+<p align="center">
+  <img src="public/logo.png" alt="CanvasAnvil logo" width="92%" />
 </p>
 
 <h1 align="center">CanvasAnvil</h1>
@@ -17,26 +17,20 @@ CanvasAnvil은 하나의 요구사항을 반복 가능한 결과물로 전환하
 
 ## 캔버스 미리보기
 
-<div align="left">
-  <div style="width: 680px;">
-    <h3 align="center">Flow 캔버스</h3>
-    <img src="public/demos/flow.gif" alt="Flow 캔버스" width="680" />
-  </div>
-</div>
+<table>
+  <tr><td width="680" align="center"><strong>Flow 캔버스</strong></td></tr>
+  <tr><td width="680" align="left"><img src="public/demos/flow.gif?raw=1" alt="Flow 캔버스" width="680" /></td></tr>
+</table>
 
-<div align="left">
-  <div style="width: 680px;">
-    <h3 align="center">CAD 캔버스</h3>
-    <img src="public/demos/cad.gif" alt="CAD 캔버스" width="680" />
-  </div>
-</div>
+<table>
+  <tr><td width="680" align="center"><strong>CAD 캔버스</strong></td></tr>
+  <tr><td width="680" align="left"><img src="public/demos/cad.gif?raw=1" alt="CAD 캔버스" width="680" /></td></tr>
+</table>
 
-<div align="left">
-  <div style="width: 680px;">
-    <h3 align="center">PPT 캔버스</h3>
-    <img src="public/demos/ppt.gif" alt="PPT 캔버스" width="680" />
-  </div>
-</div>
+<table>
+  <tr><td width="680" align="center"><strong>PPT 캔버스</strong></td></tr>
+  <tr><td width="680" align="left"><img src="public/demos/ppt.gif?raw=1" alt="PPT 캔버스" width="680" /></td></tr>
+</table>
 
 ## 동영상 튜토리얼
 
@@ -137,7 +131,7 @@ npm run build
 
 - 배포 가이드: [배포 가이드 열기](deploy/README.md)
 
-## WeChat
+## 위챗 연락처
 
 제 WeChat QR 코드는 아래에 있습니다. 편하게 연락해 주세요.
 

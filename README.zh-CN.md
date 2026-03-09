@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="public/logo.png" alt="CanvasAnvil logo" width="100%" />
+  <img src="public/logo.png" alt="CanvasAnvil logo" width="92%" />
 </p>
 
 <h1 align="center">CanvasAnvil</h1>
@@ -17,26 +17,20 @@ CanvasAnvil 是一个多画布 AI 创作平台，用一句需求就能完成从�
 
 ## 画布预览
 
-<div align="left">
-  <div style="width: 680px;">
-    <h3 align="center">Flow 画布</h3>
-    <img src="public/demos/flow.gif" alt="Flow 画布" width="680" />
-  </div>
-</div>
+<table>
+  <tr><td width="680" align="center"><strong>Flow 画布</strong></td></tr>
+  <tr><td width="680" align="left"><img src="public/demos/flow.gif?raw=1" alt="Flow 画布" width="680" /></td></tr>
+</table>
 
-<div align="left">
-  <div style="width: 680px;">
-    <h3 align="center">CAD 画布</h3>
-    <img src="public/demos/cad.gif" alt="CAD 画布" width="680" />
-  </div>
-</div>
+<table>
+  <tr><td width="680" align="center"><strong>CAD 画布</strong></td></tr>
+  <tr><td width="680" align="left"><img src="public/demos/cad.gif?raw=1" alt="CAD 画布" width="680" /></td></tr>
+</table>
 
-<div align="left">
-  <div style="width: 680px;">
-    <h3 align="center">PPT 画布</h3>
-    <img src="public/demos/ppt.gif" alt="PPT 画布" width="680" />
-  </div>
-</div>
+<table>
+  <tr><td width="680" align="center"><strong>PPT 画布</strong></td></tr>
+  <tr><td width="680" align="left"><img src="public/demos/ppt.gif?raw=1" alt="PPT 画布" width="680" /></td></tr>
+</table>
 
 ## 视频教程
 

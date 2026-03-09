@@ -1,5 +1,5 @@
-﻿<p align="center">
-  <img src="public/logo.png" alt="CanvasAnvil logo" width="100%" />
+<p align="center">
+  <img src="public/logo.png" alt="CanvasAnvil logo" width="92%" />
 </p>
 
 <h1 align="center">CanvasAnvil</h1>
@@ -17,26 +17,20 @@ CanvasAnvil は、1つの要件を反復可能な成果物へ変換するマル�
 
 ## キャンバスプレビュー
 
-<div align="left">
-  <div style="width: 680px;">
-    <h3 align="center">Flow キャンバス</h3>
-    <img src="public/demos/flow.gif" alt="Flow キャンバス" width="680" />
-  </div>
-</div>
+<table>
+  <tr><td width="680" align="center"><strong>Flow キャンバス</strong></td></tr>
+  <tr><td width="680" align="left"><img src="public/demos/flow.gif?raw=1" alt="Flow キャンバス" width="680" /></td></tr>
+</table>
 
-<div align="left">
-  <div style="width: 680px;">
-    <h3 align="center">CAD キャンバス</h3>
-    <img src="public/demos/cad.gif" alt="CAD キャンバス" width="680" />
-  </div>
-</div>
+<table>
+  <tr><td width="680" align="center"><strong>CAD キャンバス</strong></td></tr>
+  <tr><td width="680" align="left"><img src="public/demos/cad.gif?raw=1" alt="CAD キャンバス" width="680" /></td></tr>
+</table>
 
-<div align="left">
-  <div style="width: 680px;">
-    <h3 align="center">PPT キャンバス</h3>
-    <img src="public/demos/ppt.gif" alt="PPT キャンバス" width="680" />
-  </div>
-</div>
+<table>
+  <tr><td width="680" align="center"><strong>PPT キャンバス</strong></td></tr>
+  <tr><td width="680" align="left"><img src="public/demos/ppt.gif?raw=1" alt="PPT キャンバス" width="680" /></td></tr>
+</table>
 
 ## 動画チュートリアル
 
@@ -137,7 +131,7 @@ npm run build
 
 - デプロイガイド: [デプロイガイドを開く](deploy/README.md)
 
-## WeChat
+## WeChat 連絡先
 
 私の WeChat QR コードはこちらです。お気軽にご連絡ください。
 
