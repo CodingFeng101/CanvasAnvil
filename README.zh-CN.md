@@ -1,25 +1,42 @@
-# CanvasAnvil
+<p align="center">
+  <img src="public/logo.png" alt="CanvasAnvil logo" width="100%" />
+</p>
 
-English version: [View English document](README.md)
+<h1 align="center">CanvasAnvil</h1>
+
+<p align="center">
+  <a href="README.md">English</a> |
+  <a href="README.zh-CN.md">简体中文</a> |
+  <a href="README.zh-TW.md">繁體中文</a> |
+  <a href="README.ja-JP.md">日本語</a> |
+  <a href="README.ko-KR.md">한국어</a> |
+  <a href="README.fr-FR.md">Français</a>
+</p>
 
 CanvasAnvil 是一个多画布 AI 创作平台，用一句需求就能完成从方案到可交付物的生成与迭代。
 
 ## 画布预览
 
-<h3 align="center">Flow 画布</h3>
-<p align="center">
-  <img src="public/demos/flow.gif" alt="Flow 画布" width="960" />
-</p>
+<div align="left">
+  <div style="width: 680px;">
+    <h3 align="center">Flow 画布</h3>
+    <img src="public/demos/flow.gif" alt="Flow 画布" width="680" />
+  </div>
+</div>
 
-<h3 align="center">CAD 画布</h3>
-<p align="center">
-  <img src="public/demos/cad.gif" alt="CAD 画布" width="960" />
-</p>
+<div align="left">
+  <div style="width: 680px;">
+    <h3 align="center">CAD 画布</h3>
+    <img src="public/demos/cad.gif" alt="CAD 画布" width="680" />
+  </div>
+</div>
 
-<h3 align="center">PPT 画布</h3>
-<p align="center">
-  <img src="public/demos/ppt.gif" alt="PPT 画布" width="960" />
-</p>
+<div align="left">
+  <div style="width: 680px;">
+    <h3 align="center">PPT 画布</h3>
+    <img src="public/demos/ppt.gif" alt="PPT 画布" width="680" />
+  </div>
+</div>
 
 ## 视频教程
 
@@ -119,3 +136,11 @@ npm run build
 ## 文档导航
 
 - 部署说明：[查看部署说明](deploy/README.zh-CN.md)
+
+## 微信
+
+我的微信二维码如下，欢迎联系我。
+
+<p align="left">
+  <img src="public/wechat.jpg" alt="WeChat QR code" width="280" />
+</p>

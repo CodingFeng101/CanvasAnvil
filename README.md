@@ -1,25 +1,42 @@
-# CanvasAnvil
+<p align="center">
+  <img src="public/logo.png" alt="CanvasAnvil logo" width="100%" />
+</p>
 
-中文版本: [查看中文文档](README.zh-CN.md)
+<h1 align="center">CanvasAnvil</h1>
+
+<p align="center">
+  <a href="README.md">English</a> |
+  <a href="README.zh-CN.md">简体中文</a> |
+  <a href="README.zh-TW.md">繁體中文</a> |
+  <a href="README.ja-JP.md">日本語</a> |
+  <a href="README.ko-KR.md">한국어</a> |
+  <a href="README.fr-FR.md">Français</a>
+</p>
 
 CanvasAnvil is a multi-canvas AI creation platform that turns a single requirement into deliverables you can iterate on.
 
 ## Canvas Previews
 
-<h3 align="center">Flow Canvas</h3>
-<p align="center">
-  <img src="public/demos/flow.gif" alt="Flow canvas" width="960" />
-</p>
+<div align="left">
+  <div style="width: 680px;">
+    <h3 align="center">Flow Canvas</h3>
+    <img src="public/demos/flow.gif" alt="Flow canvas" width="680" />
+  </div>
+</div>
 
-<h3 align="center">CAD Canvas</h3>
-<p align="center">
-  <img src="public/demos/cad.gif" alt="CAD canvas" width="960" />
-</p>
+<div align="left">
+  <div style="width: 680px;">
+    <h3 align="center">CAD Canvas</h3>
+    <img src="public/demos/cad.gif" alt="CAD canvas" width="680" />
+  </div>
+</div>
 
-<h3 align="center">PPT Canvas</h3>
-<p align="center">
-  <img src="public/demos/ppt.gif" alt="PPT canvas" width="960" />
-</p>
+<div align="left">
+  <div style="width: 680px;">
+    <h3 align="center">PPT Canvas</h3>
+    <img src="public/demos/ppt.gif" alt="PPT canvas" width="680" />
+  </div>
+</div>
 
 ## Video Tutorials
 
@@ -119,3 +136,11 @@ Key improvements:
 ## Docs
 
 - Deployment guide: [Open deployment guide](deploy/README.md)
+
+## WeChat
+
+我的微信二维码如下，欢迎联系我。
+
+<p align="left">
+  <img src="public/wechat.jpg" alt="WeChat QR code" width="280" />
+</p>

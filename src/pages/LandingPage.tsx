@@ -208,11 +208,11 @@ export function LandingPage({ onStart }: LandingPageProps) {
                                             </div>
                                             <div>
                                                 <div className="text-white/90 font-semibold">{uiLang === "zh" ? "智能室内设计" : "Interior Design"}</div>
-                                                <div className="text-white/45 text-sm mt-0.5">{uiLang === "zh" ? "输入需求 → 2D 平面 → 装修图 / 物料清单" : "Describe → 2D Plan → Renders / BOM"}</div>
+                                                <div className="text-white/45 text-sm mt-0.5">{uiLang === "zh" ? "输入需求 → 总体方案图 / 关键策略图 → 2D 平面 → 装修图 / 物料清单" : "Describe → Overall / Strategy Charts → 2D Plan → Renders / BOM"}</div>
                                             </div>
                                         </div>
                                         <div className="mt-2 text-sm text-white/55 space-y-1">
-                                            <div>{uiLang === "zh" ? "· 全流程覆盖：需求→方案→2D→出图/清单" : "· End-to-End: Brief → Plan → 2D → Outputs"}</div>
+                                            <div>{uiLang === "zh" ? "· 全流程覆盖：需求→总体方案图/关键策略图→2D→出图/清单" : "· End-to-End: Brief → Overall/Strategy Charts → 2D → Outputs"}</div>
                                             <div>{uiLang === "zh" ? "· 2D 支持原子修改" : "· 2D supports atomic edits"}</div>
                                         </div>
                                     </button>
@@ -691,26 +691,38 @@ function DemoCAD({ uiLang }: { uiLang: UiLanguage }) {
             
             // 0s: Display Input Prompt (Wait 2s)
             
-            // 2s: Start Generating 2D (Duration 2s)
+            // 2s: Start Generating Overall Solution Diagram (Duration 2s)
             timeouts.push(setTimeout(() => setIsGenerating(true), promptHoldMs));
-            
-            // 4s: Show 2D Plan (Duration 3s)
+             
+            // 4s: Show Overall Solution Diagram (Duration 3s)
             timeouts.push(setTimeout(() => { setIsGenerating(false); setStep(1); }, promptHoldMs + 2000));
-            
-            // 7s: Start Generating Render (Duration 2s)
+             
+            // 7s: Start Generating Key Strategy Chart (Duration 2s)
             timeouts.push(setTimeout(() => setIsGenerating(true), promptHoldMs + 5000));
-            
-            // 9s: Show Render (Duration 3s)
+
+            // 9s: Show Key Strategy Chart (Duration 3s)
             timeouts.push(setTimeout(() => { setIsGenerating(false); setStep(2); }, promptHoldMs + 7000));
 
-            // 12s: Start Generating BOM (Duration 2s)
+            // 12s: Start Generating 2D Plan (Duration 2s)
             timeouts.push(setTimeout(() => setIsGenerating(true), promptHoldMs + 10000));
 
-            // 14s: Show Final BOM (Duration 3s)
+            // 14s: Show 2D Plan (Duration 3s)
             timeouts.push(setTimeout(() => { setIsGenerating(false); setStep(3); }, promptHoldMs + 12000));
-            
-            // 17s: Loop
-            timeouts.push(setTimeout(() => runSequence(), promptHoldMs + 15000));
+
+            // 17s: Start Generating Render (Duration 2s)
+            timeouts.push(setTimeout(() => setIsGenerating(true), promptHoldMs + 15000));
+
+            // 19s: Show Render (Duration 3s)
+            timeouts.push(setTimeout(() => { setIsGenerating(false); setStep(4); }, promptHoldMs + 17000));
+
+            // 22s: Start Generating BOM (Duration 2s)
+            timeouts.push(setTimeout(() => setIsGenerating(true), promptHoldMs + 20000));
+
+            // 24s: Show Final BOM (Duration 3s)
+            timeouts.push(setTimeout(() => { setIsGenerating(false); setStep(5); }, promptHoldMs + 22000));
+
+            // 27s: Loop
+            timeouts.push(setTimeout(() => runSequence(), promptHoldMs + 25000));
         };
 
         runSequence();
@@ -719,9 +731,36 @@ function DemoCAD({ uiLang }: { uiLang: UiLanguage }) {
 
     // Helper to get generating text
     const getGenState = () => {
-        if (step === 0) return { title: tr("正在生成平面方案...", "Generating floor plan..."), sub: tr("AI 布局规划 · 动线分析 · 空间划分", "Layout planning · circulation · zoning") };
-        if (step === 1) return { title: tr("正在渲染装修效果...", "Rendering design..."), sub: tr("风格匹配 · 材质建议 · 灯光氛围", "Style match · materials · lighting mood") };
-        if (step === 2) return { title: tr("正在生成物料清单...", "Generating BOM..."), sub: tr("空间拆解 · 材料归类 · 数量估算", "Decompose spaces · classify materials · estimate quantities") };
+        if (step === 0) {
+            return {
+                title: tr("正在生成总体方案图...", "Generating overall solution diagram..."),
+                sub: tr("功能分区 · 流线组织 · 方案表达", "Functional zoning · flow organization · concept framing"),
+            };
+        }
+        if (step === 1) {
+            return {
+                title: tr("正在生成关键策略图...", "Generating key strategy chart..."),
+                sub: tr("重点节点 · 材料策略 · 设计亮点", "Key nodes · material strategy · design highlights"),
+            };
+        }
+        if (step === 2) {
+            return {
+                title: tr("正在生成平面方案...", "Generating floor plan..."),
+                sub: tr("AI 布局规划 · 动线分析 · 空间划分", "Layout planning · circulation · zoning"),
+            };
+        }
+        if (step === 3) {
+            return {
+                title: tr("正在渲染效果图...", "Rendering design..."),
+                sub: tr("风格匹配 · 材质建议 · 灯光氛围", "Style match · materials · lighting mood"),
+            };
+        }
+        if (step === 4) {
+            return {
+                title: tr("正在生成物料清单...", "Generating BOM..."),
+                sub: tr("空间拆解 · 材料归类 · 数量估算", "Decompose spaces · classify materials · estimate quantities"),
+            };
+        }
         return { title: tr("处理中...", "Processing..."), sub: tr("请稍候", "Please wait") };
     };
 
@@ -768,7 +807,7 @@ function DemoCAD({ uiLang }: { uiLang: UiLanguage }) {
                 )}
             </AnimatePresence>
 
-            <div className={`transition-all duration-1000 w-full h-full flex items-center justify-center ${(step === 0 || isGenerating) ? 'opacity-20 blur-sm' : 'opacity-100'}`}>
+            <div className={`transition-opacity duration-300 w-full h-full flex items-center justify-center ${(step === 0 || isGenerating) ? 'opacity-20' : 'opacity-100'}`}>
                 <div className="w-full h-full flex items-center justify-center">
                     <motion.div
                         className="relative w-[720px] h-[540px] bg-zinc-800/80 border-4 border-white/20 shadow-2xl"
@@ -792,14 +831,18 @@ function DemoCAD({ uiLang }: { uiLang: UiLanguage }) {
 }
 
 function CadPlan({ step, uiLang }: { step: number; uiLang: UiLanguage }) {
-    if (step === 1) return <CadStage2DImage uiLang={uiLang} />;
-    if (step === 2) return <CadStageRenderImage uiLang={uiLang} />;
-    if (step === 3) return <CadStageBomImage uiLang={uiLang} />;
+    if (step === 1) return <CadStageOverallSolutionImage uiLang={uiLang} />;
+    if (step === 2) return <CadStageKeyStrategyImage uiLang={uiLang} />;
+    if (step === 3) return <CadStage2DImage uiLang={uiLang} />;
+    if (step === 4) return <CadStageRenderImage uiLang={uiLang} />;
+    if (step === 5) return <CadStageBomImage uiLang={uiLang} />;
     return null;
 }
 
 const CAD_DEMO_IMAGES = {
     plan2d: "/cad/2D.png",
+    overallSolution: "/cad/overall_solution_diagram.png",
+    keyStrategy: "/cad/key_strategy_chart.png",
     render: "/cad/render.png",
     bom: "/cad/bom.png",
 };
@@ -818,8 +861,8 @@ function CadStageImageCard({
     const tr = (zh: string, en: string) => (uiLang === "zh" ? zh : en);
     return (
         <motion.div
-            initial={{ opacity: 0, scale: 0.985 }}
-            animate={{ opacity: 1, scale: 1 }}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
             transition={{ duration: 0.45, ease: "easeOut" }}
             className="absolute inset-4 rounded-2xl border border-white/10 bg-white/95 overflow-hidden shadow-[0_20px_80px_rgba(0,0,0,0.45)]"
         >
@@ -849,7 +892,29 @@ function CadStage2DImage({ uiLang }: { uiLang: UiLanguage }) {
             uiLang={uiLang}
             src={CAD_DEMO_IMAGES.plan2d}
             title={uiLang === "zh" ? "2D 平面图" : "2D Floor Plan"}
+            subtitle={uiLang === "zh" ? "策略确认后生成" : "Generated after strategy confirmation"}
+        />
+    );
+}
+
+function CadStageOverallSolutionImage({ uiLang }: { uiLang: UiLanguage }) {
+    return (
+        <CadStageImageCard
+            uiLang={uiLang}
+            src={CAD_DEMO_IMAGES.overallSolution}
+            title={uiLang === "zh" ? "总体方案图" : "Overall Solution Diagram"}
             subtitle={uiLang === "zh" ? "需求输入后生成" : "Generated from requirement input"}
+        />
+    );
+}
+
+function CadStageKeyStrategyImage({ uiLang }: { uiLang: UiLanguage }) {
+    return (
+        <CadStageImageCard
+            uiLang={uiLang}
+            src={CAD_DEMO_IMAGES.keyStrategy}
+            title={uiLang === "zh" ? "关键策略图" : "Key Strategy Chart"}
+            subtitle={uiLang === "zh" ? "总体方案后生成" : "Generated after overall solution"}
         />
     );
 }
@@ -859,8 +924,8 @@ function CadStageRenderImage({ uiLang }: { uiLang: UiLanguage }) {
         <CadStageImageCard
             uiLang={uiLang}
             src={CAD_DEMO_IMAGES.render}
-            title={uiLang === "zh" ? "装修图" : "Render"}
-            subtitle={uiLang === "zh" ? "2D 结束后生成" : "Generated after 2D completion"}
+            title={uiLang === "zh" ? "装修效果图" : "Render"}
+            subtitle={uiLang === "zh" ? "2D 方案后生成" : "Generated after 2D planning"}
         />
     );
 }
@@ -875,7 +940,6 @@ function CadStageBomImage({ uiLang }: { uiLang: UiLanguage }) {
         />
     );
 }
-
 function CadPlan2D({ uiLang }: { uiLang: UiLanguage }) {
     const tr = (zh: string, en: string) => (uiLang === "zh" ? zh : en);
     return (
