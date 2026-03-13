@@ -35,6 +35,8 @@ tmp/
 temp/
 *.tmp
 *.temp
+.tmp-flow-deep-thinking/
+
 
 # Local tool workspaces (not project source)
 .tmp-superpowers/
