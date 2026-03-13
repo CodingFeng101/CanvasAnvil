@@ -1,0 +1,6 @@
+saved_at=2026-03-12T01:28:04.830Z
+session_id=session-1773278861337-rbshy55
+media_type=image/png
+
+user_request:
+画一幅graphrag的流程图，精美一点，生动一点

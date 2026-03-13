@@ -8,7 +8,7 @@
     stepCountIs,
     streamText,
 } from "ai"
-import { appendFile } from "fs/promises"
+import { appendFile, mkdir, readFile, writeFile } from "fs/promises"
 import path from "path"
 import { z } from "zod"
 import { extractText, getDocumentProxy } from "unpdf"
@@ -337,6 +337,288 @@ async function summarizeRecursiveMethod(args: {
     })
 }
 
+type ImageAttachment = {
+    url: string
+    mediaType: string
+}
+
+type FlowRequestRoute = "local_edit" | "full_generation"
+
+let flowDeepThinkingImagePromptTemplateCache: string | null = null
+
+function cleanImageReferenceUrl(url: string): string | null {
+    const value = String(url || "").trim()
+    if (!value) return null
+    if (value.startsWith("http://") || value.startsWith("https://")) return value
+    if (value.startsWith("data:image/")) return value
+    return null
+}
+
+function extractImageUrlFromModelContent(messageContent: any): string | null {
+    if (Array.isArray(messageContent)) {
+        const imagePart = messageContent.find(
+            (part: any) => part?.type === "image_url" && part?.image_url?.url,
+        )
+        if (imagePart?.image_url?.url) {
+            return cleanImageReferenceUrl(imagePart.image_url.url)
+        }
+
+        const textPart = messageContent.find((part: any) => part?.type === "text")
+        const text = String(textPart?.text || "").trim()
+        if (!text) return null
+
+        const markdownMatch = text.match(/!\[.*?\]\((.*?)\)/)
+        if (markdownMatch?.[1]) {
+            return cleanImageReferenceUrl(markdownMatch[1])
+        }
+        return cleanImageReferenceUrl(text)
+    }
+
+    if (typeof messageContent === "string") {
+        const text = messageContent.trim()
+        const markdownMatch = text.match(/!\[.*?\]\((.*?)\)/)
+        if (markdownMatch?.[1]) {
+            return cleanImageReferenceUrl(markdownMatch[1])
+        }
+        return cleanImageReferenceUrl(text)
+    }
+
+    return null
+}
+
+function parseImageGenerationResponse(result: any): string | null {
+    if (result?.error) {
+        throw new Error(result.error.message || "Image model request failed")
+    }
+
+    if (Array.isArray(result?.choices) && result.choices.length > 0) {
+        return extractImageUrlFromModelContent(result.choices[0]?.message?.content)
+    }
+
+    return null
+}
+
+async function convertRemoteImageToDataUrl(url: string): Promise<string | null> {
+    const safeUrl = cleanImageReferenceUrl(url)
+    if (!safeUrl) return null
+    if (safeUrl.startsWith("data:image/")) return safeUrl
+
+    const response = await fetch(safeUrl)
+    if (!response.ok) {
+        throw new Error(`Failed to fetch generated image: ${response.status}`)
+    }
+
+    const contentType = response.headers.get("content-type") || "image/png"
+    const arrayBuffer = await response.arrayBuffer()
+    const base64 = Buffer.from(arrayBuffer).toString("base64")
+    return `data:${contentType};base64,${base64}`
+}
+
+async function getFlowDeepThinkingImagePromptTemplate(): Promise<string> {
+    if (flowDeepThinkingImagePromptTemplateCache) {
+        return flowDeepThinkingImagePromptTemplateCache
+    }
+
+    const promptPath = path.join(
+        process.cwd(),
+        "agent",
+        "flow",
+        "deep-thinking-image.md",
+    )
+    const raw = await readFile(promptPath, "utf8")
+    flowDeepThinkingImagePromptTemplateCache = String(raw || "").trim()
+    return flowDeepThinkingImagePromptTemplateCache
+}
+
+function buildFlowDeepThinkingImagePrompt(params: {
+    userText: string
+    globalConstraints: string
+    processedFilesContext: string
+    template: string
+}): string {
+    const safeUserText = String(params.userText || "").trim() || "(empty)"
+    const safeGlobalConstraints =
+        String(params.globalConstraints || "").trim() || "(none)"
+    const safeProcessedFiles =
+        String(params.processedFilesContext || "").trim() || "(none)"
+
+    return params.template
+        .replace("{{USER_REQUEST}}", safeUserText)
+        .replace("{{GLOBAL_CONSTRAINTS}}", safeGlobalConstraints)
+        .replace("{{PROCESSED_FILE_CONTENT}}", safeProcessedFiles)
+}
+
+function getImageExtensionFromMediaType(mediaType: string): string {
+    const normalized = String(mediaType || "").toLowerCase()
+    if (normalized.includes("png")) return "png"
+    if (normalized.includes("jpeg") || normalized.includes("jpg")) return "jpg"
+    if (normalized.includes("webp")) return "webp"
+    if (normalized.includes("gif")) return "gif"
+    if (normalized.includes("svg")) return "svg"
+    return "png"
+}
+
+async function saveDeepThinkingImageDebugArtifact(args: {
+    dataUrl: string
+    sessionId?: string
+    userText: string
+}): Promise<string | null> {
+    const raw = String(args.dataUrl || "")
+    if (!raw.startsWith("data:image/")) return null
+
+    const { mediaType, base64 } = parseDataUrl(raw)
+    const ext = getImageExtensionFromMediaType(mediaType)
+    const safeSession =
+        String(args.sessionId || "anonymous").replace(/[^a-zA-Z0-9_-]/g, "_") ||
+        "anonymous"
+    const stamp = new Date().toISOString().replace(/[:.]/g, "-")
+    const outDir = path.join(process.cwd(), ".tmp-flow-deep-thinking")
+    const imagePath = path.join(outDir, `${stamp}-${safeSession}.${ext}`)
+    const metaPath = path.join(outDir, `${stamp}-${safeSession}.txt`)
+
+    await mkdir(outDir, { recursive: true })
+    await writeFile(imagePath, Buffer.from(base64, "base64"))
+    await writeFile(
+        metaPath,
+        [
+            `saved_at=${new Date().toISOString()}`,
+            `session_id=${args.sessionId || ""}`,
+            `media_type=${mediaType}`,
+            "",
+            "user_request:",
+            String(args.userText || "").trim(),
+        ].join("\n"),
+        "utf8",
+    )
+    return imagePath
+}
+
+function normalizeIntentText(text: string): string {
+    return String(text || "")
+        .toLowerCase()
+        .replace(/\s+/g, " ")
+        .trim()
+}
+
+function isLikelyLocalEditRequest(text: string): boolean {
+    const normalized = normalizeIntentText(text)
+    if (!normalized) return false
+
+    const patterns = [
+        /修改|改成|调整|优化|补充|添加|增加|删除|移除|替换|重命名|改颜色|移动|对齐|局部|节点|连线|箭头|文案/,
+        /\b(edit|update|modify|adjust|tweak|refine|add|remove|delete|rename|move|reposition|change|fix|patch)\b/,
+    ]
+
+    return patterns.some((pattern) => pattern.test(normalized))
+}
+
+function isExplicitFullRegenerationRequest(text: string): boolean {
+    const normalized = normalizeIntentText(text)
+    if (!normalized) return false
+
+    const patterns = [
+        /重新生成|重画|从头|全新|重做|整体重构|替换整个|重建|重新画|新建一个/,
+        /\b(regenerate|from scratch|redraw|rebuild|replace the entire|new diagram|create a new)\b/,
+    ]
+
+    return patterns.some((pattern) => pattern.test(normalized))
+}
+
+function classifyFlowRequest(params: {
+    xml: string
+    userText: string
+}): FlowRequestRoute {
+    if (isMinimalDiagram(params.xml || "")) return "full_generation"
+    if (isExplicitFullRegenerationRequest(params.userText)) {
+        return "full_generation"
+    }
+    if (isLikelyLocalEditRequest(params.userText)) return "local_edit"
+    return "local_edit"
+}
+
+function shouldRunDeepThinking(params: {
+    deepThinkingEnabled: boolean
+    route: FlowRequestRoute
+}): boolean {
+    if (!params.deepThinkingEnabled) return false
+    return params.route === "full_generation"
+}
+
+async function generateDeepThinkingDiagramImage(args: {
+    userText: string
+    globalConstraints: string
+    processedFilesContext: string
+    imageAttachments: ImageAttachment[]
+    baseUrl: string
+    apiKey: string
+    imageModel: string
+}): Promise<string | null> {
+    let promptText = ""
+    try {
+        const template = await getFlowDeepThinkingImagePromptTemplate()
+        promptText = buildFlowDeepThinkingImagePrompt({
+            userText: args.userText,
+            globalConstraints: args.globalConstraints,
+            processedFilesContext: args.processedFilesContext,
+            template,
+        })
+    } catch (error) {
+        console.warn(
+            "[DeepThinking] Failed to load prompt file, using fallback prompt:",
+            error,
+        )
+        promptText = [
+            "You are a final-quality flowchart image generation agent.",
+            "Generate one polished, production-ready, directly usable final diagram image.",
+            "Do not generate a sketch, wireframe, draft, poster, or UI mockup.",
+            "Prioritize clear structure, readable labels, complete coverage, balanced spacing, and unambiguous connectors.",
+            `User request:\n${String(args.userText || "").trim() || "(empty)"}`,
+            `Global constraints:\n${String(args.globalConstraints || "").trim() || "(none)"}`,
+            `Processed file content:\n${String(args.processedFilesContext || "").trim() || "(none)"}`,
+        ].join("\n\n")
+    }
+
+    const content: any[] = [
+        {
+            type: "text",
+            text: promptText,
+        },
+    ]
+
+    for (const attachment of args.imageAttachments) {
+        if (!attachment.url) continue
+        content.push({
+            type: "image_url",
+            image_url: { url: attachment.url },
+        })
+    }
+
+    const response = await fetch(`${args.baseUrl}/chat/completions`, {
+        method: "POST",
+        headers: {
+            Authorization: `Bearer ${args.apiKey}`,
+            "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+            model: args.imageModel,
+            messages: [{ role: "user", content }],
+            stream: false,
+        }),
+    })
+
+    if (!response.ok) {
+        const text = await response.text()
+        throw new Error(
+            `Image model request failed with status ${response.status}: ${text}`,
+        )
+    }
+
+    const result = await response.json()
+    const imageUrl = parseImageGenerationResponse(result)
+    if (!imageUrl) return null
+    return await convertRemoteImageToDataUrl(imageUrl)
+}
+
 function validateUploadedFiles(uploadedFiles: UploadedFilePayload[]): {
     valid: boolean
     error?: string
@@ -493,6 +775,7 @@ async function handleChatRequest(req: Request): Promise<Response> {
         ? payload.uploadedFiles
         : []
     const bodyAIConfig = payload?.aiConfig || {}
+    const deepThinkingEnabled = Boolean(payload?.deepThinkingEnabled)
 
     // Debug: log the actual message structure received
     console.log("[DEBUG] Received messages:", JSON.stringify(messages, null, 2))
@@ -565,6 +848,11 @@ async function handleChatRequest(req: Request): Promise<Response> {
                   ? bodyAIConfig.modelId
                   : null),
     }
+    const imageModelId =
+        req.headers.get("x-ai-image-model") ||
+        (typeof bodyAIConfig.imageModel === "string"
+            ? bodyAIConfig.imageModel
+            : null)
 
     // Get AI model with optional client overrides
     const { model, providerOptions, headers, modelId } =
@@ -669,12 +957,104 @@ async function handleChatRequest(req: Request): Promise<Response> {
         : []
     const fileParts = [...partsFileParts, ...contentImageParts]
 
+    const imageAttachments: ImageAttachment[] = fileParts
+        .map((part: any) => {
+            const url =
+                part?.url || part?.image || part?.image_url?.url || ""
+            const mediaType = part?.mediaType || part?.mimeType || ""
+            const safeUrl = cleanImageReferenceUrl(url)
+            return safeUrl ? { url: safeUrl, mediaType } : null
+        })
+        .filter((item): item is ImageAttachment => Boolean(item))
+
+    const flowRequestRoute = classifyFlowRequest({
+        xml: String(xml || ""),
+        userText: lastMessageText,
+    })
+
+    const shouldUseDeepThinking = shouldRunDeepThinking({
+        deepThinkingEnabled,
+        route: flowRequestRoute,
+    })
+
+    console.log("[FlowRoute]", {
+        route: flowRequestRoute,
+        deepThinkingEnabled,
+        shouldUseDeepThinking,
+    })
+
+    let deepThinkingImageDataUrl: string | null = null
+    if (shouldUseDeepThinking) {
+        const imageBaseUrl =
+            (typeof clientOverrides.baseUrl === "string" &&
+            clientOverrides.baseUrl.trim()
+                ? clientOverrides.baseUrl
+                : process.env.AI_BASE_URL || process.env.OPENAI_BASE_URL || "")
+                .trim()
+        const imageApiKey =
+            (typeof clientOverrides.apiKey === "string" &&
+            clientOverrides.apiKey.trim()
+                ? clientOverrides.apiKey
+                : process.env.AI_API_KEY || process.env.OPENAI_API_KEY || "")
+                .trim()
+        const deepThinkingImageModel = String(imageModelId || "").trim()
+
+        if (imageBaseUrl && imageApiKey && deepThinkingImageModel) {
+            try {
+                deepThinkingImageDataUrl = await generateDeepThinkingDiagramImage({
+                    userText: lastMessageText,
+                    globalConstraints: globalConstraintsRaw,
+                    processedFilesContext: parsedFilesContext,
+                    imageAttachments,
+                    baseUrl: imageBaseUrl,
+                    apiKey: imageApiKey,
+                    imageModel: deepThinkingImageModel,
+                })
+                console.log(
+                    "[DeepThinking] Generated draft image:",
+                    Boolean(deepThinkingImageDataUrl),
+                )
+                if (deepThinkingImageDataUrl) {
+                    try {
+                        const savedPath =
+                            await saveDeepThinkingImageDebugArtifact({
+                                dataUrl: deepThinkingImageDataUrl,
+                                sessionId: validSessionId,
+                                userText: lastMessageText,
+                            })
+                        if (savedPath) {
+                            console.log(
+                                "[DeepThinking] Saved debug image to:",
+                                savedPath,
+                            )
+                        }
+                    } catch (error) {
+                        console.warn(
+                            "[DeepThinking] Failed to save debug image locally:",
+                            error,
+                        )
+                    }
+                }
+            } catch (error) {
+                console.warn("[DeepThinking] Failed to generate draft image:", error)
+            }
+        } else {
+            console.warn(
+                "[DeepThinking] Skipped because image model configuration is incomplete",
+            )
+        }
+    }
+
     // User input only - XML is now in a separate cached system message
     const formattedUserInput = `User input:
 """md
 ${lastMessageText}
 """
-${parsedFilesContext ? `\n\nParsed file summaries:\n"""md\n${parsedFilesContext}\n"""` : ""}`
+${parsedFilesContext ? `\n\nParsed file summaries:\n"""md\n${parsedFilesContext}\n"""` : ""}${
+        deepThinkingImageDataUrl
+            ? `\n\nReference image:\nAn optional reference image generated by the deep-thinking stage is attached below. Use it to infer structure, composition, grouping, and layout. If it conflicts with the user's request, follow the user's request.`
+            : ""
+    }`
 
     // Validate messages structure before conversion
     if (!messages || !Array.isArray(messages)) {
@@ -879,6 +1259,14 @@ ${parsedFilesContext ? `\n\nParsed file summaries:\n"""md\n${parsedFilesContext}
                         type: "image",
                         image: imageUrl,
                         mimeType: filePart.mediaType || filePart.mimeType,
+                    })
+                }
+
+                if (deepThinkingImageDataUrl) {
+                    contentParts.push({
+                        type: "image",
+                        image: deepThinkingImageDataUrl,
+                        mimeType: "image/png",
                     })
                 }
 

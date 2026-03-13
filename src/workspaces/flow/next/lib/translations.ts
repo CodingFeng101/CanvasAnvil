@@ -23,6 +23,7 @@ const en = {
   "input.stop": "Stop generation",
   "input.history": "History",
   "input.history.toggle": "Toggle history",
+  "input.deep_thinking": "Deep Think",
 
   // ChatMessageDisplay
   "message.sending": "Sending message...",
@@ -106,6 +107,7 @@ const en = {
   "examples.animated.desc": "Draw a transformer architecture with animated connectors",
   "tooltip.history": "Diagram history",
   "tooltip.save": "Save diagram",
+  "tooltip.deep_thinking": "Deep Think",
 
   // HistoryDialog
   "history.title": "Diagram History",
@@ -156,6 +158,7 @@ export const translations = {
     "input.stop": "停止生成",
     "input.history": "历史记录",
     "input.history.toggle": "切换历史记录",
+    "input.deep_thinking": "深度思考",
 
     // ChatMessageDisplay
     "message.sending": "正在发送消息...",
@@ -239,6 +242,7 @@ export const translations = {
     "examples.animated.desc": "绘制带动画连线的 Transformer 架构图",
     "tooltip.history": "流程图历史",
     "tooltip.save": "保存流程图",
+    "tooltip.deep_thinking": "深度思考",
 
     // HistoryDialog
     "history.title": "流程图历史记录",

@@ -1,10 +1,10 @@
 ﻿"use client"
 
 import {
+    Brain,
     FileText,
     History,
     Image as ImageIcon,
-    Loader2,
     ScrollText,
     Send,
     Square,
@@ -144,8 +144,9 @@ interface ChatInputProps {
     >
     showHistory?: boolean
     onToggleHistory?: (show: boolean) => void
-    sessionId?: string
     error?: Error | null
+    deepThinkingEnabled?: boolean
+    onToggleDeepThinking?: () => void
 }
 
 export function ChatInput({
@@ -160,8 +161,9 @@ export function ChatInput({
     pdfData = new Map(),
     showHistory = false,
     onToggleHistory = () => {},
-    sessionId,
     error = null,
+    deepThinkingEnabled = false,
+    onToggleDeepThinking = () => {},
 }: ChatInputProps) {
     const { t } = useLanguage()
     const { diagramHistory } = useDiagram()
@@ -409,6 +411,26 @@ export function ChatInput({
 
                     {/* Right actions */}
                     <div className="flex items-center gap-1">
+                        <ButtonWithTooltip
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={onToggleDeepThinking}
+                            disabled={isDisabled}
+                            tooltipContent={t("tooltip.deep_thinking")}
+                            className="h-8 w-8 p-0 text-muted-foreground hover:text-foreground"
+                            aria-pressed={deepThinkingEnabled}
+                            aria-label={t("input.deep_thinking")}
+                        >
+                            <Brain
+                                className={`h-3.5 w-3.5 ${
+                                    deepThinkingEnabled
+                                        ? "text-blue-600"
+                                        : "text-muted-foreground"
+                                }`}
+                            />
+                        </ButtonWithTooltip>
+
                         <ButtonWithTooltip
                             type="button"
                             variant="ghost"

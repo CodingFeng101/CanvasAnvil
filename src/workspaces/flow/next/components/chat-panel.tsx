@@ -32,6 +32,7 @@ const STORAGE_MESSAGES_KEY = "next-ai-draw-io-messages"
 const STORAGE_XML_SNAPSHOTS_KEY = "next-ai-draw-io-xml-snapshots"
 const STORAGE_SESSION_ID_KEY = "next-ai-draw-io-session-id"
 export const STORAGE_DIAGRAM_XML_KEY = "next-ai-draw-io-diagram-xml"
+const STORAGE_DEEP_THINKING_KEY = "next-ai-draw-io-deep-thinking"
 
 // Type for message parts (tool calls and their states)
 interface MessagePart {
@@ -158,6 +159,10 @@ export default function ChatPanel({
     const [tpmLimit, setTpmLimit] = useState(0)
     const [defaultModel, setDefaultModel] = useState("")
     const [isParsingFiles, setIsParsingFiles] = useState(false)
+    const [deepThinkingEnabled, setDeepThinkingEnabled] = useState(() => {
+        if (typeof window === "undefined") return false
+        return localStorage.getItem(STORAGE_DEEP_THINKING_KEY) === "true"
+    })
 
     // Check config on mount
     useEffect(() => {
@@ -174,6 +179,14 @@ export default function ChatPanel({
                 setAccessCodeRequired(false)
             })
     }, [])
+
+    useEffect(() => {
+        if (typeof window === "undefined") return
+        localStorage.setItem(
+            STORAGE_DEEP_THINKING_KEY,
+            deepThinkingEnabled ? "true" : "false",
+        )
+    }, [deepThinkingEnabled])
 
     // Quota management using extracted hook
     const quotaManager = useQuotaManager({
@@ -636,7 +649,11 @@ Please fix the XML issues. Ensure you are editing exact lines from the current X
 
                 // Build user text by concatenating input with pre-extracted text
                 // (Backend only reads first text part, so we must combine them)
-                setIsParsingFiles(true)
+                const hasExtractableFiles = files.some(
+                    (file) =>
+                        isPdfFile(file) || isTextFile(file) || isWordFile(file),
+                )
+                setIsParsingFiles(hasExtractableFiles)
                 const parts: any[] = []
                 const { userText, uploadedFiles } = await processFilesAndAppendContent(
                     input,
@@ -869,6 +886,7 @@ Please fix the XML issues. Ensure you are editing exact lines from the current X
                     previousXml,
                     sessionId,
                     uploadedFiles,
+                    deepThinkingEnabled,
                     aiConfig: {
                         provider: config.aiProvider,
                         baseUrl: config.aiBaseUrl,
@@ -1212,8 +1230,11 @@ Please fix the XML issues. Ensure you are editing exact lines from the current X
                     pdfData={pdfData}
                     showHistory={showHistory}
                     onToggleHistory={setShowHistory}
-                    sessionId={sessionId}
                     error={error}
+                    deepThinkingEnabled={deepThinkingEnabled}
+                    onToggleDeepThinking={() =>
+                        setDeepThinkingEnabled((prev) => !prev)
+                    }
                 />
             </footer>
         </div>
