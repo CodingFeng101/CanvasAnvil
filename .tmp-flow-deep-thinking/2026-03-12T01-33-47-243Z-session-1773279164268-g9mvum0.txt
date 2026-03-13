@@ -1,6 +1,0 @@
-saved_at=2026-03-12T01:33:47.253Z
-session_id=session-1773279164268-g9mvum0
-media_type=image/png
-
-user_request:
-复现这个图。
