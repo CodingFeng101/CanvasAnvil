@@ -19,16 +19,16 @@ CanvasAnvil is a multi-canvas AI creation platform for flow diagrams, CAD workfl
 
 Current release: `v1.0.0`
 
-`v1.0.0` marks the first major usable release with a more stable PPT pipeline, stronger agent routing, cleaner version handling, and better local proxy support for AI requests.
+`v1.0.0` marks the first major usable release with stronger PPT editing support, especially for refining existing slide decks such as NotebookLM-exported PPTs.
 
 ## Highlights in v1.0.0
 
 - Unified multi-canvas workflow across `Flow`, `CAD`, and `PPT`
-- PPT chat uses single-turn task execution instead of passing full chat history to the agent
+- Support for text editing on PPT files exported from NotebookLM
+- Better editing workflows for existing PPT decks instead of only first-pass generation
 - PPT image uploads no longer bloat chat input with raw base64 data
 - PPT image generation and image-edit requests now go through a local proxy route for better browser compatibility
 - More stable image-reference routing with image count limits, compression, and fallback retry behavior
-- Cleaner PPT version display and hidden internal textless-background processing
 - Fixed multiple garbled text issues in PPT workspace and repo docs
 
 ## Canvas Previews

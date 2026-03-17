@@ -1,8 +1,8 @@
 # Deployment Guide
 
-中文版本: [查看中文文档](README.zh-CN.md)
+Chinese version: [README.zh-CN.md](README.zh-CN.md)
 
-The deployment model is a single service: one Node process serves both static assets and `/api/*`.
+CanvasAnvil uses a single-service deployment model: one Node process serves both static assets and `/api/*`.
 
 ## Quick Start
 
@@ -16,33 +16,42 @@ Default URL: `http://localhost:8080/`
 
 ## Directory Layout
 
-- `deploy/host/`: host/bare-metal scripts and Nginx reverse proxy config
-- `deploy/docker/`: Dockerfile and Compose config
+- `deploy/host/`: host or bare-metal scripts and Nginx reverse proxy config
+- `deploy/docker/`: Dockerfile and Docker Compose config
 
 ## Host Deployment
 
 1. Build
+
 - Linux/macOS:
+
 ```bash
 bash deploy/host/build.sh
 ```
+
 - Windows PowerShell:
+
 ```powershell
 powershell -ExecutionPolicy Bypass -File deploy/host/build.ps1
 ```
+
 - Or run manually:
+
 ```bash
 npm ci
 npm run build
 ```
 
 2. Run
+
 ```bash
 npm start
 ```
-For production, use `pm2` or `systemd` to keep it alive.
 
-3. Nginx (Optional)
+For production, use `pm2` or `systemd` to keep the service alive.
+
+3. Nginx (optional)
+
 - Enable `deploy/host/nginx.conf` and reload Nginx
 - Includes `client_max_body_size 25m`
 - Sets `proxy_buffering off` for `/api/chat`
@@ -50,7 +59,7 @@ For production, use `pm2` or `systemd` to keep it alive.
 
 ## Docker Deployment
 
-Option A: Compose (recommended)
+Option A: Docker Compose
 
 ```bash
 docker compose -f deploy/docker/docker-compose.yml up -d --build
@@ -67,6 +76,6 @@ docker run --rm -p 8080:8080 canvasanvil/app:latest
 
 | Variable | Default | Description |
 | --- | --- | --- |
-| `PORT` | `8080` | service listen port |
-| `API_BODY_LIMIT` | `25mb` | max API request body size |
-| `WEB_DIST_DIR` | `./dist` | static web assets directory |
+| `PORT` | `8080` | Service listen port |
+| `API_BODY_LIMIT` | `25mb` | Maximum API request body size |
+| `WEB_DIST_DIR` | `./dist` | Static web assets directory |
