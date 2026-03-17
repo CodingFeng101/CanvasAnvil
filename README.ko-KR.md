@@ -13,127 +13,131 @@
   <a href="README.fr-FR.md">Français</a>
 </p>
 
-CanvasAnvil은 하나의 요구사항을 반복 가능한 결과물로 전환하는 멀티 캔버스 AI 제작 플랫폼입니다.
+CanvasAnvil은 플로우차트, CAD 워크플로우, PPT 생성 및 편집을 지원하는 멀티 캔버스 AI 제작 플랫폼입니다.
+
+## 버전
+
+현재 버전: `v1.0.0`
+
+`v1.0.0`은 첫 번째 주요 실사용 릴리스입니다. 특히 기존 PPT 편집을 강화했고, NotebookLM에서 내보낸 PPT의 텍스트 편집과 반복 수정 작업을 더 잘 지원합니다.
+
+## v1.0.0 주요 업데이트
+
+- `Flow`, `CAD`, `PPT` 전반의 상호작용 경험 통합
+- NotebookLM에서 내보낸 PPT에 대한 텍스트 편집 지원
+- 첫 생성뿐 아니라 기존 PPT 수정과 반복 개선에 더 적합한 워크플로우
+- PPT 이미지 업로드 시 raw base64 대용량 텍스트를 채팅 입력에 직접 넣지 않도록 개선
+- PPT 이미지 생성 및 편집을 로컬 프록시 경로로 통일해 브라우저 호환성 향상
+- 이미지 참조 체인에 수량 제한, 압축, 실패 시 폴백 재시도 추가
+- PPT 워크스페이스와 문서의 깨진 문자 문제 다수 수정
 
 ## 캔버스 미리보기
 
 <table>
-  <tr><td width="680" align="center"><strong>Flow 캔버스</strong></td></tr>
-  <tr><td width="680" align="left"><img src="public/demos/flow.gif?raw=1" alt="Flow 캔버스" width="680" /></td></tr>
+  <tr><td width="680" align="center"><strong>Flow Canvas</strong></td></tr>
+  <tr><td width="680" align="left"><img src="public/demos/flow.gif?raw=1" alt="Flow canvas" width="680" /></td></tr>
 </table>
 
 <table>
-  <tr><td width="680" align="center"><strong>CAD 캔버스</strong></td></tr>
-  <tr><td width="680" align="left"><img src="public/demos/cad.gif?raw=1" alt="CAD 캔버스" width="680" /></td></tr>
+  <tr><td width="680" align="center"><strong>CAD Canvas</strong></td></tr>
+  <tr><td width="680" align="left"><img src="public/demos/cad.gif?raw=1" alt="CAD canvas" width="680" /></td></tr>
 </table>
 
 <table>
-  <tr><td width="680" align="center"><strong>PPT 캔버스</strong></td></tr>
-  <tr><td width="680" align="left"><img src="public/demos/ppt.gif?raw=1" alt="PPT 캔버스" width="680" /></td></tr>
+  <tr><td width="680" align="center"><strong>PPT Canvas</strong></td></tr>
+  <tr><td width="680" align="left"><img src="public/demos/ppt.gif?raw=1" alt="PPT canvas" width="680" /></td></tr>
 </table>
 
-## 동영상 튜토리얼
-
-- [Bilibili에서 보기](https://www.bilibili.com/video/BV1jzZ3BBEHc?vd_source=b6b031f92061ae667eba1185f4782a1c)
-- [YouTube에서 보기](https://youtu.be/n3Otj--aLRo)
-- [Douyin에서 보기](https://v.douyin.com/JwlwhmE6R40/)
-
-## CanvasAnvil 사용해보기
+## 온라인 데모
 
 - [CanvasAnvil 열기](https://canvasanvil.codingfgd.asia)
-- 참고: 현재 서버 사양이 높지 않아 간헐적으로 지연이 발생할 수 있습니다.
 
-## 기능 개요 (사용자 관점)
+## 튜토리얼 영상
 
-- `Flow`: 플로우차트 생성 및 부분 편집 (draw.io XML)
-- `CAD`: 실내 설계 계획, 분석 보드, 2D 평면도, 렌더 작업, BOM
-- `PPT`: 프레젠테이션 초안 생성 및 반복 편집
+- [Bilibili](https://www.bilibili.com/video/BV1jzZ3BBEHc?vd_source=b6b031f92061ae667eba1185f4782a1c)
+- [YouTube](https://youtu.be/n3Otj--aLRo)
+- [Douyin](https://v.douyin.com/JwlwhmE6R40/)
 
-## 일반 워크플로
+## 기능 개요
 
-1. 요구사항 입력
-2. 설계안 생성 및 반복 개선
-3. 분석 보드 생성 후 전략 확인
-4. 2D 평면도 생성 및 편집
-5. 결과물 내보내기 (다이어그램 / 목록 / 슬라이드)
+- `Flow`: draw.io XML 기반 플로우차트 생성 및 부분 편집
+- `CAD`: 실내 워크플로우 기획, 분석 보드, 2D 평면도, 렌더 작업, BOM
+- `PPT`: 구조화된 슬라이드 생성, 페이지 단위 편집, 이미지 보조 반복 작업, 내보내기
 
 ## 빠른 시작
 
 1. 의존성 설치
+
 ```bash
 npm install
 ```
-2. 개발 서버 시작
+
+2. 로컬 개발 시작
+
 ```bash
 npm run dev
 ```
-기본 URL: `http://localhost:5173`
+
+기본 주소: `http://localhost:5173`
 
 3. 타입 검사
+
 ```bash
 npm run check
 ```
+
 4. 프로덕션 빌드
+
 ```bash
 npm run build
 ```
 
-## 출처 및 통합
+## 자주 쓰는 명령
 
-- Flow 캔버스: [next-ai-draw-io](https://github.com/DayuanJiang/next-ai-draw-io) 기반 통합/개선
-- PPT 캔버스: [banana-slides](https://github.com/Anionex/banana-slides.git) 기반 통합/개선
-- CAD 캔버스: 자체 구현 (아키텍처, Agent 워크플로, 2D SVG 편집 파이프라인, BOM/렌더 파이프라인)
-
-핵심 개선 사항:
-
-- 캔버스 전반의 통합 UX (채팅, 코드 블록, 원클릭 적용)
-- 더 안정적인 Agent 라우팅 및 재시도 메커니즘
-- CAD 전용 기능 (patch / replace / BOM / 7-슬롯 렌더 워크플로)
-- 캔버스 간 상태/버전/내보내기 파이프라인
-
-## 핵심 기능 (개발자 관점)
-
-- Flow: 채팅 기반 플로우차트 생성, patch/replace, 원클릭 적용, 스냅샷 복원
-- CAD: `cad_plan` 출력, 분석 보드 병렬 생성, 분석 이미지 참조 기반 2D SVG 부분 업데이트, 렌더 작업 동시 실행, BOM 내보내기
-- PPT: 구조화된 콘텐츠 생성, 페이지 단위 증분 편집, 스트리밍 반복
-
-## 기술 스택
-
-- 프론트엔드: React 18 + TypeScript + Vite
-- UI: Tailwind CSS + Radix UI + Lucide
-- 다이어그램 엔진: Flow는 draw.io/diagrams.net, CAD는 SVG-Edit
-- 모델 통합: 구성 가능한 멀티 모델 접근 (채팅 / 이미지)
-
-## 유용한 스크립트
-
-- `npm run dev`: 개발 서버 시작
-- `npm start`: 프로덕션 시작 (정적 사이트 + API)
-- `npm run build`: 프로덕션 빌드
+- `npm run dev`: Vite 개발 서버 시작
+- `npm run dev:full`: Web과 API 개발 서버 동시 시작
+- `npm run dev:web`: 프론트엔드 개발 서버 시작
+- `npm run dev:api`: API 개발 서버 시작
 - `npm run check`: TypeScript 검사
-- `npm run lint`: ESLint
+- `npm run lint`: ESLint 검사
+- `npm run build`: 프로덕션 빌드
+- `npm run preview`: 빌드 결과 미리보기
+- `npm start`: API 서버 시작
 
-## 프로젝트 구조 (핵심 경로)
+## 개발 메모
+
+- AI 설정은 로컬 앱 설정에서 읽으며, 사용자 지정 모델 서비스에 연결할 수 있습니다
+- PPT 로컬 개발은 `/api/ppt-ai` 로컬 프록시 라우트에 의존합니다
+- `vite.config.ts` 의 로컬 API 라우팅을 바꿨다면 개발 서버를 재시작해야 합니다
+
+## 프로젝트 구조
 
 ```text
 .
-|- agent/                      # CAD/Flow/PPT 프롬프트 및 서브 Agent 명세
-|- public/                     # 정적 자산 (SVG-Edit 포함)
-|- src/
-|  |- workspaces/
-|  |  |- flow/                 # Flow 캔버스
-|  |  |- cad/                  # CAD 캔버스 (자체 코어)
-|  |  |- ppt/                  # PPT 캔버스
-|- api/                        # API 로직
-|- README.md
+├─ agent/                      # Agent 프롬프트와 하위 Agent 사양
+├─ public/                     # 정적 자산
+├─ src/
+│  └─ workspaces/
+│     ├─ flow/                 # Flow canvas
+│     ├─ cad/                  # CAD canvas
+│     └─ ppt/                  # PPT canvas
+├─ api/                        # 로컬 API 라우트 진입점
+└─ README.md
 ```
+
+## 출처 및 통합
+
+- Flow canvas: [next-ai-draw-io](https://github.com/DayuanJiang/next-ai-draw-io) 기반 통합 및 확장
+- PPT canvas: [banana-slides](https://github.com/Anionex/banana-slides.git) 기반 통합 및 확장
+- CAD canvas: agent 워크플로우, 2D SVG 편집, 렌더 오케스트레이션, BOM 파이프라인을 포함한 자체 구현
 
 ## 문서
 
-- 배포 가이드: [배포 가이드 열기](deploy/README.md)
+- 배포 가이드: [deploy/README.md](deploy/README.md)
 
-## 위챗 연락처
+## 연락처
 
-제 WeChat QR 코드는 아래에 있습니다. 편하게 연락해 주세요.
+아래 WeChat QR 코드를 통해 작성자에게 연락할 수 있습니다.
 
 <p align="left">
   <img src="public/wechat.jpg" alt="WeChat QR code" width="280" />

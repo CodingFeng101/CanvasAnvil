@@ -13,7 +13,23 @@
   <a href="README.fr-FR.md">Français</a>
 </p>
 
-CanvasAnvil est une plateforme IA multi-canvas qui transforme une exigence unique en livrables itérables.
+CanvasAnvil est une plateforme IA multi-canvas dédiée aux diagrammes de flux, aux workflows CAD et à la génération/édition de PPT.
+
+## Version
+
+Version actuelle : `v1.0.0`
+
+`v1.0.0` est la première grande version réellement exploitable. Elle améliore surtout l’édition de PPT existants, en particulier l’édition de texte sur des PPT exportés depuis NotebookLM.
+
+## Points forts de v1.0.0
+
+- Expérience unifiée entre `Flow`, `CAD` et `PPT`
+- Prise en charge de l’édition de texte sur des PPT exportés depuis NotebookLM
+- Workflow mieux adapté à la modification et à l’itération sur des PPT existants, pas seulement à la première génération
+- Les images importées dans PPT n’injectent plus de gros payloads base64 bruts dans le chat
+- Les requêtes de génération et d’édition d’images PPT passent maintenant par un proxy local pour une meilleure compatibilité navigateur
+- Gestion plus stable des images de référence avec limite du nombre d’images, compression et retry de secours
+- Correction de plusieurs problèmes de texte corrompu dans l’espace de travail PPT et dans la documentation
 
 ## Aperçu des canvas
 
@@ -32,108 +48,96 @@ CanvasAnvil est une plateforme IA multi-canvas qui transforme une exigence uniqu
   <tr><td width="680" align="left"><img src="public/demos/ppt.gif?raw=1" alt="Canvas PPT" width="680" /></td></tr>
 </table>
 
-## Tutoriels vidéo
-
-- [Regarder sur Bilibili](https://www.bilibili.com/video/BV1jzZ3BBEHc?vd_source=b6b031f92061ae667eba1185f4782a1c)
-- [Regarder sur YouTube](https://youtu.be/n3Otj--aLRo)
-- [Regarder sur Douyin](https://v.douyin.com/JwlwhmE6R40/)
-
-## Essayer CanvasAnvil
+## Démo en ligne
 
 - [Ouvrir CanvasAnvil](https://canvasanvil.codingfgd.asia)
-- Remarque : la configuration serveur actuelle est modeste, le service peut parfois être lent.
 
-## Vue d'ensemble des capacités (côté utilisateur)
+## Tutoriels vidéo
 
-- `Flow` : génération de diagrammes de flux et éditions partielles (draw.io XML)
-- `CAD` : planification d'aménagement intérieur, tableaux d'analyse, plans 2D, tâches de rendu, BOM
-- `PPT` : génération de brouillons de présentation et édition itérative
+- [Bilibili](https://www.bilibili.com/video/BV1jzZ3BBEHc?vd_source=b6b031f92061ae667eba1185f4782a1c)
+- [YouTube](https://youtu.be/n3Otj--aLRo)
+- [Douyin](https://v.douyin.com/JwlwhmE6R40/)
 
-## Workflow type
+## Vue d’ensemble des capacités
 
-1. Saisir le besoin
-2. Générer/itérer le plan de conception
-3. Générer les tableaux d'analyse et valider la stratégie
-4. Générer et éditer le plan 2D
-5. Exporter les livrables (diagrammes / listes / diapositives)
+- `Flow` : génération de diagrammes de flux et édition partielle basées sur draw.io XML
+- `CAD` : planification de workflows intérieurs, planches d’analyse, plans 2D, tâches de rendu et BOM
+- `PPT` : génération de diapositives structurées, édition au niveau de la page, itération assistée par image et export
 
 ## Démarrage rapide
 
 1. Installer les dépendances
+
 ```bash
 npm install
 ```
-2. Lancer le mode développement
+
+2. Lancer le développement local
+
 ```bash
 npm run dev
 ```
+
 URL par défaut : `http://localhost:5173`
 
-3. Vérification de types
+3. Vérifier les types
+
 ```bash
 npm run check
 ```
+
 4. Build de production
+
 ```bash
 npm run build
 ```
 
-## Origines et intégrations
-
-- Canvas Flow : intégré et amélioré depuis [next-ai-draw-io](https://github.com/DayuanJiang/next-ai-draw-io)
-- Canvas PPT : intégré et amélioré depuis [banana-slides](https://github.com/Anionex/banana-slides.git)
-- Canvas CAD : implémentation interne (architecture, workflow Agent, pipeline d'édition 2D SVG, pipeline BOM/rendu)
-
-Améliorations clés :
-
-- UX unifiée entre les canvas (chat, blocs de code, application en un clic)
-- Routage Agent et mécanismes de retry plus stables
-- Capacités spécifiques CAD (patch / replace / BOM / workflow de rendu à 7 slots)
-- Pipelines transverses d'état/version/export
-
-## Capacités principales (côté développeur)
-
-- Flow : génération de diagrammes pilotée par chat, patch/replace, application en un clic, restauration de snapshots
-- CAD : sortie `cad_plan`, génération parallèle de tableaux d'analyse, mises à jour partielles 2D SVG avec références d'images d'analyse, rendus concurrents, export BOM
-- PPT : génération de contenu structuré, éditions incrémentales par page, itérations en streaming
-
-## Stack technique
-
-- Frontend : React 18 + TypeScript + Vite
-- UI : Tailwind CSS + Radix UI + Lucide
-- Moteurs de diagrammes : draw.io/diagrams.net pour Flow, SVG-Edit pour CAD
-- Intégration de modèles : accès multi-modèles configurable (chat / image)
-
 ## Scripts utiles
 
-- `npm run dev` : démarrer le serveur de développement
-- `npm start` : démarrage production (site statique + API)
-- `npm run build` : build de production
+- `npm run dev` : démarrer le serveur Vite
+- `npm run dev:full` : démarrer les serveurs Web et API ensemble
+- `npm run dev:web` : démarrer le frontend
+- `npm run dev:api` : démarrer l’API
 - `npm run check` : vérification TypeScript
 - `npm run lint` : ESLint
+- `npm run build` : build de production
+- `npm run preview` : prévisualiser le build
+- `npm start` : démarrer le serveur API
 
-## Structure du projet (chemins clés)
+## Notes de développement
+
+- La configuration IA est lue depuis les paramètres locaux de l’application et peut pointer vers des fournisseurs personnalisés
+- Le développement local PPT dépend maintenant de la route proxy locale `/api/ppt-ai`
+- Après une modification du routage API local dans `vite.config.ts`, redémarrez le serveur de développement
+
+## Structure du projet
 
 ```text
 .
-|- agent/                      # Prompts et specs de sous-agents CAD/Flow/PPT
-|- public/                     # Ressources statiques (incluant SVG-Edit)
-|- src/
-|  |- workspaces/
-|  |  |- flow/                 # Canvas Flow
-|  |  |- cad/                  # Canvas CAD (cœur interne)
-|  |  |- ppt/                  # Canvas PPT
-|- api/                        # Logique API
-|- README.md
+├─ agent/                      # Prompts Agent et spécifications des sous-agents
+├─ public/                     # Ressources statiques
+├─ src/
+│  └─ workspaces/
+│     ├─ flow/                 # Canvas Flow
+│     ├─ cad/                  # Canvas CAD
+│     └─ ppt/                  # Canvas PPT
+├─ api/                        # Points d’entrée des routes API locales
+└─ README.md
 ```
+
+## Origines et intégrations
+
+- Canvas Flow : intégré et étendu depuis [next-ai-draw-io](https://github.com/DayuanJiang/next-ai-draw-io)
+- Canvas PPT : intégré et étendu depuis [banana-slides](https://github.com/Anionex/banana-slides.git)
+- Canvas CAD : implémentation interne incluant workflow agent, édition 2D SVG, orchestration des rendus et pipeline BOM
 
 ## Documentation
 
-- Guide de déploiement : [Ouvrir le guide de déploiement](deploy/README.md)
+- Guide de déploiement : [deploy/README.md](deploy/README.md)
 
-## Contact WeChat
+## Contact
 
-Mon QR code WeChat est ci-dessous, n'hésitez pas à me contacter.
+Scannez le QR code WeChat ci-dessous pour contacter l’auteur.
 
 <p align="left">
   <img src="public/wechat.jpg" alt="WeChat QR code" width="280" />

@@ -13,7 +13,23 @@
   <a href="README.fr-FR.md">Français</a>
 </p>
 
-CanvasAnvil 是一個多畫布 AI 創作平台，能把單一需求轉換為可持續迭代的交付成果。
+CanvasAnvil 是一個多畫布 AI 創作平台，面向流程圖、CAD 工作流與 PPT 生成/編輯。
+
+## 版本
+
+目前版本：`v1.0.0`
+
+`v1.0.0` 是第一個重大可用版本，重點是更好地支援現有 PPT 的編輯，尤其是支援對 NotebookLM 匯出的 PPT 進行文字編輯與迭代。
+
+## v1.0.0 重點更新
+
+- 統一 `Flow`、`CAD`、`PPT` 三類畫布的互動模式
+- 支援對 NotebookLM 匯出的 PPT 進行文字編輯
+- 更適合對既有 PPT 進行修改與迭代，而不只是首輪生成
+- PPT 圖片上傳不再把原始 base64 大文本塞進聊天輸入
+- PPT 圖像生成與編輯統一走本地代理，減少瀏覽器跨域問題
+- 圖片參考鏈路增加數量限制、壓縮與失敗降級重試
+- 修復多處 PPT 工作區與文件亂碼問題
 
 ## 畫布預覽
 
@@ -32,108 +48,96 @@ CanvasAnvil 是一個多畫布 AI 創作平台，能把單一需求轉換為可�
   <tr><td width="680" align="left"><img src="public/demos/ppt.gif?raw=1" alt="PPT 畫布" width="680" /></td></tr>
 </table>
 
-## 影片教學
+## 線上體驗
 
-- [在 Bilibili 觀看](https://www.bilibili.com/video/BV1jzZ3BBEHc?vd_source=b6b031f92061ae667eba1185f4782a1c)
-- [在 YouTube 觀看](https://youtu.be/n3Otj--aLRo)
-- [在抖音觀看](https://v.douyin.com/JwlwhmE6R40/)
+- [打開 CanvasAnvil](https://canvasanvil.codingfgd.asia)
 
-## 線上試用 CanvasAnvil
+## 教學影片
 
-- [開啟 CanvasAnvil](https://canvasanvil.codingfgd.asia)
-- 注意：目前伺服器配置較低，服務偶爾可能有延遲或卡頓，感謝理解。
+- [Bilibili](https://www.bilibili.com/video/BV1jzZ3BBEHc?vd_source=b6b031f92061ae667eba1185f4782a1c)
+- [YouTube](https://youtu.be/n3Otj--aLRo)
+- [抖音](https://v.douyin.com/JwlwhmE6R40/)
 
-## 功能概覽（使用者視角）
+## 能力概覽
 
-- `Flow`：流程圖生成與局部編輯（draw.io XML）
-- `CAD`：室內設計規劃、分析看板、2D 平面圖、渲染任務與 BOM
-- `PPT`：簡報草稿生成與迭代編輯
-
-## 典型工作流程
-
-1. 輸入需求
-2. 生成並迭代設計方案
-3. 生成分析看板並確認策略
-4. 生成並編輯 2D 平面圖
-5. 匯出成果（圖表 / 清單 / 簡報）
+- `Flow`：基於 draw.io XML 的流程圖生成與局部編輯
+- `CAD`：室內工作流規劃、分析板、2D 平面圖、渲染任務與 BOM
+- `PPT`：結構化投影片生成、頁面級編輯、圖像輔助迭代與匯出
 
 ## 快速開始
 
 1. 安裝依賴
+
 ```bash
 npm install
 ```
-2. 啟動開發模式
+
+2. 啟動本地開發
+
 ```bash
 npm run dev
 ```
-預設網址：`http://localhost:5173`
 
-3. 型別檢查
+預設位址：`http://localhost:5173`
+
+3. 執行型別檢查
+
 ```bash
 npm run check
 ```
-4. 生產建置
+
+4. 建構正式版本
+
 ```bash
 npm run build
 ```
 
-## 來源與整合
+## 常用命令
 
-- Flow 畫布：整合並增強自 [next-ai-draw-io](https://github.com/DayuanJiang/next-ai-draw-io)
-- PPT 畫布：整合並增強自 [banana-slides](https://github.com/Anionex/banana-slides.git)
-- CAD 畫布：內部自研（架構、Agent 工作流、2D SVG 編輯管線、BOM/渲染管線）
-
-主要改進：
-
-- 跨畫布統一體驗（對話、程式碼區塊、一鍵套用到畫布）
-- 更穩定的 Agent 路由與重試機制
-- CAD 專屬能力（patch / replace / BOM / 7 槽位渲染流程）
-- 跨畫布狀態/版本/匯出管線
-
-## 核心能力（開發者視角）
-
-- Flow：對話驅動流程圖生成、patch/replace、一鍵套用、快照回復
-- CAD：`cad_plan` 輸出、分析看板並行生成、引用分析圖的 2D SVG 局部更新、渲染任務併發、BOM 匯出
-- PPT：結構化內容生成、頁面級增量編輯、串流式迭代
-
-## 技術棧
-
-- 前端：React 18 + TypeScript + Vite
-- UI：Tailwind CSS + Radix UI + Lucide
-- 圖形引擎：Flow 使用 draw.io/diagrams.net，CAD 使用 SVG-Edit
-- 模型整合：可配置多模型接入（聊天 / 圖像）
-
-## 常用腳本
-
-- `npm run dev`：啟動開發伺服器
-- `npm start`：生產啟動（靜態站點 + API）
-- `npm run build`：生產建置
+- `npm run dev`：啟動 Vite 開發服務
+- `npm run dev:full`：同時啟動 Web 與 API 開發服務
+- `npm run dev:web`：啟動前端開發服務
+- `npm run dev:api`：啟動 API 開發服務
 - `npm run check`：TypeScript 檢查
-- `npm run lint`：ESLint
+- `npm run lint`：ESLint 檢查
+- `npm run build`：正式建構
+- `npm run preview`：預覽建構結果
+- `npm start`：啟動 API 服務
 
-## 專案結構（關鍵路徑）
+## 開發說明
+
+- AI 設定從本地應用設定中讀取，可接入自訂模型服務
+- PPT 本地開發現在依賴本地 `/api/ppt-ai` 代理路由
+- 若修改了 `vite.config.ts` 中的本地 API 路由映射，需要重新啟動開發服務
+
+## 專案結構
 
 ```text
 .
-|- agent/                      # CAD/Flow/PPT 的提示詞與子 Agent 規格
-|- public/                     # 靜態資產（含 SVG-Edit）
-|- src/
-|  |- workspaces/
-|  |  |- flow/                 # Flow 畫布
-|  |  |- cad/                  # CAD 畫布（自研核心）
-|  |  |- ppt/                  # PPT 畫布
-|- api/                        # API 邏輯
-|- README.md
+├─ agent/                      # Agent Prompt 與子 Agent 規格
+├─ public/                     # 靜態資源
+├─ src/
+│  └─ workspaces/
+│     ├─ flow/                 # Flow 畫布
+│     ├─ cad/                  # CAD 畫布
+│     └─ ppt/                  # PPT 畫布
+├─ api/                        # 本地 API 路由入口
+└─ README.md
 ```
+
+## 來源與整合
+
+- Flow 畫布：整合並擴展自 [next-ai-draw-io](https://github.com/DayuanJiang/next-ai-draw-io)
+- PPT 畫布：整合並擴展自 [banana-slides](https://github.com/Anionex/banana-slides.git)
+- CAD 畫布：專案自研，包含 agent 工作流、2D SVG 編輯、渲染編排與 BOM 鏈路
 
 ## 文件
 
-- 部署指南：[開啟部署指南](deploy/README.md)
+- 部署說明：[deploy/README.md](deploy/README.md)
 
-## 微信
+## 聯絡方式
 
-我的微信二維碼如下，歡迎聯繫我。
+可掃描下方微信 QR code 聯絡作者。
 
 <p align="left">
   <img src="public/wechat.jpg" alt="WeChat QR code" width="280" />

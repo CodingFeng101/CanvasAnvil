@@ -10,6 +10,7 @@ import { POST as postLogSave } from "./routes/log-save";
 import { POST as postLogFileParser } from "./routes/log-file-parser";
 import { POST as postThirdPartyParser } from "./routes/third-party-parser";
 import { POST as postChat } from "./routes/chat";
+import { POST as postPptAi } from "./routes/ppt-ai";
 
 const PORT = Number(process.env.PORT || process.env.API_PORT || 8080);
 const BODY_LIMIT = process.env.API_BODY_LIMIT || "25mb";
@@ -113,6 +114,7 @@ app.post("/api/log-save", withHandler(postLogSave));
 app.post("/api/log-file-parser", withHandler(postLogFileParser));
 app.post("/api/third-party-parser", withHandler(postThirdPartyParser));
 app.post("/api/chat", withHandler(postChat));
+app.post("/api/ppt-ai", withHandler(postPptAi));
 
 app.get("/healthz", (_req, res) => {
   res.json({ ok: true, ts: new Date().toISOString() });
