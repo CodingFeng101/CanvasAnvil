@@ -25,6 +25,9 @@ Master Renovation Scheme (SSOT, read-only):
 3. Write a single, dense, print-ready sheet prompt that includes all mandatory elements for this sheet.
 4. Output JSON strictly following the schema in “# Output Format”.
 
+# E - End Goal
+Produce one deterministic single-sheet JSON prompt for the renovation plan layout that is directly usable by the downstream image generator.
+
 # N - Narrowing
 Constraints (must follow):
 1. Output ONLY one JSON code block and nothing else.

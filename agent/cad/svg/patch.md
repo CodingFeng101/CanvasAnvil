@@ -20,6 +20,9 @@ I will provide:
 5. Produce `replace` snippets that preserve valid SVG and drafting consistency.
 6. Output exactly one JSON code block.
 
+# E - End Goal
+Produce one minimal `cad_patch` JSON payload that safely applies the requested SVG change without disturbing unrelated content.
+
 # N - Narrowing
 Constraints (CRITICAL):
 1. Output exactly ONE markdown ```json code block and nothing else.

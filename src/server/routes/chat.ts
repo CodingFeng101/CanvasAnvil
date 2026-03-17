@@ -167,7 +167,7 @@ async function summarizeChunk(
         providerOptions,
         headers,
         system:
-            "You are a strict summarizer. Output only direct summary text, no questions, no instructions.",
+            "R - Role\nYou are a strict summarizer.\n\nI - Instructions\nOutput only direct summary text.\n\nE - End Goal\nProduce a concise faithful summary.\n\nN - Narrowing\nNo questions. No instructions. No extra framing.",
         user: `任务：仅根据下述文本输出摘要（<=300字）。禁止提问、禁止让用户补充内容、禁止输出模板化客套。\n\n文本：\n${chunk}`,
         maxOutputTokens: 600,
         maxChars: 300,
@@ -278,7 +278,7 @@ async function summarizeBlockMethod(args: {
         providerOptions: args.providerOptions,
         headers: args.headers,
         system:
-            "You produce concise, faithful merged summaries. Output only summary text.",
+            "R - Role\nYou merge chunk summaries.\n\nI - Instructions\nOutput only concise faithful summary text.\n\nE - End Goal\nProduce one merged summary.\n\nN - Narrowing\nNo questions. No instructions. No extra framing.",
         user: `任务：将以下分块摘要合并为完整摘要（<=1000字）。禁止提问、禁止请求补充材料，仅输出摘要正文。\n\n${merged}`,
         maxOutputTokens: 1800,
         maxChars: 1000,
@@ -314,7 +314,7 @@ async function summarizeRecursiveMethod(args: {
                     providerOptions: args.providerOptions,
                     headers: args.headers,
                     system:
-                        "You merge summaries into a higher-level summary. Output only summary text.",
+                        "R - Role\nYou merge summaries into a higher-level summary.\n\nI - Instructions\nOutput only summary text.\n\nE - End Goal\nProduce one higher-level merged summary.\n\nN - Narrowing\nNo questions. No instructions. No extra framing.",
                     user: `任务：把这组摘要提炼成更高层摘要（<=350字）。禁止提问、禁止让用户补充，只输出摘要。\n\n${group}`,
                     maxOutputTokens: 800,
                     maxChars: 350,
@@ -329,7 +329,7 @@ async function summarizeRecursiveMethod(args: {
         providerOptions: args.providerOptions,
         headers: args.headers,
         system:
-            "You produce final executive summaries with hierarchical fidelity and no hallucination. Output only summary text.",
+            "R - Role\nYou produce final executive summaries.\n\nI - Instructions\nKeep hierarchical fidelity and avoid hallucination. Output only summary text.\n\nE - End Goal\nProduce one final executive summary.\n\nN - Narrowing\nNo questions. No requests for more info. No extra framing.",
         user: `任务：输出最终摘要（<=1000字）。禁止提问、禁止请求更多信息，仅输出摘要正文。\n\n${level.join("\n")}`,
         maxOutputTokens: 1800,
         maxChars: 1000,
@@ -568,13 +568,22 @@ async function generateDeepThinkingDiagramImage(args: {
             error,
         )
         promptText = [
+            "R - Role",
             "You are a final-quality flowchart image generation agent.",
+            "I - Instructions",
             "Generate one polished, production-ready, directly usable final diagram image.",
-            "Do not generate a sketch, wireframe, draft, poster, or UI mockup.",
-            "Prioritize clear structure, readable labels, complete coverage, balanced spacing, and unambiguous connectors.",
+            "Input",
             `User request:\n${String(args.userText || "").trim() || "(empty)"}`,
             `Global constraints:\n${String(args.globalConstraints || "").trim() || "(none)"}`,
             `Processed file content:\n${String(args.processedFilesContext || "").trim() || "(none)"}`,
+            "S - Steps",
+            "1. Understand the requested diagram and any constraints.",
+            "2. Build a coherent, readable final composition.",
+            "3. Generate one polished final diagram image.",
+            "E - End Goal",
+            "Produce one refined diagram image suitable for downstream XML generation.",
+            "N - Narrowing",
+            "Do not generate a sketch, wireframe, draft, poster, or UI mockup. Prioritize clear structure, readable labels, complete coverage, balanced spacing, and unambiguous connectors.",
         ].join("\n\n")
     }
 

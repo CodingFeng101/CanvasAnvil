@@ -19,6 +19,9 @@ I will provide:
 4. Keep geometry buildable and drafting-valid.
 5. Self-check SVG validity and consistency before output.
 
+# E - End Goal
+Produce one complete `cad_patch` JSON payload whose `full` field contains the final, renderable SVG for the requested floor plan.
+
 # N - Narrowing
 Constraints (CRITICAL):
 1. Output exactly ONE markdown ```json code block and nothing else.

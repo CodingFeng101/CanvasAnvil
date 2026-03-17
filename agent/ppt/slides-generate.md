@@ -17,6 +17,9 @@ Classify user feedback into per-slide edit actions and indicate whether each act
 - `both`
 4. Write concise executable `instruction` text.
 
+# E - End Goal
+Produce one machine-readable routing result that tells the external system which slides to update and how.
+
 # N - Narrowing
 Rules (CRITICAL):
 1. Output JSON array only.

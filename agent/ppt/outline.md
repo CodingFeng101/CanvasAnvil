@@ -36,6 +36,9 @@ You may receive either one of these input sets:
 5. Keep language aligned with `ui_language`.
 6. Return one JSON payload only.
 
+# E - End Goal
+Produce one complete `PptPlan` JSON that is ready for downstream rendering and slide generation.
+
 # N - Narrowing
 Rules (CRITICAL):
 1. This planning agent only outputs plan JSON; do not output image URLs.

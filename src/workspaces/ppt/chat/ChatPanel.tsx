@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { PanelRightClose, PanelRightOpen } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { streamChatMessage, generateChatMessage, ChatMessage, getAIConfig } from '@/lib/ai-client';
+import { streamChatMessage, generateChatMessage, generatePptProxyChatMessage, ChatMessage, getAIConfig } from '@/lib/ai-client';
 import { DRAWIO_SYSTEM_PROMPT } from '@/lib/system-prompts';
 import { ButtonWithTooltip } from '@/workspaces/ppt/chat/components/button-with-tooltip';
 import { ChatInput } from '@/workspaces/ppt/chat/ChatInput';
@@ -64,6 +64,8 @@ interface ChatPanelProps {
 
 const STORAGE_KEY_PREFIX = 'chat_history_v2_';
 const PPT_WORKSPACE_STORAGE_KEY = "CanvasAnvil-ppt-state-v1";
+const STORAGE_MESSAGE_LIMIT = 40;
+const STORAGE_CONTENT_LIMIT = 4000;
 
 // Convert internal ChatMessage to UIMessage
 const toUIMessage = (msg: ChatMessage, index: number): UIMessage => ({
@@ -72,6 +74,53 @@ const toUIMessage = (msg: ChatMessage, index: number): UIMessage => ({
     content: msg.content,
     parts: [{ type: 'text', text: msg.content }]
 });
+
+const compactMessageContent = (value: unknown) => {
+  const text = String(value || "");
+  const withoutImageTags = text.replace(/\[\[IMAGE\|([^|\]]*)\|data:image\/[\s\S]*?\]\]/gi, "[[IMAGE|$1|[image-data]]]");
+  const withoutDataUrls = withoutImageTags.replace(/data:image\/[^)\s]+/gi, "[image-data]");
+  if (withoutDataUrls.length <= STORAGE_CONTENT_LIMIT) return withoutDataUrls;
+  return `${withoutDataUrls.slice(0, STORAGE_CONTENT_LIMIT)}\n...[truncated]`;
+};
+
+const getMessagesForStorage = (messages: ChatMessage[]) =>
+  messages.slice(-STORAGE_MESSAGE_LIMIT).map((message) => ({
+    role: message.role,
+    content: compactMessageContent(message.content),
+  }));
+
+const getChatErrorText = (
+  error: unknown,
+  trText: (zhText: string, enText: string) => string
+) => {
+  const raw = String((error as any)?.message || error || "");
+
+  if (/input token count exceeds|maximum number of tokens allowed|too many tokens|context length/i.test(raw)) {
+    return trText(
+      "本次请求内容过长，通常是图片或附件内容过大。请重试；如果仍失败，请减少附件数量或缩小单个附件内容。",
+      "This request is too large, usually because an image or attachment expanded the input too much. Retry once; if it still fails, reduce the number or size of attachments."
+    );
+  }
+
+  if (/api key|invalid api key|incorrect api key|unauthorized|401/i.test(raw)) {
+    return trText(
+      "API 配置无效，请检查 API key 或服务配置。",
+      "The API configuration is invalid. Check the API key or provider settings."
+    );
+  }
+
+  if (/400|bad request/i.test(raw)) {
+    return trText(
+      "请求格式无效，请检查本次输入或附件内容。",
+      "The request payload is invalid. Check this input or its attachments."
+    );
+  }
+
+  return trText(
+    "抱歉，请求失败，请稍后重试。",
+    "Sorry, the request failed. Please try again."
+  );
+};
 
 export function ChatPanel({ 
     className, 
@@ -91,7 +140,7 @@ export function ChatPanel({
     collapsed = false,
     onToggleCollapse,
     collapseLocked = false,
-    title = "AI 助手",
+    title,
     inputPlaceholder,
     history = [],
     onRestore,
@@ -103,6 +152,7 @@ export function ChatPanel({
 }: ChatPanelProps) {
   const uiLang = useUiLanguage();
   const trText = (zhText: string, enText: string) => (uiLang === "zh" ? zhText : enText);
+  const resolvedTitle = title || t(uiLang, "workspace.default.title");
   // Persistence key
   const storageKey = `${STORAGE_KEY_PREFIX}${workspaceId}`;
 
@@ -326,7 +376,15 @@ export function ChatPanel({
 
   // Persist messages
   useEffect(() => {
-    localStorage.setItem(storageKey, JSON.stringify(messages));
+    try {
+      localStorage.setItem(storageKey, JSON.stringify(getMessagesForStorage(messages)));
+    } catch (error) {
+      console.warn("Failed to persist chat history", error);
+      try {
+        localStorage.removeItem(storageKey);
+      } catch {
+      }
+    }
     onMessagesChange?.(messages);
   }, [messages, storageKey, onMessagesChange]);
 
@@ -562,13 +620,14 @@ export function ChatPanel({
         if (file.type.startsWith('image/')) {
              try {
                  const dataUrl = await fileToDataUrl(file);
-                 // We embed the image directly in the prompt using Markdown syntax.
-                 // This allows the Agent (if it's a VLM) to see it, or at least we provide the Data URL string
-                 // which the Agent can echo back in the JSON for the frontend to use.
-                 fileTexts.push(`![${file.name}](${dataUrl})`);
-                 fileTexts.push(`[Image Attachment: ${file.name}]`);
                  currentUploadedImages.push(dataUrl);
                  currentUploadedImageItems.push({ name: file.name, url: dataUrl });
+                 const imageIndex = currentUploadedImageItems.length;
+                 fileTexts.push(
+                   workspaceId === "ppt"
+                     ? `[Uploaded Image ${imageIndex}: ${file.name}]\nThis image is available as an optional material/reference for this turn. Do not use it or route to image editing unless the user explicitly asks to place, reference, replace, or visually use this uploaded image.`
+                     : `[Image Attachment ${imageIndex}: ${file.name}]`
+                 );
              } catch (e) {
                  console.error("Failed to read image", file.name, e);
                  fileTexts.push(`[Image: ${file.name}] (Failed to read)`);
@@ -867,20 +926,31 @@ export function ChatPanel({
       
       const systemContent = [systemPrompt, globalSystemPrompt, globalConstraints].filter(Boolean).join('\n\n');
 
-      const apiMessages: ChatMessage[] = [
-        { role: 'system', content: systemContent },
-        ...messages,
-        { role: 'user', content: promptContent }
-      ];
+      const apiMessages: ChatMessage[] =
+        workspaceId === "ppt"
+          ? [
+              { role: 'system', content: systemContent },
+              { role: 'user', content: promptContent }
+            ]
+          : [
+              { role: 'system', content: systemContent },
+              ...messages,
+              { role: 'user', content: promptContent }
+            ];
 
       setMessages(prev => [...prev, { role: 'assistant', content: '' }]);
 
       let fullResponse = '';
       const updater = createThrottledAssistantUpdater();
-      await streamChatMessage(apiMessages, (chunk) => {
-        fullResponse = chunk;
-        updater.push(chunk);
-      }, chatModel, controller.signal);
+      if (workspaceId === "ppt") {
+        fullResponse = await generatePptProxyChatMessage(apiMessages, chatModel, { signal: controller.signal });
+        updater.push(fullResponse);
+      } else {
+        await streamChatMessage(apiMessages, (chunk) => {
+          fullResponse = chunk;
+          updater.push(chunk);
+        }, chatModel, controller.signal);
+      }
       updater.flush();
       
       let flowRoutedBaseMessages: ChatMessage[] | null = null;
@@ -1318,12 +1388,9 @@ export function ChatPanel({
         });
         return;
       }
+      const errorText = getChatErrorText(error, trText);
       setMessages(prev => {
         const last = prev[prev.length - 1];
-        const errorText = trText(
-          "Sorry, an error occurred. Please check API key settings.",
-          "Sorry, an error occurred. Please check API key settings."
-        );
         if (last.role === 'assistant' && !last.content) {
             return [...prev.slice(0, -1), { role: 'assistant', content: errorText }];
         }
@@ -1353,11 +1420,17 @@ export function ChatPanel({
         : "";
     const promptContent = [lastUserText, flowContextText].filter(Boolean).join("\n\n");
 
-    const apiMessages: ChatMessage[] = [
-      { role: 'system', content: systemContent },
-      ...baseMessages.slice(0, -1),
-      { role: "user", content: promptContent }
-    ];
+    const apiMessages: ChatMessage[] =
+      workspaceId === "ppt"
+        ? [
+            { role: 'system', content: systemContent },
+            { role: "user", content: promptContent }
+          ]
+        : [
+            { role: 'system', content: systemContent },
+            ...baseMessages.slice(0, -1),
+            { role: "user", content: promptContent }
+          ];
 
     setIsLoading(true);
     abortControllerRef.current?.abort();
@@ -1369,10 +1442,15 @@ export function ChatPanel({
     let fullResponse = '';
     const updater = createThrottledAssistantUpdater();
     try {
-      await streamChatMessage(apiMessages, (chunk) => {
-        fullResponse = chunk;
-        updater.push(chunk);
-      }, chatModel, controller.signal);
+      if (workspaceId === "ppt") {
+        fullResponse = await generatePptProxyChatMessage(apiMessages, chatModel, { signal: controller.signal });
+        updater.push(fullResponse);
+      } else {
+        await streamChatMessage(apiMessages, (chunk) => {
+          fullResponse = chunk;
+          updater.push(chunk);
+        }, chatModel, controller.signal);
+      }
       updater.flush();
 
       if (fullResponse) {
@@ -1489,13 +1567,14 @@ export function ChatPanel({
         });
         return;
       }
+      const errorText = getChatErrorText(error, trText);
 
       setMessages(prev => {
         const last = prev[prev.length - 1];
         if (last?.role === 'assistant' && !last.content) {
-          return [...prev.slice(0, -1), { role: 'assistant', content: "Sorry, an error occurred. Please check API key settings." }];
+          return [...prev.slice(0, -1), { role: 'assistant', content: errorText }];
         }
-        return [...prev, { role: 'assistant', content: "Sorry, an error occurred. Please check API key settings." }];
+        return [...prev, { role: 'assistant', content: errorText }];
       });
     } finally {
       setIsLoading(false);
@@ -1571,7 +1650,7 @@ export function ChatPanel({
       <div className="px-5 py-4 border-b border-border/50">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <span className="text-base font-semibold tracking-tight whitespace-nowrap">{title}</span>
+            <span className="text-base font-semibold tracking-tight whitespace-nowrap">{resolvedTitle}</span>
           </div>
           <div className="flex items-center gap-1">
             {onToggleCollapse && (

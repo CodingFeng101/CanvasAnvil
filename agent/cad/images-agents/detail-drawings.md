@@ -26,6 +26,9 @@ Master Renovation Scheme (SSOT, read-only):
 4. For each detail, specify scale (1:10 or 1:20), layers, thicknesses, dimensions, and workmanship notes.
 5. Output JSON strictly following the schema in “# Output Format”.
 
+# E - End Goal
+Produce one deterministic single-sheet JSON prompt for detail drawings that is directly usable by the downstream image generator.
+
 # N - Narrowing
 Constraints (must follow):
 1. Output ONLY one JSON code block and nothing else.

@@ -26,6 +26,9 @@ Master Renovation Scheme (SSOT, read-only):
 4. Include mounting heights, circuit labeling, pipe diameters, and slope notes where applicable.
 5. Output JSON strictly following the schema in “# Output Format”.
 
+# E - End Goal
+Produce one deterministic single-sheet JSON prompt for the MEP plan that is directly usable by the downstream image generator.
+
 # N - Narrowing
 Constraints (must follow):
 1. Output ONLY one JSON code block and nothing else.

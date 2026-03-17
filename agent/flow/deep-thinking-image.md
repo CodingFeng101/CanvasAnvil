@@ -40,7 +40,7 @@ Treat the user's requirement as the final product goal.
    - complete content coverage
 5. Produce a diagram image that looks finished and presentation-ready, not approximate.
 
-## E: End State
+## E: End Goal
 The generated image must:
 - be a complete final-quality diagram image
 - be suitable as a direct visual reference for downstream XML generation

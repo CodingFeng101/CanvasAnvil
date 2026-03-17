@@ -10,6 +10,7 @@ import { POST as postLogSave } from "./api/routes/log-save";
 import { POST as postLogFileParser } from "./api/routes/log-file-parser";
 import { POST as postThirdPartyParser } from "./api/routes/third-party-parser";
 import { POST as postChat } from "./api/routes/chat";
+import { POST as postPptAi } from "./api/routes/ppt-ai";
 
 type RouteHandler = (request: Request) => Promise<Response>;
 
@@ -21,6 +22,7 @@ const API_ROUTES: Record<string, RouteHandler> = {
   "POST /api/log-file-parser": postLogFileParser,
   "POST /api/third-party-parser": postThirdPartyParser,
   "POST /api/chat": postChat,
+  "POST /api/ppt-ai": postPptAi,
 };
 
 async function toWebRequest(req: IncomingMessage): Promise<Request> {

@@ -17,6 +17,8 @@ const dict: Dict = {
   "settings.title": { zh: "配置设置", en: "Settings" },
   "settings.subtitle": { zh: "配置 AI 模型参数与 API 密钥", en: "Configure model parameters and API keys" },
   "settings.language": { zh: "界面语言", en: "Language" },
+  "settings.language.zh": { zh: "中文", en: "Chinese" },
+  "settings.language.en": { zh: "英文", en: "English" },
   "settings.buttonTitle": { zh: "设置", en: "Settings" },
   "settings.chatModel": { zh: "对话模型 (Chat Model)", en: "Chat Model" },
   "settings.imageModel": { zh: "绘图模型 (Image Model)", en: "Image Model" },

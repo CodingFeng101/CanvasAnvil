@@ -1,4 +1,6 @@
 
+import { buildRisenPrompt } from "./risen-prompt";
+
 export interface ProjectContext {
   idea_prompt?: string;
   outline_text?: string;
@@ -50,36 +52,15 @@ export function getOutlineGenerationPrompt(projectContext: ProjectContext, langu
   const filesXml = formatReferenceFilesXml(projectContext.reference_files_content);
   const ideaPrompt = projectContext.idea_prompt || "";
 
-  return `${filesXml}You are a helpful assistant that generates an outline for a ppt.
-
-You can organize the content in two ways:
-
-1. Simple format (for short PPTs without major sections):
-[{"title": "title1", "points": ["point1", "point2"]}, {"title": "title2", "points": ["point1", "point2"]}]
-
-2. Part-based format (for longer PPTs with major sections):
-[
-    {
-    "part": "Part 1: Introduction",
-    "pages": [
-        {"title": "Welcome", "points": ["point1", "point2"]},
-        {"title": "Overview", "points": ["point1", "point2"]}
-    ]
-    },
-    {
-    "part": "Part 2: Main Content",
-    "pages": [
-        {"title": "Topic 1", "points": ["point1", "point2"]},
-        {"title": "Topic 2", "points": ["point1", "point2"]}
-    ]
-    }
-]
-
-Choose the format that best fits the content. Use parts when the PPT has clear major sections.
-
-The user's request: ${ideaPrompt}. Now generate the outline as valid JSON only. Do not wrap in markdown code blocks. Do not include any other text.
-${getLanguageInstruction(language)}
-`;
+  return `${filesXml}${buildRisenPrompt({
+    role: "You are an outline planning agent for PPT generation.",
+    instructions: `Generate an outline as valid JSON only. Choose the format that best fits the content: simple page list for short decks, or part-based outline when the deck has major sections. ${getLanguageInstruction(language)}`.trim(),
+    input: `User request:\n${ideaPrompt || "(none)"}`,
+    steps: `1. Understand the requested topic and audience.\n2. Choose simple format or part-based format.\n3. Keep page titles concise and points presentation-friendly.\n4. Use parts only when there are clear major sections.`,
+    endGoal: "Produce a complete outline that is directly usable for downstream PPT page planning.",
+    narrowing: `1. Return valid JSON only.\n2. Do not wrap the JSON in markdown code fences.\n3. Do not include any explanation outside the JSON payload.`,
+    outputFormat: `Simple format:\n[{"title":"title1","points":["point1","point2"]}]\n\nPart-based format:\n[{"part":"Part 1","pages":[{"title":"Welcome","points":["point1","point2"]}]}]`,
+  })}`;
 }
 
 export function getPageDescriptionPrompt(
@@ -94,64 +75,26 @@ export function getPageDescriptionPrompt(
   const originalInput = projectContext.idea_prompt || "";
 
   if (language === "en") {
-    return `${filesXml}We are generating per-slide content descriptions for a PPT.
-The user's original request is:\n${originalInput}\n
-We already have the full outline:\n${JSON.stringify(outline)}\n${partInfo}
-Now generate the description for slide ${pageIndex}:
-${JSON.stringify(pageOutline)}
-
-[IMPORTANT] The "Slide text" section will be rendered directly on the PPT slide. Please ensure:
-1. Keep text concise; each bullet is ~8–16 words
-2. Use clear list structure
-3. Avoid long sentences and overly complex wording
-4. Make it highly readable for live presentation
-5. Do not add any extra explanatory notes or commentary
-
-Output format example:
-Slide title: Human societies: living with nature
-
-Slide text:
-- Hunter-gatherer societies: limited impact due to small scale
-- High dependence: life relies on direct natural supply
-- Adaptation over transformation: learn from nature to survive
-- Impact pattern: local, short-term, low intensity, self-recovering
-
-Other slide materials (add when helpful: markdown image links, formulas, tables, etc.)
-
-[About images] If reference files include local image URLs starting with /files/ (e.g. /files/mineru/xxx/image.png), output them in markdown, e.g. ![alt text](/files/mineru/xxx/image.png). These images will be included in the slide.
-
-${getLanguageInstruction(language)}
-`;
+    return `${filesXml}${buildRisenPrompt({
+      role: "You are a per-slide PPT content description agent.",
+      instructions: `Generate one slide description in English. The 'Slide text' will be rendered directly onto the slide, so it must stay concise and highly readable. ${getLanguageInstruction(language)}`.trim(),
+      input: `Original request:\n${originalInput}\n\nFull outline:\n${JSON.stringify(outline)}\n${partInfo}\nTarget slide ${pageIndex}:\n${JSON.stringify(pageOutline)}`,
+      steps: `1. Read the full outline and the target slide context.\n2. Write a concise slide title.\n3. Write slide text as clear bullets, about 8-16 words each.\n4. Add other slide materials only when helpful, including markdown image links when reference files include local image URLs.`,
+      endGoal: "Produce one slide description that can be rendered directly into a readable presentation slide.",
+      narrowing: "1. Avoid long sentences.\n2. Do not add commentary outside the requested sections.\n3. Keep content optimized for live presentation.",
+      outputFormat: `Slide title: Human societies: living with nature\n\nSlide text:\n- Hunter-gatherer societies: limited impact due to small scale\n- High dependence: life relies on direct natural supply\n\nOther slide materials`,
+    })}`;
   }
 
-  return `${filesXml}我们正在为PPT的每一页生成内容描述。
-用户的原始需求是：\n${originalInput}\n
-我们已经有了完整的大纲：\n${JSON.stringify(outline)}\n${partInfo}
-现在请为第 ${pageIndex} 页生成描述：
-${JSON.stringify(pageOutline)}
-
-【重要提示】生成的"页面文字"部分会直接渲染到PPT页面上，因此请务必注意：
-1. 文字内容要简洁精炼，每条要点控制在15-25字以内
-2. 条理清晰，使用列表形式组织内容
-3. 避免冗长的句子和复杂的表述
-4. 确保内容可读性强，适合在演示时展示
-5. 不要包含任何额外的说明性文字或注释
-
-输出格式示例：
-页面标题：原始社会：与自然共生
-
-页面文字：
-- 狩猎采集文明：人类活动规模小，对环境影响有限
-- 依赖性强：生活完全依赖自然资源的直接供给
-- 适应而非改造：通过观察学习自然，发展生存技能
-- 影响特点：局部、短期、低强度，生态可自我恢复
-
-其他页面素材（如果有请积极添加，包括markdown图片链接、公式、表格等）
-
-【关于图片】如果参考文件中包含以 /files/ 开头的本地文件URL图片（例如 /files/mineru/xxx/image.png），请将这些图片以markdown格式输出，例如：![图片描述](/files/mineru/xxx/image.png)。这些图片会被包含在PPT页面中。
-
-${getLanguageInstruction(language)}
-`;
+  return `${filesXml}${buildRisenPrompt({
+    role: "你是一名逐页 PPT 内容描述生成智能体。",
+    instructions: `请为单页 PPT 生成内容描述。“页面文字”会直接渲染到幻灯片上，因此必须简洁、清晰、适合演示。${getLanguageInstruction(language)}`.trim(),
+    input: `原始需求：\n${originalInput}\n\n完整大纲：\n${JSON.stringify(outline)}\n${partInfo}\n目标页（第 ${pageIndex} 页）：\n${JSON.stringify(pageOutline)}`,
+    steps: `1. 阅读完整大纲和目标页上下文。\n2. 生成一个简洁的页面标题。\n3. 生成页面文字，每条控制在 15-25 字左右。\n4. 如有帮助，可补充其他页面素材，包括 markdown 图片链接、公式或表格。`,
+    endGoal: "输出一页可直接用于渲染 PPT 的内容描述。",
+    narrowing: "1. 避免冗长句子和复杂表述。\n2. 不要输出额外说明或注释。\n3. 如果参考文件里有 /files/ 开头的本地图片 URL，可以用 markdown 图片格式输出。",
+    outputFormat: `页面标题：原始社会：与自然共生\n\n页面文字：\n- 狩猎采集文明：人类活动规模小，对环境影响有限\n- 依赖性强：生活完全依赖自然资源的直接供给\n\n其他页面素材`,
+  })}`;
 }
 
 export function getImageGenerationPrompt(
@@ -177,57 +120,24 @@ export function getImageGenerationPrompt(
     : "";
 
   if (language === "en") {
-    return `You are an expert UI/UX presentation designer. Generate a well-designed PPT slide.
-The current slide description:
-<page_description>
-${pageDesc}
-</page_description>
-
-<reference_information>
-Overall outline:
-${outlineText}
-
-Current section: ${currentSection}
-</reference_information>
-
-<design_guidelines>
-- Text must be crisp and sharp; 4K quality; 16:9 aspect ratio.
-- Colors and design language must closely match the template reference image.
-- Create the best composition automatically and render all text from the description accurately.
-- Unless necessary, avoid markdown symbols (like #, *).
-- Use the template only for style; do not include any template text.
-- Fill empty areas with appropriately sized decorative shapes or illustrations.
-</design_guidelines>
-${getPptLanguageInstruction(language)}
-${materialImagesNote}${extraReqText}
-`;
+    return buildRisenPrompt({
+      role: "You are an expert PPT visual design agent.",
+      instructions: `Generate one polished PPT slide image. ${getPptLanguageInstruction(language)}${materialImagesNote}${extraReqText}`.trim(),
+      input: `Page description:\n${pageDesc}\n\nOverall outline:\n${outlineText || "(none)"}\n\nCurrent section: ${currentSection || "(none)"}`,
+      steps: `1. Read the page description and outline context.\n2. Build the strongest slide composition for the content.\n3. Follow the template reference image style closely.\n4. If material images are provided, integrate only the useful ones.`,
+      endGoal: "Produce one sharp, presentation-ready 16:9 slide image that renders the described content accurately.",
+      narrowing: "1. Keep text crisp and readable.\n2. Avoid markdown symbols unless strictly required.\n3. Use the template for style only; do not copy template text.\n4. Fill empty regions with suitable decorative shapes or illustrations.",
+    });
   }
 
-  return `你是一位专家级UI UX演示设计师，专注于生成设计良好的PPT页面。
-当前PPT页面的页面描述如下:
-<page_description>
-${pageDesc}
-</page_description>
-
-<reference_information>
-整个PPT的大纲为：
-${outlineText}
-
-当前位于章节：${currentSection}
-</reference_information>
-
-
-<design_guidelines>
-- 要求文字清晰锐利, 画面为4K分辨率，16:9比例。
-- 配色和设计语言和模板图片严格相似。
-- 根据内容自动设计最完美的构图，不重不漏地渲染"页面描述"中的文本。
-- 如非必要，禁止出现 markdown 格式符号（如 # 和 * 等）。
-- 只参考风格设计，禁止出现模板中的文字。
-- 使用大小恰当的装饰性图形或插画对空缺位置进行填补。
-</design_guidelines>
-${getPptLanguageInstruction(language)}
-${materialImagesNote}${extraReqText}
-`;
+  return buildRisenPrompt({
+    role: "你是一名专家级 PPT 视觉设计智能体。",
+    instructions: `生成一张完成度很高的 PPT 页面图。${getPptLanguageInstruction(language)}${materialImagesNote}${extraReqText}`.trim(),
+    input: `页面描述：\n${pageDesc}\n\n整体大纲：\n${outlineText || "(none)"}\n\n当前章节：${currentSection || "(none)"}`,
+    steps: `1. 阅读页面描述和整套 PPT 上下文。\n2. 自动组织最佳构图与视觉层级。\n3. 严格参考模板图片的风格与设计语言。\n4. 如果提供了素材图，只在确实有帮助时整合进去。`,
+    endGoal: "产出一张清晰、锐利、适合正式演示的 16:9 PPT 页面图。",
+    narrowing: "1. 文字必须清晰可读。\n2. 非必要不要出现 markdown 符号。\n3. 只参考模板风格，不得复用模板中的文字。\n4. 用适量装饰图形或插画填补空缺区域。",
+  });
 }
 
 export function getTemplateGenerationPrompt(args: { requirements: string; language?: string }) {
@@ -235,18 +145,22 @@ export function getTemplateGenerationPrompt(args: { requirements: string; langua
   const requirements = String(args.requirements || "").trim();
   const pageDesc =
     language === "en"
-      ? `We are generating a PPT template background image (blank slide) that will be used as a style reference for generating slides later.
-User requirements:
-${requirements}
-Rules:
-- Generate a clean template background for a 16:9 slide.
-- Do NOT include any text, letters, or watermarks.`
-      : `我们正在生成一张PPT模板背景图（空白页面），用于后续生成整套PPT时的风格参考。
-用户需求：
-${requirements}
-规则：
-- 生成一张16:9比例的干净模板背景图。
-- 禁止出现任何文字、字母或水印。`;
+      ? buildRisenPrompt({
+          role: "You are a PPT template background design agent.",
+          instructions: "Generate one blank slide background image that will be used as a style reference later.",
+          input: `User requirements:\n${requirements || "(none)"}`,
+          steps: "1. Interpret the requested visual direction.\n2. Design a clean background for a 16:9 slide.\n3. Keep it reusable as a template reference.",
+          endGoal: "Produce one text-free PPT template background image.",
+          narrowing: "1. Do not include text, letters, or watermarks.\n2. Keep the slide clean and reusable.",
+        })
+      : buildRisenPrompt({
+          role: "你是一名 PPT 模板背景设计智能体。",
+          instructions: "生成一张空白幻灯片背景图，供后续整套 PPT 作为风格参考使用。",
+          input: `用户需求：\n${requirements || "(none)"}`,
+          steps: "1. 理解用户需要的视觉方向。\n2. 设计一张 16:9 比例的干净模板背景图。\n3. 保持它适合作为后续模板参考。",
+          endGoal: "产出一张不含文字的 PPT 模板背景图。",
+          narrowing: "1. 禁止出现任何文字、字母或水印。\n2. 保持页面干净、可复用。",
+        });
 
   return getImageGenerationPrompt(pageDesc, "", "", false, "", language);
 }

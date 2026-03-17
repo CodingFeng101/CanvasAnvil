@@ -1,7 +1,7 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useLayoutEffect, useRef } from 'react';
 import { motion } from "framer-motion";
 import { generateImage, generateChatMessage } from '@/lib/ai-client';
-import { pptService, PptPage } from '@/lib/ppt-service';
+import { pptService, PptPage, type PptTextBlock, type SlideEditRoutingItem, estimateTextBlockFontSize, PPT_REFERENCE_SLIDE_HEIGHT, PPT_REFERENCE_SLIDE_WIDTH } from '@/lib/ppt-service';
 import { getTemplateGenerationPrompt } from '@/lib/ppt-prompts';
 import { Loader2, Plus, Image as ImageIcon, MessageSquarePlus, Upload, Presentation, Sparkles, Check, Play, FileText, Download, Lightbulb, X, ArrowLeft, ArrowRight, Eye, Trash2, Maximize2, Minimize2 } from 'lucide-react';
 import {
@@ -24,6 +24,96 @@ interface SlideData {
   layout?: string;
   description?: string; // Add description support
 }
+
+type SlideRenderLayer = {
+  backgroundImageUrl: string;
+  textBlocks: PptTextBlock[];
+  status: "pending" | "ready" | "failed";
+  error?: string;
+};
+
+type SlideImageVersionType = "generated" | "edited" | "derived_textless";
+
+type SlideImageVersion = {
+  id: string;
+  url: string;
+  timestamp: number;
+  type: SlideImageVersionType;
+  instruction?: string;
+  sourceVersionId?: string;
+};
+
+const hasRenderableTextBlocks = (layer?: SlideRenderLayer) =>
+  Array.isArray(layer?.textBlocks) && layer.textBlocks.length > 0;
+
+const migrateLegacyTextlessVersions = (rawState: any) => {
+  if (!rawState || typeof rawState !== "object") return rawState;
+
+  const imageVersions =
+    rawState.imageVersions && typeof rawState.imageVersions === "object" && !Array.isArray(rawState.imageVersions)
+      ? { ...rawState.imageVersions }
+      : {};
+  const renderLayers =
+    rawState.renderLayers && typeof rawState.renderLayers === "object" && !Array.isArray(rawState.renderLayers)
+      ? { ...rawState.renderLayers }
+      : {};
+  const currentImageVersionId =
+    rawState.currentImageVersionId &&
+    typeof rawState.currentImageVersionId === "object" &&
+    !Array.isArray(rawState.currentImageVersionId)
+      ? { ...rawState.currentImageVersionId }
+      : {};
+
+  for (const [slideId, rawVersions] of Object.entries(imageVersions)) {
+    if (!Array.isArray(rawVersions)) continue;
+    const versions = rawVersions as SlideImageVersion[];
+    const layerMap =
+      renderLayers[slideId] && typeof renderLayers[slideId] === "object" && !Array.isArray(renderLayers[slideId])
+        ? { ...renderLayers[slideId] }
+        : {};
+    let changed = false;
+
+    for (const version of versions) {
+      if (version?.type !== "derived_textless" || !version.sourceVersionId) continue;
+      const sourceLayer = layerMap[version.sourceVersionId];
+      const derivedLayer = layerMap[version.id];
+      if (!hasRenderableTextBlocks(sourceLayer) && hasRenderableTextBlocks(derivedLayer)) {
+        layerMap[version.sourceVersionId] = derivedLayer;
+        changed = true;
+      }
+      if (currentImageVersionId[slideId] === version.id) {
+        currentImageVersionId[slideId] = version.sourceVersionId;
+      }
+    }
+
+    const filtered = versions.filter((version) => version?.type !== "derived_textless");
+    if (filtered.length !== versions.length) {
+      imageVersions[slideId] = filtered;
+      changed = true;
+    }
+
+    if (changed) {
+      renderLayers[slideId] = layerMap;
+    }
+  }
+
+  return {
+    ...rawState,
+    imageVersions,
+    renderLayers,
+    currentImageVersionId,
+  };
+};
+
+const stripLeadingBullet = (value: string) =>
+  value.replace(/^[•●▪◦·]\s*/, "").trim();
+
+const textToLines = (value: string) =>
+  value
+    .replace(/\r\n/g, "\n")
+    .split("\n")
+    .map((item) => item.trim())
+    .filter(Boolean);
 
 interface PptData {
   theme?: string;
@@ -97,6 +187,252 @@ interface PptWorkspaceProps {
   onResetWorkspace?: () => void;
 }
 
+type TextBlockOverlayProps = {
+  block: PptTextBlock;
+  slideId: string;
+  editable: boolean;
+  uiLang: "zh" | "en";
+  canvasWidth: number;
+  canvasHeight: number;
+  isDragging: boolean;
+  isEditing: boolean;
+  onFocusBlock: (blockId: string) => void;
+  onBlurBlock: (blockId: string, nextText: string) => void;
+  onDragStart: (event: React.PointerEvent<HTMLButtonElement>, block: PptTextBlock, slideId: string) => void;
+  tr: (zh: string, en: string) => string;
+};
+
+const PPT_POINT_TO_CSS_PX = 96 / 72;
+
+function TextBlockOverlay({
+  block,
+  slideId,
+  editable,
+  uiLang,
+  canvasWidth,
+  canvasHeight,
+  isDragging,
+  isEditing,
+  onFocusBlock,
+  onBlurBlock,
+  onDragStart,
+  tr,
+}: TextBlockOverlayProps) {
+  const style = block.style || {};
+  const rawFontSize = Number(style.fontSize || 0);
+  const isSingleLine = !String(block.text || "").includes("\n");
+  const isTitle = block.role === "title";
+  const isTag =
+    block.role === "tag" ||
+    (block.role === "summary" && block.text.trim().length <= 12 && block.w <= 0.2 && block.h <= 0.09);
+  const isPanelHeading =
+    !isTitle &&
+    !isTag &&
+    isSingleLine &&
+    block.text.trim().length <= 22 &&
+    block.h <= 0.13 &&
+    (rawFontSize >= 16 || Number(style.fontWeight || 0) >= 620 || block.role === "bullet");
+  const scale = Math.max(0.45, Math.min(1.8, Math.min(canvasWidth / 1100, canvasHeight / 619)));
+  const basePaddingX = Math.max(2, Math.round((isTitle ? 12 : isTag ? 9 : 10) * scale));
+  const basePaddingY = Math.max(1, Math.round((isTitle ? 8 : isTag ? 4 : 6) * scale));
+  const dragHandleSize = Math.max(14, Math.round(20 * scale));
+  const dragHandleOffset = Math.max(2, Math.round(4 * scale));
+  const paddingLeft = basePaddingX;
+  const paddingRight = basePaddingX;
+  const paddingTop = basePaddingY;
+  const paddingBottom = basePaddingY;
+  const lineHeightRatio = Number(style.lineHeight || (isTitle ? 1.12 : isTag ? 1.04 : 1.35));
+  const slideScale = Math.min(canvasWidth / PPT_REFERENCE_SLIDE_WIDTH, canvasHeight / PPT_REFERENCE_SLIDE_HEIGHT);
+  const referenceFontSize = Math.max(
+    10,
+    estimateTextBlockFontSize(block, PPT_REFERENCE_SLIDE_WIDTH, PPT_REFERENCE_SLIDE_HEIGHT)
+  );
+  const estimatedFontSize = Math.max(10, referenceFontSize * slideScale);
+  const [resolvedFontSize, setResolvedFontSize] = useState(estimatedFontSize);
+  const outerRef = useRef<HTMLDivElement | null>(null);
+  const textRef = useRef<HTMLDivElement | null>(null);
+  const baseColor = style.color || (isTitle ? "#ffffff" : isTag || isPanelHeading ? "#ffd66b" : "#ffffff");
+  const gradientFrom = style.gradientFrom || (isTitle ? "#ffffff" : undefined);
+  const gradientTo = style.gradientTo || (isTitle ? "#22d3ee" : undefined);
+  const hasGradient = Boolean(gradientFrom && gradientTo && isTitle);
+  const relaxedVerticalFit = isTitle || isPanelHeading || isTag;
+  const outerBackground = isTag
+    ? "linear-gradient(180deg, rgba(26,89,160,0.55) 0%, rgba(32,159,230,0.24) 100%)"
+    : "transparent";
+  const outerBorder = isTag ? "1px solid rgba(116,217,255,0.55)" : "none";
+  const outerRadius = isTag ? `${Math.max(12, Math.round(18 * scale))}px` : "0px";
+  const outerShadow = isTag ? "0 0 0 1px rgba(255,255,255,0.08) inset, 0 8px 18px rgba(15,23,42,0.18)" : "none";
+  const effectiveFontWeight = Number(
+    style.fontWeight || (isTitle ? 900 : isTag || isPanelHeading ? 800 : 500)
+  );
+  const effectiveFontFamily = style.fontFamily || (uiLang === "zh" ? "Microsoft YaHei" : "Aptos");
+  const effectiveTextShadow = isTitle
+    ? "0 2px 10px rgba(15,23,42,0.55), 0 0 16px rgba(34,211,238,0.22)"
+    : isTag || isPanelHeading
+      ? "0 1px 6px rgba(15,23,42,0.45), 0 0 10px rgba(250,204,21,0.18)"
+      : "0 1px 4px rgba(15,23,42,0.18)";
+  const effectiveStroke = style.strokeColor
+    ? `${Number(style.strokeWidth || Math.max(0.6, 1.1 * scale))}px ${style.strokeColor}`
+    : isTitle
+      ? `${Math.max(0.7, 1.25 * scale)}px rgba(8,15,36,0.42)`
+      : isPanelHeading
+        ? `${Math.max(0.45, 0.8 * scale)}px rgba(8,15,36,0.28)`
+      : "0px transparent";
+
+  useEffect(() => {
+    setResolvedFontSize(estimatedFontSize);
+  }, [estimatedFontSize, block.id, block.text]);
+
+  useEffect(() => {
+    if (!editable || !isEditing) return;
+    const el = textRef.current;
+    if (!el) return;
+    el.focus();
+    const selection = window.getSelection();
+    if (!selection) return;
+    const range = document.createRange();
+    range.selectNodeContents(el);
+    range.collapse(false);
+    selection.removeAllRanges();
+    selection.addRange(range);
+  }, [editable, isEditing]);
+
+  useLayoutEffect(() => {
+    const outer = outerRef.current;
+    const text = textRef.current;
+    if (!outer || !text) return;
+
+    const minSize = Math.max(5, Math.round(estimatedFontSize * 0.72), Math.round(6 * scale));
+    const availableWidth = Math.max(8, outer.clientWidth - paddingLeft - paddingRight);
+    const targetWidth = availableWidth * (isTitle ? 0.99 : isTag ? 0.97 : 0.985);
+
+    const apply = (fontSize: number) => {
+      text.style.fontSize = `${fontSize}px`;
+      text.style.lineHeight = String(lineHeightRatio);
+      text.style.wordBreak = "break-word";
+      text.style.overflowWrap = "anywhere";
+    };
+
+    let size = estimatedFontSize;
+    apply(size);
+    for (let i = 0; i < 24 && text.scrollWidth > targetWidth + 1 && size > minSize; i += 1) {
+      size = Math.max(minSize, size - 0.5);
+      apply(size);
+    }
+    apply(size);
+
+    if (Math.abs(size - resolvedFontSize) > 0.25) {
+      setResolvedFontSize(size);
+    }
+  }, [
+    block.id,
+    block.text,
+    block.x,
+    block.y,
+    block.w,
+    block.h,
+    canvasWidth,
+    canvasHeight,
+    estimatedFontSize,
+    paddingLeft,
+    paddingRight,
+    paddingTop,
+    paddingBottom,
+    lineHeightRatio,
+    resolvedFontSize,
+    scale,
+    block.text,
+    isTitle,
+    isTag,
+    isPanelHeading,
+    relaxedVerticalFit,
+  ]);
+
+  return (
+    <div
+      ref={outerRef}
+      className={relaxedVerticalFit ? "absolute overflow-visible" : "absolute overflow-hidden"}
+      style={{
+        left: `${block.x * 100}%`,
+        top: `${block.y * 100}%`,
+        width: `${block.w * 100}%`,
+        height: `${block.h * 100}%`,
+        padding: `${paddingTop}px ${paddingRight}px ${paddingBottom}px ${paddingLeft}px`,
+        boxSizing: "border-box",
+        pointerEvents: editable ? "auto" : "none",
+        color: baseColor,
+        fontFamily: effectiveFontFamily,
+        fontWeight: effectiveFontWeight,
+        fontStyle: style.fontStyle || "normal",
+        letterSpacing: `${style.letterSpacing || 0}px`,
+        textAlign: style.align || "left",
+        textShadow: effectiveTextShadow,
+        background: outerBackground,
+        border: outerBorder,
+        borderRadius: outerRadius,
+        boxShadow: outerShadow,
+        cursor: editable ? "text" : "default",
+        outline: editable && isDragging ? "2px solid rgba(59,130,246,0.45)" : "none",
+      }}
+    >
+      {editable ? (
+        <button
+          type="button"
+          className="absolute z-20 rounded bg-black/55 text-white leading-none shadow-sm cursor-grab active:cursor-grabbing"
+          title={tr("拖动文本框", "Drag text block")}
+          style={{
+            right: `${-Math.round(dragHandleSize * 0.45)}px`,
+            top: `${-Math.round(dragHandleSize * 0.3)}px`,
+            width: `${dragHandleSize}px`,
+            height: `${dragHandleSize}px`,
+            fontSize: `${Math.max(8, Math.round(10 * scale))}px`,
+          }}
+          onPointerDown={(event) => onDragStart(event, block, slideId)}
+        >
+          +
+        </button>
+      ) : null}
+      <div
+        ref={textRef}
+        contentEditable={editable && isEditing}
+        suppressContentEditableWarning
+        spellCheck={false}
+        className={relaxedVerticalFit
+          ? "h-full w-full whitespace-pre-wrap break-words bg-transparent outline-none overflow-visible"
+          : "h-full w-full whitespace-pre-wrap break-words bg-transparent outline-none overflow-hidden"}
+        onClick={() => {
+          if (editable && !isEditing) onFocusBlock(block.id);
+        }}
+        onFocus={() => {
+          if (editable && isEditing) onFocusBlock(block.id);
+        }}
+        onBlur={(event) => {
+          if (!editable || !isEditing) return;
+          const nextText = textToLines(event.currentTarget.textContent || "").join("\n");
+          onBlurBlock(block.id, nextText);
+        }}
+        style={{
+          fontSize: `${resolvedFontSize}px`,
+          lineHeight: String(lineHeightRatio),
+          wordBreak: "break-word",
+          overflowWrap: "anywhere",
+          color: hasGradient ? "transparent" : baseColor,
+          fontWeight: effectiveFontWeight,
+          textShadow: effectiveTextShadow,
+          backgroundImage: hasGradient ? `linear-gradient(90deg, ${gradientFrom}, ${gradientTo})` : undefined,
+          backgroundClip: hasGradient ? "text" : undefined,
+          WebkitBackgroundClip: hasGradient ? "text" : undefined,
+          WebkitTextFillColor: hasGradient ? "transparent" : undefined,
+          WebkitTextStroke: effectiveStroke,
+          outline: editable && isEditing ? "2px solid rgba(59,130,246,0.35)" : "none",
+        }}
+      >
+        {block.text}
+      </div>
+    </div>
+  );
+}
+
 type CreationStep = 'idle' | 'input' | 'outline' | 'generating_content' | 'generating_images' | 'done';
 type CreationMode = 'idea' | 'outline' | 'beautify';
 type ReferenceFile = { id: string; filename: string; content: string; charCount: number };
@@ -153,7 +489,7 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, onPptStageCh
       const raw = localStorage.getItem(PPT_WORKSPACE_STORAGE_KEY);
       const parsed = raw ? JSON.parse(raw) : null;
       if (!parsed || typeof parsed !== "object") return null;
-      return parsed as any;
+      return migrateLegacyTextlessVersions(parsed as any);
     } catch {
       return null;
     }
@@ -219,20 +555,21 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, onPptStageCh
     }
     return out;
   });
-  const [imageVersions, setImageVersions] = useState<Record<string, Array<{ id: string; url: string; timestamp: number; type: 'generated' | 'edited'; instruction?: string }>>>(() => {
+  const [imageVersions, setImageVersions] = useState<Record<string, SlideImageVersion[]>>(() => {
     const v = initialPptState?.imageVersions;
     if (!v || typeof v !== "object" || Array.isArray(v)) return {};
-    const out: Record<string, Array<{ id: string; url: string; timestamp: number; type: 'generated' | 'edited'; instruction?: string }>> = {};
+    const out: Record<string, SlideImageVersion[]> = {};
     for (const [k, val] of Object.entries(v)) {
       if (typeof k !== "string" || !Array.isArray(val)) continue;
       out[k] = val
-        .filter((x: any) => x && typeof x.id === "string" && typeof x.url === "string" && typeof x.timestamp === "number" && (x.type === "generated" || x.type === "edited"))
+        .filter((x: any) => x && typeof x.id === "string" && typeof x.url === "string" && typeof x.timestamp === "number" && (x.type === "generated" || x.type === "edited" || x.type === "derived_textless"))
         .map((x: any) => ({
           id: x.id,
           url: x.url,
           timestamp: x.timestamp,
           type: x.type,
           instruction: typeof x.instruction === "string" ? x.instruction : undefined,
+          sourceVersionId: typeof x.sourceVersionId === "string" ? x.sourceVersionId : undefined,
         }));
     }
     return out;
@@ -246,6 +583,32 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, onPptStageCh
     }
     return out;
   });
+  const [renderLayers, setRenderLayers] = useState<Record<string, Record<string, SlideRenderLayer>>>(() => {
+    const v = initialPptState?.renderLayers;
+    if (!v || typeof v !== "object" || Array.isArray(v)) return {};
+    const out: Record<string, Record<string, SlideRenderLayer>> = {};
+    for (const [slideId, versions] of Object.entries(v)) {
+      if (typeof slideId !== "string" || !versions || typeof versions !== "object" || Array.isArray(versions)) continue;
+      const nextVersions: Record<string, SlideRenderLayer> = {};
+      for (const [versionId, layer] of Object.entries(versions)) {
+        if (typeof versionId !== "string" || !layer || typeof layer !== "object" || Array.isArray(layer)) continue;
+        const backgroundImageUrl = typeof (layer as any).backgroundImageUrl === "string" ? (layer as any).backgroundImageUrl : "";
+        const textBlocks = Array.isArray((layer as any).textBlocks) ? (layer as any).textBlocks : [];
+        const status = (layer as any).status === "pending" || (layer as any).status === "failed" ? (layer as any).status : "ready";
+        nextVersions[versionId] = {
+          backgroundImageUrl,
+          textBlocks,
+          status,
+          error: typeof (layer as any).error === "string" ? (layer as any).error : undefined,
+        };
+      }
+      out[slideId] = nextVersions;
+    }
+    return out;
+  });
+  const [editingTextBlockId, setEditingTextBlockId] = useState<string | null>(null);
+  const [draggingTextBlockId, setDraggingTextBlockId] = useState<string | null>(null);
+  const [resizingTextBlockId, setResizingTextBlockId] = useState<string | null>(null);
   const [isGeneratingImage, setIsGeneratingImage] = useState(false);
   const [isExporting, setIsExporting] = useState<null | "pptx" | "pdf">(null);
   
@@ -324,6 +687,34 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, onPptStageCh
   const descriptionEditorAppliedRef = useRef<Record<string, string>>({});
   const descriptionEditorFocusedRef = useRef<string | null>(null);
   const assetCaptionCacheRef = useRef<Record<string, string>>({});
+  const derivedProcessingRef = useRef<Set<string>>(new Set());
+  const previewCanvasRef = useRef<HTMLDivElement | null>(null);
+  const textBlockDragRef = useRef<null | {
+    slideId: string;
+    versionId: string;
+    blockId: string;
+    startClientX: number;
+    startClientY: number;
+    startX: number;
+    startY: number;
+    blockW: number;
+    blockH: number;
+    canvasWidth: number;
+    canvasHeight: number;
+  }>(null);
+  const textBlockResizeRef = useRef<null | {
+    slideId: string;
+    versionId: string;
+    blockId: string;
+    startClientX: number;
+    startClientY: number;
+    startW: number;
+    startH: number;
+    startX: number;
+    startY: number;
+    canvasWidth: number;
+    canvasHeight: number;
+  }>(null);
   const [slideshowOpen, setSlideshowOpen] = useState(false);
   const [slideshowIndex, setSlideshowIndex] = useState(0);
   const [slideshowFullscreen, setSlideshowFullscreen] = useState(false);
@@ -334,6 +725,7 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, onPptStageCh
     item: null
   });
   const [windowDimensions, setWindowDimensions] = useState({ width: 0, height: 0 });
+  const [previewCanvasSize, setPreviewCanvasSize] = useState({ width: 1100, height: 619 });
   const isParsingReferenceFiles = Array.from(referencePdfData.values()).some((x) => x.isExtracting);
   const referenceFiles: ReferenceFile[] = referenceUploadFiles
     .map((file) => {
@@ -384,6 +776,7 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, onPptStageCh
           generatedImages,
           imageVersions,
           currentImageVersionId,
+          renderLayers,
           creationStep,
           creationMode,
           ideaInput,
@@ -404,6 +797,7 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, onPptStageCh
     generatedImages,
     imageVersions,
     currentImageVersionId,
+    renderLayers,
     creationStep,
     creationMode,
     ideaInput,
@@ -427,6 +821,21 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, onPptStageCh
       handleResize();
       return () => window.removeEventListener('resize', handleResize);
   }, []);
+
+  useEffect(() => {
+    if (typeof ResizeObserver === "undefined") return;
+    const target = previewCanvasRef.current;
+    if (!target) return;
+    const observer = new ResizeObserver((entries) => {
+      const entry = entries[0];
+      if (!entry) return;
+      const width = Math.max(1, Math.round(entry.contentRect.width));
+      const height = Math.max(1, Math.round(entry.contentRect.height));
+      setPreviewCanvasSize({ width, height });
+    });
+    observer.observe(target);
+    return () => observer.disconnect();
+  }, [currentSlideIndex, imageVersions, currentImageVersionId, generatedImages, creationStep]);
 
   const getSlideshowDimensions = () => {
       if (!windowDimensions.width) return { width: '90vw', height: '50.625vw' }; // Fallback
@@ -632,7 +1041,9 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, onPptStageCh
 
     if (incomingSlidesRaw.length === 0) return;
 
-    const uploadedImages: string[] = Array.isArray(parsed?.uploadedImages) ? parsed.uploadedImages : [];
+    const uploadedImages: string[] = Array.isArray(parsed?.uploadedImages)
+      ? Array.from(new Set((parsed.uploadedImages as any[]).map((x: any) => String(x || "").trim()).filter(Boolean))).slice(0, 2)
+      : [];
     const existingById = new Map(localSlides.map((s) => [s.id, s] as const));
     const getCurrentSlideImageUrlById = (slideId: string) => {
       const versions = imageVersions[slideId] || [];
@@ -699,6 +1110,183 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, onPptStageCh
     const allowImageEdits = creationStep === "done";
     if (!allowImageEdits) return;
 
+    const routedEditTasks: Array<() => Promise<void>> = [];
+    for (const inc of mergedIncomingSlides) {
+      const id = String(inc?.id || "");
+      if (!id) continue;
+      const slide = mergedSlides.find((s) => s.id === id);
+      if (!slide) continue;
+
+      const incomingImageUrl = typeof inc?.imageUrl === "string" ? inc.imageUrl : "";
+      const instruction = typeof inc?.imageEditInstruction === "string"
+        ? inc.imageEditInstruction
+        : typeof inc?.instruction === "string"
+          ? inc.instruction
+          : "";
+      const before = existingById.get(id);
+      const changedByPatch =
+        !!before &&
+        (
+          before.title !== slide.title ||
+          before.description !== slide.description ||
+          before.layout !== slide.layout ||
+          before.note !== slide.note ||
+          JSON.stringify(before.content || []) !== JSON.stringify(slide.content || [])
+        );
+      const isNewSlide = !before;
+      const editType = normalizeSlideEditType(inc, before, slide);
+      const styleRefSlideIds = Array.isArray(inc?.styleRefSlideIds)
+        ? inc.styleRefSlideIds.map((x: any) => String(x || "").trim()).filter((x: string) => !!x && x !== id)
+        : [];
+      const styleRefPolicy: "style_only" | "style_and_layout" =
+        inc?.styleRefPolicy === "style_and_layout" ? "style_and_layout" : "style_only";
+      const explicitStyleRefImageUrls = Array.isArray(inc?.styleRefImageUrls)
+        ? inc.styleRefImageUrls.map((x: any) => String(x || "").trim()).filter((x: string) => !!x)
+        : [];
+      const explicitMaterialImageUrls = Array.isArray(inc?.materialImageUrls)
+        ? inc.materialImageUrls.map((x: any) => String(x || "").trim()).filter((x: string) => !!x)
+        : [];
+      const styleRefRefsFromSlides = styleRefSlideIds
+        .map((sid: string) => {
+          const url = getCurrentSlideImageUrlById(sid);
+          if (!url) return null;
+          const safeSid = sid.replace(/[^a-zA-Z0-9_-]/g, "_");
+          return { url, label: `STYLE_REF_SLIDE_${safeSid}`, source: sid };
+        })
+        .filter(Boolean) as Array<{ url: string; label: string; source: string }>;
+      const explicitStyleRefRefs = explicitStyleRefImageUrls.map((url: string, idx: number) => ({
+        url,
+        label: `STYLE_REF_EXTERNAL_${idx + 1}`,
+        source: `external-${idx + 1}`,
+      }));
+      const styleRefRefs = Array.from(
+        new Map([...styleRefRefsFromSlides, ...explicitStyleRefRefs].map((x) => [x.url, x] as const)).values()
+      );
+      const styleRefImageUrls = styleRefRefs.map((x) => x.url);
+      const styleRefMappingText = styleRefRefs.length > 0
+        ? styleRefRefs.map((x, i) => `${i + 1}. ${x.label} => ${x.source}`).join("\n")
+        : "";
+      /*
+      const styleReferenceInstruction = styleRefImageUrls.length > 0
+        ? (
+            styleRefPolicy === "style_and_layout"
+              ? tr(
+                  `风格参考映射如下（标签 => 来源）：\n${styleRefMappingText}\n可参考其视觉风格与版式结构，但禁止复用其文字内容。`,
+                  `Style reference mapping (label => source):\n${styleRefMappingText}\nYou may follow both style and layout, but must not copy their text content.`
+                )
+              : tr(
+                  `风格参考映射如下（标签 => 来源）：\n${styleRefMappingText}\n仅参考其视觉风格（配色、质感、氛围），不要复制其版式与文字内容。`,
+                  `Style reference mapping (label => source):\n${styleRefMappingText}\nFollow style only (palette/texture/mood), do not copy their layout or text content.`
+                )
+          )
+        : "";
+      */
+      const styleReferenceInstruction = styleRefImageUrls.length > 0
+        ? (
+            styleRefPolicy === "style_and_layout"
+              ? tr(
+                  `参考映射如下（标签 => 来源）:\n${styleRefMappingText}\n可参考其风格和版式，但不要复制其中的文字内容。`,
+                  `Style reference mapping (label => source):\n${styleRefMappingText}\nYou may follow both style and layout, but must not copy their text content.`
+                )
+              : tr(
+                  `参考映射如下（标签 => 来源）:\n${styleRefMappingText}\n仅参考风格，不要复制其版式和文字内容。`,
+                  `Style reference mapping (label => source):\n${styleRefMappingText}\nFollow style only (palette/texture/mood), do not copy their layout or text content.`
+                )
+          )
+        : "";
+      const page: PptPage = {
+        id,
+        title: slide.title,
+        content: slide.content || [],
+        description: slide.description,
+        note: slide.note,
+        layout: slide.layout,
+      };
+
+      if (incomingImageUrl.trim()) {
+        const versionId = pushImageVersion(id, incomingImageUrl, "edited", instruction.trim() ? instruction : undefined);
+        routedEditTasks.push(async () => {
+          await processRenderedSlideVersion(slide, incomingImageUrl, versionId);
+        });
+        continue;
+      }
+
+      if (editType === "text_only" || editType === "text_relayout") {
+        routedEditTasks.push(async () => {
+          const currentVersionMeta = getSlideVersionMeta(id);
+          const currentLayer = currentVersionMeta.versionId ? renderLayers[id]?.[currentVersionMeta.versionId] : undefined;
+          if (!isNewSlide && currentVersionMeta.versionId && currentLayer?.textBlocks?.length) {
+            await applySlideTextLayerEdit(slide, currentVersionMeta.versionId, editType);
+            return;
+          }
+          const rendered = await pptService.generatePageImage(
+            page,
+            uiLang as "zh" | "en",
+            templateImage || undefined,
+            [
+              ...styleRefRefs.map((x) => ({ url: x.url, label: x.label })),
+              ...getSlideMaterialImageRefs(id),
+            ],
+            [instruction.trim(), styleReferenceInstruction].filter(Boolean).join("\n")
+          );
+          if (rendered) {
+            await pushImageVersionAndProcess(slide, rendered, "generated", instruction.trim() || undefined);
+          }
+        });
+        continue;
+      }
+
+      routedEditTasks.push(async () => {
+        const versions = imageVersions[id] || [];
+        const currentVersion = currentImageVersionId[id];
+        const currentUrl = currentVersion ? versions.find((v) => v.id === currentVersion)?.url : generatedImages[id];
+        const shouldRegenerate = isNewSlide || !currentUrl || changedByPatch;
+        if (shouldRegenerate) {
+          const rendered = await pptService.generatePageImage(
+            page,
+            uiLang as "zh" | "en",
+            templateImage || undefined,
+            [
+              ...styleRefRefs.map((x) => ({ url: x.url, label: x.label })),
+              ...getSlideMaterialImageRefs(id),
+            ],
+            [instruction.trim(), styleReferenceInstruction].filter(Boolean).join("\n")
+          );
+          if (rendered) {
+            await pushImageVersionAndProcess(slide, rendered, "generated", instruction.trim() || undefined);
+          }
+          return;
+        }
+        const editedUrl = await pptService.editPageImage(
+          page,
+          [instruction.trim(), styleReferenceInstruction].filter(Boolean).join("\n"),
+          currentUrl || undefined,
+          templateImage || undefined,
+          Array.from(new Set([
+            ...styleRefImageUrls,
+            ...explicitMaterialImageUrls,
+            ...uploadedImages,
+            ...getSlideMaterialImageUrls(id),
+          ]))
+        );
+        if (editedUrl) {
+          await pushImageVersionAndProcess(slide, editedUrl, "edited", instruction.trim() || undefined);
+        }
+      });
+    }
+
+    if (routedEditTasks.length > 0) {
+      setIsApplyingEdits(true);
+      try {
+        await runInParallel(routedEditTasks, MODEL_CONCURRENCY);
+      } catch (e) {
+        console.error("Failed to apply image edits", e);
+      } finally {
+        setIsApplyingEdits(false);
+      }
+      return;
+    }
+
     const editTasks: Array<() => Promise<void>> = [];
     for (const inc of mergedIncomingSlides) {
       const id = String(inc?.id || "");
@@ -753,7 +1341,10 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, onPptStageCh
       if (!slide) continue;
 
       if (incomingImageUrl.trim()) {
-        pushImageVersion(id, incomingImageUrl, "edited", instruction.trim() ? instruction : undefined);
+        const versionId = pushImageVersion(id, incomingImageUrl, "edited", instruction.trim() ? instruction : undefined);
+        editTasks.push(async () => {
+          await processRenderedSlideVersion(slide, incomingImageUrl, versionId);
+        });
         continue;
       }
 
@@ -805,7 +1396,7 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, onPptStageCh
             ].filter(Boolean).join("\n")
           );
           if (rendered) {
-            pushImageVersion(id, rendered, "generated", kind === "both" ? instruction : undefined);
+            await pushImageVersionAndProcess(slide, rendered, "generated", kind === "both" ? instruction : undefined);
           }
         });
         if (kind === "content" || kind === "both") continue;
@@ -847,7 +1438,7 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, onPptStageCh
           Array.from(new Set([...styleRefImageUrls, ...uploadedImages, ...getSlideMaterialImageUrls(id)]))
         );
         if (editedUrl) {
-          pushImageVersion(id, editedUrl, "edited", instruction);
+          await pushImageVersionAndProcess(slide, editedUrl, "edited", instruction);
         }
       });
     }
@@ -876,17 +1467,749 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, onPptStageCh
         });
   }, [incomingEdit?.id]);
 
+  const getSlideVersionMeta = (slideId: string) => {
+      const versions = imageVersions[slideId] || [];
+      const visibleVersions = versions.filter((version) => {
+        const layer = renderLayers[slideId]?.[version.id];
+        return hasRenderableTextBlocks(layer);
+      });
+      const requestedVersionId = currentImageVersionId[slideId] || "";
+      const resolvedVersionId =
+        (requestedVersionId && visibleVersions.some((item) => item.id === requestedVersionId)
+          ? requestedVersionId
+          : visibleVersions[visibleVersions.length - 1]?.id) ||
+        requestedVersionId ||
+        versions[versions.length - 1]?.id ||
+        "";
+      const version = resolvedVersionId ? versions.find((x) => x.id === resolvedVersionId) : undefined;
+      return {
+        versionId: resolvedVersionId,
+        version,
+        imageUrl: version?.url || generatedImages[slideId] || "",
+      };
+  };
+  const getVisibleSlideVersions = (slideId: string) => {
+    const versions = imageVersions[slideId] || [];
+    const visible = versions.filter((version) => {
+      const layer = renderLayers[slideId]?.[version.id];
+      return hasRenderableTextBlocks(layer);
+    });
+    return visible;
+  };
+  const getSlideImageUrl = (slideId: string) => getSlideVersionMeta(slideId).imageUrl;
+  const getSlideRenderLayer = (slideId: string) => {
+    const { versionId } = getSlideVersionMeta(slideId);
+    if (!versionId) return undefined;
+    return renderLayers[slideId]?.[versionId];
+  };
+  const getSlideBackgroundUrl = (slideId: string) => {
+    const layer = getSlideRenderLayer(slideId);
+    return layer?.backgroundImageUrl || getSlideImageUrl(slideId) || "";
+  };
+
+  const normalizeSlideEditType = (
+    incoming: any,
+    before?: SlideData,
+    after?: SlideData
+  ): SlideEditRoutingItem["editType"] => {
+    if (incoming?.editType === "text_only" || incoming?.editType === "text_relayout" || incoming?.editType === "background_redraw") {
+      return incoming.editType;
+    }
+    const hasImageUrl = typeof incoming?.imageUrl === "string" && incoming.imageUrl.trim().length > 0;
+    const hasImageEditInstruction =
+      typeof incoming?.imageEditInstruction === "string" && incoming.imageEditInstruction.trim().length > 0;
+    const hasInstruction = typeof incoming?.instruction === "string" && incoming.instruction.trim().length > 0;
+    const hasMaterialImages =
+      Array.isArray(incoming?.materialImageUrls) &&
+      incoming.materialImageUrls.some((x: any) => String(x || "").trim().length > 0);
+    const hasStyleRefImages =
+      Array.isArray(incoming?.styleRefImageUrls) &&
+      incoming.styleRefImageUrls.some((x: any) => String(x || "").trim().length > 0);
+    const hasStyleRefSlides =
+      Array.isArray(incoming?.styleRefSlideIds) &&
+      incoming.styleRefSlideIds.some((x: any) => String(x || "").trim().length > 0);
+    const styleNeedsLayout =
+      (incoming?.styleRefPolicy === "style_and_layout" && (hasStyleRefImages || hasStyleRefSlides));
+    const legacyKind = incoming?.kind === "content" || incoming?.kind === "visual" || incoming?.kind === "both" ? incoming.kind : null;
+    if (legacyKind === "visual" || legacyKind === "both") return "background_redraw";
+    if (legacyKind === "content") return "text_relayout";
+    if (hasImageUrl || hasImageEditInstruction || hasMaterialImages || styleNeedsLayout) return "background_redraw";
+    const layoutChanged = !!before && !!after && before.layout !== after.layout;
+    if (layoutChanged) return "background_redraw";
+    if (!before) return hasInstruction ? "text_relayout" : "text_only";
+    const textChanged =
+      !!after &&
+      (
+        before.title !== after.title ||
+        before.description !== after.description ||
+        before.note !== after.note ||
+        JSON.stringify(before.content || []) !== JSON.stringify(after.content || [])
+      );
+    if (textChanged || hasInstruction || hasStyleRefImages || hasStyleRefSlides) return "text_relayout";
+    return "text_only";
+  };
+
+  const updateSlideRenderLayerBlocks = (slideId: string, versionId: string, textBlocks: PptTextBlock[]) => {
+    setRenderLayers((prev) => {
+      const layer = prev[slideId]?.[versionId];
+      if (!layer) return prev;
+      return {
+        ...prev,
+        [slideId]: {
+          ...(prev[slideId] || {}),
+          [versionId]: {
+            ...layer,
+            textBlocks,
+          },
+        },
+      };
+    });
+  };
+
+  const createRenderLayerSnapshotVersion = (
+    slideId: string,
+    sourceVersionId: string,
+    nextLayer: SlideRenderLayer,
+    instruction: string,
+  ) => {
+    const versions = imageVersions[slideId] || [];
+    const sourceVersion = versions.find((item) => item.id === sourceVersionId);
+    if (!sourceVersion) return sourceVersionId;
+    const nextVersionType: SlideImageVersionType = "edited";
+    const nextVersionId = pushImageVersion(
+      slideId,
+      sourceVersion.url,
+      nextVersionType,
+      instruction,
+      {
+        sourceVersionId: sourceVersion.sourceVersionId || sourceVersionId,
+      }
+    );
+    setRenderLayerState(slideId, nextVersionId, nextLayer);
+    return nextVersionId;
+  };
+
+  const applySlideTextLayerEdit = async (
+    slide: SlideData,
+    versionId: string,
+    editType: "text_only" | "text_relayout",
+  ) => {
+    const layer = renderLayers[slide.id]?.[versionId];
+    if (!layer || !Array.isArray(layer.textBlocks) || layer.textBlocks.length === 0) return;
+    const nextBlocks = await pptService.rewriteSlideTextBlocks(
+      {
+        id: slide.id,
+        title: slide.title,
+        content: slide.content || [],
+        description: slide.description,
+        note: slide.note,
+        layout: slide.layout,
+      },
+      layer.textBlocks,
+      editType,
+      uiLang as "zh" | "en",
+    );
+    if (!Array.isArray(nextBlocks) || nextBlocks.length === 0) return;
+    createRenderLayerSnapshotVersion(
+      slide.id,
+      versionId,
+      {
+        ...layer,
+        textBlocks: nextBlocks,
+      },
+      tr("文字层调整", "Text layer update"),
+    );
+  };
+
+  const updateSlideTextBlock = (slideId: string, blockId: string, nextText: string) => {
+    const { versionId } = getSlideVersionMeta(slideId);
+    if (!versionId) return;
+    const currentLayer = renderLayers[slideId]?.[versionId];
+    const nextBlocks = (currentLayer?.textBlocks || []).map((block) =>
+      block.id === blockId ? { ...block, text: nextText } : block
+    );
+    setRenderLayers((prev) => {
+      const layer = prev[slideId]?.[versionId];
+      if (!layer) return prev;
+      return {
+        ...prev,
+        [slideId]: {
+          ...(prev[slideId] || {}),
+          [versionId]: {
+            ...layer,
+            textBlocks: nextBlocks,
+          },
+        },
+      };
+    });
+    setLocalSlides((prev) =>
+      prev.map((slide) => {
+        if (slide.id !== slideId) return slide;
+        const titleBlock = nextBlocks.find((block) => block.role === "title");
+        const bulletBlocks = nextBlocks.filter((block) => block.role === "bullet");
+        const summaryBlocks = nextBlocks.filter((block) => block.role === "summary");
+        return {
+          ...slide,
+          title: titleBlock ? titleBlock.text.trim() : slide.title,
+          content: bulletBlocks.length > 0 ? bulletBlocks.map((block) => stripLeadingBullet(block.text)).filter(Boolean) : slide.content,
+          description: summaryBlocks.length > 0 ? summaryBlocks.map((block) => block.text.trim()).filter(Boolean).join("\n") : slide.description,
+        };
+      })
+    );
+  };
+
+  const updateSlideTextBlockPosition = (slideId: string, blockId: string, nextX: number, nextY: number, targetVersionId?: string) => {
+    const { versionId: currentVersionId } = getSlideVersionMeta(slideId);
+    const versionId = targetVersionId || currentVersionId;
+    if (!versionId) return;
+    setRenderLayers((prev) => {
+      const layer = prev[slideId]?.[versionId];
+      if (!layer) return prev;
+      return {
+        ...prev,
+        [slideId]: {
+          ...(prev[slideId] || {}),
+          [versionId]: {
+            ...layer,
+            textBlocks: layer.textBlocks.map((block) =>
+              block.id === blockId
+                ? {
+                    ...block,
+                    x: Math.max(0, Math.min(1 - block.w, nextX)),
+                    y: Math.max(0, Math.min(1 - block.h, nextY)),
+                  }
+                : block
+            ),
+          },
+        },
+      };
+    });
+  };
+
+  const updateSlideTextBlockSize = (
+    slideId: string,
+    blockId: string,
+    nextW: number,
+    nextH: number,
+    targetVersionId?: string,
+  ) => {
+    const { versionId: currentVersionId } = getSlideVersionMeta(slideId);
+    const versionId = targetVersionId || currentVersionId;
+    if (!versionId) return;
+    setRenderLayers((prev) => {
+      const layer = prev[slideId]?.[versionId];
+      if (!layer) return prev;
+      return {
+        ...prev,
+        [slideId]: {
+          ...(prev[slideId] || {}),
+          [versionId]: {
+            ...layer,
+            textBlocks: layer.textBlocks.map((block) => {
+              if (block.id !== blockId) return block;
+              const minW = Math.max(0.05, block.role === "title" ? 0.18 : block.role === "tag" ? 0.07 : 0.1);
+              const minH = Math.max(0.04, block.role === "title" ? 0.08 : block.role === "tag" ? 0.045 : 0.06);
+              return {
+                ...block,
+                w: Math.max(minW, Math.min(1 - block.x, nextW)),
+                h: Math.max(minH, Math.min(1 - block.y, nextH)),
+              };
+            }),
+          },
+        },
+      };
+    });
+  };
+
+  const beginTextBlockDrag = (slideId: string, sourceVersionId: string) => {
+    return sourceVersionId;
+  };
+
+  const beginTextBlockResize = (slideId: string, sourceVersionId: string) => {
+    return sourceVersionId;
+  };
+
+  useEffect(() => {
+    if (!draggingTextBlockId && !resizingTextBlockId) return;
+    const handlePointerMove = (event: PointerEvent) => {
+      const drag = textBlockDragRef.current;
+      if (drag) {
+        const dx = (event.clientX - drag.startClientX) / Math.max(drag.canvasWidth, 1);
+        const dy = (event.clientY - drag.startClientY) / Math.max(drag.canvasHeight, 1);
+        updateSlideTextBlockPosition(
+          drag.slideId,
+          drag.blockId,
+          drag.startX + dx,
+          drag.startY + dy,
+          drag.versionId,
+        );
+      }
+      const resize = textBlockResizeRef.current;
+      if (resize) {
+        const dw = (event.clientX - resize.startClientX) / Math.max(resize.canvasWidth, 1);
+        const dh = (event.clientY - resize.startClientY) / Math.max(resize.canvasHeight, 1);
+        updateSlideTextBlockSize(
+          resize.slideId,
+          resize.blockId,
+          resize.startW + dw,
+          resize.startH + dh,
+          resize.versionId,
+        );
+      }
+    };
+    const stopDrag = () => {
+      textBlockDragRef.current = null;
+      textBlockResizeRef.current = null;
+      setDraggingTextBlockId(null);
+      setResizingTextBlockId(null);
+    };
+    window.addEventListener("pointermove", handlePointerMove);
+    window.addEventListener("pointerup", stopDrag);
+    window.addEventListener("pointercancel", stopDrag);
+    return () => {
+      window.removeEventListener("pointermove", handlePointerMove);
+      window.removeEventListener("pointerup", stopDrag);
+      window.removeEventListener("pointercancel", stopDrag);
+    };
+  }, [draggingTextBlockId, resizingTextBlockId]);
+
+  const renderSlideTextBlocks = (
+    slide: SlideData,
+    editable = false,
+    canvasWidth = 1100,
+    canvasHeight = 619
+  ) => {
+    const layer = getSlideRenderLayer(slide.id);
+    if (!layer || layer.textBlocks.length === 0) return null;
+    const scale = Math.max(0.45, Math.min(1.8, Math.min(canvasWidth / 1100, canvasHeight / 619)));
+    return layer.textBlocks.map((block) => {
+      const style = block.style || {};
+      const fontSize = Math.max(10, estimateTextBlockFontSize(block, canvasWidth, canvasHeight));
+      const isDragging = draggingTextBlockId === block.id;
+      const paddingX = Math.max(6, Math.round((block.role === "title" ? 14 : 12) * scale));
+      const paddingY = Math.max(4, Math.round((block.role === "title" ? 10 : 8) * scale));
+      const dragHandleSize = Math.max(14, Math.round(20 * scale));
+      const dragHandleOffset = Math.max(2, Math.round(4 * scale));
+      return (
+        <div
+          key={block.id}
+          className="absolute overflow-hidden"
+          style={{
+            left: `${block.x * 100}%`,
+            top: `${block.y * 100}%`,
+            width: `${block.w * 100}%`,
+            height: `${block.h * 100}%`,
+            padding: `${paddingY}px ${paddingX}px`,
+            pointerEvents: editable ? "auto" : "none",
+            color: style.color || "#111827",
+            fontFamily: style.fontFamily || (uiLang === "zh" ? "Microsoft YaHei" : "Aptos"),
+            fontSize: `${fontSize}px`,
+            fontWeight: style.fontWeight || (block.role === "title" ? 700 : 500),
+            fontStyle: style.fontStyle || "normal",
+            lineHeight: String(style.lineHeight || (block.role === "title" ? 1.18 : 1.35)),
+            letterSpacing: `${style.letterSpacing || 0}px`,
+            textAlign: style.align || "left",
+            textShadow: "0 1px 4px rgba(15,23,42,0.18)",
+            cursor: editable ? "text" : "default",
+            outline: editable && isDragging ? "2px solid rgba(59,130,246,0.45)" : "none",
+          }}
+        >
+          {editable ? (
+            <button
+              type="button"
+              className="absolute z-20 rounded bg-black/55 text-white leading-none shadow-sm cursor-grab active:cursor-grabbing"
+              title={tr("拖动文本框", "Drag text block")}
+              style={{
+                right: `${dragHandleOffset}px`,
+                top: `${dragHandleOffset}px`,
+                width: `${dragHandleSize}px`,
+                height: `${dragHandleSize}px`,
+                fontSize: `${Math.max(8, Math.round(10 * scale))}px`,
+              }}
+              onPointerDown={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                const rect = previewCanvasRef.current?.getBoundingClientRect();
+                if (!rect) return;
+                const { versionId: sourceVersionId } = getSlideVersionMeta(slide.id);
+                if (!sourceVersionId) return;
+                const editableVersionId = beginTextBlockDrag(slide.id, sourceVersionId);
+                textBlockDragRef.current = {
+                  slideId: slide.id,
+                  versionId: editableVersionId,
+                  blockId: block.id,
+                  startClientX: event.clientX,
+                  startClientY: event.clientY,
+                  startX: block.x,
+                  startY: block.y,
+                  blockW: block.w,
+                  blockH: block.h,
+                  canvasWidth: rect.width,
+                  canvasHeight: rect.height,
+                };
+                setDraggingTextBlockId(block.id);
+              }}
+            >
+              +
+            </button>
+          ) : null}
+          <div
+            contentEditable={editable}
+            suppressContentEditableWarning
+            spellCheck={false}
+            className="h-full w-full whitespace-pre-wrap break-words bg-transparent outline-none"
+            onFocus={() => {
+              if (editable) setEditingTextBlockId(block.id);
+            }}
+            onBlur={(event) => {
+              if (!editable) return;
+              setEditingTextBlockId((current) => (current === block.id ? null : current));
+              const nextText = textToLines(event.currentTarget.textContent || "").join("\n");
+              if (!nextText || nextText === block.text) return;
+              updateSlideTextBlock(slide.id, block.id, nextText);
+            }}
+            style={{
+              outline: editable && editingTextBlockId === block.id ? "2px solid rgba(59,130,246,0.35)" : "none",
+            }}
+          >
+            {block.text}
+          </div>
+        </div>
+      );
+    });
+  };
+
+  const renderResponsiveSlideTextBlocks = (
+    slide: SlideData,
+    editable = false,
+    canvasWidth = 1100,
+    canvasHeight = 619
+  ) => {
+    const layer = getSlideRenderLayer(slide.id);
+    if (!layer || layer.textBlocks.length === 0) return null;
+    return layer.textBlocks.map((block) => (
+      <TextBlockOverlay
+        key={block.id}
+        block={block}
+        slideId={slide.id}
+        editable={editable}
+        uiLang={uiLang as "zh" | "en"}
+        canvasWidth={canvasWidth}
+        canvasHeight={canvasHeight}
+        isDragging={draggingTextBlockId === block.id}
+        isEditing={editingTextBlockId === block.id}
+        onFocusBlock={(blockId) => {
+          if (editable) setEditingTextBlockId(blockId);
+        }}
+        onBlurBlock={(blockId, nextText) => {
+          if (!editable) return;
+          setEditingTextBlockId((current) => (current === blockId ? null : current));
+          if (!nextText || nextText === block.text) return;
+          updateSlideTextBlock(slide.id, blockId, nextText);
+        }}
+        onDragStart={(event, activeBlock, activeSlideId) => {
+          event.preventDefault();
+          event.stopPropagation();
+          const rect = previewCanvasRef.current?.getBoundingClientRect();
+          if (!rect) return;
+          const { versionId: sourceVersionId } = getSlideVersionMeta(activeSlideId);
+          if (!sourceVersionId) return;
+          const editableVersionId = beginTextBlockDrag(activeSlideId, sourceVersionId);
+          textBlockDragRef.current = {
+            slideId: activeSlideId,
+            versionId: editableVersionId,
+            blockId: activeBlock.id,
+            startClientX: event.clientX,
+            startClientY: event.clientY,
+            startX: activeBlock.x,
+            startY: activeBlock.y,
+            blockW: activeBlock.w,
+            blockH: activeBlock.h,
+            canvasWidth: rect.width,
+            canvasHeight: rect.height,
+          };
+          setDraggingTextBlockId(activeBlock.id);
+        }}
+        tr={tr}
+      />
+    ));
+  };
+
+  const renderFixedSlideTextSvg = (slide: SlideData) => {
+    const layer = getSlideRenderLayer(slide.id);
+    if (!layer || layer.textBlocks.length === 0) return null;
+
+    return (
+      <div className="absolute inset-0 z-10 pointer-events-none">
+        {layer.textBlocks.map((block) => {
+          if (editingTextBlockId === block.id) return null;
+          const style = block.style || {};
+          const refFontSize = Math.max(
+            10,
+            estimateTextBlockFontSize(block, PPT_REFERENCE_SLIDE_WIDTH, PPT_REFERENCE_SLIDE_HEIGHT)
+          );
+          const previewFontSize = refFontSize * PPT_POINT_TO_CSS_PX;
+          const lineHeightRatio = Number(style.lineHeight || (block.role === "title" ? 1.12 : block.role === "tag" ? 1.05 : 1.35));
+          const x = block.x * PPT_REFERENCE_SLIDE_WIDTH;
+          const y = block.y * PPT_REFERENCE_SLIDE_HEIGHT;
+          const w = block.w * PPT_REFERENCE_SLIDE_WIDTH;
+          const h = block.h * PPT_REFERENCE_SLIDE_HEIGHT;
+          const isTag = block.role === "tag";
+          const justifyContent = style.align === "center" ? "center" : style.align === "right" ? "flex-end" : "flex-start";
+          const textColor = style.color || (block.role === "title" ? "#ffffff" : isTag ? "#ffd66b" : "#ffffff");
+          const fontFamily = style.fontFamily || "Aptos";
+
+          return (
+            <div
+              key={block.id}
+              className="absolute overflow-visible"
+              style={{
+                left: `${x}px`,
+                top: `${y}px`,
+                width: `${w}px`,
+                height: `${h}px`,
+                display: "flex",
+                alignItems: "center",
+                justifyContent,
+                background: "transparent",
+                border: "none",
+                boxShadow: "none",
+              }}
+            >
+              <div
+                style={{
+                  width: "100%",
+                  whiteSpace: "pre-wrap",
+                  wordBreak: "break-word",
+                  overflowWrap: "anywhere",
+                  textAlign: style.align || "left",
+                  fontFamily,
+                  fontSize: `${previewFontSize}px`,
+                  fontWeight: Number(style.fontWeight || (block.role === "title" ? 900 : isTag ? 800 : 500)),
+                  fontStyle: style.fontStyle || "normal",
+                  lineHeight: String(lineHeightRatio),
+                  letterSpacing: `${Number(style.letterSpacing || 0)}px`,
+                  color: textColor,
+                }}
+              >
+                {block.text}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    );
+  };
+
+  const renderSlideInteractionLayer = (slide: SlideData) => {
+    const layer = getSlideRenderLayer(slide.id);
+    if (!layer || layer.textBlocks.length === 0) return null;
+
+    return layer.textBlocks.map((block) => {
+      const style = block.style || {};
+      const refFontSize = Math.max(
+        10,
+        estimateTextBlockFontSize(block, PPT_REFERENCE_SLIDE_WIDTH, PPT_REFERENCE_SLIDE_HEIGHT)
+      );
+      const previewFontSize = refFontSize * PPT_POINT_TO_CSS_PX;
+      const isEditing = editingTextBlockId === block.id;
+      const dragHandleSize = 20;
+      const resizeHandleSize = 18;
+      return (
+        <div
+          key={`interactive-${block.id}`}
+          className="absolute"
+          style={{
+            left: `${block.x * 100}%`,
+            top: `${block.y * 100}%`,
+            width: `${block.w * 100}%`,
+            height: `${block.h * 100}%`,
+            pointerEvents: "auto",
+            outline:
+              draggingTextBlockId === block.id || resizingTextBlockId === block.id
+                ? "2px solid rgba(59,130,246,0.45)"
+                : "none",
+          }}
+        >
+          <button
+            type="button"
+            className="absolute z-20 rounded bg-black/55 text-white leading-none shadow-sm cursor-grab active:cursor-grabbing"
+            title={tr("拖动文本框", "Drag text block")}
+            style={{
+              right: "-8px",
+              top: "-6px",
+              width: `${dragHandleSize}px`,
+              height: `${dragHandleSize}px`,
+              fontSize: "10px",
+            }}
+            onPointerDown={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              const rect = previewCanvasRef.current?.getBoundingClientRect();
+              if (!rect) return;
+              const { versionId: sourceVersionId } = getSlideVersionMeta(slide.id);
+              if (!sourceVersionId) return;
+              const editableVersionId = beginTextBlockDrag(slide.id, sourceVersionId);
+              textBlockDragRef.current = {
+                slideId: slide.id,
+                versionId: editableVersionId,
+                blockId: block.id,
+                startClientX: event.clientX,
+                startClientY: event.clientY,
+                startX: block.x,
+                startY: block.y,
+                blockW: block.w,
+                blockH: block.h,
+                canvasWidth: rect.width,
+                canvasHeight: rect.height,
+              };
+              setDraggingTextBlockId(block.id);
+            }}
+          >
+            +
+          </button>
+          <button
+            type="button"
+            className="absolute z-20 rounded bg-blue-600/75 text-white leading-none shadow-sm cursor-nwse-resize active:cursor-nwse-resize"
+            title={tr("缩放文本框", "Resize text box")}
+            style={{
+              right: "-7px",
+              bottom: "-7px",
+              width: `${resizeHandleSize}px`,
+              height: `${resizeHandleSize}px`,
+              fontSize: "10px",
+            }}
+            onPointerDown={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              const rect = previewCanvasRef.current?.getBoundingClientRect();
+              if (!rect) return;
+              const { versionId: sourceVersionId } = getSlideVersionMeta(slide.id);
+              if (!sourceVersionId) return;
+              const editableVersionId = beginTextBlockResize(slide.id, sourceVersionId);
+              textBlockResizeRef.current = {
+                slideId: slide.id,
+                versionId: editableVersionId,
+                blockId: block.id,
+                startClientX: event.clientX,
+                startClientY: event.clientY,
+                startW: block.w,
+                startH: block.h,
+                startX: block.x,
+                startY: block.y,
+                canvasWidth: rect.width,
+                canvasHeight: rect.height,
+              };
+              setResizingTextBlockId(block.id);
+            }}
+          >
+            {uiLang === "zh" ? "缩" : "↘"}
+          </button>
+          {isEditing ? (
+            <div
+              className="absolute inset-0 flex"
+              style={{
+                alignItems: "center",
+                justifyContent: style.align === "center" ? "center" : style.align === "right" ? "flex-end" : "flex-start",
+              }}
+            >
+              <div
+                contentEditable
+                suppressContentEditableWarning
+                spellCheck={false}
+                className="w-full whitespace-pre-wrap break-words bg-transparent outline-none"
+                onBlur={(event) => {
+                  const nextText = textToLines(event.currentTarget.textContent || "").join("\n");
+                  setEditingTextBlockId((current) => (current === block.id ? null : current));
+                  if (!nextText || nextText === block.text) return;
+                  updateSlideTextBlock(slide.id, block.id, nextText);
+                }}
+                ref={(node) => {
+                  if (!node || editingTextBlockId !== block.id) return;
+                  node.focus();
+                  const selection = window.getSelection();
+                  if (!selection) return;
+                  const range = document.createRange();
+                  range.selectNodeContents(node);
+                  range.collapse(false);
+                  selection.removeAllRanges();
+                  selection.addRange(range);
+                }}
+                style={{
+                  textAlign: style.align || "left",
+                  fontFamily: style.fontFamily || "Aptos",
+                  fontSize: `${previewFontSize}px`,
+                  fontWeight: Number(style.fontWeight || (block.role === "title" ? 900 : block.role === "tag" ? 800 : 500)),
+                  fontStyle: style.fontStyle || "normal",
+                  lineHeight: String(style.lineHeight || (block.role === "title" ? 1.12 : block.role === "tag" ? 1.05 : 1.35)),
+                  color: style.color || (block.role === "title" ? "#ffffff" : block.role === "tag" ? "#ffd66b" : "#ffffff"),
+                  outline: "2px solid rgba(59,130,246,0.35)",
+                }}
+              >
+                {block.text}
+              </div>
+            </div>
+          ) : (
+            <button
+              type="button"
+              className="absolute inset-0 bg-transparent"
+              onClick={() => setEditingTextBlockId(block.id)}
+              aria-label={`Edit ${block.id}`}
+            />
+          )}
+        </div>
+      );
+    });
+  };
+
+  const renderScaledSlideScene = (
+    slide: SlideData,
+    editable = false,
+    outerWidth = PPT_REFERENCE_SLIDE_WIDTH,
+    outerHeight = PPT_REFERENCE_SLIDE_HEIGHT,
+  ) => {
+    const backgroundUrl = getSlideBackgroundUrl(slide.id);
+    const hasTextLayer = (getSlideRenderLayer(slide.id)?.textBlocks || []).length > 0;
+    const scale = Math.min(
+      outerWidth / PPT_REFERENCE_SLIDE_WIDTH,
+      outerHeight / PPT_REFERENCE_SLIDE_HEIGHT
+    ) || 1;
+
+    if (!backgroundUrl) return null;
+
+    return (
+      <div className="absolute inset-0 overflow-hidden">
+        <div
+          className="absolute left-0 top-0"
+          style={{
+            width: `${PPT_REFERENCE_SLIDE_WIDTH}px`,
+            height: `${PPT_REFERENCE_SLIDE_HEIGHT}px`,
+            transform: `scale(${scale})`,
+            transformOrigin: "top left",
+          }}
+        >
+          <img
+            src={backgroundUrl}
+            className="absolute inset-0 w-full h-full object-cover bg-white"
+            alt={`Slide ${slide.id}`}
+          />
+          {hasTextLayer ? renderFixedSlideTextSvg(slide) : null}
+          {editable && hasTextLayer ? <div className="absolute inset-0 z-20">{renderSlideInteractionLayer(slide)}</div> : null}
+        </div>
+      </div>
+    );
+  };
+
   const activeSlides = localSlides.length > 0 ? localSlides : [];
   const currentSlide = activeSlides[currentSlideIndex];
-  const getSlideImageUrl = (slideId: string) => {
-      const versions = imageVersions[slideId] || [];
-      const currentVersion = currentImageVersionId[slideId];
-      const v = currentVersion ? versions.find((x) => x.id === currentVersion) : undefined;
-      return v?.url || generatedImages[slideId] || "";
-  };
-  const currentSlideImage = currentSlide ? getSlideImageUrl(currentSlide.id) : "";
+  const currentSlideImage = currentSlide ? getSlideBackgroundUrl(currentSlide.id) : "";
+  const currentSlideHasTextLayer = currentSlide ? ((getSlideRenderLayer(currentSlide.id)?.textBlocks || []).length > 0) : false;
   const failedBeautifyCount = activeSlides.reduce((n, s) => n + (beautifyFailures[s.id] ? 1 : 0), 0);
   const currentSlideFailure = currentSlide ? beautifyFailures[currentSlide.id] : "";
+
+  const formatImageVersionLabel = (version: SlideImageVersion, index: number) => {
+    return tr(`第 ${index + 1} 版`, `Version ${index + 1}`);
+  };
 
   const enterSlideshowFullscreen = async () => {
     if (typeof document === "undefined") return;
@@ -983,18 +2306,159 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, onPptStageCh
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [slideshowOpen, activeSlides.length, slideshowFullscreen]);
 
-  const pushImageVersion = (slideId: string, url: string, type: 'generated' | 'edited', instruction?: string) => {
+  const setRenderLayerState = (slideId: string, versionId: string, layer: SlideRenderLayer) => {
+      setRenderLayers((prev) => ({
+          ...prev,
+          [slideId]: {
+              ...(prev[slideId] || {}),
+              [versionId]: layer,
+          },
+      }));
+  };
+
+  const getDerivedProcessingKey = (slideId: string, sourceVersionId: string) => `${slideId}::${sourceVersionId}`;
+
+  const processRenderedSlideVersion = async (slide: SlideData, slideImageUrl: string, versionId: string) => {
+      try {
+          const page: PptPage = {
+            id: slide.id,
+            title: slide.title,
+            content: slide.content,
+            description: slide.description,
+            note: slide.note,
+            layout: slide.layout,
+          };
+          const [textBlocks, backgroundImageUrl] = await Promise.all([
+            pptService.extractSlideTextBlocks(page, slideImageUrl, uiLang as "zh" | "en"),
+            pptService.generateTextlessPageImage(page, slideImageUrl, [], uiLang as "zh" | "en"),
+          ]);
+          const reviewedTextBlocks = await pptService.reviewSlideTextBlocks(
+            page,
+            slideImageUrl,
+            backgroundImageUrl || slideImageUrl,
+            textBlocks,
+            uiLang as "zh" | "en"
+          );
+          return {
+              backgroundImageUrl: backgroundImageUrl || slideImageUrl,
+              textBlocks: reviewedTextBlocks,
+              status: "ready",
+          } satisfies SlideRenderLayer;
+      } catch (error) {
+          console.error("Failed to build PPT render layer", error);
+          const failedLayer = {
+              backgroundImageUrl: slideImageUrl,
+              textBlocks: [],
+              status: "failed",
+              error: error instanceof Error ? error.message : "Failed to process slide",
+          } satisfies SlideRenderLayer;
+          setRenderLayerState(slide.id, versionId, failedLayer);
+          return failedLayer;
+      }
+  };
+
+  const pushImageVersion = (
+    slideId: string,
+    url: string,
+    type: SlideImageVersionType,
+    instruction?: string,
+    options?: { setCurrent?: boolean; sourceVersionId?: string }
+  ) => {
       const versionId = `v-${Date.now()}-${Math.random().toString(16).slice(2)}`;
       setImageVersions(prev => ({
           ...prev,
           [slideId]: [
               ...(prev[slideId] || []),
-              { id: versionId, url, timestamp: Date.now(), type, instruction }
+              { id: versionId, url, timestamp: Date.now(), type, instruction, sourceVersionId: options?.sourceVersionId }
           ]
       }));
-      setCurrentImageVersionId(prev => ({ ...prev, [slideId]: versionId }));
-      setGeneratedImages(prev => ({ ...prev, [slideId]: url }));
+      if (options?.setCurrent !== false) {
+        setCurrentImageVersionId(prev => ({ ...prev, [slideId]: versionId }));
+        setGeneratedImages(prev => ({ ...prev, [slideId]: url }));
+      }
+      return versionId;
   };
+
+  const pushImageVersionAndProcess = async (slide: SlideData, url: string, type: "generated" | "edited", instruction?: string) => {
+      const originalVersionId = pushImageVersion(slide.id, url, type, instruction);
+      const processingKey = getDerivedProcessingKey(slide.id, originalVersionId);
+      derivedProcessingRef.current.add(processingKey);
+      setRenderLayerState(slide.id, originalVersionId, {
+          backgroundImageUrl: url,
+          textBlocks: [],
+          status: "ready",
+      });
+      try {
+        const derived = await processRenderedSlideVersion(slide, url, originalVersionId);
+        if (derived?.backgroundImageUrl) {
+          setRenderLayerState(slide.id, originalVersionId, derived);
+        }
+        return originalVersionId;
+      } finally {
+        derivedProcessingRef.current.delete(processingKey);
+      }
+  };
+
+  const deriveTextlessVersionFromExisting = async (slide: SlideData, sourceVersion: SlideImageVersion) => {
+      const processingKey = getDerivedProcessingKey(slide.id, sourceVersion.id);
+      if (derivedProcessingRef.current.has(processingKey)) return sourceVersion.id;
+      derivedProcessingRef.current.add(processingKey);
+      try {
+        const derived = await processRenderedSlideVersion(slide, sourceVersion.url, sourceVersion.id);
+        if (derived?.backgroundImageUrl) {
+          setRenderLayerState(slide.id, sourceVersion.id, derived);
+        }
+        return sourceVersion.id;
+      } finally {
+        derivedProcessingRef.current.delete(processingKey);
+      }
+  };
+
+  const createTwoStageSlideProgressTracker = (
+    slideCount: number,
+    initialZh: string,
+    initialEn: string,
+    processingZh: string,
+    processingEn: string,
+  ) => {
+    const safeTotal = Math.max(1, slideCount);
+    const counter = { doneUnits: 0 };
+    const setStage = (current: number, zhLabel: string, enLabel: string) => {
+      setProgress({
+        current,
+        total: safeTotal,
+        message: tr(zhLabel, enLabel),
+      });
+    };
+
+    return {
+      start() {
+        setStage(0, initialZh, initialEn);
+      },
+      markBaseReady() {
+        counter.doneUnits = Math.min(safeTotal * 2, counter.doneUnits + 1);
+        setStage(counter.doneUnits / 2, processingZh, processingEn);
+      },
+      markSlideFinished(baseReady: boolean) {
+        counter.doneUnits = Math.min(safeTotal * 2, counter.doneUnits + (baseReady ? 1 : 2));
+        setStage(counter.doneUnits / 2, processingZh, processingEn);
+      },
+    };
+  };
+
+  useEffect(() => {
+      activeSlides.forEach((slide) => {
+        const { versionId, version, imageUrl } = getSlideVersionMeta(slide.id);
+        if (!versionId || !version || !imageUrl) return;
+        if (version.type === "derived_textless") return;
+        if (derivedProcessingRef.current.has(getDerivedProcessingKey(slide.id, versionId))) return;
+        const hasDerivedVersion = (imageVersions[slide.id] || []).some((item) => item.sourceVersionId === versionId && item.type === "derived_textless");
+        if (hasDerivedVersion) return;
+        const layer = renderLayers[slide.id]?.[versionId];
+        if (layer?.status === "pending" || hasRenderableTextBlocks(layer)) return;
+        void deriveTextlessVersionFromExisting(slide, version);
+      });
+  }, [activeSlides, imageVersions, currentImageVersionId, renderLayers]);
 
   const handleReferenceFileInputChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
       const files = Array.from(e.target.files || []);
@@ -1547,6 +3011,7 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, onPptStageCh
       setGeneratedImages({});
       setImageVersions({});
       setCurrentImageVersionId({});
+      setRenderLayers({});
       setCurrentSlideIndex(0);
   };
 
@@ -1788,7 +3253,7 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, onPptStageCh
 
       const initialGenerated: Record<string, string> = {};
       const initialCurrent: Record<string, string> = {};
-      const initialVersions: Record<string, Array<{ id: string; url: string; timestamp: number; type: "generated" | "edited"; instruction?: string }>> = {};
+      const initialVersions: Record<string, SlideImageVersion[]> = {};
 
       for (let i = 0; i < slides.length; i += 1) {
         const slideId = slides[i].id;
@@ -1796,7 +3261,7 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, onPptStageCh
         const versionId = `v-${Date.now()}-${Math.random().toString(16).slice(2)}`;
         initialGenerated[slideId] = url;
         initialCurrent[slideId] = versionId;
-        initialVersions[slideId] = [{ id: versionId, url, timestamp: Date.now(), type: "generated", instruction: tr("原始页面", "Original") }];
+        initialVersions[slideId] = [{ id: versionId, url, timestamp: Date.now(), type: "generated", instruction: tr("原始页面", "Original full slide") }];
       }
 
       setLocalSlides(slides);
@@ -1805,17 +3270,26 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, onPptStageCh
       setImageVersions(initialVersions);
 
       setCreationStep("generating_images");
-      setProgress({ current: 0, total: slides.length, message: tr("正在美化渲染...", "Beautifying slides...") });
+      const progressTracker = createTwoStageSlideProgressTracker(
+        slides.length,
+        "正在生成美化页图...",
+        "Generating beautified slides...",
+        "正在处理美化页文字层...",
+        "Processing beautified slide text layers...",
+      );
+      progressTracker.start();
 
       const instruction = buildBeautifyInstruction(beautifyRequirement);
       const beautifyTemplate = beautifyUseTemplate ? (templateImage || undefined) : undefined;
-      const counter = { done: 0 };
       const tasks = slides.map((s, i) => async () => {
+        let baseReady = false;
         try {
           const page: PptPage = { id: s.id, title: s.title, content: s.content || [], description: s.description || "" };
           const edited = await editPageImageWithRetry(page, instruction, pageImages[i], beautifyTemplate);
+          progressTracker.markBaseReady();
+          baseReady = true;
           if (edited) {
-            pushImageVersion(s.id, edited, "edited", instruction);
+            await pushImageVersionAndProcess(s, edited, "edited", instruction);
             setBeautifyFailures((prev) => {
               if (!prev[s.id]) return prev;
               const next = { ...prev };
@@ -1829,13 +3303,7 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, onPptStageCh
           console.error(`Beautify failed for slide ${i + 1}`, e);
           setBeautifyFailures((prev) => ({ ...prev, [s.id]: getErrorMessage(e) }));
         } finally {
-          counter.done += 1;
-          setProgress((prev) => ({
-            ...prev,
-            current: counter.done,
-            total: slides.length,
-            message: tr(`正在美化渲染... (${counter.done}/${slides.length})`, `Beautifying slides... (${counter.done}/${slides.length})`),
-          }));
+          progressTracker.markSlideFinished(baseReady);
         }
       });
 
@@ -1859,37 +3327,36 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, onPptStageCh
     if (failedSlideIds.length === 0) return;
 
     setCreationStep("generating_images");
-    setProgress({
-      current: 0,
-      total: failedSlideIds.length,
-      message: tr(`正在重试失败页... (0/${failedSlideIds.length})`, `Retrying failed slides... (0/${failedSlideIds.length})`),
-    });
+    const progressTracker = createTwoStageSlideProgressTracker(
+      failedSlideIds.length,
+      "正在重试生成页图...",
+      "Retrying slide generation...",
+      "正在处理重试页文字层...",
+      "Processing retried slide text layers...",
+    );
+    progressTracker.start();
 
     try {
       const instruction = buildBeautifyInstruction(beautifyRequirement);
       const beautifyTemplate = beautifyUseTemplate ? (templateImage || undefined) : undefined;
-      const counter = { done: 0 };
       const tasks = failedSlideIds.map((slideId) => async () => {
+        let baseReady = false;
         const slide = activeSlides.find((x) => x.id === slideId);
         const baseImageUrl = generatedImages[slideId] || getSlideImageUrl(slideId);
         if (!slide || !baseImageUrl) {
           setBeautifyFailures((prev) => ({ ...prev, [slideId]: tr("缺少可重试的原始图片", "Missing base image for retry") }));
-          counter.done += 1;
-          setProgress((prev) => ({
-            ...prev,
-            current: counter.done,
-            total: failedSlideIds.length,
-            message: tr(`正在重试失败页... (${counter.done}/${failedSlideIds.length})`, `Retrying failed slides... (${counter.done}/${failedSlideIds.length})`),
-          }));
+          progressTracker.markSlideFinished(false);
           return;
         }
         try {
           const page: PptPage = { id: slide.id, title: slide.title, content: slide.content || [], description: slide.description || "" };
           const edited = await editPageImageWithRetry(page, instruction, baseImageUrl, beautifyTemplate);
+          progressTracker.markBaseReady();
+          baseReady = true;
           if (!edited) {
             setBeautifyFailures((prev) => ({ ...prev, [slideId]: tr("模型返回空结果", "Empty model result") }));
           } else {
-            pushImageVersion(slideId, edited, "edited", instruction);
+            await pushImageVersionAndProcess(slide, edited, "edited", instruction);
             setBeautifyFailures((prev) => {
               if (!prev[slideId]) return prev;
               const next = { ...prev };
@@ -1900,13 +3367,9 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, onPptStageCh
         } catch (e) {
           setBeautifyFailures((prev) => ({ ...prev, [slideId]: getErrorMessage(e) }));
         } finally {
-          counter.done += 1;
-          setProgress((prev) => ({
-            ...prev,
-            current: counter.done,
-            total: failedSlideIds.length,
-            message: tr(`正在重试失败页... (${counter.done}/${failedSlideIds.length})`, `Retrying failed slides... (${counter.done}/${failedSlideIds.length})`),
-          }));
+          if (slide && baseImageUrl) {
+            progressTracker.markSlideFinished(baseReady);
+          }
         }
       });
 
@@ -2030,30 +3493,35 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, onPptStageCh
     }));
 
     try {
-        setProgress({ current: 0, total: pages.length, message: tr("正在生成幻灯片...", "Generating slides...") });
-
-        const imageCounter = { done: 0 };
+        const progressTracker = createTwoStageSlideProgressTracker(
+          pages.length,
+          "正在生成页图...",
+          "Generating slide images...",
+          "正在处理页文字层...",
+          "Processing slide text layers...",
+        );
+        progressTracker.start();
         const imageTasks = pages.map((_, i) => async () => {
+             let baseReady = false;
              try {
                  const imageUrl = await pptService.generatePageImage(
                   pages[i],
                   uiLang as "zh" | "en",
                   templateImage || undefined,
-                  getSlideMaterialImageRefs(pages[i].id || `slide-${i + 1}`)
+                 getSlideMaterialImageRefs(pages[i].id || `slide-${i + 1}`)
                 );
+                 progressTracker.markBaseReady();
+                 baseReady = true;
                  if (imageUrl) {
-                     const slideId = localSlides[i]?.id || `slide-${i}`;
-                     pushImageVersion(slideId, imageUrl, 'generated');
+                     const slide = localSlides[i];
+                     if (slide) {
+                       await pushImageVersionAndProcess(slide, imageUrl, 'generated');
+                     }
                  }
              } catch (e) {
                  console.error(`Failed to generate image for slide ${i}`, e);
              } finally {
-                 imageCounter.done += 1;
-                 setProgress(prev => ({
-                     ...prev,
-                     current: imageCounter.done,
-                     message: tr(`正在生成幻灯片... (${imageCounter.done}/${pages.length})`, `Generating slides... (${imageCounter.done}/${pages.length})`)
-                 }));
+                 progressTracker.markSlideFinished(baseReady);
              }
         });
 
@@ -2073,7 +3541,6 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, onPptStageCh
   const handleGenerateImagesOnly = async () => {
       if (localSlides.length === 0) return;
       setCreationStep('generating_images');
-      setProgress({ current: 0, total: localSlides.length, message: tr("正在生成幻灯片...", "Generating slides...") });
 
       const pages: PptPage[] = localSlides.map((s) => ({
           id: s.id,
@@ -2083,8 +3550,16 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, onPptStageCh
           status: "description_generated"
       }));
 
-      const imageCounter = { done: 0 };
+      const progressTracker = createTwoStageSlideProgressTracker(
+        pages.length,
+        "正在生成页图...",
+        "Generating slide images...",
+        "正在处理页文字层...",
+        "Processing slide text layers...",
+      );
+      progressTracker.start();
       const imageTasks = pages.map((_, i) => async () => {
+          let baseReady = false;
           try {
               const imageUrl = await pptService.generatePageImage(
                 pages[i],
@@ -2092,18 +3567,18 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, onPptStageCh
                 templateImage || undefined,
                 getSlideMaterialImageRefs(pages[i].id || `slide-${i + 1}`)
               );
+              progressTracker.markBaseReady();
+              baseReady = true;
               if (imageUrl) {
-                  pushImageVersion(pages[i].id || `slide-${i}`, imageUrl, 'generated');
+                  const slide = localSlides[i];
+                  if (slide) {
+                    await pushImageVersionAndProcess(slide, imageUrl, 'generated');
+                  }
               }
           } catch (e) {
               console.error(`Failed to generate image for slide ${i}`, e);
           } finally {
-              imageCounter.done += 1;
-              setProgress(prev => ({
-                  ...prev,
-                  current: imageCounter.done,
-                  message: tr(`正在生成幻灯片... (${imageCounter.done}/${pages.length})`, `Generating slides... (${imageCounter.done}/${pages.length})`)
-              }));
+              progressTracker.markSlideFinished(baseReady);
           }
       });
 
@@ -2123,38 +3598,26 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, onPptStageCh
     
     setIsGeneratingImage(true);
     try {
-        // Use the service logic if description exists, otherwise fallback
         let imageUrl: string | null = null;
-        
-        if (currentSlide.description) {
-             const pages: PptPage[] = localSlides.map(s => ({
-                id: s.id,
-                title: s.title,
-                content: s.content,
-                status: 'description_generated',
-                description: s.description,
-                note: s.note,
-                layout: s.layout
-            }));
-            const pageIndex = localSlides.findIndex(s => s === currentSlide);
-            imageUrl = await pptService.generatePageImage(
-              pages[pageIndex],
-              uiLang as "zh" | "en",
-              templateImage || undefined,
-              getSlideMaterialImageRefs(currentSlide.id || `slide-${pageIndex + 1}`)
-            );
-        } else {
-             // Fallback to simple prompt
-             const prompt = `Design a presentation slide. Title: "${currentSlide.title}". Content: ${(currentSlide.content || []).join('; ')}. Style: Professional, Modern.`;
-             imageUrl = await generateImage({
-                prompt: prompt,
-                referenceImageUrl: templateImage || undefined
-            });
-        }
+        const pages: PptPage[] = localSlides.map(s => ({
+          id: s.id,
+          title: s.title,
+          content: s.content,
+          status: 'description_generated',
+          description: s.description,
+          note: s.note,
+          layout: s.layout
+        }));
+        const pageIndex = localSlides.findIndex(s => s === currentSlide);
+        imageUrl = await pptService.generatePageImage(
+          pages[pageIndex],
+          uiLang as "zh" | "en",
+          templateImage || undefined,
+          getSlideMaterialImageRefs(currentSlide.id || `slide-${pageIndex + 1}`)
+        );
 
         if (imageUrl) {
-            const slideId = currentSlide.id || `slide-${currentSlideIndex + 1}`;
-            pushImageVersion(slideId, imageUrl, 'generated');
+            await pushImageVersionAndProcess(currentSlide, imageUrl, 'generated');
         }
     } catch (e) {
         console.error("Failed to generate slide image", e);
@@ -2163,12 +3626,28 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, onPptStageCh
     }
   };
 
+  const toRenderablePage = (slide: SlideData): PptPage => {
+    const layer = getSlideRenderLayer(slide.id);
+    return {
+      id: slide.id,
+      title: slide.title,
+      content: slide.content,
+      description: slide.description,
+      note: slide.note,
+      layout: slide.layout,
+      textBlocks: layer?.textBlocks || [],
+      backgroundImageUrl: layer?.backgroundImageUrl || getSlideImageUrl(slide.id) || undefined,
+      status: "completed",
+    };
+  };
+
   const handleAddSlideToChat = (slide: SlideData) => {
     if (onAddToChat) {
         const slideId = slide.id || `slide-${currentSlideIndex + 1}`;
         const currentVersion = currentImageVersionId[slideId];
         const versions = imageVersions[slideId] || [];
         const imageUrl = currentVersion ? versions.find(v => v.id === currentVersion)?.url : generatedImages[slideId];
+        const layer = getSlideRenderLayer(slideId);
         const materialImages = (slideMaterials[slideId] || []).map((x) => ({
           name: x.name,
           url: x.dataUrl,
@@ -2177,7 +3656,13 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, onPptStageCh
           sourcePage: typeof x.sourcePage === "number" ? x.sourcePage : undefined,
           refLabel: x.refLabel || "",
         }));
-        onAddToChat(JSON.stringify({ ...slide, imageUrl, materialImages }, null, 2), `${slideId}.json`);
+        onAddToChat(JSON.stringify({
+          ...slide,
+          imageUrl,
+          backgroundImageUrl: layer?.backgroundImageUrl || imageUrl,
+          textBlocks: layer?.textBlocks || [],
+          materialImages,
+        }, null, 2), `${slideId}.json`);
     }
   };
 
@@ -2185,12 +3670,7 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, onPptStageCh
     if (isExporting) return;
     setIsExporting("pptx");
     try {
-        const pages: PptPage[] = activeSlides.map(s => ({
-            id: s.id,
-            title: s.title,
-            content: s.content,
-            status: 'completed'
-        }));
+        const pages: PptPage[] = activeSlides.map((s) => toRenderablePage(s));
         const images: Record<string, string> = {};
         for (const s of activeSlides) {
             const versions = imageVersions[s.id] || [];
@@ -2211,12 +3691,7 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, onPptStageCh
     if (isExporting) return;
     setIsExporting("pdf");
     try {
-        const pages: PptPage[] = activeSlides.map(s => ({
-            id: s.id,
-            title: s.title,
-            content: s.content,
-            status: 'completed'
-        }));
+        const pages: PptPage[] = activeSlides.map((s) => toRenderablePage(s));
         const images: Record<string, string> = {};
         for (const s of activeSlides) {
             const versions = imageVersions[s.id] || [];
@@ -3129,11 +4604,12 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, onPptStageCh
         {/* Thumbnails */}
         <div className="w-64 bg-zinc-50 dark:bg-zinc-900 border-r border-border overflow-y-auto p-4 space-y-4">
           {activeSlides.map((slide, index) => {
-            const hasGeneratedImage = generatedImages[slide.id || index];
+            const hasGeneratedImage = getSlideBackgroundUrl(slide.id);
+            const hasTextLayer = (getSlideRenderLayer(slide.id)?.textBlocks || []).length > 0;
             const slideFailure = beautifyFailures[slide.id];
             return (
             <ContextMenu key={slide.id || index}>
-                <ContextMenuTrigger>
+                <ContextMenuTrigger asChild>
                     <div 
                     onClick={() => setCurrentSlideIndex(index)}
                     className={`cursor-pointer border-2 rounded-lg overflow-hidden relative aspect-[16/9] group transition-all duration-200 ${
@@ -3158,7 +4634,7 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, onPptStageCh
                     </div>
                     {/* Thumbnail Preview */}
                     {hasGeneratedImage ? (
-                        <img src={hasGeneratedImage} className="w-full h-full object-cover" alt={`Slide ${index + 1}`} />
+                        renderScaledSlideScene(slide, false, 240, 135)
                     ) : (
                         <div className="w-full h-full p-2 flex flex-col bg-white overflow-hidden text-[6px]">
                             {templateImage && (
@@ -3221,14 +4697,22 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, onPptStageCh
               {isGeneratingImage ? <Loader2 className="w-3 h-3 mr-1 animate-spin" /> : null}
               {tr("重新渲染本页", "Regenerate this slide")}
             </Button>
-            {currentSlide && (imageVersions[currentSlide.id] || []).length > 0 && (
+            {currentSlide && getVisibleSlideVersions(currentSlide.id).length > 0 && (
               <select
                 className="h-7 text-xs rounded-md border border-input bg-background px-2"
-                value={currentImageVersionId[currentSlide.id] || (imageVersions[currentSlide.id] || [])[0]?.id}
+                value={
+                  (() => {
+                    const visibleVersions = getVisibleSlideVersions(currentSlide.id);
+                    const currentVersionId = currentImageVersionId[currentSlide.id];
+                    return visibleVersions.some((item) => item.id === currentVersionId)
+                      ? currentVersionId
+                      : visibleVersions[visibleVersions.length - 1]?.id || "";
+                  })()
+                }
                 onChange={(e) => {
                   const slideId = currentSlide.id;
                   const versionId = e.target.value;
-                  const versions = imageVersions[slideId] || [];
+                  const versions = getVisibleSlideVersions(slideId);
                   const v = versions.find(x => x.id === versionId);
                   if (v) {
                     setCurrentImageVersionId(prev => ({ ...prev, [slideId]: versionId }));
@@ -3236,9 +4720,9 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, onPptStageCh
                   }
                 }}
               >
-                {(imageVersions[currentSlide.id] || []).map((v, idx) => (
+                {getVisibleSlideVersions(currentSlide.id).map((v, idx) => (
                   <option key={v.id} value={v.id}>
-                    {idx + 1} 路 {new Date(v.timestamp).toLocaleString()}
+                    {formatImageVersionLabel(v, idx)} · {new Date(v.timestamp).toLocaleString()}
                   </option>
                 ))}
               </select>
@@ -3252,14 +4736,15 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, onPptStageCh
           ) : null}
           {currentSlide ? (
              <ContextMenu>
-                <ContextMenuTrigger className="outline-none">
+                <ContextMenuTrigger asChild>
                     <div 
-                        className="relative w-full max-w-[1100px] bg-white shadow-2xl rounded-sm overflow-hidden flex flex-col transition-transform duration-300"
+                        ref={previewCanvasRef}
+                        className="relative w-full max-w-[1100px] bg-white shadow-2xl rounded-sm overflow-hidden flex flex-col transition-transform duration-300 outline-none"
                         style={{ aspectRatio: "16/9" }}
                     >
                         {/* Display either generated image or DOM layout */}
                         {currentSlideImage ? (
-                            <img src={currentSlideImage} className="w-full h-full object-contain bg-white" alt="AI Generated Slide" />
+                            renderScaledSlideScene(currentSlide, true, previewCanvasSize.width, previewCanvasSize.height)
                         ) : (
                             <div className="w-full h-full p-12 flex flex-col relative">
                                 {/* Background Template */}
@@ -3355,20 +4840,21 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, onPptStageCh
           
           <div className="flex-1 flex items-center justify-center p-8 overflow-hidden bg-black/90">
             {activeSlides[slideshowIndex] ? (
+              (() => {
+                const slideDims = getSlideshowDimensions();
+                const slideWidth = typeof slideDims.width === "number" ? slideDims.width : 1100;
+                const slideHeight = typeof slideDims.height === "number" ? slideDims.height : 619;
+                return (
               <div className="relative w-full h-full flex items-center justify-center">
                   <div 
                     className="relative bg-white shadow-2xl overflow-hidden rounded-lg mx-auto"
                     style={{
-                      width: getSlideshowDimensions().width,
-                      height: getSlideshowDimensions().height
+                      width: slideDims.width,
+                      height: slideDims.height
                     }}
                   >
-                  {getSlideImageUrl(activeSlides[slideshowIndex].id) ? (
-                    <img
-                      src={getSlideImageUrl(activeSlides[slideshowIndex].id)}
-                      className="w-full h-full object-contain bg-black"
-                      alt="Slide"
-                    />
+                  {getSlideBackgroundUrl(activeSlides[slideshowIndex].id) ? (
+                    renderScaledSlideScene(activeSlides[slideshowIndex], false, slideWidth, slideHeight)
                   ) : (
                     <div className="w-full h-full p-16 flex flex-col">
                       <h1 className="text-5xl font-bold mb-12 text-zinc-900 border-b-4 border-blue-600 pb-6 w-fit pr-16">
@@ -3390,6 +4876,8 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, onPptStageCh
                   )}
                 </div>
               </div>
+                );
+              })()
             ) : null}
           </div>
 

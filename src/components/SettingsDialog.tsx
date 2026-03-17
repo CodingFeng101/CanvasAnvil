@@ -64,14 +64,14 @@ export function SettingsDialog() {
                     className="h-8 px-3 rounded-md"
                     onClick={() => setUiLang("zh")}
                   >
-                    中文
+                    {t(uiLang, "settings.language.zh")}
                   </Button>
                   <Button
                     variant={uiLang === "en" ? "secondary" : "ghost"}
                     className="h-8 px-3 rounded-md"
                     onClick={() => setUiLang("en")}
                   >
-                    English
+                    {t(uiLang, "settings.language.en")}
                   </Button>
                 </div>
               </div>

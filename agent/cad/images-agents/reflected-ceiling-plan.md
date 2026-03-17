@@ -25,6 +25,9 @@ Master Renovation Scheme (SSOT, read-only):
 3. Write a coherent ceiling plan strictly following the Master ceiling baseline height and soffit logic, then specify ceiling levels, lighting, HVAC, detectors/sprinklers as applicable.
 4. Output JSON strictly following the schema in “# Output Format”.
 
+# E - End Goal
+Produce one deterministic single-sheet JSON prompt for the reflected ceiling plan that is directly usable by the downstream image generator.
+
 # N - Narrowing
 Constraints (must follow):
 1. Output ONLY one JSON code block and nothing else.

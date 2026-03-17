@@ -15,6 +15,9 @@ I will provide:
 3. Use consistent layout, styles, and deterministic ids.
 4. Self-validate the XML and fix any violations before responding.
 
+# E - End Goal
+Produce one complete `flow_patch` JSON payload whose `full` field contains the final draw.io XML for the requested diagram.
+
 # N - Narrowing
 Constraints (CRITICAL):
 1. Output exactly ONE markdown ```json code block and nothing else.

@@ -13,7 +13,23 @@
   <a href="README.fr-FR.md">Français</a>
 </p>
 
-CanvasAnvil is a multi-canvas AI creation platform that turns a single requirement into deliverables you can iterate on.
+CanvasAnvil is a multi-canvas AI creation platform for flow diagrams, CAD workflows, and PPT generation/editing.
+
+## Release
+
+Current release: `v1.0.0`
+
+`v1.0.0` marks the first major usable release with a more stable PPT pipeline, stronger agent routing, cleaner version handling, and better local proxy support for AI requests.
+
+## Highlights in v1.0.0
+
+- Unified multi-canvas workflow across `Flow`, `CAD`, and `PPT`
+- PPT chat uses single-turn task execution instead of passing full chat history to the agent
+- PPT image uploads no longer bloat chat input with raw base64 data
+- PPT image generation and image-edit requests now go through a local proxy route for better browser compatibility
+- More stable image-reference routing with image count limits, compression, and fallback retry behavior
+- Cleaner PPT version display and hidden internal textless-background processing
+- Fixed multiple garbled text issues in PPT workspace and repo docs
 
 ## Canvas Previews
 
@@ -32,108 +48,96 @@ CanvasAnvil is a multi-canvas AI creation platform that turns a single requireme
   <tr><td width="680" align="left"><img src="public/demos/ppt.gif?raw=1" alt="PPT canvas" width="680" /></td></tr>
 </table>
 
-## Video Tutorials
-
-- [Watch on Bilibili](https://www.bilibili.com/video/BV1jzZ3BBEHc?vd_source=b6b031f92061ae667eba1185f4782a1c)
-- [Watch on YouTube](https://youtu.be/n3Otj--aLRo)
-- [Watch on Douyin](https://v.douyin.com/JwlwhmE6R40/)
-
-## Try CanvasAnvil
+## Online Demo
 
 - [Open CanvasAnvil](https://canvasanvil.codingfgd.asia)
-- Note: The current server configuration is modest, so the service may occasionally feel slow or laggy. Thanks for your understanding.
 
-## Capability Overview (User View)
+## Video Tutorials
 
-- `Flow`: flowchart generation and partial edits (draw.io XML)
-- `CAD`: interior design planning, analysis boards, 2D floor plans, render tasks, and BOM
-- `PPT`: presentation draft generation and iterative editing
+- [Bilibili](https://www.bilibili.com/video/BV1jzZ3BBEHc?vd_source=b6b031f92061ae667eba1185f4782a1c)
+- [YouTube](https://youtu.be/n3Otj--aLRo)
+- [Douyin](https://v.douyin.com/JwlwhmE6R40/)
 
-## Typical Workflow
+## Capability Overview
 
-1. Enter your requirement
-2. Generate/iterate on design plan
-3. Generate analysis boards and confirm strategy
-4. Generate and edit 2D floor plan
-5. Export outputs (diagrams / lists / slides)
+- `Flow`: flowchart generation and partial edits based on draw.io XML
+- `CAD`: interior workflow planning, analysis boards, 2D floor plans, render-task generation, and BOM
+- `PPT`: structured slide generation, page-level editing, image-assisted iteration, and export
 
 ## Quick Start
 
 1. Install dependencies
+
 ```bash
 npm install
 ```
-2. Start development
+
+2. Start local development
+
 ```bash
 npm run dev
 ```
+
 Default URL: `http://localhost:5173`
 
-3. Type check
+3. Run type checks
+
 ```bash
 npm run check
 ```
-4. Production build
+
+4. Build for production
+
 ```bash
 npm run build
 ```
 
-## Origins and Integrations
-
-- Flow canvas: integrated and enhanced from [next-ai-draw-io](https://github.com/DayuanJiang/next-ai-draw-io)
-- PPT canvas: integrated and enhanced from [banana-slides](https://github.com/Anionex/banana-slides.git)
-- CAD canvas: implemented in-house (architecture, agent workflow, 2D SVG editing pipeline, BOM/render pipeline)
-
-Key improvements:
-
-- Unified UX across canvases (chat, code blocks, one-click apply to canvas)
-- More stable agent routing and retry mechanisms
-- CAD-specific capabilities (patch / replace / BOM / 7-slot render workflow)
-- Cross-canvas state/version/export pipelines
-
-## Core Capabilities (Developer View)
-
-- Flow: chat-driven flowchart generation, patch/replace, one-click apply, snapshot restore
-- CAD: `cad_plan` output, parallel analysis-board generation, 2D SVG partial updates with analysis-image references, concurrent render jobs, BOM export
-- PPT: structured content generation, page-level incremental edits, streaming iteration
-
-## Tech Stack
-
-- Frontend: React 18 + TypeScript + Vite
-- UI: Tailwind CSS + Radix UI + Lucide
-- Diagram engines: draw.io/diagrams.net for Flow, SVG-Edit for CAD
-- Model integration: configurable multi-model access (chat / image)
-
 ## Useful Scripts
 
-- `npm run dev`: start development server
-- `npm start`: production start (static site + API)
-- `npm run build`: production build
+- `npm run dev`: start Vite development server
+- `npm run dev:full`: start web and API dev servers together
+- `npm run dev:web`: start frontend dev server
+- `npm run dev:api`: start API dev server
 - `npm run check`: TypeScript check
 - `npm run lint`: ESLint
+- `npm run build`: production build
+- `npm run preview`: preview built app
+- `npm start`: run API server
 
-## Project Structure (Key Paths)
+## Development Notes
+
+- AI configuration is read from local app settings and can be routed to custom providers
+- PPT local development now depends on the local `/api/ppt-ai` proxy route
+- After changing local API route wiring in `vite.config.ts`, restart the dev server
+
+## Project Structure
 
 ```text
 .
-├─ agent/                      # Prompts and sub-agent specs for CAD/Flow/PPT
-├─ public/                     # Static assets (including SVG-Edit)
+├─ agent/                      # Agent prompts and sub-agent specs
+├─ public/                     # Static assets
 ├─ src/
 │  └─ workspaces/
 │     ├─ flow/                 # Flow canvas
-│     ├─ cad/                  # CAD canvas (in-house core)
+│     ├─ cad/                  # CAD canvas
 │     └─ ppt/                  # PPT canvas
-├─ api/                        # API logic
+├─ api/                        # Local API route entrypoints
 └─ README.md
 ```
 
+## Origins and Integrations
+
+- Flow canvas: integrated and extended from [next-ai-draw-io](https://github.com/DayuanJiang/next-ai-draw-io)
+- PPT canvas: integrated and extended from [banana-slides](https://github.com/Anionex/banana-slides.git)
+- CAD canvas: built in-house, including agent workflow, 2D SVG editing, render orchestration, and BOM pipeline
+
 ## Docs
 
-- Deployment guide: [Open deployment guide](deploy/README.md)
+- Deployment guide: [deploy/README.md](deploy/README.md)
 
-## WeChat
+## Contact
 
-Scan my WeChat QR code below to contact me.
+Scan the WeChat QR code below to contact the author.
 
 <p align="left">
   <img src="public/wechat.jpg" alt="WeChat QR code" width="280" />

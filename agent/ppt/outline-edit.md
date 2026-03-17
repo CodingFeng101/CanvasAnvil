@@ -27,6 +27,9 @@ Notes:
 - `note`
 5. Return one patch payload only.
 
+# E - End Goal
+Produce one machine-readable routing result that tells the external system which slides to update and how.
+
 # N - Narrowing
 Rules (CRITICAL):
 1. Text editing only. Do NOT output image URLs.

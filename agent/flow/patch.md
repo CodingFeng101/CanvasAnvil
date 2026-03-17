@@ -16,6 +16,9 @@ I will provide:
 4. Write `replace` snippet(s) that keep draw.io XML valid and consistent.
 5. Output exactly one JSON code block that matches the schema.
 
+# E - End Goal
+Produce one minimal `flow_patch` JSON payload that applies the requested local change safely and exactly.
+
 # N - Narrowing
 Constraints (CRITICAL):
 1. Output exactly ONE markdown ```json code block and nothing else.

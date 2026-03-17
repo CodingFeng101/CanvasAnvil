@@ -24,6 +24,10 @@ const DEFAULT_CONFIG: AIConfig = {
 
 const STORAGE_KEY = "unified_ai_workspace_config";
 const MODEL_CONCURRENCY = 30;
+const IMAGE_MODEL_MAX_REFERENCE_IMAGES = 3;
+const IMAGE_MODEL_MAX_DIMENSION = 1536;
+const IMAGE_MODEL_MAX_DATA_URL_LENGTH = 1_800_000;
+const IMAGE_MODEL_JPEG_QUALITY = 0.86;
 
 type QueueItem<T> = {
   run: () => Promise<T>;
@@ -237,6 +241,10 @@ export type GenerateChatMessageOptions = {
   timeoutMs?: number;
 };
 
+async function normalizeVisionImageUrls(imageUrls: string[]) {
+  return await normalizeImageUrlsForModel(imageUrls, IMAGE_MODEL_MAX_REFERENCE_IMAGES);
+}
+
 export async function generateChatMessage(messages: ChatMessage[], model?: string, options?: GenerateChatMessageOptions) {
   const timeoutMs = typeof options?.timeoutMs === "number" && options.timeoutMs > 0 ? options.timeoutMs : 0;
   const externalSignal = options?.signal;
@@ -286,6 +294,106 @@ export async function generateChatMessage(messages: ChatMessage[], model?: strin
   }
 }
 
+export async function generatePptProxyChatMessage(
+  messages: ChatMessage[],
+  model?: string,
+  options?: GenerateChatMessageOptions
+) {
+  const config = getAIConfig();
+  if (!config.apiKey) {
+    throw new Error(t(getUiLanguage(), "error.missingApiKey"));
+  }
+
+  const data = await callPptProxy<{ content?: string }>(
+    {
+      kind: "chat",
+      aiConfig: {
+        apiKey: config.apiKey,
+        baseUrl: config.baseUrl,
+        chatModel: config.chatModel,
+        imageModel: config.imageModel,
+      },
+      messages,
+      model: model || config.chatModel,
+    },
+    options?.signal
+  );
+
+  return String(data?.content || "");
+}
+
+export async function generateVisionChatMessage(
+  systemPrompt: string,
+  userPrompt: string,
+  imageUrls: string[],
+  model?: string,
+  options?: GenerateChatMessageOptions
+) {
+  const timeoutMs = typeof options?.timeoutMs === "number" && options.timeoutMs > 0 ? options.timeoutMs : 0;
+  const externalSignal = options?.signal;
+
+  const controller = typeof AbortController !== "undefined" ? new AbortController() : null;
+  const mergedSignal = controller?.signal || externalSignal;
+  let timeoutId: any = null;
+
+  if (controller && externalSignal) {
+    if (externalSignal.aborted) controller.abort();
+    else externalSignal.addEventListener("abort", () => controller.abort(), { once: true });
+  }
+
+  if (controller && timeoutMs > 0) {
+    timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+  }
+
+  try {
+    return await limitModelCall(async () => {
+      const config = getAIConfig();
+
+      if (!config.apiKey) {
+        throw new Error(t(getUiLanguage(), "error.missingApiKey"));
+      }
+
+      const normalizedImageUrls = await normalizeVisionImageUrls(imageUrls);
+      const userContent: any[] = [{ type: "text", text: userPrompt }];
+      for (const url of normalizedImageUrls) {
+        userContent.push({
+          type: "image_url",
+          image_url: { url },
+        });
+      }
+
+      try {
+        const data = await callPptProxy<{ content?: string }>(
+          {
+            kind: "chat",
+            aiConfig: {
+              apiKey: config.apiKey,
+              baseUrl: config.baseUrl,
+              chatModel: config.chatModel,
+              imageModel: config.imageModel,
+            },
+            messages: [
+              { role: "system", content: systemPrompt },
+              { role: "user", content: userContent as any },
+            ] as any,
+            model: model || config.chatModel,
+          },
+          mergedSignal || undefined
+        );
+        return String(data?.content || "");
+      } catch (error) {
+        if ((error as any)?.name === "AbortError" || (error as any)?.name === "APIUserAbortError") {
+          throw error;
+        }
+        console.error("Vision Chat Error:", error);
+        throw error;
+      }
+    }, mergedSignal);
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId);
+  }
+}
+
 // Legacy non-stream function (kept for compatibility if needed)
 export async function sendChatMessage(messages: ChatMessage[]) {
   return streamChatMessage(messages, () => {});
@@ -296,6 +404,48 @@ export interface ImageGenerationRequest {
   prompt: string;
   referenceImageUrl?: string; // Main reference (kept for backward compatibility)
   additionalReferenceImageUrls?: string[]; // Additional references
+}
+
+type PptProxyChatRequest = {
+  kind: "chat";
+  aiConfig: Pick<AIConfig, "apiKey" | "baseUrl" | "chatModel" | "imageModel">;
+  messages: ChatMessage[];
+  model?: string;
+};
+
+type PptProxyImageRequest = {
+  kind: "image";
+  aiConfig: Pick<AIConfig, "apiKey" | "baseUrl" | "chatModel" | "imageModel">;
+  prompt: string;
+  referenceImageUrl?: string;
+  additionalReferenceImageUrls?: string[];
+  model?: string;
+};
+
+async function callPptProxy<T>(body: PptProxyChatRequest | PptProxyImageRequest, signal?: AbortSignal): Promise<T> {
+    const response = await fetch("/api/ppt-ai", {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json",
+        },
+        body: JSON.stringify(body),
+        signal,
+    });
+
+    const text = await response.text().catch(() => "");
+    let parsed: any = null;
+    try {
+        parsed = text ? JSON.parse(text) : null;
+    } catch {
+        parsed = null;
+    }
+
+    if (!response.ok) {
+        const detail = String(parsed?.error || text || "").trim();
+        throw new Error(detail || `Proxy request failed with status ${response.status}`);
+    }
+
+    return parsed as T;
 }
 
 // Helper to validate and clean URL
@@ -341,6 +491,99 @@ async function objectUrlToDataUrl(objectUrl: string) {
     } catch {
         return null;
     }
+}
+
+function getImageMimeFromDataUrl(dataUrl: string) {
+    const match = String(dataUrl || "").match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,/i);
+    return match?.[1]?.toLowerCase() || "image/png";
+}
+
+async function compressDataImageUrlForModel(dataUrl: string) {
+    if (typeof window === "undefined" || typeof document === "undefined") return dataUrl;
+    if (!String(dataUrl || "").startsWith("data:image")) return dataUrl;
+
+    return await new Promise<string>((resolve) => {
+        const img = new Image();
+        img.onload = () => {
+            try {
+                const width = Number(img.naturalWidth || img.width || 0);
+                const height = Number(img.naturalHeight || img.height || 0);
+                if (!width || !height) {
+                    resolve(dataUrl);
+                    return;
+                }
+
+                const longestSide = Math.max(width, height);
+                const needsResize = longestSide > IMAGE_MODEL_MAX_DIMENSION;
+                const needsReencode = dataUrl.length > IMAGE_MODEL_MAX_DATA_URL_LENGTH;
+
+                if (!needsResize && !needsReencode) {
+                    resolve(dataUrl);
+                    return;
+                }
+
+                const scale = needsResize ? IMAGE_MODEL_MAX_DIMENSION / longestSide : 1;
+                const targetWidth = Math.max(1, Math.round(width * scale));
+                const targetHeight = Math.max(1, Math.round(height * scale));
+                const canvas = document.createElement("canvas");
+                canvas.width = targetWidth;
+                canvas.height = targetHeight;
+                const ctx = canvas.getContext("2d");
+                if (!ctx) {
+                    resolve(dataUrl);
+                    return;
+                }
+
+                ctx.imageSmoothingEnabled = true;
+                ctx.imageSmoothingQuality = "high";
+                ctx.drawImage(img, 0, 0, targetWidth, targetHeight);
+
+                const originalMime = getImageMimeFromDataUrl(dataUrl);
+                const targetMime =
+                    originalMime === "image/jpeg" || originalMime === "image/jpg" || needsReencode
+                        ? "image/jpeg"
+                        : originalMime;
+                const compressed =
+                    targetMime === "image/jpeg"
+                        ? canvas.toDataURL(targetMime, IMAGE_MODEL_JPEG_QUALITY)
+                        : canvas.toDataURL(targetMime);
+
+                resolve(compressed.length < dataUrl.length ? compressed : dataUrl);
+            } catch {
+                resolve(dataUrl);
+            }
+        };
+        img.onerror = () => resolve(dataUrl);
+        img.src = dataUrl;
+    });
+}
+
+async function normalizeImageUrlForModel(url: string) {
+    const raw = String(url || "").trim();
+    if (!raw) return null;
+
+    if (raw.startsWith("blob:")) {
+        const dataUrl = await objectUrlToDataUrl(raw);
+        if (!dataUrl) return null;
+        return await compressDataImageUrlForModel(dataUrl);
+    }
+
+    if (raw.startsWith("data:image")) {
+        return await compressDataImageUrlForModel(raw);
+    }
+
+    return cleanUrl(raw);
+}
+
+async function normalizeImageUrlsForModel(imageUrls: string[], maxImages: number) {
+    const normalized: string[] = [];
+    for (const raw of imageUrls) {
+        if (normalized.length >= maxImages) break;
+        const url = await normalizeImageUrlForModel(raw);
+        if (!url || normalized.includes(url)) continue;
+        normalized.push(url);
+    }
+    return normalized;
 }
 
 function extractImageUrlFromContent(messageContent: any) {
@@ -397,82 +640,32 @@ export async function generateImage(request: ImageGenerationRequest, signal?: Ab
       throw new Error(t(getUiLanguage(), "error.missingApiKey"));
     }
   
-    let referenceImageUrl = request.referenceImageUrl;
-    if (referenceImageUrl && referenceImageUrl.startsWith("blob:")) {
-      const dataUrl = await objectUrlToDataUrl(referenceImageUrl);
-      if (dataUrl) referenceImageUrl = dataUrl;
-      else referenceImageUrl = undefined;
-    }
+    const normalizedReferenceImageUrl = request.referenceImageUrl
+      ? await normalizeImageUrlForModel(request.referenceImageUrl)
+      : null;
+    const additionalUrls = await normalizeImageUrlsForModel(
+      Array.isArray(request.additionalReferenceImageUrls) ? request.additionalReferenceImageUrls : [],
+      Math.max(0, IMAGE_MODEL_MAX_REFERENCE_IMAGES - (normalizedReferenceImageUrl ? 1 : 0))
+    );
 
-    const additionalUrls: string[] = [];
-    if (request.additionalReferenceImageUrls && request.additionalReferenceImageUrls.length > 0) {
-        for (const url of request.additionalReferenceImageUrls) {
-            if (url.startsWith("blob:")) {
-                const dataUrl = await objectUrlToDataUrl(url);
-                if (dataUrl) additionalUrls.push(dataUrl);
-            } else {
-                additionalUrls.push(url);
-            }
-        }
-    }
-
-    const myHeaders = new Headers();
-    myHeaders.append("Authorization", `Bearer ${config.apiKey}`);
-    myHeaders.append("Content-Type", "application/json");
-  
-    const content: any[] = [
-      {
-        "type": "text",
-        "text": request.prompt
-      }
-    ];
-  
-    if (referenceImageUrl) {
-      content.push({
-        "type": "image_url",
-        "image_url": {
-          "url": referenceImageUrl
-        }
-      });
-    }
-
-    for (const url of additionalUrls) {
-        content.push({
-            "type": "image_url",
-            "image_url": {
-                "url": url
-            }
-        });
-    }
-  
-    const raw = JSON.stringify({
-      "model": config.imageModel,
-      "messages": [
-        {
-          "role": "user",
-          "content": referenceImageUrl || additionalUrls.length > 0 ? content : request.prompt
-        }
-      ],
-      "stream": false
-    });
-  
-    const requestOptions = {
-      method: 'POST',
-      headers: myHeaders,
-      body: raw,
-      redirect: 'follow' as RequestRedirect,
-      ...(signal ? { signal } : {})
-    };
-  
     try {
-      const response = await fetch(`${config.baseUrl}/chat/completions`, requestOptions);
-      
-      if (!response.ok) {
-          throw new Error(`API request failed with status ${response.status}`);
-      }
-  
-      const result = await response.json();
-      const url = parseAIResponse(result);
+      const result = await callPptProxy<{ url?: string }>(
+        {
+          kind: "image",
+          aiConfig: {
+            apiKey: config.apiKey,
+            baseUrl: config.baseUrl,
+            chatModel: config.chatModel,
+            imageModel: config.imageModel,
+          },
+          prompt: request.prompt,
+          referenceImageUrl: normalizedReferenceImageUrl || undefined,
+          additionalReferenceImageUrls: additionalUrls,
+          model: config.imageModel,
+        },
+        signal
+      );
+      const url = cleanUrl(String(result?.url || ""));
       if (url && url.startsWith("data:image")) {
         try {
           const objectUrl = dataUrlToObjectUrl(url);

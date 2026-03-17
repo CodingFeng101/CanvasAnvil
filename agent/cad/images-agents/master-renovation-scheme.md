@@ -22,7 +22,7 @@ Plan:
 {{svg2d}}
 ```
 
-# S - Responsibilities
+# S - Steps
 1. Normalize and LOCK room names.
 2. Decide wall strategy: retain / demolish / new-build.
 3. Lock floor material zoning by room.
@@ -33,6 +33,9 @@ Plan:
 8. Lock finish style and feature-wall strategy.
 9. Lock dimensioning rules and drawing consistency rules.
 10. Output ONE unified Renovation Scheme JSON.
+
+# E - End Goal
+Produce one deterministic renovation scheme JSON that becomes the single source of truth for downstream CAD drawing prompts.
 
 # N - Narrowing
 Constraints:
