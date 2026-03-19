@@ -41,6 +41,7 @@ export function PptWorkspaceShell() {
   const [pptResetTick, setPptResetTick] = useState(0);
   const [pptReady, setPptReady] = useState(false);
   const [pptStage, setPptStage] = useState<"start" | "outline" | "slides">("start");
+  const [pptCreationMode, setPptCreationMode] = useState<"idea" | "outline" | "beautify" | "image_transform">("idea");
 
   const [chatHistory, setChatHistory] = useState<ChatMessage[]>([]);
   const [versionHistory, setVersionHistory] = useState<HistoryItem[]>(() => {
@@ -56,7 +57,9 @@ export function PptWorkspaceShell() {
 
   const [isChatCollapsed, setIsChatCollapsed] = useState(false);
   const chatPanelRef = useRef<PanelImperativeHandle | null>(null);
-  const showPptChat = pptStage === "outline" || pptStage === "slides";
+  const showPptChat =
+    (pptStage === "outline" || pptStage === "slides") &&
+    pptCreationMode !== "image_transform";
   const pptChatLocked = !showPptChat || !pptReady;
 
   useEffect(() => {
@@ -201,6 +204,7 @@ export function PptWorkspaceShell() {
     setPptDraftSlides([]);
     setPptReady(false);
     setPptStage("start");
+    setPptCreationMode("idea");
     setChatHistory([]);
     setAttachments([]);
     setVersionHistory([]);
@@ -232,6 +236,7 @@ export function PptWorkspaceShell() {
             onAddToChat={handleAddToChat}
             onPptReadyChange={setPptReady}
             onPptStageChange={setPptStage}
+            onCreationModeChange={setPptCreationMode}
             incomingEdit={pptIncomingEdit}
             onIncomingEditHandled={() => setPptIncomingEdit(null)}
             onResetWorkspace={clearWorkspace}

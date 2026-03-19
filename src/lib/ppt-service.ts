@@ -745,9 +745,9 @@ export const pptService = {
             role: "You are a textless slide background editing agent.",
             instructions: "Edit the provided slide image in place and remove only true slide-layer text while preserving the slide design pixel-for-pixel everywhere else as much as possible.",
             input: `language: ${uiLanguage}\nslide-layer text to remove:\n${textList || "(none)"}\n\napproximate text regions:\n${textRegions}`,
-            steps: "1. Remove only the listed slide-layer text.\n2. Reconstruct the covered background from immediate surrounding visual cues.\n3. Keep all non-text shapes, icons, charts, photos, gradients, shadows, and composition unchanged.\n4. Preserve the original 16:9 layout exactly.",
+            steps: "1. Remove only the listed slide-layer text inside the listed regions.\n2. Erase the full visible text treatment, including glyph fill, outline, glow, drop shadow, anti-aliased fringe, and other text effects immediately around the letters.\n3. Reconstruct the covered background from immediate surrounding visual cues.\n4. Keep all non-text shapes, icons, charts, photos, gradients, shadows, and composition unchanged.\n5. Preserve the original 16:9 layout exactly.",
             endGoal: "Produce one 16:9 textless background slide image that preserves the original design.",
-            narrowing: "1. Keep everything else unchanged.\n2. Do not redesign, move, resize, crop, recolor, restyle, sharpen, blur, or recompose anything.\n3. Do not touch text inside material images, screenshots, charts, tables, logos, diagrams, or scanned content.\n4. Do not add any new text, icons, decorative elements, or cleanup artifacts.\n5. Output must still look like the same slide, just without the removable slide-layer text.",
+            narrowing: "1. Keep everything else unchanged.\n2. Remove the entire text silhouette cleanly rather than partially fading or blurring it.\n3. Do not redesign, move, resize, crop, recolor, restyle, sharpen, blur, or recompose anything.\n4. Do not touch text inside material images, screenshots, charts, tables, logos, diagrams, or scanned content.\n5. Do not add any new text, icons, decorative elements, or cleanup artifacts.\n6. Output must still look like the same slide, just without the removable slide-layer text.",
         });
 
         return await generateImage({

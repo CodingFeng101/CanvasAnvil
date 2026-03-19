@@ -182,6 +182,7 @@ interface PptWorkspaceProps {
   onAddToChat?: (json: string, name: string) => void;
   onPptReadyChange?: (ready: boolean) => void;
   onPptStageChange?: (stage: "start" | "outline" | "slides") => void;
+  onCreationModeChange?: (mode: "idea" | "outline" | "beautify" | "image_transform") => void;
   incomingEdit?: { id: string; payload: string } | null;
   onIncomingEditHandled?: (id: string) => void;
   onResetWorkspace?: () => void;
@@ -434,7 +435,7 @@ function TextBlockOverlay({
 }
 
 type CreationStep = 'idle' | 'input' | 'outline' | 'generating_content' | 'generating_images' | 'done';
-type CreationMode = 'idea' | 'outline' | 'beautify';
+type CreationMode = 'idea' | 'outline' | 'beautify' | 'image_transform';
 type ReferenceFile = { id: string; filename: string; content: string; charCount: number };
 type SlideMaterialImage = {
   id: string;
@@ -480,7 +481,7 @@ const BEAUTIFY_CONCURRENCY = 5;
 const BEAUTIFY_RETRY_MAX_ATTEMPTS = 3;
 const BEAUTIFY_RETRY_BASE_DELAY_MS = 1200;
 
-export function PptWorkspace({ data, onAddToChat, onPptReadyChange, onPptStageChange, incomingEdit, onIncomingEditHandled, onResetWorkspace }: PptWorkspaceProps) {
+export function PptWorkspace({ data, onAddToChat, onPptReadyChange, onPptStageChange, onCreationModeChange, incomingEdit, onIncomingEditHandled, onResetWorkspace }: PptWorkspaceProps) {
   const uiLang = useUiLanguage();
   const tr = (zh: string, en: string) => (uiLang === "zh" ? zh : en);
   const initialPptState = (() => {
@@ -631,15 +632,28 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, onPptStageCh
   }, [creationStep, onPptStageChange]);
   const [creationMode, setCreationMode] = useState<CreationMode>(() => {
     const v = initialPptState?.creationMode;
-    return v === "idea" || v === "outline" || v === "beautify" ? v : "idea";
+    return v === "idea" || v === "outline" || v === "beautify" || v === "image_transform" ? v : "idea";
   });
+  useEffect(() => {
+    onCreationModeChange?.(creationMode);
+  }, [creationMode, onCreationModeChange]);
   const [ideaInput, setIdeaInput] = useState(() => (typeof initialPptState?.ideaInput === "string" ? initialPptState.ideaInput : ""));
   const [outlineInput, setOutlineInput] = useState(() => (typeof initialPptState?.outlineInput === "string" ? initialPptState.outlineInput : ""));
   const [beautifyRequirement, setBeautifyRequirement] = useState(() => (typeof initialPptState?.beautifyRequirement === "string" ? initialPptState.beautifyRequirement : ""));
   const [beautifyUseTemplate, setBeautifyUseTemplate] = useState(() => Boolean(initialPptState?.beautifyUseTemplate));
   const [beautifyFile, setBeautifyFile] = useState<File | null>(null);
+  const [imageTransformFile, setImageTransformFile] = useState<File | null>(null);
   const [beautifyFailures, setBeautifyFailures] = useState<Record<string, string>>(() => {
     const v = initialPptState?.beautifyFailures;
+    if (!v || typeof v !== "object" || Array.isArray(v)) return {};
+    const out: Record<string, string> = {};
+    for (const [k, val] of Object.entries(v)) {
+      if (typeof k === "string" && typeof val === "string" && val.trim()) out[k] = val;
+    }
+    return out;
+  });
+  const [imageTransformFailures, setImageTransformFailures] = useState<Record<string, string>>(() => {
+    const v = initialPptState?.imageTransformFailures;
     if (!v || typeof v !== "object" || Array.isArray(v)) return {};
     const out: Record<string, string> = {};
     for (const [k, val] of Object.entries(v)) {
@@ -681,6 +695,7 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, onPptStageCh
   const [progress, setProgress] = useState({ current: 0, total: 0, message: "" });
   const referenceFileInputRef = useRef<HTMLInputElement | null>(null);
   const beautifyFileInputRef = useRef<HTMLInputElement | null>(null);
+  const imageTransformFileInputRef = useRef<HTMLInputElement | null>(null);
   const slideMaterialInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
   const descriptionTextareaRefs = useRef<Record<string, HTMLTextAreaElement | null>>({});
   const descriptionEditorRefs = useRef<Record<string, HTMLDivElement | null>>({});
@@ -785,6 +800,7 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, onPptStageCh
           beautifyRequirement,
           beautifyUseTemplate,
           beautifyFailures,
+          imageTransformFailures,
           updatedAt: Date.now(),
         })
       );
@@ -806,6 +822,7 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, onPptStageCh
     beautifyRequirement,
     beautifyUseTemplate,
     beautifyFailures,
+    imageTransformFailures,
   ]);
 
   useEffect(() => {
@@ -1471,7 +1488,7 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, onPptStageCh
       const versions = imageVersions[slideId] || [];
       const visibleVersions = versions.filter((version) => {
         const layer = renderLayers[slideId]?.[version.id];
-        return hasRenderableTextBlocks(layer);
+        return hasRenderableTextBlocks(layer) || (creationMode === "image_transform" && layer?.status === "ready");
       });
       const requestedVersionId = currentImageVersionId[slideId] || "";
       const resolvedVersionId =
@@ -1492,11 +1509,15 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, onPptStageCh
     const versions = imageVersions[slideId] || [];
     const visible = versions.filter((version) => {
       const layer = renderLayers[slideId]?.[version.id];
-      return hasRenderableTextBlocks(layer);
+      return hasRenderableTextBlocks(layer) || (creationMode === "image_transform" && layer?.status === "ready");
     });
     return visible;
   };
   const getSlideImageUrl = (slideId: string) => getSlideVersionMeta(slideId).imageUrl;
+  const getOriginalSlideVersion = (slideId: string) => {
+    const versions = imageVersions[slideId] || [];
+    return versions.find((version) => !version.sourceVersionId) || versions[0];
+  };
   const getSlideRenderLayer = (slideId: string) => {
     const { versionId } = getSlideVersionMeta(slideId);
     if (!versionId) return undefined;
@@ -2205,7 +2226,10 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, onPptStageCh
   const currentSlideImage = currentSlide ? getSlideBackgroundUrl(currentSlide.id) : "";
   const currentSlideHasTextLayer = currentSlide ? ((getSlideRenderLayer(currentSlide.id)?.textBlocks || []).length > 0) : false;
   const failedBeautifyCount = activeSlides.reduce((n, s) => n + (beautifyFailures[s.id] ? 1 : 0), 0);
-  const currentSlideFailure = currentSlide ? beautifyFailures[currentSlide.id] : "";
+  const failedImageTransformCount = activeSlides.reduce((n, s) => n + (imageTransformFailures[s.id] ? 1 : 0), 0);
+  const currentSlideFailure = currentSlide
+    ? (creationMode === "image_transform" ? imageTransformFailures[currentSlide.id] : beautifyFailures[currentSlide.id])
+    : "";
 
   const formatImageVersionLabel = (version: SlideImageVersion, index: number) => {
     return tr(`第 ${index + 1} 版`, `Version ${index + 1}`);
@@ -2328,10 +2352,17 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, onPptStageCh
             note: slide.note,
             layout: slide.layout,
           };
-          const [textBlocks, backgroundImageUrl] = await Promise.all([
-            pptService.extractSlideTextBlocks(page, slideImageUrl, uiLang as "zh" | "en"),
-            pptService.generateTextlessPageImage(page, slideImageUrl, [], uiLang as "zh" | "en"),
-          ]);
+          const textBlocks = await pptService.extractSlideTextBlocks(
+            page,
+            slideImageUrl,
+            uiLang as "zh" | "en"
+          );
+          const backgroundImageUrl = await pptService.generateTextlessPageImage(
+            page,
+            slideImageUrl,
+            textBlocks,
+            uiLang as "zh" | "en"
+          );
           const reviewedTextBlocks = await pptService.reviewSlideTextBlocks(
             page,
             slideImageUrl,
@@ -2447,6 +2478,7 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, onPptStageCh
   };
 
   useEffect(() => {
+      if (creationMode === "image_transform") return;
       activeSlides.forEach((slide) => {
         const { versionId, version, imageUrl } = getSlideVersionMeta(slide.id);
         if (!versionId || !version || !imageUrl) return;
@@ -2458,7 +2490,7 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, onPptStageCh
         if (layer?.status === "pending" || hasRenderableTextBlocks(layer)) return;
         void deriveTextlessVersionFromExisting(slide, version);
       });
-  }, [activeSlides, imageVersions, currentImageVersionId, renderLayers]);
+  }, [activeSlides, imageVersions, currentImageVersionId, renderLayers, creationMode]);
 
   const handleReferenceFileInputChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
       const files = Array.from(e.target.files || []);
@@ -3128,6 +3160,11 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, onPptStageCh
     return file?.type === "application/pdf" || name.endsWith(".pdf");
   };
 
+  const isImageTransformSourceFile = (file: File) => {
+    const name = String(file?.name || "").toLowerCase();
+    return file?.type === "application/pdf" || name.endsWith(".pdf");
+  };
+
   const extractPdfPagesAsImages = async (file: File) => {
     const { getPdfDocumentFromUrl, renderPdfPageToCanvas } = await import("@/lib/pdf-utils");
     const objectUrl = URL.createObjectURL(file);
@@ -3157,11 +3194,141 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, onPptStageCh
     }
   };
 
+  const extractImageDeckPages = async (file: File) => {
+    if (isBeautifyPdfFile(file)) {
+      return await extractPdfPagesAsImages(file);
+    }
+    throw new Error(tr("仅支持 PDF 文件。", "Only PDF files are supported."));
+  };
+
 
   const handleBeautifyFileInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0] || null;
     e.target.value = "";
     setBeautifyFile(f);
+  };
+
+  const handleImageTransformFileInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0] || null;
+    e.target.value = "";
+    setImageTransformFile(f);
+  };
+
+  const createImageTransformSlideVersion = async (slide: SlideData, sourceUrl: string) => {
+    const originalVersionId = pushImageVersion(
+      slide.id,
+      sourceUrl,
+      "generated",
+      tr("原始上传页", "Original uploaded page"),
+      { setCurrent: false }
+    );
+    setRenderLayerState(slide.id, originalVersionId, {
+      backgroundImageUrl: sourceUrl,
+      textBlocks: [],
+      status: "ready",
+    });
+
+    const reconstructedVersionId = pushImageVersion(
+      slide.id,
+      sourceUrl,
+      "edited",
+      tr("图片PPT转化结果", "Image PPT reconstruction"),
+      { sourceVersionId: originalVersionId }
+    );
+    setRenderLayerState(slide.id, reconstructedVersionId, {
+      backgroundImageUrl: sourceUrl,
+      textBlocks: [],
+      status: "pending",
+    });
+
+    try {
+      const derived = await processRenderedSlideVersion(slide, sourceUrl, reconstructedVersionId);
+      setRenderLayerState(slide.id, reconstructedVersionId, derived);
+      if (derived.status === "failed") {
+        setImageTransformFailures((prev) => ({
+          ...prev,
+          [slide.id]: derived.error || tr("图片PPT转化失败", "Image PPT transform failed"),
+        }));
+      } else {
+        setImageTransformFailures((prev) => {
+          if (!prev[slide.id]) return prev;
+          const next = { ...prev };
+          delete next[slide.id];
+          return next;
+        });
+      }
+      return reconstructedVersionId;
+    } catch (error) {
+      const message = getErrorMessage(error);
+      setImageTransformFailures((prev) => ({ ...prev, [slide.id]: message }));
+      return reconstructedVersionId;
+    }
+  };
+
+  const handleStartImageTransform = async () => {
+    const file = imageTransformFile;
+    if (!file) return;
+
+    resetGenerationState();
+    setBeautifyFailures({});
+    setImageTransformFailures({});
+    setCreationStep("generating_content");
+    setProgress({ current: 0, total: 0, message: tr("正在解析文件...", "Parsing file...") });
+
+    try {
+      const pageImages = await extractImageDeckPages(file);
+      if (pageImages.length === 0) {
+        alert(tr("无法解析页面图片，请确认文件格式。", "Failed to extract slide images. Please check the file format."));
+        setCreationStep("idle");
+        setProgress({ current: 0, total: 0, message: "" });
+        return;
+      }
+
+      const slides: SlideData[] = pageImages.map((_, i) => ({
+        id: `slide-${i + 1}`,
+        title: tr(`第 ${i + 1} 页`, `Slide ${i + 1}`),
+        content: [],
+        description: "",
+      }));
+
+      setLocalSlides(slides);
+      setCreationStep("generating_images");
+
+      const progressTracker = createTwoStageSlideProgressTracker(
+        slides.length,
+        "正在创建原始版本...",
+        "Creating original slide versions...",
+        "正在重建可编辑文字层...",
+        "Rebuilding editable text layers...",
+      );
+      progressTracker.start();
+
+      const tasks = slides.map((slide, index) => async () => {
+        let baseReady = false;
+        try {
+          progressTracker.markBaseReady();
+          baseReady = true;
+          await createImageTransformSlideVersion(slide, pageImages[index]);
+        } catch (error) {
+          setImageTransformFailures((prev) => ({
+            ...prev,
+            [slide.id]: getErrorMessage(error),
+          }));
+        } finally {
+          progressTracker.markSlideFinished(baseReady);
+        }
+      });
+
+      await runInParallel(tasks, MODEL_CONCURRENCY);
+      setCreationStep("done");
+      onPptReadyChange?.(true);
+    } catch (error) {
+      console.error("Image PPT transform failed", error);
+      alert(getErrorMessage(error));
+      setCreationStep("idle");
+    } finally {
+      setProgress({ current: 0, total: 0, message: "" });
+    }
   };
 
   const buildBeautifyInstruction = (req: string) => {
@@ -3598,6 +3765,12 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, onPptStageCh
     
     setIsGeneratingImage(true);
     try {
+        if (creationMode === "image_transform") {
+          const originalVersion = getOriginalSlideVersion(currentSlide.id);
+          if (!originalVersion?.url) return;
+          await createImageTransformSlideVersion(currentSlide, originalVersion.url);
+          return;
+        }
         let imageUrl: string | null = null;
         const pages: PptPage[] = localSlides.map(s => ({
           id: s.id,
@@ -3725,7 +3898,9 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, onPptStageCh
     setBeautifyRequirement("");
     setBeautifyUseTemplate(false);
     setBeautifyFile(null);
+    setImageTransformFile(null);
     setBeautifyFailures({});
+    setImageTransformFailures({});
     setReferenceUploadFiles([]);
     setSlideMaterials({});
     setMaterialPickerSlideId(null);
@@ -3780,6 +3955,7 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, onPptStageCh
         { id: 'idea', label: tr('想法', 'Idea') },
         { id: 'outline', label: tr('大纲', 'Outline') },
         { id: 'beautify', label: tr('PPT美化', 'Beautify') },
+        { id: 'image_transform', label: tr('图片PPT转化', 'Image PPT Transform') },
       ];
       const modeCopy = (() => {
           if (creationMode === "outline") {
@@ -3800,6 +3976,12 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, onPptStageCh
                   )
               };
           }
+          if (creationMode === "image_transform") {
+              return {
+                  hint: tr("上传 PDF，系统会为每一页生成原始版本和可编辑重建版本。", "Upload a PDF, and the system will build both the original slide version and an editable reconstructed version for each page."),
+                  placeholder: "",
+              };
+          }
           return {
               hint: tr("输入你的想法，AI 将为你生成完整 PPT", "Describe your idea and AI will generate a full deck."),
               placeholder: tr("例如：生成一份关于 AI 发展史的演讲 PPT", "e.g. Create a presentation about the history of AI")
@@ -3813,6 +3995,7 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, onPptStageCh
 
                 <div className="space-y-8">
                     {/* Template Selection */}
+                    {creationMode !== "image_transform" ? (
                     <div className="space-y-4">
                         <label className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 flex items-center gap-2">
                             <span className="w-6 h-6 rounded-full bg-blue-100 text-blue-600 text-xs flex items-center justify-center font-bold">1</span>
@@ -3876,11 +4059,12 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, onPptStageCh
                             ))}
                         </div>
                     </div>
+                    ) : null}
 
                     {/* Mode Selection & Input */}
                     <div className="space-y-4">
                         <label className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 flex items-center gap-2">
-                            <span className="w-6 h-6 rounded-full bg-blue-100 text-blue-600 text-xs flex items-center justify-center font-bold">2</span>
+                            <span className="w-6 h-6 rounded-full bg-blue-100 text-blue-600 text-xs flex items-center justify-center font-bold">{creationMode === "image_transform" ? "1" : "2"}</span>
                             {tr("输入内容", "Input")}
                         </label>
 
@@ -3927,7 +4111,7 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, onPptStageCh
                             className="space-y-3"
                         >
                             <div className="flex items-center gap-2 text-sm text-zinc-700 dark:text-zinc-200">
-                                {creationMode === "beautify" ? <Sparkles className="w-4 h-4 text-blue-600" /> : <Lightbulb className="w-4 h-4 text-amber-500" />}
+                                {creationMode === "beautify" ? <Sparkles className="w-4 h-4 text-blue-600" /> : creationMode === "image_transform" ? <Presentation className="w-4 h-4 text-blue-600" /> : <Lightbulb className="w-4 h-4 text-amber-500" />}
                                 <span>{modeCopy.hint}</span>
                             </div>
 
@@ -3980,6 +4164,40 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, onPptStageCh
                                   className="w-full h-36 p-4 rounded-xl border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-900/50 text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all resize-none outline-none"
                                   placeholder={modeCopy.placeholder}
                                 />
+                              </div>
+                            ) : creationMode === "image_transform" ? (
+                              <div className="space-y-3">
+                                <input
+                                  ref={imageTransformFileInputRef}
+                                  type="file"
+                                  accept=".pdf,application/pdf"
+                                  className="hidden"
+                                  onChange={handleImageTransformFileInputChange}
+                                />
+
+                                <div className="flex items-center justify-between gap-3 rounded-xl border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-900/50 px-4 py-3">
+                                  <div className="min-w-0">
+                                    <div className="text-sm font-medium text-zinc-900 dark:text-zinc-100">{tr("上传 PDF", "Upload PDF")}</div>
+                                    <div className="text-xs text-zinc-500 dark:text-zinc-400 truncate">
+                                      {imageTransformFile ? imageTransformFile.name : tr("未选择文件", "No file selected")}
+                                    </div>
+                                  </div>
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    className="shrink-0"
+                                    onClick={() => imageTransformFileInputRef.current?.click()}
+                                  >
+                                    <Upload className="w-4 h-4 mr-2" />
+                                    {tr("选择文件", "Choose")}
+                                  </Button>
+                                </div>
+
+                                <div className="rounded-xl border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-900/50 px-4 py-3 text-xs text-zinc-500 dark:text-zinc-400 leading-6">
+                                  <div>{tr("处理结果：", "Output:")}</div>
+                                  <div>{tr("第 1 版保留原始上传页图。", "Version 1 keeps the original uploaded slide image.")}</div>
+                                  <div>{tr("第 2 版生成无字底图并覆盖可编辑文字层。", "Version 2 generates a textless background and overlays an editable text layer.")}</div>
+                                </div>
                               </div>
                             ) : (
                               <>
@@ -4061,12 +4279,12 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, onPptStageCh
                     </div>
 
                     <Button 
-                        onClick={creationMode === "beautify" ? handleStartBeautify : creationMode === "idea" ? handleGenerateOutline : handleLoadOutline}
-                        disabled={Boolean(progress.message) || (creationMode === "beautify" ? !beautifyFile : isParsingReferenceFiles || (creationMode === "idea" ? !ideaInput.trim() : !outlineInput.trim()))}
+                        onClick={creationMode === "beautify" ? handleStartBeautify : creationMode === "image_transform" ? handleStartImageTransform : creationMode === "idea" ? handleGenerateOutline : handleLoadOutline}
+                        disabled={Boolean(progress.message) || (creationMode === "beautify" ? !beautifyFile : creationMode === "image_transform" ? !imageTransformFile || !isImageTransformSourceFile(imageTransformFile) : isParsingReferenceFiles || (creationMode === "idea" ? !ideaInput.trim() : !outlineInput.trim()))}
                         className="w-full py-6 text-lg font-medium bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white shadow-lg shadow-blue-500/20 rounded-xl transition-all hover:scale-[1.01] active:scale-[0.99]"
                     >
                         {progress.message ? <Loader2 className="w-5 h-5 mr-2 animate-spin" /> : <Sparkles className="w-5 h-5 mr-2" />}
-                        {progress.message || (creationMode === "beautify" ? tr("开始渲染", "Start rendering") : creationMode === "idea" ? tr("开始生成大纲", "Generate outline") : tr("载入大纲", "Load outline"))}
+                        {progress.message || (creationMode === "beautify" ? tr("开始渲染", "Start rendering") : creationMode === "image_transform" ? tr("开始转化", "Start transform") : creationMode === "idea" ? tr("开始生成大纲", "Generate outline") : tr("载入大纲", "Load outline"))}
                     </Button>
                 </div>
 
@@ -4595,6 +4813,11 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, onPptStageCh
                 {tr(`失败 ${failedBeautifyCount} 页`, `${failedBeautifyCount} failed`)}
               </span>
             ) : null}
+            {creationMode === "image_transform" && failedImageTransformCount > 0 ? (
+              <span className="rounded border border-red-200 bg-red-50 px-2 py-1 text-red-700">
+                {tr(`转化失败 ${failedImageTransformCount} 页`, `${failedImageTransformCount} failed`)}
+              </span>
+            ) : null}
             <span>{activeSlides.length > 0 ? tr(`第 ${currentSlideIndex + 1} / ${activeSlides.length} 页`, `Slide ${currentSlideIndex + 1} / ${activeSlides.length}`) : tr("空文档", "Empty")}</span>
         </div>
       </div>
@@ -4606,7 +4829,7 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, onPptStageCh
           {activeSlides.map((slide, index) => {
             const hasGeneratedImage = getSlideBackgroundUrl(slide.id);
             const hasTextLayer = (getSlideRenderLayer(slide.id)?.textBlocks || []).length > 0;
-            const slideFailure = beautifyFailures[slide.id];
+            const slideFailure = creationMode === "image_transform" ? imageTransformFailures[slide.id] : beautifyFailures[slide.id];
             return (
             <ContextMenu key={slide.id || index}>
                 <ContextMenuTrigger asChild>
@@ -4618,20 +4841,22 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, onPptStageCh
                         : 'border-transparent hover:border-zinc-300 dark:hover:border-zinc-700 bg-white dark:bg-zinc-800 shadow-sm'
                     }`}
                     >
-                    <div
-                      className="absolute top-1 left-1 z-20"
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      <Button
-                        size="sm"
-                        variant="destructive"
-                        className="h-6 px-2 text-[10px] gap-1 shadow-sm opacity-0 group-hover:opacity-100 transition-opacity"
-                        onClick={() => handleAddSlideToChat(slide)}
+                    {creationMode !== "image_transform" ? (
+                      <div
+                        className="absolute top-1 left-1 z-20"
+                        onClick={(e) => e.stopPropagation()}
                       >
-                        <Presentation className="w-3 h-3" />
-                        {tr("加入对话", "Add to chat")}
-                      </Button>
-                    </div>
+                        <Button
+                          size="sm"
+                          variant="destructive"
+                          className="h-6 px-2 text-[10px] gap-1 shadow-sm opacity-0 group-hover:opacity-100 transition-opacity"
+                          onClick={() => handleAddSlideToChat(slide)}
+                        >
+                          <Presentation className="w-3 h-3" />
+                          {tr("加入对话", "Add to chat")}
+                        </Button>
+                      </div>
+                    ) : null}
                     {/* Thumbnail Preview */}
                     {hasGeneratedImage ? (
                         renderScaledSlideScene(slide, false, 240, 135)
@@ -4657,17 +4882,19 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, onPptStageCh
                         className="absolute top-1 right-1 bg-red-600/90 text-white text-[10px] px-1.5 py-0.5 rounded-sm max-w-[85%] truncate"
                         title={slideFailure}
                       >
-                        {tr("美化失败", "Beautify failed")}
+                        {creationMode === "image_transform" ? tr("转化失败", "Transform failed") : tr("美化失败", "Beautify failed")}
                       </div>
                     ) : null}
                     </div>
                 </ContextMenuTrigger>
-                <ContextMenuContent>
-                    <ContextMenuItem onClick={() => handleAddSlideToChat(slide)} className="gap-2">
-                        <MessageSquarePlus className="w-4 h-4" />
-                        <span>{tr("把此页添加到对话", "Add this slide to chat")}</span>
-                    </ContextMenuItem>
-                </ContextMenuContent>
+                {creationMode !== "image_transform" ? (
+                  <ContextMenuContent>
+                      <ContextMenuItem onClick={() => handleAddSlideToChat(slide)} className="gap-2">
+                          <MessageSquarePlus className="w-4 h-4" />
+                          <span>{tr("把此页添加到对话", "Add this slide to chat")}</span>
+                      </ContextMenuItem>
+                  </ContextMenuContent>
+                ) : null}
             </ContextMenu>
           )})}
           
@@ -4730,7 +4957,7 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, onPptStageCh
           </div>
           {currentSlideFailure ? (
             <div className="absolute top-16 left-4 z-30 max-w-[520px] rounded-lg border border-red-200 bg-red-50/95 px-3 py-2 text-xs text-red-700 shadow-sm">
-              <span className="font-medium mr-1">{tr("本页美化失败：", "Slide beautify failed:")}</span>
+              <span className="font-medium mr-1">{creationMode === "image_transform" ? tr("本页转化失败：", "Slide transform failed:") : tr("本页美化失败：", "Slide beautify failed:")}</span>
               <span>{currentSlideFailure}</span>
             </div>
           ) : null}
@@ -4786,12 +5013,14 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, onPptStageCh
                         )}
                     </div>
                 </ContextMenuTrigger>
-                <ContextMenuContent>
-                    <ContextMenuItem onClick={() => handleAddSlideToChat(currentSlide)} className="gap-2">
-                        <MessageSquarePlus className="w-4 h-4" />
-                        <span>把此页添加到对话</span>
-                    </ContextMenuItem>
-                </ContextMenuContent>
+                {creationMode !== "image_transform" ? (
+                  <ContextMenuContent>
+                      <ContextMenuItem onClick={() => handleAddSlideToChat(currentSlide)} className="gap-2">
+                          <MessageSquarePlus className="w-4 h-4" />
+                          <span>把此页添加到对话</span>
+                      </ContextMenuItem>
+                  </ContextMenuContent>
+                ) : null}
             </ContextMenu>
           ) : (
             <div className="text-muted-foreground flex flex-col items-center">
