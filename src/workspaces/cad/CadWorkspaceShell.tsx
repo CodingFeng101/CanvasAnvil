@@ -5,6 +5,11 @@ import { t } from "@/lib/i18n";
 import { useUiLanguage } from "@/lib/use-ui-language";
 import { getCadRenderFallbackTitle } from "@/lib/cad-render-titles";
 import {
+  clearPersistedCadWorkspaceItem,
+  readPersistedCadWorkspaceItem,
+  savePersistedCadWorkspaceItem,
+} from "@/lib/cad-persistence";
+import {
   ResizableHandle,
   ResizablePanel,
   ResizablePanelGroup,
@@ -29,6 +34,8 @@ const CAD_WORKSPACE_STORAGE_KEY = "CanvasAnvil-cad-state-v1";
 const CAD_RENDERS_STORAGE_KEY = "CanvasAnvil-cad-renders-v1";
 const CAD_ANALYSIS_IMAGES_STORAGE_KEY = "CanvasAnvil-cad-analysis-images-v1";
 const CAD_CHAT_STORAGE_KEY = "chat_history_v2_cad";
+const CAD_PERSISTED_RENDERS_KEY = "renders";
+const CAD_PERSISTED_ANALYSIS_IMAGES_KEY = "analysis-images";
 
 const tryParseJson = (text: string) => {
   try {
@@ -283,17 +290,58 @@ export function CadWorkspaceShell() {
     return { columns, rows };
   });
   const [cadFocusPanel, setCadFocusPanel] = useState<"analysis" | "2d" | "renders" | "bom" | null>("analysis");
+  const [isCadImagePersistenceHydrated, setIsCadImagePersistenceHydrated] = useState(false);
 
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [chatHistory, setChatHistory] = useState<ChatMessage[]>([]);
 
   const cadImageObjectUrlsRef = useRef<string[]>([]);
+  const cadStableImagesRef = useRef<CadRenderItem[]>(initialCadRenders);
+  const cadStableAnalysisImagesRef = useRef<CadRenderItem[]>(initialCadAnalysisImages);
+  const cadRenderPersistenceRunningRef = useRef(false);
+  const cadRenderPersistenceRetryRef = useRef(false);
+  const cadAnalysisPersistenceRunningRef = useRef(false);
+  const cadAnalysisPersistenceRetryRef = useRef(false);
   const suppressChatSvgSyncRef = useRef(false);
   const cad2dSvgRef = useRef<string | undefined>(typeof initialCadState?.cad2dSvg === "string" ? initialCadState.cad2dSvg : undefined);
   const [isChatCollapsed, setIsChatCollapsed] = useState(false);
   const [cadResetTick, setCadResetTick] = useState(0);
   const [cadApplyTick, setCadApplyTick] = useState(0);
   const chatPanelRef = useRef<PanelImperativeHandle | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    void (async () => {
+      try {
+        const [persistedRenders, persistedAnalysisImages] = await Promise.all([
+          readPersistedCadWorkspaceItem<CadRenderItem[]>(CAD_PERSISTED_RENDERS_KEY),
+          readPersistedCadWorkspaceItem<CadRenderItem[]>(CAD_PERSISTED_ANALYSIS_IMAGES_KEY),
+        ]);
+        if (cancelled) return;
+
+        const nextRenders = normalizeCadRenderItems(persistedRenders, { allowBlob: false, max: 30 });
+        if (nextRenders.length > 0 && cadStableImagesRef.current.length === 0) {
+          cadStableImagesRef.current = nextRenders;
+          setCadImages(nextRenders);
+        }
+
+        const nextAnalysisImages = normalizeCadRenderItems(persistedAnalysisImages, { allowBlob: false, max: 2 });
+        if (nextAnalysisImages.length > 0 && cadStableAnalysisImagesRef.current.length === 0) {
+          cadStableAnalysisImagesRef.current = nextAnalysisImages;
+          setCadAnalysisImages(nextAnalysisImages);
+        }
+      } catch (e) {
+        console.error("Failed to load persisted CAD images", e);
+      } finally {
+        if (!cancelled) setIsCadImagePersistenceHydrated(true);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     cad2dSvgRef.current = cad2dSvg;
@@ -307,7 +355,7 @@ export function CadWorkspaceShell() {
         JSON.stringify({
           cad2dSvg: typeof cad2dSvg === "string" ? cad2dSvg : null,
           cadPlan: cadPlan ?? null,
-          cadAnalysisImages: normalizeCadRenderItems(cadAnalysisImages, { allowBlob: false, max: 2 }),
+          cadAnalysisImages: [],
           cadBom,
           cadFocusPanel,
           updatedAt: Date.now(),
@@ -319,28 +367,146 @@ export function CadWorkspaceShell() {
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    try {
-      const stable = normalizeCadRenderItems(cadImages, { allowBlob: false, max: 30 });
-      if (stable.length > 0) {
+    if (!isCadImagePersistenceHydrated) return;
+    const stable = normalizeCadRenderItems(cadImages, { allowBlob: false, max: 30 });
+    if (stable.length > 0) {
+      cadStableImagesRef.current = stable;
+      void savePersistedCadWorkspaceItem(CAD_PERSISTED_RENDERS_KEY, stable).catch((e) => {
+        console.error("Failed to persist CAD render images", e);
+      });
+      try {
         localStorage.setItem(CAD_RENDERS_STORAGE_KEY, JSON.stringify(stable));
-      } else {
-        localStorage.removeItem(CAD_RENDERS_STORAGE_KEY);
+      } catch (e) {
+        console.error("Failed to persist CAD render images snapshot", e);
       }
-    } catch {
     }
-  }, [cadImages]);
+  }, [cadImages, isCadImagePersistenceHydrated]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    try {
-      const stable = normalizeCadRenderItems(cadAnalysisImages, { allowBlob: false, max: 2 });
-      if (stable.length > 0) {
+    if (!isCadImagePersistenceHydrated) return;
+    const stable = normalizeCadRenderItems(cadAnalysisImages, { allowBlob: false, max: 2 });
+    if (stable.length > 0) {
+      cadStableAnalysisImagesRef.current = stable;
+      void savePersistedCadWorkspaceItem(CAD_PERSISTED_ANALYSIS_IMAGES_KEY, stable).catch((e) => {
+        console.error("Failed to persist CAD analysis images", e);
+      });
+      try {
         localStorage.setItem(CAD_ANALYSIS_IMAGES_STORAGE_KEY, JSON.stringify(stable));
-      } else {
-        localStorage.removeItem(CAD_ANALYSIS_IMAGES_STORAGE_KEY);
+      } catch (e) {
+        console.error("Failed to persist CAD analysis image snapshot", e);
       }
-    } catch {
     }
+  }, [cadAnalysisImages, isCadImagePersistenceHydrated]);
+
+  useEffect(() => {
+    if (cadRenderPersistenceRunningRef.current) {
+      cadRenderPersistenceRetryRef.current = true;
+      return;
+    }
+
+    const pending = cadImages.some((item) => {
+      const raw = String(item?.url || "").trim();
+      return raw.startsWith("blob:") || raw.startsWith("http://") || raw.startsWith("https://");
+    });
+    if (!pending) return;
+
+    let cancelled = false;
+    cadRenderPersistenceRunningRef.current = true;
+    cadRenderPersistenceRetryRef.current = false;
+
+    void (async () => {
+      try {
+        const cache = new Map<string, string>();
+        let changed = false;
+        const next = await Promise.all(
+          cadImages.map(async (item) => {
+            const raw = String(item?.url || "").trim();
+            if (!raw) return item;
+            if (!raw.startsWith("blob:") && !raw.startsWith("http://") && !raw.startsWith("https://")) {
+              return item;
+            }
+            if (!cache.has(raw)) {
+              cache.set(raw, await toPersistableRenderUrl(raw));
+            }
+            const persisted = cache.get(raw) || raw;
+            if (persisted && persisted !== raw) {
+              changed = true;
+              return { ...item, url: persisted };
+            }
+            return item;
+          }),
+        );
+        if (!cancelled && changed) {
+          setCadImages(next);
+        }
+      } finally {
+        cadRenderPersistenceRunningRef.current = false;
+        if (!cancelled && cadRenderPersistenceRetryRef.current) {
+          cadRenderPersistenceRetryRef.current = false;
+          setCadImages((prev) => [...prev]);
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [cadImages]);
+
+  useEffect(() => {
+    if (cadAnalysisPersistenceRunningRef.current) {
+      cadAnalysisPersistenceRetryRef.current = true;
+      return;
+    }
+
+    const pending = cadAnalysisImages.some((item) => {
+      const raw = String(item?.url || "").trim();
+      return raw.startsWith("blob:") || raw.startsWith("http://") || raw.startsWith("https://");
+    });
+    if (!pending) return;
+
+    let cancelled = false;
+    cadAnalysisPersistenceRunningRef.current = true;
+    cadAnalysisPersistenceRetryRef.current = false;
+
+    void (async () => {
+      try {
+        const cache = new Map<string, string>();
+        let changed = false;
+        const next = await Promise.all(
+          cadAnalysisImages.map(async (item) => {
+            const raw = String(item?.url || "").trim();
+            if (!raw) return item;
+            if (!raw.startsWith("blob:") && !raw.startsWith("http://") && !raw.startsWith("https://")) {
+              return item;
+            }
+            if (!cache.has(raw)) {
+              cache.set(raw, await toPersistableRenderUrl(raw));
+            }
+            const persisted = cache.get(raw) || raw;
+            if (persisted && persisted !== raw) {
+              changed = true;
+              return { ...item, url: persisted };
+            }
+            return item;
+          }),
+        );
+        if (!cancelled && changed) {
+          setCadAnalysisImages(next);
+        }
+      } finally {
+        cadAnalysisPersistenceRunningRef.current = false;
+        if (!cancelled && cadAnalysisPersistenceRetryRef.current) {
+          cadAnalysisPersistenceRetryRef.current = false;
+          setCadAnalysisImages((prev) => [...prev]);
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
   }, [cadAnalysisImages]);
 
   useEffect(() => {
@@ -490,6 +656,7 @@ export function CadWorkspaceShell() {
         uiLang === "zh" ? "整体方案图" : "Overall Scheme",
         uiLang === "zh" ? "重点策略图" : "Key Strategy",
       ];
+      const previousStableAnalysis = normalizeCadRenderItems(cadAnalysisImages, { allowBlob: false, max: 2 });
       const items = prompts
         .map((p: any, idx: number) => ({
           title:
@@ -503,7 +670,12 @@ export function CadWorkspaceShell() {
 
       setCadFocusPanel("analysis");
       setCadAnalysisImagesLoading(true);
-      setCadAnalysisImages(defaultTitles.map((title) => ({ title, url: "" })));
+      setCadAnalysisImages(
+        defaultTitles.map((title, idx) => ({
+          title: previousStableAnalysis[idx]?.title || title,
+          url: previousStableAnalysis[idx]?.url || "",
+        })),
+      );
       try {
         const wait = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
         const generateWithRetry = async (prompt: string, maxRetries: number, retryDelayMs: number) => {
@@ -547,7 +719,12 @@ export function CadWorkspaceShell() {
             url: await toPersistableRenderUrl(item.url),
           })),
         );
-        setCadAnalysisImages(persistableFinal);
+        setCadAnalysisImages(
+          defaultTitles.map((title, idx) => ({
+            title: persistableFinal[idx]?.title || previousStableAnalysis[idx]?.title || title,
+            url: persistableFinal[idx]?.url || previousStableAnalysis[idx]?.url || "",
+          })),
+        );
         const failedCount = final.filter((x) => !x.url).length;
         if (failedCount > 0) {
           toast.warning(
@@ -559,7 +736,12 @@ export function CadWorkspaceShell() {
       } catch (e) {
         console.error("CAD analysis image generation failed", e);
         toast.error(tr("分析图生成失败", "Analysis image generation failed"));
-        setCadAnalysisImages(defaultTitles.map((title) => ({ title, url: "" })));
+        setCadAnalysisImages(
+          defaultTitles.map((title, idx) => ({
+            title: previousStableAnalysis[idx]?.title || title,
+            url: previousStableAnalysis[idx]?.url || "",
+          })),
+        );
       } finally {
         setCadAnalysisImagesLoading(false);
         setCadFocusPanel("analysis");
@@ -569,6 +751,7 @@ export function CadWorkspaceShell() {
 
     if (parsedType === "cad_images") {
       const prompts = Array.isArray(parsed.prompts) ? parsed.prompts : [];
+      const previousStableRenders = normalizeCadRenderItems(cadImages, { allowBlob: false, max: 30 });
       const items = prompts
         .map((p: any) => ({
           title: typeof p?.title === "string" ? p.title : tr("视图", "View"),
@@ -582,7 +765,7 @@ export function CadWorkspaceShell() {
       setCadImages(
         Array.from({ length: 7 }).map((_, idx) => ({
           title: getCadRenderFallbackTitle(uiLang, idx),
-          url: "",
+          url: previousStableRenders[idx]?.url || "",
         })),
       );
       try {
@@ -640,7 +823,7 @@ export function CadWorkspaceShell() {
           setCadImages(
             Array.from({ length: 7 }).map((_, idx) => ({
               title: getCadRenderFallbackTitle(uiLang, idx),
-              url: results[idx]?.url || "",
+              url: results[idx]?.url || previousStableRenders[idx]?.url || "",
             })),
           );
         };
@@ -682,7 +865,12 @@ export function CadWorkspaceShell() {
             url: await toPersistableRenderUrl(item.url),
           })),
         );
-        setCadImages(persistableFinal);
+        setCadImages(
+          Array.from({ length: 7 }).map((_, idx) => ({
+            title: getCadRenderFallbackTitle(uiLang, idx),
+            url: persistableFinal[idx]?.url || previousStableRenders[idx]?.url || "",
+          })),
+        );
         const failedCount = list.filter((_, idx) => !results[idx]?.url).length;
         if (failedCount > 0) {
           toast.warning(
@@ -697,7 +885,7 @@ export function CadWorkspaceShell() {
         setCadImages(
           Array.from({ length: 7 }).map((_, idx) => ({
             title: getCadRenderFallbackTitle(uiLang, idx),
-            url: "",
+            url: previousStableRenders[idx]?.url || "",
           })),
         );
       } finally {
@@ -787,6 +975,8 @@ export function CadWorkspaceShell() {
   const clearWorkspace = () => {
     suppressChatSvgSyncRef.current = true;
     cad2dSvgRef.current = undefined;
+    cadStableImagesRef.current = [];
+    cadStableAnalysisImagesRef.current = [];
     setCad2dSvg(undefined);
     setCadPlan(null);
     setCadAnalysisImages([]);
@@ -813,6 +1003,12 @@ export function CadWorkspaceShell() {
       localStorage.removeItem(CAD_CHAT_STORAGE_KEY);
     } catch {
     }
+    void Promise.all([
+      clearPersistedCadWorkspaceItem(CAD_PERSISTED_RENDERS_KEY),
+      clearPersistedCadWorkspaceItem(CAD_PERSISTED_ANALYSIS_IMAGES_KEY),
+    ]).catch((e) => {
+      console.error("Failed to clear persisted CAD images", e);
+    });
     try {
       localStorage.removeItem("CanvasAnvil-history-cad-v1");
     } catch {

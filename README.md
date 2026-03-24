@@ -17,9 +17,17 @@ CanvasAnvil is a multi-canvas AI creation platform for flow diagrams, CAD workfl
 
 ## Release
 
-Current release: `v1.0.0`
+Current release: `v1.0.1`
 
-`v1.0.0` marks the first major usable release with stronger PPT editing support, especially for refining existing slide decks such as NotebookLM-exported PPTs.
+`v1.0.1` is a patch release focused on persistence fixes. PPT and CAD workspace images now survive refreshes more reliably and remain stored unless the user explicitly clears the workspace.
+
+`v1.0.0` remains the first major usable release with stronger PPT editing support, especially for refining existing slide decks such as NotebookLM-exported PPTs.
+
+## Patch Highlights in v1.0.1
+
+- Fixed PPT workspace image persistence across refreshes by moving heavy image state to IndexedDB-backed storage
+- Fixed PPT restore ordering so lightweight snapshots no longer override the latest persisted image state
+- Fixed CAD render and analysis image persistence across refreshes with IndexedDB-backed storage and safer placeholder handling
 
 ## Highlights in v1.0.0
 

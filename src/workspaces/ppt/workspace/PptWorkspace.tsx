@@ -3,6 +3,7 @@ import { motion } from "framer-motion";
 import { generateImage, generateChatMessage } from '@/lib/ai-client';
 import { pptService, PptPage, type PptTextBlock, type SlideEditRoutingItem, estimateTextBlockFontSize, PPT_REFERENCE_SLIDE_HEIGHT, PPT_REFERENCE_SLIDE_WIDTH } from '@/lib/ppt-service';
 import { getTemplateGenerationPrompt } from '@/lib/ppt-prompts';
+import { clearPersistedPptWorkspaceState, readPersistedPptWorkspaceState, savePersistedPptWorkspaceState } from '@/lib/ppt-persistence';
 import { Loader2, Plus, Image as ImageIcon, MessageSquarePlus, Upload, Presentation, Sparkles, Check, Play, FileText, Download, Lightbulb, X, ArrowLeft, ArrowRight, Eye, Trash2, Maximize2, Minimize2 } from 'lucide-react';
 import {
   ContextMenu,
@@ -481,20 +482,157 @@ const BEAUTIFY_CONCURRENCY = 5;
 const BEAUTIFY_RETRY_MAX_ATTEMPTS = 3;
 const BEAUTIFY_RETRY_BASE_DELAY_MS = 1200;
 
+const readBlobAsDataUrl = async (blob: Blob) =>
+  await new Promise<string>((resolve) => {
+    const reader = new FileReader();
+    reader.onerror = () => resolve("");
+    reader.onloadend = () => resolve(typeof reader.result === "string" ? reader.result : "");
+    reader.readAsDataURL(blob);
+  });
+
+const persistImageUrlIfNeeded = async (url: string) => {
+  const raw = String(url || "").trim();
+  if (!raw || raw.startsWith("data:image")) return raw;
+  try {
+    const resp = await fetch(raw);
+    if (!resp.ok) return raw;
+    const blob = await resp.blob();
+    const dataUrl = await readBlobAsDataUrl(blob);
+    return dataUrl || raw;
+  } catch (e) {
+    console.error("Failed to persist image url", e);
+    return raw;
+  }
+};
+
+const shouldInlinePersistImageUrl = (url: string) => {
+  const raw = String(url || "").trim();
+  return raw.startsWith("blob:") || raw.startsWith("http://") || raw.startsWith("https://");
+};
+
+const normalizePersistedSlides = (value: any): SlideData[] => {
+  if (!Array.isArray(value)) return [];
+  return value
+    .filter((s: any) => s && typeof s.id === "string")
+    .map((s: any) => ({
+      id: String(s.id),
+      title: typeof s.title === "string" ? s.title : "",
+      content: Array.isArray(s.content) ? s.content.filter((x: any) => typeof x === "string") : [],
+      note: typeof s.note === "string" ? s.note : undefined,
+      layout: typeof s.layout === "string" ? s.layout : undefined,
+      description: typeof s.description === "string" ? s.description : undefined,
+    }));
+};
+
+const normalizePersistedImageMap = (value: any): Record<string, string> => {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  const out: Record<string, string> = {};
+  for (const [k, val] of Object.entries(value)) {
+    if (typeof k === "string" && typeof val === "string") out[k] = val;
+  }
+  return out;
+};
+
+const normalizePersistedImageVersions = (value: any): Record<string, SlideImageVersion[]> => {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  const out: Record<string, SlideImageVersion[]> = {};
+  for (const [k, val] of Object.entries(value)) {
+    if (typeof k !== "string" || !Array.isArray(val)) continue;
+    out[k] = val
+      .filter((x: any) => x && typeof x.id === "string" && typeof x.url === "string" && typeof x.timestamp === "number" && (x.type === "generated" || x.type === "edited" || x.type === "derived_textless"))
+      .map((x: any) => ({
+        id: x.id,
+        url: x.url,
+        timestamp: x.timestamp,
+        type: x.type,
+        instruction: typeof x.instruction === "string" ? x.instruction : undefined,
+        sourceVersionId: typeof x.sourceVersionId === "string" ? x.sourceVersionId : undefined,
+      }));
+  }
+  return out;
+};
+
+const normalizePersistedRenderLayers = (value: any): Record<string, Record<string, SlideRenderLayer>> => {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  const out: Record<string, Record<string, SlideRenderLayer>> = {};
+  for (const [slideId, versions] of Object.entries(value)) {
+    if (typeof slideId !== "string" || !versions || typeof versions !== "object" || Array.isArray(versions)) continue;
+    const nextVersions: Record<string, SlideRenderLayer> = {};
+    for (const [versionId, layer] of Object.entries(versions)) {
+      if (typeof versionId !== "string" || !layer || typeof layer !== "object" || Array.isArray(layer)) continue;
+      const backgroundImageUrl = typeof (layer as any).backgroundImageUrl === "string" ? (layer as any).backgroundImageUrl : "";
+      const textBlocks = Array.isArray((layer as any).textBlocks) ? (layer as any).textBlocks : [];
+      const status = (layer as any).status === "pending" || (layer as any).status === "failed" ? (layer as any).status : "ready";
+      nextVersions[versionId] = {
+        backgroundImageUrl,
+        textBlocks,
+        status,
+        error: typeof (layer as any).error === "string" ? (layer as any).error : undefined,
+      };
+    }
+    out[slideId] = nextVersions;
+  }
+  return out;
+};
+
+const normalizePersistedStringMap = (value: any, trim = false): Record<string, string> => {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  const out: Record<string, string> = {};
+  for (const [k, val] of Object.entries(value)) {
+    if (typeof k !== "string" || typeof val !== "string") continue;
+    if (trim && !val.trim()) continue;
+    out[k] = val;
+  }
+  return out;
+};
+
+const filterRecordByAllowedKeys = <T,>(value: Record<string, T>, allowedKeys: Set<string>) => {
+  const out: Record<string, T> = {};
+  for (const [k, val] of Object.entries(value)) {
+    if (allowedKeys.has(k)) out[k] = val;
+  }
+  return out;
+};
+
+const normalizePersistedSlideMaterials = (value: any): Record<string, SlideMaterialImage[]> => {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  const out: Record<string, SlideMaterialImage[]> = {};
+  for (const [k, val] of Object.entries(value)) {
+    if (typeof k !== "string" || !Array.isArray(val)) continue;
+    out[k] = val
+      .filter((x: any) => x && typeof x.id === "string" && typeof x.name === "string" && typeof x.dataUrl === "string")
+      .map((x: any) => ({
+        id: x.id,
+        name: x.name,
+        fileName: typeof x.fileName === "string" ? x.fileName : x.name,
+        dataUrl: x.dataUrl,
+        refLabel: typeof x.refLabel === "string" ? x.refLabel : undefined,
+        caption: typeof x.caption === "string" ? x.caption : undefined,
+        sourceFileName: typeof x.sourceFileName === "string" ? x.sourceFileName : undefined,
+        sourcePage: typeof x.sourcePage === "number" ? x.sourcePage : undefined,
+      }));
+  }
+  return out;
+};
+
 export function PptWorkspace({ data, onAddToChat, onPptReadyChange, onPptStageChange, onCreationModeChange, incomingEdit, onIncomingEditHandled, onResetWorkspace }: PptWorkspaceProps) {
   const uiLang = useUiLanguage();
   const tr = (zh: string, en: string) => (uiLang === "zh" ? zh : en);
-  const initialPptState = (() => {
-    if (typeof window === "undefined") return null;
-    try {
-      const raw = localStorage.getItem(PPT_WORKSPACE_STORAGE_KEY);
-      const parsed = raw ? JSON.parse(raw) : null;
-      if (!parsed || typeof parsed !== "object") return null;
-      return migrateLegacyTextlessVersions(parsed as any);
-    } catch {
-      return null;
-    }
-  })();
+  const initialPptStateRef = useRef<any>(undefined);
+  if (typeof initialPptStateRef.current === "undefined") {
+    initialPptStateRef.current = (() => {
+      if (typeof window === "undefined") return null;
+      try {
+        const raw = localStorage.getItem(PPT_WORKSPACE_STORAGE_KEY);
+        const parsed = raw ? JSON.parse(raw) : null;
+        if (!parsed || typeof parsed !== "object") return null;
+        return migrateLegacyTextlessVersions(parsed as any);
+      } catch {
+        return null;
+      }
+    })();
+  }
+  const initialPptState = initialPptStateRef.current;
 
   // If data is provided by AI, use it. Otherwise maintain local state for demo.
   const [localSlides, setLocalSlides] = useState<SlideData[]>(() => {
@@ -703,6 +841,12 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, onPptStageCh
   const descriptionEditorFocusedRef = useRef<string | null>(null);
   const assetCaptionCacheRef = useRef<Record<string, string>>({});
   const derivedProcessingRef = useRef<Set<string>>(new Set());
+  const pptImagePersistenceRunningRef = useRef(false);
+  const pptImagePersistenceRetryRef = useRef(false);
+  const [isPersistenceHydrated, setIsPersistenceHydrated] = useState(false);
+  const latestWorkspaceUpdatedAtRef = useRef(
+    typeof initialPptState?.updatedAt === "number" ? initialPptState.updatedAt : 0
+  );
   const previewCanvasRef = useRef<HTMLDivElement | null>(null);
   const textBlockDragRef = useRef<null | {
     slideId: string;
@@ -755,6 +899,135 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, onPptStageCh
     })
     .filter((x): x is ReferenceFile => !!x);
 
+  useEffect(() => {
+    let cancelled = false;
+
+    void (async () => {
+      try {
+        const raw = await readPersistedPptWorkspaceState<any>();
+        if (cancelled || !raw || typeof raw !== "object") return;
+        const persistedState = migrateLegacyTextlessVersions(raw);
+        const snapshotState =
+          initialPptStateRef.current && typeof initialPptStateRef.current === "object"
+            ? initialPptStateRef.current
+            : null;
+        const snapshotUpdatedAt =
+          typeof snapshotState?.updatedAt === "number" ? snapshotState.updatedAt : 0;
+        const persistedUpdatedAt =
+          typeof persistedState?.updatedAt === "number" ? persistedState.updatedAt : 0;
+        const coreState =
+          snapshotState && snapshotUpdatedAt > persistedUpdatedAt ? snapshotState : persistedState;
+
+        const nextSlides = normalizePersistedSlides(coreState?.localSlides);
+        const allowedSlideIds = new Set(nextSlides.map((slide) => slide.id));
+        const nextGeneratedImages = {
+          ...filterRecordByAllowedKeys(
+            normalizePersistedImageMap(coreState?.generatedImages),
+            allowedSlideIds,
+          ),
+          ...filterRecordByAllowedKeys(
+            normalizePersistedImageMap(persistedState?.generatedImages),
+            allowedSlideIds,
+          ),
+        };
+        const nextImageVersions = {
+          ...filterRecordByAllowedKeys(
+            normalizePersistedImageVersions(coreState?.imageVersions),
+            allowedSlideIds,
+          ),
+          ...filterRecordByAllowedKeys(
+            normalizePersistedImageVersions(persistedState?.imageVersions),
+            allowedSlideIds,
+          ),
+        };
+        const nextRenderLayers = {
+          ...filterRecordByAllowedKeys(
+            normalizePersistedRenderLayers(coreState?.renderLayers),
+            allowedSlideIds,
+          ),
+          ...filterRecordByAllowedKeys(
+            normalizePersistedRenderLayers(persistedState?.renderLayers),
+            allowedSlideIds,
+          ),
+        };
+        const nextSlideMaterials = {
+          ...filterRecordByAllowedKeys(
+            normalizePersistedSlideMaterials(coreState?.slideMaterials),
+            allowedSlideIds,
+          ),
+          ...filterRecordByAllowedKeys(
+            normalizePersistedSlideMaterials(persistedState?.slideMaterials),
+            allowedSlideIds,
+          ),
+        };
+        setLocalSlides(nextSlides);
+        setCurrentSlideIndex(
+          typeof coreState?.currentSlideIndex === "number" && Number.isFinite(coreState.currentSlideIndex)
+            ? Math.max(0, Math.floor(coreState.currentSlideIndex))
+            : 0,
+        );
+        setSelectedTemplateId(
+          typeof coreState?.selectedTemplateId === "string" ? coreState.selectedTemplateId : null,
+        );
+        setGeneratedImages(nextGeneratedImages);
+        setImageVersions(nextImageVersions);
+        setCurrentImageVersionId(
+          filterRecordByAllowedKeys(
+            normalizePersistedStringMap(coreState?.currentImageVersionId),
+            allowedSlideIds,
+          ),
+        );
+        setRenderLayers(nextRenderLayers);
+        setCreationStep(
+          coreState?.creationStep === "idle" ||
+            coreState?.creationStep === "input" ||
+            coreState?.creationStep === "outline" ||
+            coreState?.creationStep === "done"
+            ? coreState.creationStep
+            : nextSlides.length > 0
+              ? "done"
+              : "idle",
+        );
+        setCreationMode(
+          coreState?.creationMode === "idea" ||
+            coreState?.creationMode === "outline" ||
+            coreState?.creationMode === "beautify" ||
+            coreState?.creationMode === "image_transform"
+            ? coreState.creationMode
+            : "idea",
+        );
+        setIdeaInput(typeof coreState?.ideaInput === "string" ? coreState.ideaInput : "");
+        setOutlineInput(typeof coreState?.outlineInput === "string" ? coreState.outlineInput : "");
+        setBeautifyRequirement(
+          typeof coreState?.beautifyRequirement === "string" ? coreState.beautifyRequirement : "",
+        );
+        setBeautifyUseTemplate(Boolean(coreState?.beautifyUseTemplate));
+        setBeautifyFailures(
+          filterRecordByAllowedKeys(
+            normalizePersistedStringMap(coreState?.beautifyFailures, true),
+            allowedSlideIds,
+          ),
+        );
+        setImageTransformFailures(
+          filterRecordByAllowedKeys(
+            normalizePersistedStringMap(coreState?.imageTransformFailures, true),
+            allowedSlideIds,
+          ),
+        );
+        setSlideMaterials(nextSlideMaterials);
+        latestWorkspaceUpdatedAtRef.current = Math.max(snapshotUpdatedAt, persistedUpdatedAt);
+      } catch (e) {
+        console.error("Failed to load persisted PPT workspace from IndexedDB", e);
+      } finally {
+        if (!cancelled) setIsPersistenceHydrated(true);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const templates: TemplateItem[] = [
     ...PRESET_TEMPLATES
       .filter((t) => !hiddenPresetTemplateIds.includes(t.id))
@@ -781,6 +1054,28 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, onPptStageCh
 
   useEffect(() => {
     if (typeof window === "undefined") return;
+    if (!isPersistenceHydrated) return;
+    const updatedAt = Date.now();
+    latestWorkspaceUpdatedAtRef.current = updatedAt;
+    const workspaceState = {
+      localSlides,
+      currentSlideIndex,
+      selectedTemplateId,
+      generatedImages,
+      imageVersions,
+      currentImageVersionId,
+      renderLayers,
+      creationStep,
+      creationMode,
+      ideaInput,
+      outlineInput,
+      slideMaterials,
+      beautifyRequirement,
+      beautifyUseTemplate,
+      beautifyFailures,
+      imageTransformFailures,
+      updatedAt,
+    };
     try {
       localStorage.setItem(
         PPT_WORKSPACE_STORAGE_KEY,
@@ -788,24 +1083,28 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, onPptStageCh
           localSlides,
           currentSlideIndex,
           selectedTemplateId,
-          generatedImages,
-          imageVersions,
+          generatedImages: {},
+          imageVersions: {},
           currentImageVersionId,
-          renderLayers,
+          renderLayers: {},
           creationStep,
           creationMode,
           ideaInput,
           outlineInput,
-          slideMaterials,
+          slideMaterials: {},
           beautifyRequirement,
           beautifyUseTemplate,
           beautifyFailures,
           imageTransformFailures,
-          updatedAt: Date.now(),
+          updatedAt,
         })
       );
-    } catch {
+    } catch (e) {
+      console.error("Failed to persist PPT workspace snapshot to localStorage", e);
     }
+    void savePersistedPptWorkspaceState(workspaceState).catch((e) => {
+      console.error("Failed to persist PPT workspace to IndexedDB", e);
+    });
   }, [
     localSlides,
     currentSlideIndex,
@@ -823,7 +1122,96 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, onPptStageCh
     beautifyUseTemplate,
     beautifyFailures,
     imageTransformFailures,
+    isPersistenceHydrated,
   ]);
+
+  useEffect(() => {
+    if (pptImagePersistenceRunningRef.current) {
+      pptImagePersistenceRetryRef.current = true;
+      return;
+    }
+
+    const pendingGenerated = Object.values(generatedImages).some(shouldInlinePersistImageUrl);
+    const pendingVersions = Object.values(imageVersions).some((versions) =>
+      Array.isArray(versions) && versions.some((item) => shouldInlinePersistImageUrl(item?.url || ""))
+    );
+    const pendingLayers = Object.values(renderLayers).some((versions) =>
+      versions &&
+      typeof versions === "object" &&
+      Object.values(versions).some((layer) => shouldInlinePersistImageUrl(layer?.backgroundImageUrl || ""))
+    );
+    if (!pendingGenerated && !pendingVersions && !pendingLayers) return;
+
+    let cancelled = false;
+    pptImagePersistenceRunningRef.current = true;
+    pptImagePersistenceRetryRef.current = false;
+
+    void (async () => {
+      try {
+        const cache = new Map<string, string>();
+        const resolveUrl = async (url: string) => {
+          const raw = String(url || "").trim();
+          if (!shouldInlinePersistImageUrl(raw)) return raw;
+          if (cache.has(raw)) return cache.get(raw) || raw;
+          const persisted = await persistImageUrlIfNeeded(raw);
+          cache.set(raw, persisted);
+          return persisted;
+        };
+
+        let generatedChanged = false;
+        const nextGenerated: Record<string, string> = {};
+        for (const [slideId, url] of Object.entries(generatedImages)) {
+          const persisted = await resolveUrl(url);
+          nextGenerated[slideId] = persisted;
+          if (persisted !== url) generatedChanged = true;
+        }
+
+        let versionsChanged = false;
+        const nextVersions: Record<string, SlideImageVersion[]> = {};
+        for (const [slideId, versions] of Object.entries(imageVersions)) {
+          const next = await Promise.all(
+            (versions || []).map(async (item) => {
+              const persisted = await resolveUrl(item.url);
+              if (persisted !== item.url) versionsChanged = true;
+              return persisted === item.url ? item : { ...item, url: persisted };
+            })
+          );
+          nextVersions[slideId] = next;
+        }
+
+        let layersChanged = false;
+        const nextLayers: Record<string, Record<string, SlideRenderLayer>> = {};
+        for (const [slideId, versions] of Object.entries(renderLayers)) {
+          const nextVersionMap: Record<string, SlideRenderLayer> = {};
+          for (const [versionId, layer] of Object.entries(versions || {})) {
+            const currentUrl = String(layer?.backgroundImageUrl || "");
+            const persisted = await resolveUrl(currentUrl);
+            if (persisted !== currentUrl) layersChanged = true;
+            nextVersionMap[versionId] =
+              persisted === currentUrl
+                ? layer
+                : { ...layer, backgroundImageUrl: persisted };
+          }
+          nextLayers[slideId] = nextVersionMap;
+        }
+
+        if (cancelled) return;
+        if (generatedChanged) setGeneratedImages(nextGenerated);
+        if (versionsChanged) setImageVersions(nextVersions);
+        if (layersChanged) setRenderLayers(nextLayers);
+      } finally {
+        pptImagePersistenceRunningRef.current = false;
+        if (!cancelled && pptImagePersistenceRetryRef.current) {
+          pptImagePersistenceRetryRef.current = false;
+          setGeneratedImages((prev) => ({ ...prev }));
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [generatedImages, imageVersions, renderLayers]);
 
   useEffect(() => {
     onPptReadyChange?.(localSlides.length > 0);
@@ -945,22 +1333,8 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, onPptStageCh
   };
 
   const toDataUrlIfNeeded = async (url: string) => {
-    const raw = String(url || "").trim();
-    if (!raw) return "";
-    if (raw.startsWith("data:image")) return raw;
-    try {
-      const resp = await fetch(raw);
-      const blob = await resp.blob();
-      return await new Promise<string>((resolve) => {
-        const reader = new FileReader();
-        reader.onerror = () => resolve("");
-        reader.onloadend = () => resolve(typeof reader.result === "string" ? reader.result : "");
-        reader.readAsDataURL(blob);
-      });
-    } catch (e) {
-      console.error("Failed to convert generated template to data url", e);
-      return "";
-    }
+    const dataUrl = await persistImageUrlIfNeeded(url);
+    return dataUrl.startsWith("data:image") ? dataUrl : "";
   };
 
   const addGeneratedTemplate = async (imageUrl: string) => {
@@ -1221,9 +1595,15 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, onPptStageCh
       };
 
       if (incomingImageUrl.trim()) {
-        const versionId = pushImageVersion(id, incomingImageUrl, "edited", instruction.trim() ? instruction : undefined);
         routedEditTasks.push(async () => {
-          await processRenderedSlideVersion(slide, incomingImageUrl, versionId);
+          const persistedIncomingImageUrl = await persistImageUrlIfNeeded(incomingImageUrl);
+          const versionId = pushImageVersion(
+            id,
+            persistedIncomingImageUrl,
+            "edited",
+            instruction.trim() ? instruction : undefined,
+          );
+          await processRenderedSlideVersion(slide, persistedIncomingImageUrl, versionId);
         });
         continue;
       }
@@ -1358,9 +1738,15 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, onPptStageCh
       if (!slide) continue;
 
       if (incomingImageUrl.trim()) {
-        const versionId = pushImageVersion(id, incomingImageUrl, "edited", instruction.trim() ? instruction : undefined);
         editTasks.push(async () => {
-          await processRenderedSlideVersion(slide, incomingImageUrl, versionId);
+          const persistedIncomingImageUrl = await persistImageUrlIfNeeded(incomingImageUrl);
+          const versionId = pushImageVersion(
+            id,
+            persistedIncomingImageUrl,
+            "edited",
+            instruction.trim() ? instruction : undefined,
+          );
+          await processRenderedSlideVersion(slide, persistedIncomingImageUrl, versionId);
         });
         continue;
       }
@@ -2344,6 +2730,7 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, onPptStageCh
 
   const processRenderedSlideVersion = async (slide: SlideData, slideImageUrl: string, versionId: string) => {
       try {
+          const persistedSlideImageUrl = await persistImageUrlIfNeeded(slideImageUrl);
           const page: PptPage = {
             id: slide.id,
             title: slide.title,
@@ -2354,31 +2741,33 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, onPptStageCh
           };
           const textBlocks = await pptService.extractSlideTextBlocks(
             page,
-            slideImageUrl,
+            persistedSlideImageUrl,
             uiLang as "zh" | "en"
           );
-          const backgroundImageUrl = await pptService.generateTextlessPageImage(
+          const backgroundImageUrlRaw = await pptService.generateTextlessPageImage(
             page,
-            slideImageUrl,
+            persistedSlideImageUrl,
             textBlocks,
             uiLang as "zh" | "en"
           );
+          const backgroundImageUrl = await persistImageUrlIfNeeded(backgroundImageUrlRaw || persistedSlideImageUrl);
           const reviewedTextBlocks = await pptService.reviewSlideTextBlocks(
             page,
-            slideImageUrl,
-            backgroundImageUrl || slideImageUrl,
+            persistedSlideImageUrl,
+            backgroundImageUrl || persistedSlideImageUrl,
             textBlocks,
             uiLang as "zh" | "en"
           );
           return {
-              backgroundImageUrl: backgroundImageUrl || slideImageUrl,
+              backgroundImageUrl: backgroundImageUrl || persistedSlideImageUrl,
               textBlocks: reviewedTextBlocks,
               status: "ready",
           } satisfies SlideRenderLayer;
       } catch (error) {
           console.error("Failed to build PPT render layer", error);
+          const persistedSlideImageUrl = await persistImageUrlIfNeeded(slideImageUrl);
           const failedLayer = {
-              backgroundImageUrl: slideImageUrl,
+              backgroundImageUrl: persistedSlideImageUrl,
               textBlocks: [],
               status: "failed",
               error: error instanceof Error ? error.message : "Failed to process slide",
@@ -2411,16 +2800,17 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, onPptStageCh
   };
 
   const pushImageVersionAndProcess = async (slide: SlideData, url: string, type: "generated" | "edited", instruction?: string) => {
-      const originalVersionId = pushImageVersion(slide.id, url, type, instruction);
+      const persistedUrl = await persistImageUrlIfNeeded(url);
+      const originalVersionId = pushImageVersion(slide.id, persistedUrl, type, instruction);
       const processingKey = getDerivedProcessingKey(slide.id, originalVersionId);
       derivedProcessingRef.current.add(processingKey);
       setRenderLayerState(slide.id, originalVersionId, {
-          backgroundImageUrl: url,
+          backgroundImageUrl: persistedUrl,
           textBlocks: [],
           status: "ready",
       });
       try {
-        const derived = await processRenderedSlideVersion(slide, url, originalVersionId);
+        const derived = await processRenderedSlideVersion(slide, persistedUrl, originalVersionId);
         if (derived?.backgroundImageUrl) {
           setRenderLayerState(slide.id, originalVersionId, derived);
         }
@@ -3215,34 +3605,35 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, onPptStageCh
   };
 
   const createImageTransformSlideVersion = async (slide: SlideData, sourceUrl: string) => {
+    const persistedSourceUrl = await persistImageUrlIfNeeded(sourceUrl);
     const originalVersionId = pushImageVersion(
       slide.id,
-      sourceUrl,
+      persistedSourceUrl,
       "generated",
       tr("原始上传页", "Original uploaded page"),
       { setCurrent: false }
     );
     setRenderLayerState(slide.id, originalVersionId, {
-      backgroundImageUrl: sourceUrl,
+      backgroundImageUrl: persistedSourceUrl,
       textBlocks: [],
       status: "ready",
     });
 
     const reconstructedVersionId = pushImageVersion(
       slide.id,
-      sourceUrl,
+      persistedSourceUrl,
       "edited",
       tr("图片PPT转化结果", "Image PPT reconstruction"),
       { sourceVersionId: originalVersionId }
     );
     setRenderLayerState(slide.id, reconstructedVersionId, {
-      backgroundImageUrl: sourceUrl,
+      backgroundImageUrl: persistedSourceUrl,
       textBlocks: [],
       status: "pending",
     });
 
     try {
-      const derived = await processRenderedSlideVersion(slide, sourceUrl, reconstructedVersionId);
+      const derived = await processRenderedSlideVersion(slide, persistedSourceUrl, reconstructedVersionId);
       setRenderLayerState(slide.id, reconstructedVersionId, derived);
       if (derived.status === "failed") {
         setImageTransformFailures((prev) => ({
@@ -3418,13 +3809,16 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, onPptStageCh
         description: "",
       }));
 
+      const persistedPageImages = await Promise.all(
+        pageImages.map(async (url) => await persistImageUrlIfNeeded(url))
+      );
       const initialGenerated: Record<string, string> = {};
       const initialCurrent: Record<string, string> = {};
       const initialVersions: Record<string, SlideImageVersion[]> = {};
 
       for (let i = 0; i < slides.length; i += 1) {
         const slideId = slides[i].id;
-        const url = pageImages[i];
+        const url = persistedPageImages[i] || pageImages[i];
         const versionId = `v-${Date.now()}-${Math.random().toString(16).slice(2)}`;
         initialGenerated[slideId] = url;
         initialCurrent[slideId] = versionId;
@@ -3452,7 +3846,12 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, onPptStageCh
         let baseReady = false;
         try {
           const page: PptPage = { id: s.id, title: s.title, content: s.content || [], description: s.description || "" };
-          const edited = await editPageImageWithRetry(page, instruction, pageImages[i], beautifyTemplate);
+          const edited = await editPageImageWithRetry(
+            page,
+            instruction,
+            persistedPageImages[i] || pageImages[i],
+            beautifyTemplate,
+          );
           progressTracker.markBaseReady();
           baseReady = true;
           if (edited) {
@@ -3890,6 +4289,9 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, onPptStageCh
       localStorage.removeItem(PPT_WORKSPACE_STORAGE_KEY);
     } catch {
     }
+    void clearPersistedPptWorkspaceState().catch((e) => {
+      console.error("Failed to clear persisted PPT workspace", e);
+    });
     setLocalSlides([]);
     resetGenerationState();
     setCreationStep("idle");
@@ -3942,6 +4344,42 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, onPptStageCh
 
   const handleDeleteOutlineSlide = (slideId: string) => {
     setLocalSlides((prev) => prev.filter((s) => s.id !== slideId));
+    setGeneratedImages((prev) => {
+      if (!(slideId in prev)) return prev;
+      const next = { ...prev };
+      delete next[slideId];
+      return next;
+    });
+    setImageVersions((prev) => {
+      if (!(slideId in prev)) return prev;
+      const next = { ...prev };
+      delete next[slideId];
+      return next;
+    });
+    setCurrentImageVersionId((prev) => {
+      if (!(slideId in prev)) return prev;
+      const next = { ...prev };
+      delete next[slideId];
+      return next;
+    });
+    setRenderLayers((prev) => {
+      if (!(slideId in prev)) return prev;
+      const next = { ...prev };
+      delete next[slideId];
+      return next;
+    });
+    setBeautifyFailures((prev) => {
+      if (!(slideId in prev)) return prev;
+      const next = { ...prev };
+      delete next[slideId];
+      return next;
+    });
+    setImageTransformFailures((prev) => {
+      if (!(slideId in prev)) return prev;
+      const next = { ...prev };
+      delete next[slideId];
+      return next;
+    });
     setSlideMaterials((prev) => {
       const next = { ...prev };
       delete next[slideId];

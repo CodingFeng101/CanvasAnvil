@@ -4,6 +4,20 @@ All notable changes to this project will be documented in this file.
 
 The format is based on Keep a Changelog, and the project aims to follow Semantic Versioning.
 
+## [1.0.1] - 2026-03-24
+
+### Changed
+
+- Promoted the release version from `1.0.0` to the patch release `1.0.1`.
+
+### Fixed
+
+- Moved oversized PPT workspace image persistence from `localStorage` to IndexedDB-backed storage to prevent refresh-time data loss.
+- Fixed PPT workspace restore order so lightweight snapshots no longer override the latest persisted image state.
+- Ensured PPT imported, edited, and generated slide images are converted to persistable URLs before being written into workspace state.
+- Moved CAD analysis and render image persistence to IndexedDB-backed storage with lightweight local snapshots for better refresh stability.
+- Prevented CAD render/analysis images from being dropped by temporary loading placeholders unless the user explicitly clears the workspace.
+
 ## [1.0.0] - 2026-03-17
 
 ### Added

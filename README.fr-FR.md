@@ -17,9 +17,17 @@ CanvasAnvil est une plateforme IA multi-canvas dédiée aux diagrammes de flux, 
 
 ## Version
 
-Version actuelle : `v1.0.0`
+Version actuelle : `v1.0.1`
+
+`v1.0.1` est une version corrective centrée sur la persistance. Les images des espaces de travail PPT et CAD survivent désormais beaucoup plus fiablement à un rechargement, sauf si l’utilisateur vide explicitement l’espace de travail.
 
 `v1.0.0` est la première grande version réellement exploitable. Elle améliore surtout l’édition de PPT existants, en particulier l’édition de texte sur des PPT exportés depuis NotebookLM.
+
+## Correctifs de v1.0.1
+
+- Déplacement de l’état lourd des images du workspace PPT vers une persistance IndexedDB afin de corriger la perte d’images après rechargement
+- Correction de l’ordre de restauration du workspace PPT pour éviter qu’un snapshot léger n’écrase le dernier état d’images persistant
+- Passage des rendus et images d’analyse CAD à une persistance IndexedDB, avec une meilleure gestion des placeholders pour fiabiliser la restauration après rechargement
 
 ## Points forts de v1.0.0
 

@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { motion, AnimatePresence, animate, useMotionValue, useTransform } from 'framer-motion';
-import { Layers, Zap, Layout, Box, Droplet, Brush, FileText, Square, Hammer } from 'lucide-react';
+import { Layers, Zap, Layout, Box, Droplet, Brush, FileText, Square, Hammer, Github } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { getPdfDocumentFromUrl, renderPdfPageToCanvas } from '@/lib/pdf-utils';
 import { getUiLanguage, setUiLanguage, type UiLanguage } from "@/lib/ui-language";
@@ -116,13 +116,30 @@ export function LandingPage({ onStart }: LandingPageProps) {
                     </div>
                 </div>
                 <div className="absolute top-4 right-4 z-20">
-                    <Button
+                    <div className="flex items-center gap-2">
+                        <Button
+                        asChild
+                        variant="secondary"
+                        className="h-9 rounded-full bg-white/10 text-white border border-white/15 hover:bg-white/15"
+                    >
+                        <a
+                            href="https://github.com/CodingFeng101/CanvasAnvil"
+                            target="_blank"
+                            rel="noreferrer"
+                            aria-label={uiLang === "zh" ? "打开开源仓库" : "Open GitHub repository"}
+                        >
+                            <Github className="w-4 h-4 mr-2" />
+                            {uiLang === "zh" ? "开源仓库" : "Open Repo"}
+                        </a>
+                        </Button>
+                        <Button
                         variant="secondary"
                         className="h-9 rounded-full bg-white/10 text-white border border-white/15 hover:bg-white/15"
                         onClick={() => setUiLang((prev) => (prev === "zh" ? "en" : "zh"))}
                     >
                         {uiLang === "zh" ? "中文" : "English"}
-                    </Button>
+                        </Button>
+                    </div>
                 </div>
                 <main className="flex-1 flex flex-col items-center justify-center text-center px-4 py-20">
                     <motion.div

@@ -141,27 +141,20 @@ export function CadWorkspace({
   bom,
   focusPanel,
 }: CadWorkspaceProps) {
-  const CAD_RENDERS_STORAGE_KEY = "CanvasAnvil-cad-renders-v1";
   const [svgContent, setSvgContent] = useState<string | null>(null);
   const [isSvgEditorReady, setIsSvgEditorReady] = useState(false);
   const [viewMode, setViewMode] = useState<ViewMode>("2d");
   const [previewImage, setPreviewImage] = useState<{ title: string; url: string } | null>(null);
   const [isExporting, setIsExporting] = useState(false);
   const [localImages, setLocalImages] = useState<Array<{ title: string; url: string }>>(() => {
-    if (typeof window === "undefined") return [];
-    try {
-      const raw = localStorage.getItem(CAD_RENDERS_STORAGE_KEY);
-      const parsed = raw ? JSON.parse(raw) : [];
-      if (!Array.isArray(parsed)) return [];
-      return parsed
-        .filter((x: any) => x && typeof x.url === "string")
-        .map((x: any) => ({
-          title: typeof x.title === "string" ? x.title : "",
-          url: String(x.url),
-        }));
-    } catch {
-      return [];
-    }
+    if (!Array.isArray(images)) return [];
+    return images
+      .filter((x: any) => x && typeof x.url === "string")
+      .map((x: any) => ({
+        title: typeof x.title === "string" ? x.title : "",
+        url: String(x.url),
+      }))
+      .slice(0, 30);
   });
 
   const uiLang = useUiLanguage();
@@ -364,21 +357,6 @@ export function CadWorkspace({
       cancelled = true;
     };
   }, [images]);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    try {
-      const stable = localImages
-        .filter((x) => x && typeof x.url === "string" && x.url && !x.url.startsWith("blob:"))
-        .slice(0, 30);
-      if (stable.length > 0) {
-        localStorage.setItem(CAD_RENDERS_STORAGE_KEY, JSON.stringify(stable));
-      } else {
-        localStorage.removeItem(CAD_RENDERS_STORAGE_KEY);
-      }
-    } catch {
-    }
-  }, [localImages]);
 
   useEffect(() => {
     if (!focusPanel) return;

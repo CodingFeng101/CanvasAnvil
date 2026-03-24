@@ -12,6 +12,7 @@ import {
   PPT_OUTLINE_EDIT_SYSTEM_PROMPT,
   PPT_SLIDES_EDIT_SYSTEM_PROMPT,
 } from "@/lib/system-prompts";
+import { clearPersistedPptWorkspaceState } from "@/lib/ppt-persistence";
 import type { ChatMessage } from "@/lib/ai-client";
 import { PptWorkspace } from "@/workspaces/ppt/workspace/PptWorkspace";
 import { ChatPanel as PptChatPanel } from "@/workspaces/ppt/chat/ChatPanel";
@@ -212,6 +213,9 @@ export function PptWorkspaceShell() {
       localStorage.removeItem(PPT_WORKSPACE_STORAGE_KEY);
     } catch {
     }
+    void clearPersistedPptWorkspaceState().catch((e) => {
+      console.error("Failed to clear persisted PPT workspace", e);
+    });
     try {
       localStorage.removeItem(PPT_CHAT_STORAGE_KEY);
     } catch {
