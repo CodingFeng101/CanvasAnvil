@@ -3,7 +3,13 @@ import { motion } from "framer-motion";
 import { generateImage, generateChatMessage } from '@/lib/ai-client';
 import { pptService, PptPage, type PptTextBlock, type SlideEditRoutingItem, estimateTextBlockFontSize, PPT_REFERENCE_SLIDE_HEIGHT, PPT_REFERENCE_SLIDE_WIDTH } from '@/lib/ppt-service';
 import { getTemplateGenerationPrompt } from '@/lib/ppt-prompts';
-import { clearPersistedPptWorkspaceState, readPersistedPptWorkspaceState, savePersistedPptWorkspaceState } from '@/lib/ppt-persistence';
+import {
+  clearPersistedPptWorkspaceState,
+  readPersistedPptTemplateLibraryState,
+  readPersistedPptWorkspaceState,
+  savePersistedPptTemplateLibraryState,
+  savePersistedPptWorkspaceState,
+} from '@/lib/ppt-persistence';
 import { Loader2, Plus, Image as ImageIcon, MessageSquarePlus, Upload, Presentation, Sparkles, Check, Play, FileText, Download, Lightbulb, X, ArrowLeft, ArrowRight, Eye, Trash2, Maximize2, Minimize2 } from 'lucide-react';
 import {
   ContextMenu,
@@ -468,6 +474,31 @@ const PPT_TEMPLATE_UPLOADS_KEY = "ppt_template_uploads_v1";
 const PPT_TEMPLATE_HIDDEN_PRESETS_KEY = "ppt_template_hidden_presets_v1";
 const PPT_WORKSPACE_STORAGE_KEY = "CanvasAnvil-ppt-state-v1";
 
+const readLegacyUploadedTemplates = (): UploadTemplate[] => {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = localStorage.getItem(PPT_TEMPLATE_UPLOADS_KEY);
+    const parsed = raw ? JSON.parse(raw) : [];
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .filter((x: any) => x && typeof x.id === "string" && typeof x.name === "string" && typeof x.dataUrl === "string")
+      .map((x: any) => ({ id: x.id, name: x.name, dataUrl: x.dataUrl }));
+  } catch {
+    return [];
+  }
+};
+
+const readLegacyHiddenPresetTemplateIds = (): string[] => {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = localStorage.getItem(PPT_TEMPLATE_HIDDEN_PRESETS_KEY);
+    const parsed = raw ? JSON.parse(raw) : [];
+    return Array.isArray(parsed) ? parsed.map((x: any) => String(x)) : [];
+  } catch {
+    return [];
+  }
+};
+
 const PRESET_TEMPLATES: PresetTemplate[] = [
   { id: "preset-tech-business", zhName: "科技商务", enName: "Tech Business", path: "/templates/template_b.png" },
   { id: "preset-academic", zhName: "学术汇报", enName: "Academic", path: "/templates/template_academic.jpg" },
@@ -615,6 +646,18 @@ const normalizePersistedSlideMaterials = (value: any): Record<string, SlideMater
   return out;
 };
 
+const normalizePersistedUploadedTemplates = (value: any): UploadTemplate[] => {
+  if (!Array.isArray(value)) return [];
+  return value
+    .filter((x: any) => x && typeof x.id === "string" && typeof x.name === "string" && typeof x.dataUrl === "string")
+    .map((x: any) => ({ id: x.id, name: x.name, dataUrl: x.dataUrl }));
+};
+
+const normalizePersistedStringArray = (value: any): string[] => {
+  if (!Array.isArray(value)) return [];
+  return value.map((item: any) => String(item));
+};
+
 export function PptWorkspace({ data, onAddToChat, onPptReadyChange, onPptStageChange, onCreationModeChange, incomingEdit, onIncomingEditHandled, onResetWorkspace }: PptWorkspaceProps) {
   const uiLang = useUiLanguage();
   const tr = (zh: string, en: string) => (uiLang === "zh" ? zh : en);
@@ -658,33 +701,12 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, onPptStageCh
     const v = initialPptState?.selectedTemplateId;
     return typeof v === "string" ? v : null;
   });
-  const [uploadedTemplates, setUploadedTemplates] = useState<UploadTemplate[]>(() => {
-    if (typeof window === "undefined") return [];
-    try {
-      const raw = localStorage.getItem(PPT_TEMPLATE_UPLOADS_KEY);
-      const parsed = raw ? JSON.parse(raw) : [];
-      if (!Array.isArray(parsed)) return [];
-      return parsed
-        .filter((x: any) => x && typeof x.id === "string" && typeof x.name === "string" && typeof x.dataUrl === "string")
-        .map((x: any) => ({ id: x.id, name: x.name, dataUrl: x.dataUrl }));
-    } catch {
-      return [];
-    }
-  });
+  const [uploadedTemplates, setUploadedTemplates] = useState<UploadTemplate[]>(() => readLegacyUploadedTemplates());
   const [templateGeneratorOpen, setTemplateGeneratorOpen] = useState(false);
   const [backConfirmOpen, setBackConfirmOpen] = useState(false);
   const [templateGeneratorRequirement, setTemplateGeneratorRequirement] = useState("");
   const [templateGeneratorIsGenerating, setTemplateGeneratorIsGenerating] = useState(false);
-  const [hiddenPresetTemplateIds, setHiddenPresetTemplateIds] = useState<string[]>(() => {
-    if (typeof window === "undefined") return [];
-    try {
-      const raw = localStorage.getItem(PPT_TEMPLATE_HIDDEN_PRESETS_KEY);
-      const parsed = raw ? JSON.parse(raw) : [];
-      return Array.isArray(parsed) ? parsed.map((x: any) => String(x)) : [];
-    } catch {
-      return [];
-    }
-  });
+  const [hiddenPresetTemplateIds, setHiddenPresetTemplateIds] = useState<string[]>(() => readLegacyHiddenPresetTemplateIds());
   const [generatedImages, setGeneratedImages] = useState<Record<string, string>>(() => {
     const v = initialPptState?.generatedImages;
     if (!v || typeof v !== "object" || Array.isArray(v)) return {};
@@ -749,7 +771,7 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, onPptStageCh
   const [draggingTextBlockId, setDraggingTextBlockId] = useState<string | null>(null);
   const [resizingTextBlockId, setResizingTextBlockId] = useState<string | null>(null);
   const [isGeneratingImage, setIsGeneratingImage] = useState(false);
-  const [isExporting, setIsExporting] = useState<null | "pptx" | "pdf">(null);
+  const [isExporting, setIsExporting] = useState<null | "pptx" | "pptx_editable" | "pdf">(null);
   
   // Creation Wizard State
   const [creationStep, setCreationStep] = useState<CreationStep>(() => {
@@ -840,10 +862,10 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, onPptStageCh
   const descriptionEditorAppliedRef = useRef<Record<string, string>>({});
   const descriptionEditorFocusedRef = useRef<string | null>(null);
   const assetCaptionCacheRef = useRef<Record<string, string>>({});
-  const derivedProcessingRef = useRef<Set<string>>(new Set());
   const pptImagePersistenceRunningRef = useRef(false);
   const pptImagePersistenceRetryRef = useRef(false);
   const [isPersistenceHydrated, setIsPersistenceHydrated] = useState(false);
+  const [isTemplateLibraryHydrated, setIsTemplateLibraryHydrated] = useState(false);
   const latestWorkspaceUpdatedAtRef = useRef(
     typeof initialPptState?.updatedAt === "number" ? initialPptState.updatedAt : 0
   );
@@ -878,6 +900,8 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, onPptStageCh
   const [slideshowIndex, setSlideshowIndex] = useState(0);
   const [slideshowFullscreen, setSlideshowFullscreen] = useState(false);
   const slideshowRootRef = useRef<HTMLDivElement | null>(null);
+  const [exportMenuOpen, setExportMenuOpen] = useState(false);
+  const exportMenuRef = useRef<HTMLDivElement | null>(null);
   const [materialPreview, setMaterialPreview] = useState<{ open: boolean; slideTitle: string; item: SlideMaterialImage | null }>({
     open: false,
     slideTitle: "",
@@ -1028,6 +1052,27 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, onPptStageCh
     };
   }, []);
 
+  useEffect(() => {
+    let cancelled = false;
+
+    void (async () => {
+      try {
+        const persistedTemplateLibrary = await readPersistedPptTemplateLibraryState<any>();
+        if (cancelled || !persistedTemplateLibrary || typeof persistedTemplateLibrary !== "object") return;
+        setUploadedTemplates(normalizePersistedUploadedTemplates(persistedTemplateLibrary.uploadedTemplates));
+        setHiddenPresetTemplateIds(normalizePersistedStringArray(persistedTemplateLibrary.hiddenPresetTemplateIds));
+      } catch (e) {
+        console.error("Failed to load persisted PPT template library from IndexedDB", e);
+      } finally {
+        if (!cancelled) setIsTemplateLibraryHydrated(true);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const templates: TemplateItem[] = [
     ...PRESET_TEMPLATES
       .filter((t) => !hiddenPresetTemplateIds.includes(t.id))
@@ -1037,20 +1082,23 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, onPptStageCh
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    try {
-      localStorage.setItem(PPT_TEMPLATE_UPLOADS_KEY, JSON.stringify(uploadedTemplates));
-    } catch (e) {
-      console.error("Failed to persist uploaded PPT templates", e);
-    }
-  }, [uploadedTemplates]);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    try {
-      localStorage.setItem(PPT_TEMPLATE_HIDDEN_PRESETS_KEY, JSON.stringify(hiddenPresetTemplateIds));
-    } catch {
-    }
-  }, [hiddenPresetTemplateIds]);
+    if (!isTemplateLibraryHydrated) return;
+    void savePersistedPptTemplateLibraryState({
+      uploadedTemplates,
+      hiddenPresetTemplateIds,
+      updatedAt: Date.now(),
+    })
+      .then(() => {
+        try {
+          localStorage.removeItem(PPT_TEMPLATE_UPLOADS_KEY);
+          localStorage.removeItem(PPT_TEMPLATE_HIDDEN_PRESETS_KEY);
+        } catch {
+        }
+      })
+      .catch((e) => {
+        console.error("Failed to persist PPT template library to IndexedDB", e);
+      });
+  }, [uploadedTemplates, hiddenPresetTemplateIds, isTemplateLibraryHydrated]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -1597,25 +1645,18 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, onPptStageCh
       if (incomingImageUrl.trim()) {
         routedEditTasks.push(async () => {
           const persistedIncomingImageUrl = await persistImageUrlIfNeeded(incomingImageUrl);
-          const versionId = pushImageVersion(
+          pushImageVersion(
             id,
             persistedIncomingImageUrl,
             "edited",
             instruction.trim() ? instruction : undefined,
           );
-          await processRenderedSlideVersion(slide, persistedIncomingImageUrl, versionId);
         });
         continue;
       }
 
       if (editType === "text_only" || editType === "text_relayout") {
         routedEditTasks.push(async () => {
-          const currentVersionMeta = getSlideVersionMeta(id);
-          const currentLayer = currentVersionMeta.versionId ? renderLayers[id]?.[currentVersionMeta.versionId] : undefined;
-          if (!isNewSlide && currentVersionMeta.versionId && currentLayer?.textBlocks?.length) {
-            await applySlideTextLayerEdit(slide, currentVersionMeta.versionId, editType);
-            return;
-          }
           const rendered = await pptService.generatePageImage(
             page,
             uiLang as "zh" | "en",
@@ -1740,13 +1781,12 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, onPptStageCh
       if (incomingImageUrl.trim()) {
         editTasks.push(async () => {
           const persistedIncomingImageUrl = await persistImageUrlIfNeeded(incomingImageUrl);
-          const versionId = pushImageVersion(
+          pushImageVersion(
             id,
             persistedIncomingImageUrl,
             "edited",
             instruction.trim() ? instruction : undefined,
           );
-          await processRenderedSlideVersion(slide, persistedIncomingImageUrl, versionId);
         });
         continue;
       }
@@ -1872,10 +1912,7 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, onPptStageCh
 
   const getSlideVersionMeta = (slideId: string) => {
       const versions = imageVersions[slideId] || [];
-      const visibleVersions = versions.filter((version) => {
-        const layer = renderLayers[slideId]?.[version.id];
-        return hasRenderableTextBlocks(layer) || (creationMode === "image_transform" && layer?.status === "ready");
-      });
+      const visibleVersions = versions;
       const requestedVersionId = currentImageVersionId[slideId] || "";
       const resolvedVersionId =
         (requestedVersionId && visibleVersions.some((item) => item.id === requestedVersionId)
@@ -1893,11 +1930,7 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, onPptStageCh
   };
   const getVisibleSlideVersions = (slideId: string) => {
     const versions = imageVersions[slideId] || [];
-    const visible = versions.filter((version) => {
-      const layer = renderLayers[slideId]?.[version.id];
-      return hasRenderableTextBlocks(layer) || (creationMode === "image_transform" && layer?.status === "ready");
-    });
-    return visible;
+    return versions;
   };
   const getSlideImageUrl = (slideId: string) => getSlideVersionMeta(slideId).imageUrl;
   const getOriginalSlideVersion = (slideId: string) => {
@@ -1910,8 +1943,7 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, onPptStageCh
     return renderLayers[slideId]?.[versionId];
   };
   const getSlideBackgroundUrl = (slideId: string) => {
-    const layer = getSlideRenderLayer(slideId);
-    return layer?.backgroundImageUrl || getSlideImageUrl(slideId) || "";
+    return getSlideImageUrl(slideId) || "";
   };
 
   const normalizeSlideEditType = (
@@ -2571,12 +2603,11 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, onPptStageCh
 
   const renderScaledSlideScene = (
     slide: SlideData,
-    editable = false,
+    _editable = false,
     outerWidth = PPT_REFERENCE_SLIDE_WIDTH,
     outerHeight = PPT_REFERENCE_SLIDE_HEIGHT,
   ) => {
     const backgroundUrl = getSlideBackgroundUrl(slide.id);
-    const hasTextLayer = (getSlideRenderLayer(slide.id)?.textBlocks || []).length > 0;
     const scale = Math.min(
       outerWidth / PPT_REFERENCE_SLIDE_WIDTH,
       outerHeight / PPT_REFERENCE_SLIDE_HEIGHT
@@ -2600,8 +2631,6 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, onPptStageCh
             className="absolute inset-0 w-full h-full object-cover bg-white"
             alt={`Slide ${slide.id}`}
           />
-          {hasTextLayer ? renderFixedSlideTextSvg(slide) : null}
-          {editable && hasTextLayer ? <div className="absolute inset-0 z-20">{renderSlideInteractionLayer(slide)}</div> : null}
         </div>
       </div>
     );
@@ -2610,7 +2639,6 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, onPptStageCh
   const activeSlides = localSlides.length > 0 ? localSlides : [];
   const currentSlide = activeSlides[currentSlideIndex];
   const currentSlideImage = currentSlide ? getSlideBackgroundUrl(currentSlide.id) : "";
-  const currentSlideHasTextLayer = currentSlide ? ((getSlideRenderLayer(currentSlide.id)?.textBlocks || []).length > 0) : false;
   const failedBeautifyCount = activeSlides.reduce((n, s) => n + (beautifyFailures[s.id] ? 1 : 0), 0);
   const failedImageTransformCount = activeSlides.reduce((n, s) => n + (imageTransformFailures[s.id] ? 1 : 0), 0);
   const currentSlideFailure = currentSlide
@@ -2716,6 +2744,22 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, onPptStageCh
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [slideshowOpen, activeSlides.length, slideshowFullscreen]);
 
+  useEffect(() => {
+    if (!exportMenuOpen || typeof document === "undefined") return;
+    const handlePointerDown = (event: PointerEvent) => {
+      const target = event.target as Node | null;
+      if (!target) return;
+      if (exportMenuRef.current?.contains(target)) return;
+      setExportMenuOpen(false);
+    };
+    document.addEventListener("pointerdown", handlePointerDown);
+    return () => document.removeEventListener("pointerdown", handlePointerDown);
+  }, [exportMenuOpen]);
+
+  useEffect(() => {
+    if (isExporting) setExportMenuOpen(false);
+  }, [isExporting]);
+
   const setRenderLayerState = (slideId: string, versionId: string, layer: SlideRenderLayer) => {
       setRenderLayers((prev) => ({
           ...prev,
@@ -2725,8 +2769,6 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, onPptStageCh
           },
       }));
   };
-
-  const getDerivedProcessingKey = (slideId: string, sourceVersionId: string) => `${slideId}::${sourceVersionId}`;
 
   const processRenderedSlideVersion = async (slide: SlideData, slideImageUrl: string, versionId: string) => {
       try {
@@ -2801,38 +2843,7 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, onPptStageCh
 
   const pushImageVersionAndProcess = async (slide: SlideData, url: string, type: "generated" | "edited", instruction?: string) => {
       const persistedUrl = await persistImageUrlIfNeeded(url);
-      const originalVersionId = pushImageVersion(slide.id, persistedUrl, type, instruction);
-      const processingKey = getDerivedProcessingKey(slide.id, originalVersionId);
-      derivedProcessingRef.current.add(processingKey);
-      setRenderLayerState(slide.id, originalVersionId, {
-          backgroundImageUrl: persistedUrl,
-          textBlocks: [],
-          status: "ready",
-      });
-      try {
-        const derived = await processRenderedSlideVersion(slide, persistedUrl, originalVersionId);
-        if (derived?.backgroundImageUrl) {
-          setRenderLayerState(slide.id, originalVersionId, derived);
-        }
-        return originalVersionId;
-      } finally {
-        derivedProcessingRef.current.delete(processingKey);
-      }
-  };
-
-  const deriveTextlessVersionFromExisting = async (slide: SlideData, sourceVersion: SlideImageVersion) => {
-      const processingKey = getDerivedProcessingKey(slide.id, sourceVersion.id);
-      if (derivedProcessingRef.current.has(processingKey)) return sourceVersion.id;
-      derivedProcessingRef.current.add(processingKey);
-      try {
-        const derived = await processRenderedSlideVersion(slide, sourceVersion.url, sourceVersion.id);
-        if (derived?.backgroundImageUrl) {
-          setRenderLayerState(slide.id, sourceVersion.id, derived);
-        }
-        return sourceVersion.id;
-      } finally {
-        derivedProcessingRef.current.delete(processingKey);
-      }
+      return pushImageVersion(slide.id, persistedUrl, type, instruction);
   };
 
   const createTwoStageSlideProgressTracker = (
@@ -2844,11 +2855,24 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, onPptStageCh
   ) => {
     const safeTotal = Math.max(1, slideCount);
     const counter = { doneUnits: 0 };
+    const localizeProgress = (zhLabel: string, enLabel: string) => {
+      if (uiLang !== "zh") return enLabel;
+      const normalized = String(enLabel || "").trim();
+      if (normalized === "Importing slide images...") return "正在导入页面图片...";
+      if (normalized === "Finishing import...") return "正在完成导入...";
+      if (normalized === "Generating beautified slides...") return "正在生成美化页面...";
+      if (normalized === "Finishing beautification...") return "正在完成美化...";
+      if (normalized === "Retrying slide generation...") return "正在重试生成页面...";
+      if (normalized === "Finishing retry...") return "正在完成重试...";
+      if (normalized === "Generating slide images...") return "正在生成页面图片...";
+      if (normalized === "Finishing slide generation...") return "正在完成生成...";
+      return zhLabel;
+    };
     const setStage = (current: number, zhLabel: string, enLabel: string) => {
       setProgress({
         current,
         total: safeTotal,
-        message: tr(zhLabel, enLabel),
+        message: localizeProgress(zhLabel, enLabel),
       });
     };
 
@@ -2866,21 +2890,6 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, onPptStageCh
       },
     };
   };
-
-  useEffect(() => {
-      if (creationMode === "image_transform") return;
-      activeSlides.forEach((slide) => {
-        const { versionId, version, imageUrl } = getSlideVersionMeta(slide.id);
-        if (!versionId || !version || !imageUrl) return;
-        if (version.type === "derived_textless") return;
-        if (derivedProcessingRef.current.has(getDerivedProcessingKey(slide.id, versionId))) return;
-        const hasDerivedVersion = (imageVersions[slide.id] || []).some((item) => item.sourceVersionId === versionId && item.type === "derived_textless");
-        if (hasDerivedVersion) return;
-        const layer = renderLayers[slide.id]?.[versionId];
-        if (layer?.status === "pending" || hasRenderableTextBlocks(layer)) return;
-        void deriveTextlessVersionFromExisting(slide, version);
-      });
-  }, [activeSlides, imageVersions, currentImageVersionId, renderLayers, creationMode]);
 
   const handleReferenceFileInputChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
       const files = Array.from(e.target.files || []);
@@ -3606,20 +3615,21 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, onPptStageCh
 
   const createImageTransformSlideVersion = async (slide: SlideData, sourceUrl: string) => {
     const persistedSourceUrl = await persistImageUrlIfNeeded(sourceUrl);
-    const originalVersionId = pushImageVersion(
+    const versionId = pushImageVersion(
       slide.id,
       persistedSourceUrl,
       "generated",
       tr("原始上传页", "Original uploaded page"),
-      { setCurrent: false }
     );
-    setRenderLayerState(slide.id, originalVersionId, {
-      backgroundImageUrl: persistedSourceUrl,
-      textBlocks: [],
-      status: "ready",
+    setImageTransformFailures((prev) => {
+      if (!prev[slide.id]) return prev;
+      const next = { ...prev };
+      delete next[slide.id];
+      return next;
     });
+    return versionId;
 
-    const reconstructedVersionId = pushImageVersion(
+    /* const reconstructedVersionId = pushImageVersion(
       slide.id,
       persistedSourceUrl,
       "edited",
@@ -3653,7 +3663,7 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, onPptStageCh
       const message = getErrorMessage(error);
       setImageTransformFailures((prev) => ({ ...prev, [slide.id]: message }));
       return reconstructedVersionId;
-    }
+    } */
   };
 
   const handleStartImageTransform = async () => {
@@ -3688,9 +3698,9 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, onPptStageCh
       const progressTracker = createTwoStageSlideProgressTracker(
         slides.length,
         "正在创建原始版本...",
-        "Creating original slide versions...",
+        "Importing slide images...",
         "正在重建可编辑文字层...",
-        "Rebuilding editable text layers...",
+        "Finishing import...",
       );
       progressTracker.start();
 
@@ -3836,7 +3846,7 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, onPptStageCh
         "正在生成美化页图...",
         "Generating beautified slides...",
         "正在处理美化页文字层...",
-        "Processing beautified slide text layers...",
+        "Finishing beautification...",
       );
       progressTracker.start();
 
@@ -3898,7 +3908,7 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, onPptStageCh
       "正在重试生成页图...",
       "Retrying slide generation...",
       "正在处理重试页文字层...",
-      "Processing retried slide text layers...",
+      "Finishing retry...",
     );
     progressTracker.start();
 
@@ -4064,7 +4074,7 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, onPptStageCh
           "正在生成页图...",
           "Generating slide images...",
           "正在处理页文字层...",
-          "Processing slide text layers...",
+          "Finishing slide generation...",
         );
         progressTracker.start();
         const imageTasks = pages.map((_, i) => async () => {
@@ -4121,7 +4131,7 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, onPptStageCh
         "正在生成页图...",
         "Generating slide images...",
         "正在处理页文字层...",
-        "Processing slide text layers...",
+        "Finishing slide generation...",
       );
       progressTracker.start();
       const imageTasks = pages.map((_, i) => async () => {
@@ -4199,7 +4209,6 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, onPptStageCh
   };
 
   const toRenderablePage = (slide: SlideData): PptPage => {
-    const layer = getSlideRenderLayer(slide.id);
     return {
       id: slide.id,
       title: slide.title,
@@ -4207,10 +4216,45 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, onPptStageCh
       description: slide.description,
       note: slide.note,
       layout: slide.layout,
-      textBlocks: layer?.textBlocks || [],
-      backgroundImageUrl: layer?.backgroundImageUrl || getSlideImageUrl(slide.id) || undefined,
+      textBlocks: [],
+      backgroundImageUrl: getSlideImageUrl(slide.id) || undefined,
       status: "completed",
     };
+  };
+
+  const buildEditableExportPage = async (slide: SlideData): Promise<PptPage> => {
+    const { versionId, imageUrl } = getSlideVersionMeta(slide.id);
+    const basePage: PptPage = {
+      id: slide.id,
+      title: slide.title,
+      content: slide.content,
+      description: slide.description,
+      note: slide.note,
+      layout: slide.layout,
+      textBlocks: [],
+      backgroundImageUrl: imageUrl || undefined,
+      status: "completed",
+    };
+    if (!versionId || !imageUrl) return basePage;
+    let layer = renderLayers[slide.id]?.[versionId];
+    if (!hasRenderableTextBlocks(layer)) {
+      layer = await processRenderedSlideVersion(slide, imageUrl, versionId);
+    }
+    if (!layer || !hasRenderableTextBlocks(layer)) return basePage;
+    return {
+      ...basePage,
+      textBlocks: layer.textBlocks,
+      backgroundImageUrl: layer.backgroundImageUrl || imageUrl,
+    };
+  };
+
+  const buildCurrentSlideImagesMap = () => {
+    const images: Record<string, string> = {};
+    for (const slide of activeSlides) {
+      const currentUrl = getSlideImageUrl(slide.id);
+      if (currentUrl) images[slide.id] = currentUrl;
+    }
+    return images;
   };
 
   const handleAddSlideToChat = (slide: SlideData) => {
@@ -4243,13 +4287,7 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, onPptStageCh
     setIsExporting("pptx");
     try {
         const pages: PptPage[] = activeSlides.map((s) => toRenderablePage(s));
-        const images: Record<string, string> = {};
-        for (const s of activeSlides) {
-            const versions = imageVersions[s.id] || [];
-            const currentVersion = currentImageVersionId[s.id];
-            const currentUrl = currentVersion ? versions.find(v => v.id === currentVersion)?.url : generatedImages[s.id];
-            if (currentUrl) images[s.id] = currentUrl;
-        }
+        const images = buildCurrentSlideImagesMap();
         await pptService.exportPptx(pages, images, `presentation-${Date.now()}`);
     } catch (e) {
         console.error("Export failed", e);
@@ -4264,19 +4302,31 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, onPptStageCh
     setIsExporting("pdf");
     try {
         const pages: PptPage[] = activeSlides.map((s) => toRenderablePage(s));
-        const images: Record<string, string> = {};
-        for (const s of activeSlides) {
-            const versions = imageVersions[s.id] || [];
-            const currentVersion = currentImageVersionId[s.id];
-            const currentUrl = currentVersion ? versions.find(v => v.id === currentVersion)?.url : generatedImages[s.id];
-            if (currentUrl) images[s.id] = currentUrl;
-        }
+        const images = buildCurrentSlideImagesMap();
         await pptService.exportPdf(pages, images, `presentation-${Date.now()}`);
     } catch (e) {
         console.error("Export failed", e);
         alert(tr("导出失败", "Export failed"));
     } finally {
         setIsExporting(null);
+    }
+  };
+
+  const handleDownloadEditablePpt = async () => {
+    if (isExporting) return;
+    setIsExporting("pptx_editable");
+    try {
+      const pages: PptPage[] = [];
+      for (const slide of activeSlides) {
+        pages.push(await buildEditableExportPage(slide));
+      }
+      const images = buildCurrentSlideImagesMap();
+      await pptService.exportPptx(pages, images, `presentation-editable-${Date.now()}`);
+    } catch (e) {
+      console.error("Editable export failed", e);
+      alert(tr("瀵煎嚭鍙紪杈?PPTX 澶辫触", "Editable PPTX export failed"));
+    } finally {
+      setIsExporting(null);
     }
   };
 
@@ -4416,7 +4466,7 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, onPptStageCh
           }
           if (creationMode === "image_transform") {
               return {
-                  hint: tr("上传 PDF，系统会为每一页生成原始版本和可编辑重建版本。", "Upload a PDF, and the system will build both the original slide version and an editable reconstructed version for each page."),
+                  hint: tr("上传 PDF，系统会将每一页导入为图片幻灯片；仅在导出可编辑 PPTX 时才进行文字识别。", "Upload a PDF and the system will import each page as an image slide; text recognition runs only for editable PPTX export."),
                   placeholder: "",
               };
           }
@@ -4633,8 +4683,8 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, onPptStageCh
 
                                 <div className="rounded-xl border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-900/50 px-4 py-3 text-xs text-zinc-500 dark:text-zinc-400 leading-6">
                                   <div>{tr("处理结果：", "Output:")}</div>
-                                  <div>{tr("第 1 版保留原始上传页图。", "Version 1 keeps the original uploaded slide image.")}</div>
-                                  <div>{tr("第 2 版生成无字底图并覆盖可编辑文字层。", "Version 2 generates a textless background and overlays an editable text layer.")}</div>
+                                  <div>{tr("系统会把 PDF 每一页导入为图片幻灯片。", "The system imports each PDF page as an image slide.")}</div>
+                                  <div>{tr("如需可编辑文字，请在导出可编辑 PPTX 时再进行文字识别与回填。", "If you need editable text, recognition and text refill happen only during editable PPTX export.")}</div>
                                 </div>
                               </div>
                             ) : (
@@ -5175,16 +5225,16 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, onPptStageCh
                       {progress.message || tr("正在渲染图片…", "Rendering images...")}
                     </p>
                 </div>
-                
+
                 <div className="flex justify-center gap-2 text-xs text-muted-foreground">
                    <div className={`flex items-center gap-1 ${creationStep === 'generating_images' ? 'text-blue-600' : 'text-green-600'}`}>
                         {creationStep === 'generating_images' ? <Loader2 className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />}
                         <span>{tr("渲染图片", "Render images")}</span>
                    </div>
                 </div>
+                </div>
               </div>
             </div>
-        </div>
       );
   }
 
@@ -5194,44 +5244,66 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, onPptStageCh
       {/* Toolbar */}
       <div className="h-14 px-4 bg-white dark:bg-zinc-800 border-b border-zinc-200 dark:border-zinc-700 flex justify-between items-center shadow-sm z-10">
         <div className="flex items-center gap-4">
-            <h2 className="font-semibold text-sm text-foreground">{tr("PPT 演示文稿", "PPT Deck")}</h2>
-            <div className="h-4 w-px bg-border"></div>
             <button
                 onClick={handleBackToStart}
                 title={tr("返回开始", "Back to start")}
                 className="flex items-center gap-2 px-3 py-1.5 bg-zinc-100 dark:bg-zinc-700 hover:bg-zinc-200 dark:hover:bg-zinc-600 text-xs rounded transition-colors shadow-sm"
             >
                 <ArrowLeft className="w-3.5 h-3.5" />
-                <span>{tr("返回开始", "Back")}</span>
+                <span>{tr("返回", "Back")}</span>
             </button>
-            <button
-                onClick={openSlideshow}
-                disabled={activeSlides.length === 0}
-                title={tr("播放幻灯片", "Play slideshow")}
-                className="flex items-center gap-2 px-3 py-1.5 bg-zinc-100 dark:bg-zinc-700 hover:bg-zinc-200 dark:hover:bg-zinc-600 text-xs rounded transition-colors shadow-sm"
-            >
-                <Play className="w-3.5 h-3.5" />
-                <span>{tr("播放", "Play")}</span>
-            </button>
+            <h2 className="font-semibold text-sm text-foreground">{tr("PPT 演示文稿", "PPT Deck")}</h2>
             <div className="h-4 w-px bg-border"></div>
-            <button 
-                onClick={handleDownloadPpt}
+            <div ref={exportMenuRef} className="relative">
+              <button
+                onClick={() => setExportMenuOpen((open) => !open)}
                 disabled={activeSlides.length === 0 || !!isExporting}
-                title={tr("导出 PPTX", "Export PPTX")}
-                className="flex items-center gap-2 px-3 py-1.5 bg-zinc-100 dark:bg-zinc-700 hover:bg-zinc-200 dark:hover:bg-zinc-600 text-xs rounded transition-colors shadow-sm"
-            >
-                {isExporting === "pptx" ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
-                <span>{isExporting === "pptx" ? tr("导出中…", "Exporting...") : tr("导出 PPTX", "Export PPTX")}</span>
-            </button>
-            <button 
-                onClick={handleDownloadPdf}
-                disabled={activeSlides.length === 0 || !!isExporting}
-                title={tr("导出 PDF", "Export PDF")}
-                className="flex items-center gap-2 px-3 py-1.5 bg-zinc-100 dark:bg-zinc-700 hover:bg-zinc-200 dark:hover:bg-zinc-600 text-xs rounded transition-colors shadow-sm"
-            >
-                {isExporting === "pdf" ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
-                <span>{isExporting === "pdf" ? tr("导出中…", "Exporting...") : tr("导出 PDF", "Export PDF")}</span>
-            </button>
+                title={tr("导出", "Export")}
+                className="flex items-center gap-2 px-3 py-1.5 bg-zinc-100 dark:bg-zinc-700 hover:bg-zinc-200 dark:hover:bg-zinc-600 text-xs rounded transition-colors shadow-sm disabled:opacity-60"
+              >
+                {isExporting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
+                <span>{isExporting ? tr("导出中…", "Exporting...") : tr("导出", "Export")}</span>
+              </button>
+              {exportMenuOpen && !isExporting ? (
+                <motion.div
+                  initial={{ opacity: 0, y: -6 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.16, ease: "easeOut" }}
+                  className="absolute left-0 top-full z-40 mt-2 min-w-[190px] rounded-xl border border-zinc-200 bg-white p-2 shadow-xl dark:border-zinc-700 dark:bg-zinc-800"
+                >
+                  <button
+                    type="button"
+                    className="flex w-full items-center rounded-lg px-3 py-2 text-left text-xs text-zinc-700 transition-colors hover:bg-zinc-100 dark:text-zinc-100 dark:hover:bg-zinc-700"
+                    onClick={() => {
+                      setExportMenuOpen(false);
+                      void handleDownloadPdf();
+                    }}
+                  >
+                    {tr("导出 PDF", "Export PDF")}
+                  </button>
+                  <button
+                    type="button"
+                    className="flex w-full items-center rounded-lg px-3 py-2 text-left text-xs text-zinc-700 transition-colors hover:bg-zinc-100 dark:text-zinc-100 dark:hover:bg-zinc-700"
+                    onClick={() => {
+                      setExportMenuOpen(false);
+                      void handleDownloadPpt();
+                    }}
+                  >
+                    {tr("导出图片版 PPT", "Export Image PPT")}
+                  </button>
+                  <button
+                    type="button"
+                    className="flex w-full items-center rounded-lg px-3 py-2 text-left text-xs text-zinc-700 transition-colors hover:bg-zinc-100 dark:text-zinc-100 dark:hover:bg-zinc-700"
+                    onClick={() => {
+                      setExportMenuOpen(false);
+                      void handleDownloadEditablePpt();
+                    }}
+                  >
+                    {tr("导出可编辑 PPTX", "Export Editable PPTX")}
+                  </button>
+                </motion.div>
+              ) : null}
+            </div>
             {creationMode === "beautify" && (
               <button
                 onClick={handleRetryFailedBeautify}
@@ -5266,7 +5338,6 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, onPptStageCh
         <div className="w-64 bg-zinc-50 dark:bg-zinc-900 border-r border-border overflow-y-auto p-4 space-y-4">
           {activeSlides.map((slide, index) => {
             const hasGeneratedImage = getSlideBackgroundUrl(slide.id);
-            const hasTextLayer = (getSlideRenderLayer(slide.id)?.textBlocks || []).length > 0;
             const slideFailure = creationMode === "image_transform" ? imageTransformFailures[slide.id] : beautifyFailures[slide.id];
             return (
             <ContextMenu key={slide.id || index}>

@@ -41,6 +41,7 @@ temp/
 # Local tool workspaces (not project source)
 .tmp-superpowers/
 .trae/
+.claude/
 
 # IDE / editor
 .vscode/*

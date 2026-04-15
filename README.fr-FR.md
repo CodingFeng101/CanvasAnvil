@@ -5,41 +5,43 @@
 <h1 align="center">CanvasAnvil</h1>
 
 <p align="center">
-  <a href="README.md">English</a> |
-  <a href="README.zh-CN.md">简体中文</a> |
-  <a href="README.zh-TW.md">繁體中文</a> |
-  <a href="README.ja-JP.md">日本語</a> |
-  <a href="README.ko-KR.md">한국어</a> |
-  <a href="README.fr-FR.md">Français</a>
+  <strong>Une plateforme IA multi-canvas pour Flow, CAD et PPT.</strong>
 </p>
 
-CanvasAnvil est une plateforme IA multi-canvas dédiée aux diagrammes de flux, aux workflows CAD et à la génération/édition de PPT.
+<p align="center">
+  <a href="README.md">English</a> ·
+  <a href="README.zh-CN.md">Simplified Chinese</a> ·
+  <a href="README.zh-TW.md">Traditional Chinese</a> ·
+  <a href="README.ja-JP.md">Japanese</a> ·
+  <a href="README.ko-KR.md">Korean</a> ·
+  <a href="README.fr-FR.md">French</a>
+</p>
 
-## Version
+<p align="center">
+  <img alt="version" src="https://img.shields.io/badge/version-v1.0.1-2563eb?style=for-the-badge" />
+  <img alt="workspaces" src="https://img.shields.io/badge/workspaces-Flow%20%7C%20CAD%20%7C%20PPT-0f766e?style=for-the-badge" />
+  <img alt="stack" src="https://img.shields.io/badge/stack-Vite%20%2B%20React%20%2B%20TypeScript-7c3aed?style=for-the-badge" />
+</p>
 
-Version actuelle : `v1.0.1`
+> CanvasAnvil réunit dans un même espace la génération de diagrammes de flux, les workflows CAD et la production de PPT.
 
-`v1.0.1` est une version corrective centrée sur la persistance. Les images des espaces de travail PPT et CAD survivent désormais beaucoup plus fiablement à un rechargement, sauf si l’utilisateur vide explicitement l’espace de travail.
+## ✨ Vue d'ensemble
 
-`v1.0.0` est la première grande version réellement exploitable. Elle améliore surtout l’édition de PPT existants, en particulier l’édition de texte sur des PPT exportés depuis NotebookLM.
+| Canvas | Rôle principal | Sorties typiques |
+| --- | --- | --- |
+| `Flow` | génération et édition partielle basées sur draw.io XML | diagrammes de flux, schémas système, schémas logiques |
+| `CAD` | planification et analyse pour les workflows d'intérieur | planches d'analyse, plans 2D, tâches de rendu, BOM |
+| `PPT` | génération structurée de diapositives et itération orientée image | présentations, visuels de slides, exports multi-format |
 
-## Correctifs de v1.0.1
+## 🚀 Mise à jour récente
 
-- Déplacement de l’état lourd des images du workspace PPT vers une persistance IndexedDB afin de corriger la perte d’images après rechargement
-- Correction de l’ordre de restauration du workspace PPT pour éviter qu’un snapshot léger n’écrase le dernier état d’images persistant
-- Passage des rendus et images d’analyse CAD à une persistance IndexedDB, avec une meilleure gestion des placeholders pour fiabiliser la restauration après rechargement
+- Le workflow PPT est maintenant centré sur l'image
+- Les ajustements et rerendus dans l'interface régénèrent directement les images des diapositives au lieu de traiter à l'avance des calques de texte éditables pendant la création
+- L'export est séparé en `PDF`, `PPT basé sur des images` et `PPTX éditable`
+- L'OCR, la génération d'un fond sans texte et la réinjection du texte ne s'exécutent que lors de l'export `PPTX éditable`
+- Les modèles PPT importés et les préférences de modèles prédéfinis masqués sont maintenant persistés localement via IndexedDB
 
-## Points forts de v1.0.0
-
-- Expérience unifiée entre `Flow`, `CAD` et `PPT`
-- Prise en charge de l’édition de texte sur des PPT exportés depuis NotebookLM
-- Workflow mieux adapté à la modification et à l’itération sur des PPT existants, pas seulement à la première génération
-- Les images importées dans PPT n’injectent plus de gros payloads base64 bruts dans le chat
-- Les requêtes de génération et d’édition d’images PPT passent maintenant par un proxy local pour une meilleure compatibilité navigateur
-- Gestion plus stable des images de référence avec limite du nombre d’images, compression et retry de secours
-- Correction de plusieurs problèmes de texte corrompu dans l’espace de travail PPT et dans la documentation
-
-## Aperçu des canvas
+## 🖼️ Aperçu des canvas
 
 <table>
   <tr><td width="680" align="center"><strong>Canvas Flow</strong></td></tr>
@@ -56,23 +58,23 @@ Version actuelle : `v1.0.1`
   <tr><td width="680" align="left"><img src="public/demos/ppt.gif?raw=1" alt="Canvas PPT" width="680" /></td></tr>
 </table>
 
-## Démo en ligne
+## 🌐 Démo en ligne
 
 - [Ouvrir CanvasAnvil](https://canvasanvil.codingfgd.asia)
 
-## Tutoriels vidéo
+## 🎬 Tutoriels vidéo
 
 - [Bilibili](https://www.bilibili.com/video/BV1jzZ3BBEHc?vd_source=b6b031f92061ae667eba1185f4782a1c)
 - [YouTube](https://youtu.be/n3Otj--aLRo)
 - [Douyin](https://v.douyin.com/JwlwhmE6R40/)
 
-## Vue d’ensemble des capacités
+## 🧩 Capacités
 
 - `Flow` : génération de diagrammes de flux et édition partielle basées sur draw.io XML
-- `CAD` : planification de workflows intérieurs, planches d’analyse, plans 2D, tâches de rendu et BOM
-- `PPT` : génération de diapositives structurées, édition au niveau de la page, itération assistée par image et export
+- `CAD` : planification de workflows intérieurs, planches d'analyse, plans 2D, tâches de rendu et BOM
+- `PPT` : génération structurée de diapositives, itération orientée image, persistance des modèles et export multi-format
 
-## Démarrage rapide
+## ⚡ Démarrage rapide
 
 1. Installer les dépendances
 
@@ -88,64 +90,64 @@ npm run dev
 
 URL par défaut : `http://localhost:5173`
 
-3. Vérifier les types
+3. Exécuter la vérification de types
 
 ```bash
 npm run check
 ```
 
-4. Build de production
+4. Construire pour la production
 
 ```bash
 npm run build
 ```
 
-## Scripts utiles
+## 🛠️ Scripts utiles
 
-- `npm run dev` : démarrer le serveur Vite
-- `npm run dev:full` : démarrer les serveurs Web et API ensemble
-- `npm run dev:web` : démarrer le frontend
-- `npm run dev:api` : démarrer l’API
+- `npm run dev` : démarrer le serveur de développement Vite
+- `npm run dev:full` : démarrer ensemble les serveurs de développement Web et API
+- `npm run dev:web` : démarrer le serveur frontend
+- `npm run dev:api` : démarrer le serveur API
 - `npm run check` : vérification TypeScript
 - `npm run lint` : ESLint
 - `npm run build` : build de production
 - `npm run preview` : prévisualiser le build
-- `npm start` : démarrer le serveur API
+- `npm start` : lancer le service API
 
-## Notes de développement
+## 🧪 Notes de développement
 
-- La configuration IA est lue depuis les paramètres locaux de l’application et peut pointer vers des fournisseurs personnalisés
-- Le développement local PPT dépend maintenant de la route proxy locale `/api/ppt-ai`
-- Après une modification du routage API local dans `vite.config.ts`, redémarrez le serveur de développement
+- La configuration IA est lue depuis les réglages locaux de l'application et peut être reliée à des fournisseurs de modèles personnalisés
+- Le développement local du module PPT dépend du proxy local `/api/ppt-ai`
+- Après modification du routage API local dans `vite.config.ts`, redémarrez le serveur de développement
 
-## Structure du projet
+## 🗂️ Structure du projet
 
 ```text
 .
-├─ agent/                      # Prompts Agent et spécifications des sous-agents
-├─ public/                     # Ressources statiques
-├─ src/
-│  └─ workspaces/
-│     ├─ flow/                 # Canvas Flow
-│     ├─ cad/                  # Canvas CAD
-│     └─ ppt/                  # Canvas PPT
-├─ api/                        # Points d’entrée des routes API locales
-└─ README.md
+├── agent/                      # Prompts Agent et spécifications des sous-agents
+├── public/                     # Ressources statiques
+├── src/
+│   └── workspaces/
+│       ├── flow/               # Canvas Flow
+│       ├── cad/                # Canvas CAD
+│       └── ppt/                # Canvas PPT
+├── api/                        # Entrées des routes API locales
+└── README.md
 ```
 
-## Origines et intégrations
+## 🔗 Origines et intégrations
 
-- Canvas Flow : intégré et étendu depuis [next-ai-draw-io](https://github.com/DayuanJiang/next-ai-draw-io)
-- Canvas PPT : intégré et étendu depuis [banana-slides](https://github.com/Anionex/banana-slides.git)
-- Canvas CAD : implémentation interne incluant workflow agent, édition 2D SVG, orchestration des rendus et pipeline BOM
+- Canvas Flow : intégré et étendu à partir de [next-ai-draw-io](https://github.com/DayuanJiang/next-ai-draw-io)
+- Canvas PPT : intégré et étendu à partir de [banana-slides](https://github.com/Anionex/banana-slides.git)
+- Canvas CAD : développé en interne, avec workflow agent, édition SVG 2D, orchestration de rendu et pipeline BOM
 
-## Documentation
+## 📚 Documentation
 
 - Guide de déploiement : [deploy/README.md](deploy/README.md)
 
-## Contact
+## 📮 Contact
 
-Scannez le QR code WeChat ci-dessous pour contacter l’auteur.
+Scannez le QR code WeChat ci-dessous pour contacter l'auteur.
 
 <p align="left">
   <img src="public/wechat.jpg" alt="WeChat QR code" width="280" />
