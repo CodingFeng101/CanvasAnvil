@@ -18,12 +18,19 @@
 </p>
 
 <p align="center">
-  <img alt="version" src="https://img.shields.io/badge/version-v1.0.1-2563eb?style=for-the-badge" />
+  <img alt="version" src="https://img.shields.io/badge/version-v1.0.2-2563eb?style=for-the-badge" />
   <img alt="workspaces" src="https://img.shields.io/badge/workspaces-Flow%20%7C%20CAD%20%7C%20PPT-0f766e?style=for-the-badge" />
   <img alt="stack" src="https://img.shields.io/badge/stack-Vite%20%2B%20React%20%2B%20TypeScript-7c3aed?style=for-the-badge" />
 </p>
 
 > CanvasAnvil réunit dans un même espace la génération de diagrammes de flux, les workflows CAD et la production de PPT.
+
+## Version
+
+Version actuelle : `v1.0.2`
+
+- `v1.0.2` : passage du workflow PPT à un mode image-first, report de l'OCR et de la réinjection du texte au moment de l'export `PPTX éditable`, et persistance des modèles PPT dans IndexedDB
+- `v1.0.1` : correction des problèmes de persistance des images dans les espaces de travail PPT et CAD
 
 ## ✨ Vue d'ensemble
 

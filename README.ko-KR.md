@@ -18,12 +18,19 @@
 </p>
 
 <p align="center">
-  <img alt="version" src="https://img.shields.io/badge/version-v1.0.1-2563eb?style=for-the-badge" />
+  <img alt="version" src="https://img.shields.io/badge/version-v1.0.2-2563eb?style=for-the-badge" />
   <img alt="workspaces" src="https://img.shields.io/badge/workspaces-Flow%20%7C%20CAD%20%7C%20PPT-0f766e?style=for-the-badge" />
   <img alt="stack" src="https://img.shields.io/badge/stack-Vite%20%2B%20React%20%2B%20TypeScript-7c3aed?style=for-the-badge" />
 </p>
 
 > CanvasAnvil은 플로우차트 생성, CAD 워크플로, PPT 제작을 하나의 작업 공간에 통합한 AI 플랫폼입니다.
+
+## 릴리스
+
+현재 버전: `v1.0.2`
+
+- `v1.0.2`: PPT를 이미지 우선 워크플로로 전환하고, OCR 및 텍스트 재배치를 편집 가능한 PPTX 내보내기 시점으로 미루었으며, PPT 템플릿을 IndexedDB에 영속화
+- `v1.0.1`: PPT와 CAD 작업 공간 이미지의 영속성 문제를 수정
 
 ## ✨ 개요
 

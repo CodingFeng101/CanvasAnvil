@@ -18,12 +18,19 @@
 </p>
 
 <p align="center">
-  <img alt="version" src="https://img.shields.io/badge/version-v1.0.1-2563eb?style=for-the-badge" />
+  <img alt="version" src="https://img.shields.io/badge/version-v1.0.2-2563eb?style=for-the-badge" />
   <img alt="workspaces" src="https://img.shields.io/badge/workspaces-Flow%20%7C%20CAD%20%7C%20PPT-0f766e?style=for-the-badge" />
   <img alt="stack" src="https://img.shields.io/badge/stack-Vite%20%2B%20React%20%2B%20TypeScript-7c3aed?style=for-the-badge" />
 </p>
 
 > CanvasAnvil 將流程圖生成、CAD 工作流與 PPT 製作整合在同一個工作空間中。
+
+## 版本
+
+目前版本：`v1.0.2`
+
+- `v1.0.2`：PPT 切換為圖片優先工作流，將文字辨識與文字回填延後到可編輯 PPTX 匯出時執行，並把 PPT 模板改為 IndexedDB 持久化
+- `v1.0.1`：修復 PPT 與 CAD 工作區圖片的持久化問題
 
 ## ✨ 產品概覽
 
