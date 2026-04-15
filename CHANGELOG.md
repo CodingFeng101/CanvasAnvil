@@ -4,6 +4,19 @@ All notable changes to this project will be documented in this file.
 
 The format is based on Keep a Changelog, and the project aims to follow Semantic Versioning.
 
+## [1.0.2] - 2026-04-15
+
+### Changed
+
+- Promoted the release version from `1.0.1` to `1.0.2`.
+- Switched PPT creation and in-editor iteration to an image-first workflow that regenerates slide images directly.
+- Split PPT export into `PDF`, image-based `PPT`, and `editable PPTX`, with OCR and text refill deferred to editable export only.
+- Refreshed the localized README files to reflect the new PPT workflow and current release version.
+
+### Fixed
+
+- Persisted uploaded PPT templates and hidden preset-template preferences through IndexedDB-backed local storage.
+
 ## [1.0.1] - 2026-03-24
 
 ### Changed
