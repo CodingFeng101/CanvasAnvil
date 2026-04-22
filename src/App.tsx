@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { Toaster } from "sonner";
-import { FileCode, Hammer, Layers, Presentation, Square } from "lucide-react";
+import { ChartNoAxesCombined, FileCode, Hammer, Layers, Package, Presentation, ScrollText, Square } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { SettingsDialog } from "@/components/SettingsDialog";
 import { LandingPage } from "@/pages/LandingPage";
@@ -11,8 +11,11 @@ import { useUiLanguage } from "@/lib/use-ui-language";
 import { FlowWorkspaceShell } from "@/workspaces/flow/FlowWorkspaceShell";
 import { CadWorkspaceShell } from "@/workspaces/cad/CadWorkspaceShell";
 import { PptWorkspaceShell } from "@/workspaces/ppt/PptWorkspaceShell";
+import { PosterWorkspaceShell } from "@/workspaces/poster/PosterWorkspaceShell";
+import { InfographicWorkspaceShell } from "@/workspaces/infographic/InfographicWorkspaceShell";
+import { ProductWorkspaceShell } from "@/workspaces/product/ProductWorkspaceShell";
 
-type WorkspaceType = "flow" | "cad" | "ppt";
+type WorkspaceType = "flow" | "cad" | "ppt" | "poster" | "infographic" | "product";
 const APP_VIEW_STORAGE_KEY = "CanvasAnvil-app-view-v1";
 const APP_WORKSPACE_STORAGE_KEY = "CanvasAnvil-active-workspace-v1";
 
@@ -65,7 +68,7 @@ function App() {
   const [activeWorkspace, setActiveWorkspace] = useState<WorkspaceType>(() => {
     if (typeof window === "undefined") return "flow";
     const saved = localStorage.getItem(APP_WORKSPACE_STORAGE_KEY);
-    return saved === "cad" || saved === "ppt" || saved === "flow" ? saved : "flow";
+    return saved === "cad" || saved === "ppt" || saved === "flow" || saved === "poster" || saved === "infographic" || saved === "product" ? saved : "flow";
   });
 
   React.useEffect(() => {
@@ -84,9 +87,9 @@ function App() {
     <div className="h-screen w-screen flex flex-col bg-background overflow-hidden font-sans">
       <Toaster position="top-center" richColors />
 
-      <header className="h-14 border-b border-border/40 flex items-center px-6 justify-between bg-background/80 backdrop-blur-md supports-[backdrop-filter]:bg-background/60 z-50 shadow-sm">
+      <header className="h-16 border-b border-border/40 grid grid-cols-[1fr_auto_1fr] items-center gap-4 px-6 bg-background/80 backdrop-blur-md supports-[backdrop-filter]:bg-background/60 z-50 shadow-sm">
         <div
-          className="flex items-center gap-2.5 font-semibold text-lg tracking-tight text-foreground/90 cursor-pointer"
+          className="flex items-center gap-2.5 font-semibold text-lg tracking-tight text-foreground/90 cursor-pointer justify-self-start"
           onClick={() => setShowLanding(true)}
         >
           <div className="relative p-1.5 bg-blue-600/10 rounded-lg shadow-sm ring-1 ring-blue-600/20">
@@ -98,7 +101,8 @@ function App() {
           <span>CanvasAnvil</span>
         </div>
 
-        <div className="flex items-center bg-muted/50 p-1 rounded-xl border border-border/50 shadow-inner">
+        <div className="justify-self-center max-w-full overflow-x-auto">
+        <div className="flex min-w-max items-center bg-muted/50 p-1 rounded-xl border border-border/50 shadow-inner">
           <button
             onClick={() => setActiveWorkspace("flow")}
             className={cn(
@@ -135,9 +139,46 @@ function App() {
             <Presentation className="w-4 h-4" />
             {t(uiLang, "nav.ppt")}
           </button>
+          <button
+            onClick={() => setActiveWorkspace("poster")}
+            className={cn(
+              "flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-all duration-300 ease-out",
+              activeWorkspace === "poster"
+                ? "bg-background text-foreground shadow-sm ring-1 ring-border/50 scale-100"
+                : "text-muted-foreground hover:text-foreground hover:bg-background/50",
+            )}
+          >
+            <ScrollText className="w-4 h-4" />
+            {t(uiLang, "nav.poster")}
+          </button>
+          <button
+            onClick={() => setActiveWorkspace("infographic")}
+            className={cn(
+              "flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-all duration-300 ease-out",
+              activeWorkspace === "infographic"
+                ? "bg-background text-foreground shadow-sm ring-1 ring-border/50 scale-100"
+                : "text-muted-foreground hover:text-foreground hover:bg-background/50",
+            )}
+          >
+            <ChartNoAxesCombined className="w-4 h-4" />
+            {t(uiLang, "nav.infographic")}
+          </button>
+          <button
+            onClick={() => setActiveWorkspace("product")}
+            className={cn(
+              "flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-all duration-300 ease-out",
+              activeWorkspace === "product"
+                ? "bg-background text-foreground shadow-sm ring-1 ring-border/50 scale-100"
+                : "text-muted-foreground hover:text-foreground hover:bg-background/50",
+            )}
+          >
+            <Package className="w-4 h-4" />
+            {t(uiLang, "nav.product")}
+          </button>
+        </div>
         </div>
 
-        <div className="w-48 flex justify-end">
+        <div className="w-48 flex justify-end justify-self-end">
           <SettingsDialog />
         </div>
       </header>
@@ -147,6 +188,9 @@ function App() {
           {activeWorkspace === "flow" && <FlowWorkspaceShell />}
           {activeWorkspace === "cad" && <CadWorkspaceShell />}
           {activeWorkspace === "ppt" && <PptWorkspaceShell />}
+          {activeWorkspace === "poster" && <PosterWorkspaceShell />}
+          {activeWorkspace === "infographic" && <InfographicWorkspaceShell />}
+          {activeWorkspace === "product" && <ProductWorkspaceShell />}
         </ErrorBoundary>
       </div>
     </div>

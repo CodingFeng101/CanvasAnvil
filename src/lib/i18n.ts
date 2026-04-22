@@ -53,6 +53,9 @@ const dict: Dict = {
   "nav.flow": { zh: "流程绘制", en: "Flow" },
   "nav.cad": { zh: "室内设计", en: "CAD" },
   "nav.ppt": { zh: "PPT演示", en: "PPT" },
+  "nav.poster": { zh: "海报", en: "Poster" },
+  "nav.infographic": { zh: "信息图", en: "Infographic" },
+  "nav.product": { zh: "产品介绍", en: "Product" },
 
   "flow.addToChat": { zh: "添加到对话", en: "Add to chat" },
   "flow.addToChat.tooltip": { zh: "将当前图表添加到对话", en: "Add current diagram to chat" },

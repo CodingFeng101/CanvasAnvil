@@ -1,25 +1,31 @@
-import OpenAI from 'openai';
 import { getUiLanguage } from "@/lib/ui-language";
 import { t } from "@/lib/i18n";
-
-// Configuration Interfaces
-export interface AIConfig {
-  apiKey: string;
-  baseUrl: string;
-  chatModel: string;
-  imageModel: string;
-  fileParserApiToken?: string;
-  systemPrompt?: string;
-}
+import {
+  type AIConfig,
+  getImageChannelConfig,
+  getTextChannelConfig,
+  normalizeAIConfig,
+} from "@/lib/ai/provider-registry";
+export type { AIConfig } from "@/lib/ai/provider-registry";
 
 // Default Configuration
 const DEFAULT_CONFIG: AIConfig = {
-  apiKey: "",
-  baseUrl: "",
-  chatModel: "gpt-3.5-turbo",
-  imageModel: "gemini-2.5-flash-image-preview",
+  textProvider: "openai",
+  textApiKey: "",
+  textBaseUrl: "https://api.openai.com/v1",
+  textModel: "gpt-4o-mini",
+  textCustomMapping: "",
+  imageProvider: "openai",
+  imageApiKey: "",
+  imageBaseUrl: "https://api.openai.com/v1",
+  imageModel: "gpt-image-1",
+  imageCustomMapping: "",
   fileParserApiToken: "",
-  systemPrompt: ""
+  systemPrompt: "",
+  apiKey: "",
+  baseUrl: "https://api.openai.com/v1",
+  chatModel: "gpt-4o-mini",
+  imageModelLegacy: "gpt-image-1",
 };
 
 const STORAGE_KEY = "unified_ai_workspace_config";
@@ -120,7 +126,7 @@ export function getAIConfig(): AIConfig {
   const stored = localStorage.getItem(STORAGE_KEY);
   if (stored) {
     try {
-      return { ...DEFAULT_CONFIG, ...JSON.parse(stored) };
+      return normalizeAIConfig({ ...DEFAULT_CONFIG, ...JSON.parse(stored) });
     } catch {
       try {
         localStorage.removeItem(STORAGE_KEY);
@@ -134,25 +140,7 @@ export function getAIConfig(): AIConfig {
 
 // Helper to save config
 export function saveAIConfig(config: AIConfig) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(config));
-}
-
-// OpenAI Client Factory
-function getClient() {
-  const config = getAIConfig();
-  const baseURL = String(config.baseUrl || "").trim();
-  const clientOptions: {
-    apiKey: string;
-    baseURL?: string;
-    dangerouslyAllowBrowser: true;
-  } = {
-    apiKey: config.apiKey || "dummy", // Prevent crash if empty, but calls will fail
-    dangerouslyAllowBrowser: true
-  };
-  if (baseURL) {
-    clientOptions.baseURL = baseURL;
-  }
-  return new OpenAI(clientOptions);
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(normalizeAIConfig(config)));
 }
 
 export interface ChatMessage {
@@ -198,41 +186,9 @@ export async function streamChatMessage(
   model?: string,
   signal?: AbortSignal
 ) {
-  return await limitModelCall(async () => {
-    const config = getAIConfig();
-    const client = getClient();
-    
-    if (!config.apiKey) {
-      throw new Error(t(getUiLanguage(), "error.missingApiKey"));
-    }
-  
-    try {
-      const stream = await client.chat.completions.create(
-        {
-          model: model || config.chatModel,
-          messages: applyUiLanguagePolicy(messages),
-          stream: true,
-        },
-        signal ? ({ signal } as any) : undefined
-      );
-  
-      let fullContent = '';
-      for await (const chunk of stream) {
-        const content = chunk.choices[0]?.delta?.content || '';
-        if (content) {
-          fullContent += content;
-          onChunk(fullContent);
-        }
-      }
-      return fullContent;
-    } catch (error) {
-      if ((error as any)?.name === "AbortError" || (error as any)?.name === "APIUserAbortError") {
-        throw error;
-      }
-      console.error("Chat Stream Error:", error);
-      throw error;
-    }
-  }, signal);
+  const content = await generateChatMessage(messages, model, { signal });
+  onChunk(content);
+  return content;
 }
 
 // Simple non-stream wrapper
@@ -265,22 +221,22 @@ export async function generateChatMessage(messages: ChatMessage[], model?: strin
   try {
     return await limitModelCall(async () => {
       const config = getAIConfig();
-      const client = getClient();
-
-      if (!config.apiKey) {
+      const textChannel = getTextChannelConfig(config);
+      if (!textChannel.apiKey) {
         throw new Error(t(getUiLanguage(), "error.missingApiKey"));
       }
 
       try {
-        const resp = await client.chat.completions.create(
+        const data = await callPptProxy<{ content?: string }>(
           {
-            model: model || config.chatModel,
+            kind: "chat",
+            aiConfig: config,
             messages: applyUiLanguagePolicy(messages),
-            stream: false,
+            model: model || textChannel.model,
           },
-          mergedSignal ? ({ signal: mergedSignal } as any) : undefined
+          mergedSignal || undefined
         );
-        return resp.choices?.[0]?.message?.content || "";
+        return String(data?.content || "");
       } catch (error) {
         if ((error as any)?.name === "AbortError" || (error as any)?.name === "APIUserAbortError") {
           throw error;
@@ -300,21 +256,17 @@ export async function generatePptProxyChatMessage(
   options?: GenerateChatMessageOptions
 ) {
   const config = getAIConfig();
-  if (!config.apiKey) {
+  const textChannel = getTextChannelConfig(config);
+  if (!textChannel.apiKey) {
     throw new Error(t(getUiLanguage(), "error.missingApiKey"));
   }
 
   const data = await callPptProxy<{ content?: string }>(
     {
       kind: "chat",
-      aiConfig: {
-        apiKey: config.apiKey,
-        baseUrl: config.baseUrl,
-        chatModel: config.chatModel,
-        imageModel: config.imageModel,
-      },
+      aiConfig: config,
       messages,
-      model: model || config.chatModel,
+      model: model || textChannel.model,
     },
     options?.signal
   );
@@ -348,11 +300,11 @@ export async function generateVisionChatMessage(
   try {
     return await limitModelCall(async () => {
       const config = getAIConfig();
+      const textChannel = getTextChannelConfig(config);
 
-      if (!config.apiKey) {
+      if (!textChannel.apiKey) {
         throw new Error(t(getUiLanguage(), "error.missingApiKey"));
       }
-
       const normalizedImageUrls = await normalizeVisionImageUrls(imageUrls);
       const userContent: any[] = [{ type: "text", text: userPrompt }];
       for (const url of normalizedImageUrls) {
@@ -366,17 +318,12 @@ export async function generateVisionChatMessage(
         const data = await callPptProxy<{ content?: string }>(
           {
             kind: "chat",
-            aiConfig: {
-              apiKey: config.apiKey,
-              baseUrl: config.baseUrl,
-              chatModel: config.chatModel,
-              imageModel: config.imageModel,
-            },
+            aiConfig: config,
             messages: [
               { role: "system", content: systemPrompt },
               { role: "user", content: userContent as any },
             ] as any,
-            model: model || config.chatModel,
+            model: model || textChannel.model,
           },
           mergedSignal || undefined
         );
@@ -404,21 +351,23 @@ export interface ImageGenerationRequest {
   prompt: string;
   referenceImageUrl?: string; // Main reference (kept for backward compatibility)
   additionalReferenceImageUrls?: string[]; // Additional references
+  maskImageUrl?: string;
 }
 
 type PptProxyChatRequest = {
   kind: "chat";
-  aiConfig: Pick<AIConfig, "apiKey" | "baseUrl" | "chatModel" | "imageModel">;
+  aiConfig: AIConfig;
   messages: ChatMessage[];
   model?: string;
 };
 
 type PptProxyImageRequest = {
   kind: "image";
-  aiConfig: Pick<AIConfig, "apiKey" | "baseUrl" | "chatModel" | "imageModel">;
+  aiConfig: AIConfig;
   prompt: string;
   referenceImageUrl?: string;
   additionalReferenceImageUrls?: string[];
+  maskImageUrl?: string;
   model?: string;
 };
 
@@ -455,22 +404,6 @@ function cleanUrl(url: string) {
     // If it looks like a path but not absolute URL, return as is (might be base64 or relative)
     if (url.startsWith('data:image')) return url;
     return null;
-}
-
-function dataUrlToObjectUrl(dataUrl: string) {
-    if (typeof window === "undefined") return null;
-    if (!dataUrl.startsWith("data:image")) return null;
-    const comma = dataUrl.indexOf(",");
-    if (comma < 0) return null;
-    const header = dataUrl.slice(0, comma);
-    const data = dataUrl.slice(comma + 1);
-    const mimeMatch = header.match(/^data:(image\/[a-zA-Z0-9.+-]+);base64$/);
-    const mime = mimeMatch?.[1] || "image/png";
-    const binary = atob(data);
-    const bytes = new Uint8Array(binary.length);
-    for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i);
-    const blob = new Blob([bytes], { type: mime });
-    return URL.createObjectURL(blob);
 }
 
 async function objectUrlToDataUrl(objectUrl: string) {
@@ -635,44 +568,36 @@ function parseAIResponse(result: any) {
 export async function generateImage(request: ImageGenerationRequest, signal?: AbortSignal) {
   return await limitModelCall(async () => {
     const config = getAIConfig();
-    
-    if (!config.apiKey) {
+    const imageChannel = getImageChannelConfig(config);
+    if (!imageChannel.apiKey) {
       throw new Error(t(getUiLanguage(), "error.missingApiKey"));
     }
   
-    const normalizedReferenceImageUrl = request.referenceImageUrl
-      ? await normalizeImageUrlForModel(request.referenceImageUrl)
-      : null;
-    const additionalUrls = await normalizeImageUrlsForModel(
-      Array.isArray(request.additionalReferenceImageUrls) ? request.additionalReferenceImageUrls : [],
-      Math.max(0, IMAGE_MODEL_MAX_REFERENCE_IMAGES - (normalizedReferenceImageUrl ? 1 : 0))
-    );
+      const normalizedReferenceImageUrl = request.referenceImageUrl
+        ? await normalizeImageUrlForModel(request.referenceImageUrl)
+        : null;
+      const normalizedMaskImageUrl = request.maskImageUrl
+        ? await normalizeImageUrlForModel(request.maskImageUrl)
+        : null;
+      const additionalUrls = await normalizeImageUrlsForModel(
+        Array.isArray(request.additionalReferenceImageUrls) ? request.additionalReferenceImageUrls : [],
+        Math.max(0, IMAGE_MODEL_MAX_REFERENCE_IMAGES - (normalizedReferenceImageUrl ? 1 : 0))
+      );
 
     try {
       const result = await callPptProxy<{ url?: string }>(
         {
           kind: "image",
-          aiConfig: {
-            apiKey: config.apiKey,
-            baseUrl: config.baseUrl,
-            chatModel: config.chatModel,
-            imageModel: config.imageModel,
+          aiConfig: config,
+            prompt: request.prompt,
+            referenceImageUrl: normalizedReferenceImageUrl || undefined,
+            additionalReferenceImageUrls: additionalUrls,
+            maskImageUrl: normalizedMaskImageUrl || undefined,
+            model: imageChannel.model,
           },
-          prompt: request.prompt,
-          referenceImageUrl: normalizedReferenceImageUrl || undefined,
-          additionalReferenceImageUrls: additionalUrls,
-          model: config.imageModel,
-        },
-        signal
+          signal
       );
       const url = cleanUrl(String(result?.url || ""));
-      if (url && url.startsWith("data:image")) {
-        try {
-          const objectUrl = dataUrlToObjectUrl(url);
-          if (objectUrl) return objectUrl;
-        } catch {
-        }
-      }
       return url;
     } catch (error) {
       console.error("Image Gen Error:", error);

@@ -31,9 +31,11 @@ export const STORAGE_CLOSE_PROTECTION_KEY = "next-ai-draw-io-close-protection"
 const STORAGE_ACCESS_CODE_REQUIRED_KEY = "next-ai-draw-io-access-code-required"
 
 type TopSettings = {
-    apiKey: string
-    baseUrl: string
-    chatModel: string
+    textApiKey: string
+    textBaseUrl: string
+    textModel: string
+    imageApiKey: string
+    imageBaseUrl: string
     imageModel: string
 }
 
@@ -69,9 +71,11 @@ export function SettingsDialog({
         () => getStoredAccessCodeRequired() ?? false,
     )
     const [topSettings, setTopSettings] = useState<TopSettings>({
-        apiKey: "",
-        baseUrl: "",
-        chatModel: "",
+        textApiKey: "",
+        textBaseUrl: "",
+        textModel: "",
+        imageApiKey: "",
+        imageBaseUrl: "",
         imageModel: "",
     })
 
@@ -108,10 +112,12 @@ export function SettingsDialog({
 
             const workspaceConfig = getWorkspaceAIConfig()
             setTopSettings({
-                apiKey: String(workspaceConfig.apiKey || ""),
-                baseUrl: String(workspaceConfig.baseUrl || ""),
-                chatModel: String(workspaceConfig.chatModel || ""),
-                imageModel: String(workspaceConfig.imageModel || ""),
+                textApiKey: String(workspaceConfig.textApiKey || workspaceConfig.apiKey || ""),
+                textBaseUrl: String(workspaceConfig.textBaseUrl || workspaceConfig.baseUrl || ""),
+                textModel: String(workspaceConfig.textModel || workspaceConfig.chatModel || ""),
+                imageApiKey: String(workspaceConfig.imageApiKey || workspaceConfig.apiKey || ""),
+                imageBaseUrl: String(workspaceConfig.imageBaseUrl || workspaceConfig.baseUrl || ""),
+                imageModel: String(workspaceConfig.imageModel || workspaceConfig.imageModelLegacy || ""),
             })
 
             setError("")
@@ -210,7 +216,7 @@ export function SettingsDialog({
                                 <Label htmlFor="ai-model">{t("settings.model")}</Label>
                                 <Input
                                     id="ai-model"
-                                    value={topSettings.chatModel}
+                                    value={topSettings.textModel}
                                     readOnly
                                     disabled
                                     placeholder="-"
@@ -230,7 +236,7 @@ export function SettingsDialog({
                                 <Label htmlFor="ai-base-url">{t("settings.base_url")}</Label>
                                 <Input
                                     id="ai-base-url"
-                                    value={topSettings.baseUrl}
+                                    value={topSettings.textBaseUrl}
                                     readOnly
                                     disabled
                                     placeholder="-"
@@ -241,7 +247,7 @@ export function SettingsDialog({
                                 <Input
                                     id="ai-api-key"
                                     type="text"
-                                    value={maskApiKey(topSettings.apiKey)}
+                                    value={maskApiKey(topSettings.textApiKey)}
                                     readOnly
                                     disabled
                                     placeholder="-"

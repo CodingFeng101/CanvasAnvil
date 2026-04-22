@@ -24,7 +24,8 @@ import {
 } from "@/workspaces/flow/next/lib/pdf-utils"
 import { type FileData, useFileProcessor } from "@/workspaces/flow/next/lib/use-file-processor"
 import { useQuotaManager } from "@/workspaces/flow/next/lib/use-quota-manager"
-import { formatXML, wrapWithMxFile } from "@/workspaces/flow/next/lib/utils"
+import { applyDiagramOperations, isMxCellXmlComplete, type DiagramOperation } from "@/workspaces/flow/next/lib/diagram-operations"
+import { formatXML, validateAndFixXml, wrapWithMxFile } from "@/workspaces/flow/next/lib/utils"
 import { ChatMessageDisplay } from "./chat-message-display"
 
 // localStorage keys for persistence
@@ -224,6 +225,7 @@ export default function ChatPanel({
 
     // Persist processed tool call IDs so collapsing the chat doesn't replay old tool outputs
     const processedToolCallsRef = useRef<Set<string>>(new Set())
+    const assembledDiagramXmlRef = useRef("")
 
     const chat: any = (useChat as any)({
         api: "/api/chat",
@@ -257,14 +259,65 @@ export default function ChatPanel({
 
             if (toolCall.toolName === "display_diagram") {
                 const { xml } = toolCall.input as { xml: string }
+                const rawXml = String(xml || "")
+                assembledDiagramXmlRef.current = rawXml
                 if (DEBUG) {
                     console.log(
-                        `[display_diagram] Received XML length: ${xml.length}`,
+                        `[display_diagram] Received XML length: ${rawXml.length}`,
                     )
                 }
 
+                if (!isMxCellXmlComplete(rawXml)) {
+                    addToolOutput({
+                        tool: "display_diagram",
+                        toolCallId: toolCall.toolCallId,
+                        state: "output-error",
+                        errorText: `Output was truncated due to length limits. Continue with append_diagram from the exact point where this fragment stopped.
+
+Your partial XML:
+\`\`\`xml
+${rawXml}
+\`\`\`
+
+Rules:
+- Do not emit wrapper tags
+- Do not restart from the beginning
+- Continue from the exact next character`,
+                    })
+                    return
+                }
+
+                let xmlToDisplay = rawXml
+                const { valid, error, fixed, fixes } = validateAndFixXml(
+                    wrapWithMxFile(rawXml),
+                )
+                if (fixed) {
+                    xmlToDisplay = fixed
+                    if (DEBUG) {
+                        console.log("[display_diagram] XML auto-fixed:", fixes)
+                    }
+                }
+                if (!valid && error) {
+                    addToolOutput({
+                        tool: "display_diagram",
+                        toolCallId: toolCall.toolCallId,
+                        state: "output-error",
+                        errorText: `${error}
+
+Please fix the XML issues and call display_diagram again with corrected XML.
+
+Your failed XML:
+\`\`\`xml
+${rawXml}
+\`\`\``,
+                    })
+                    return
+                }
+
                 // Wrap raw XML with full mxfile structure for draw.io
-                const fullXml = wrapWithMxFile(xml)
+                const fullXml = xmlToDisplay.includes("<mxfile")
+                    ? xmlToDisplay
+                    : wrapWithMxFile(xmlToDisplay)
 
                 // loadDiagram validates and returns error if invalid
                 const validationError = onDisplayChart(fullXml)
@@ -286,7 +339,7 @@ export default function ChatPanel({
                         state: "output-error",
                         errorText: `${validationError}
 
-Please fix the XML issues and call display_diagram again with corrected XML.
+${isMxCellXmlComplete(xml) ? "Please fix the XML issues and call display_diagram again with corrected XML." : "The XML appears truncated. Continue with append_diagram from the exact point where this fragment stopped."}
 
 Your failed XML:
 \`\`\`xml
@@ -311,11 +364,104 @@ ${xml}
                         )
                     }
                 }
+            } else if (toolCall.toolName === "append_diagram") {
+                const { xml } = toolCall.input as { xml: string }
+                const appendXml = String(xml || "")
+                const trimmedAppend = appendXml.trim()
+
+                if (
+                    trimmedAppend.startsWith("<mxGraphModel") ||
+                    trimmedAppend.startsWith("<root") ||
+                    trimmedAppend.startsWith("<mxfile") ||
+                    trimmedAppend.startsWith('<mxCell id="0"') ||
+                    trimmedAppend.startsWith('<mxCell id="1"')
+                ) {
+                    addToolOutput({
+                        tool: "append_diagram",
+                        toolCallId: toolCall.toolCallId,
+                        state: "output-error",
+                        errorText: `Do not restart the diagram in append_diagram.
+
+Continue from the exact point where the previous fragment stopped:
+\`\`\`
+${assembledDiagramXmlRef.current.slice(-500)}
+\`\`\`
+
+Do not emit wrapper tags or root cells.`,
+                    })
+                    return
+                }
+
+                const combinedXml = `${assembledDiagramXmlRef.current}${appendXml}`
+                assembledDiagramXmlRef.current = combinedXml
+                if (DEBUG) {
+                    console.log(
+                        `[append_diagram] Combined XML length=${combinedXml.length}`,
+                    )
+                }
+
+                if (!isMxCellXmlComplete(combinedXml)) {
+                    addToolOutput({
+                        tool: "append_diagram",
+                        toolCallId: toolCall.toolCallId,
+                        state: "output-error",
+                        errorText: `The combined XML still appears truncated. Continue with append_diagram from the exact point where this fragment stopped.
+
+Current ending:
+\`\`\`
+${combinedXml.slice(-500)}
+\`\`\``,
+                    })
+                    return
+                }
+
+                let xmlToDisplay = combinedXml
+                const { valid, error, fixed, fixes } = validateAndFixXml(
+                    wrapWithMxFile(combinedXml),
+                )
+                if (fixed) {
+                    xmlToDisplay = fixed
+                    if (DEBUG) {
+                        console.log("[append_diagram] XML auto-fixed:", fixes)
+                    }
+                }
+                if (!valid && error) {
+                    addToolOutput({
+                        tool: "append_diagram",
+                        toolCallId: toolCall.toolCallId,
+                        state: "output-error",
+                        errorText: `${error}
+
+Please fix the appended XML and continue only if more cells are still missing.`,
+                    })
+                    return
+                }
+
+                const fullXml = xmlToDisplay.includes("<mxfile")
+                    ? xmlToDisplay
+                    : wrapWithMxFile(xmlToDisplay)
+                const validationError = onDisplayChart(fullXml)
+
+                if (validationError) {
+                    addToolOutput({
+                        tool: "append_diagram",
+                        toolCallId: toolCall.toolCallId,
+                        state: "output-error",
+                        errorText: `${validationError}
+
+${isMxCellXmlComplete(combinedXml) ? "Please fix the appended XML and continue only if more cells are still missing." : "The combined XML still appears truncated. Continue with append_diagram from the exact point where this fragment stopped."}`,
+                    })
+                } else {
+                    assembledDiagramXmlRef.current = ""
+                    addToolOutput({
+                        tool: "append_diagram",
+                        toolCallId: toolCall.toolCallId,
+                        output: "Successfully appended the remaining diagram XML.",
+                    })
+                }
             } else if (toolCall.toolName === "edit_diagram") {
-                // Parse edits from tool-call params.
-                // Each item is { search: original XML snippet, replace: new snippet }.
-                const { edits } = toolCall.input as {
-                    edits: Array<{ search: string; replace: string }>
+                const { operations } = toolCall.input as {
+                    operations: DiagramOperation[]
                 }
 
                 let currentXml = ""
@@ -342,9 +488,7 @@ ${xml}
                         )
                     }
 
-                    // Apply local search/replace edits against current XML.
-                    const { replaceXMLParts } = await import("@/workspaces/flow/next/lib/utils")
-                    const editedXml = replaceXMLParts(currentXml, edits)
+                    const editedXml = applyDiagramOperations(currentXml, operations)
 
                     // Reload edited XML and validate.
                     const validationError = onDisplayChart(editedXml)
@@ -360,11 +504,12 @@ ${xml}
                             state: "output-error",
                             errorText: `${validationError}
 
-Please fix the XML issues. Ensure you are editing exact lines from the current XML.`,
+Please fix the XML issues. Ensure cell_id values exist in the current XML and that each new_xml contains exactly one valid mxCell.`,
                         })
                     } else {
                         // Success: update cache and log completion.
                         chartXMLRef.current = editedXml
+                        assembledDiagramXmlRef.current = ""
                         addToolOutput({
                             tool: "edit_diagram",
                             toolCallId: toolCall.toolCallId,
@@ -474,6 +619,12 @@ Please fix the XML issues. Ensure you are editing exact lines from the current X
     useEffect(() => {
         messagesRef.current = messages
     }, [messages])
+
+    useEffect(() => {
+        if (!messages.length) {
+            assembledDiagramXmlRef.current = ""
+        }
+    }, [messages.length])
 
     const messagesEndRef = useRef<HTMLDivElement>(null)
 
@@ -893,6 +1044,19 @@ Please fix the XML issues. Ensure you are editing exact lines from the current X
                         apiKey: config.aiApiKey,
                         chatModel: modelToUse,
                         imageModel: imageModelToUse,
+                        textProvider: config.aiProvider,
+                        textBaseUrl: config.aiBaseUrl,
+                        textApiKey: config.aiApiKey,
+                        textModel: modelToUse,
+                        imageProvider:
+                            (config as { aiImageProvider?: string }).aiImageProvider ||
+                            config.aiProvider,
+                        imageBaseUrl:
+                            (config as { aiImageBaseUrl?: string }).aiImageBaseUrl ||
+                            config.aiBaseUrl,
+                        imageApiKey:
+                            (config as { aiImageApiKey?: string }).aiImageApiKey ||
+                            config.aiApiKey,
                     },
                     aiConstraints: globalConstraints,
                 },

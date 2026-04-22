@@ -419,30 +419,12 @@ export function getAIModel(overrides?: ClientOverrides): ModelConfig {
     }
 
     // 2. Determine API Key
-    // Order: Client Override -> AI_API_KEY -> OPENAI_API_KEY -> other provider keys
-    let apiKey = String(
-        overrides?.apiKey ||
-            process.env.AI_API_KEY ||
-            process.env.OPENAI_API_KEY ||
-            "",
-    ).trim()
-
-    if (!apiKey) {
-        // Fallback: Check other common provider keys if generic keys are missing
-        // This is just a convenience for users migrating from old configs
-        apiKey = String(
-            process.env.ANTHROPIC_API_KEY ||
-                process.env.GOOGLE_GENERATIVE_AI_API_KEY ||
-                process.env.AZURE_API_KEY ||
-                process.env.DEEPSEEK_API_KEY ||
-                process.env.SILICONFLOW_API_KEY ||
-                "",
-        ).trim()
-    }
+    // Use the key supplied by the app Settings dialog as the authoritative source.
+    const apiKey = String(overrides?.apiKey || "").trim()
 
     if (!apiKey) {
         throw new Error(
-            "API Key is missing. Please set AI_API_KEY in your .env.local file.",
+            "API Key is missing. Please set it in the app Settings dialog.",
         )
     }
 

@@ -15,21 +15,29 @@ export function getAIConfig() {
             aiApiKey: "",
             aiModel: "",
             aiImageModel: "",
+            aiImageProvider: "openai",
+            aiImageBaseUrl: "",
+            aiImageApiKey: "",
         }
     }
 
     const topConfig = getWorkspaceAIConfig()
-    const topApiKey = String(topConfig.apiKey || "").trim()
-    const topBaseUrl = String(topConfig.baseUrl || "").trim()
-    const topChatModel = String(topConfig.chatModel || "").trim()
-    const topImageModel = String(topConfig.imageModel || "").trim()
+    const topApiKey = String(topConfig.textApiKey || topConfig.apiKey || "").trim()
+    const topBaseUrl = String(topConfig.textBaseUrl || topConfig.baseUrl || "").trim()
+    const topChatModel = String(topConfig.textModel || topConfig.chatModel || "").trim()
+    const topImageModel = String(topConfig.imageModel || topConfig.imageModelLegacy || "").trim()
+    const topImageApiKey = String(topConfig.imageApiKey || topConfig.apiKey || "").trim()
+    const topImageBaseUrl = String(topConfig.imageBaseUrl || topConfig.baseUrl || "").trim()
 
     return {
         accessCode: localStorage.getItem(STORAGE_KEYS.accessCode) || "",
-        aiProvider: "openai",
+        aiProvider: String(topConfig.textProvider || "openai"),
         aiBaseUrl: topBaseUrl,
         aiApiKey: topApiKey,
         aiModel: topChatModel,
         aiImageModel: topImageModel,
+        aiImageProvider: String(topConfig.imageProvider || "openai"),
+        aiImageBaseUrl: topImageBaseUrl,
+        aiImageApiKey: topImageApiKey,
     }
 }

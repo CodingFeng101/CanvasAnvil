@@ -32,5 +32,9 @@
   "include": [
     "src",
     "api"
+  ],
+  "exclude": [
+    "src/features/ppt-editor/mate/**/*.reference.tsx",
+    "src/features/ppt-editor/mate-src/**/*"
   ]
 }

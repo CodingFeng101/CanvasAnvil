@@ -6,6 +6,121 @@ export function cn(...inputs: ClassValue[]) {
     return twMerge(clsx(inputs))
 }
 
+const MAX_XML_SIZE = 1_000_000
+const STRUCTURAL_ATTRS = [
+    "edge",
+    "parent",
+    "source",
+    "target",
+    "vertex",
+    "connectable",
+] as const
+const VALID_ENTITIES = new Set(["lt", "gt", "amp", "quot", "apos"])
+
+interface ParsedTag {
+    tagName: string
+    isClosing: boolean
+    isSelfClosing: boolean
+}
+
+function parseXmlTags(xml: string): ParsedTag[] {
+    const tags: ParsedTag[] = []
+    let i = 0
+
+    while (i < xml.length) {
+        const tagStart = xml.indexOf("<", i)
+        if (tagStart === -1) break
+
+        let tagEnd = tagStart + 1
+        let inQuote = false
+        let quoteChar = ""
+        while (tagEnd < xml.length) {
+            const ch = xml[tagEnd]
+            if (inQuote) {
+                if (ch === quoteChar) inQuote = false
+            } else if (ch === '"' || ch === "'") {
+                inQuote = true
+                quoteChar = ch
+            } else if (ch === ">") {
+                break
+            }
+            tagEnd++
+        }
+
+        if (tagEnd >= xml.length) break
+        const tag = xml.slice(tagStart, tagEnd + 1)
+        const match = /^<(\/?)([a-zA-Z][a-zA-Z0-9:_-]*)/.exec(tag)
+        if (match) {
+            tags.push({
+                tagName: match[2],
+                isClosing: match[1] === "/",
+                isSelfClosing: tag.endsWith("/>"),
+            })
+        }
+        i = tagEnd + 1
+    }
+
+    return tags
+}
+
+function checkDuplicateStructuralAttributes(xml: string): string | null {
+    const tagPattern = /<[^>]+>/g
+    let tagMatch: RegExpExecArray | null
+    while ((tagMatch = tagPattern.exec(xml)) !== null) {
+        const tag = tagMatch[0]
+        const attrPattern = /\s([a-zA-Z_:][a-zA-Z0-9_:.-]*)\s*=/g
+        const counts = new Map<string, number>()
+        let attrMatch: RegExpExecArray | null
+        while ((attrMatch = attrPattern.exec(tag)) !== null) {
+            const name = attrMatch[1]
+            counts.set(name, (counts.get(name) || 0) + 1)
+        }
+        const duplicates = Array.from(counts.entries())
+            .filter(([name, count]) => count > 1 && STRUCTURAL_ATTRS.includes(name as (typeof STRUCTURAL_ATTRS)[number]))
+            .map(([name]) => name)
+        if (duplicates.length > 0) {
+            return `Invalid XML: Duplicate structural attribute(s): ${duplicates.join(", ")}.`
+        }
+    }
+    return null
+}
+
+function checkTagMismatches(xml: string): string | null {
+    const tags = parseXmlTags(xml.replace(/<!--[\s\S]*?-->/g, ""))
+    const stack: string[] = []
+    for (const tag of tags) {
+        if (tag.isClosing) {
+            const expected = stack.pop()
+            if (!expected) {
+                return `Invalid XML: Closing tag </${tag.tagName}> without matching opening tag.`
+            }
+            if (expected.toLowerCase() !== tag.tagName.toLowerCase()) {
+                return `Invalid XML: Expected closing tag </${expected}> but found </${tag.tagName}>.`
+            }
+        } else if (!tag.isSelfClosing) {
+            stack.push(tag.tagName)
+        }
+    }
+    if (stack.length > 0) {
+        return `Invalid XML: Document has unclosed tag(s): ${stack.join(", ")}.`
+    }
+    return null
+}
+
+function checkEntityReferences(xml: string): string | null {
+    if (/&(?!(?:lt|gt|amp|quot|apos|#))/g.test(xml)) {
+        return "Invalid XML: Found unescaped & character(s). Replace & with &amp;."
+    }
+    const invalidEntityPattern = /&([a-zA-Z][a-zA-Z0-9]*);/g
+    let match: RegExpExecArray | null
+    while ((match = invalidEntityPattern.exec(xml)) !== null) {
+        if (!VALID_ENTITIES.has(match[1])) {
+            return `Invalid XML: Invalid entity reference: &${match[1]};`
+        }
+    }
+    return null
+}
+
 /**
  * Format XML string with proper indentation and line breaks
  * @param xml - The XML string to format
@@ -113,8 +228,9 @@ export function convertToLegalXml(xmlString: string): string {
  * @returns Full mxfile-wrapped XML string
  */
 export function wrapWithMxFile(xml: string): string {
+    const rootCells = '<mxCell id="0"/><mxCell id="1" parent="0"/>'
     if (!xml) {
-        return `<mxfile><diagram name="Page-1" id="page-1"><mxGraphModel><root><mxCell id="0"/><mxCell id="1" parent="0"/></root></mxGraphModel></diagram></mxfile>`
+        return `<mxfile><diagram name="Page-1" id="page-1"><mxGraphModel><root>${rootCells}</root></mxGraphModel></diagram></mxfile>`
     }
 
     // Already has full structure
@@ -127,9 +243,25 @@ export function wrapWithMxFile(xml: string): string {
         return `<mxfile><diagram name="Page-1" id="page-1">${xml}</diagram></mxfile>`
     }
 
-    // Just <root> content - extract inner content and wrap fully
-    const rootContent = xml.replace(/<\/?root>/g, "").trim()
-    return `<mxfile><diagram name="Page-1" id="page-1"><mxGraphModel><root>${rootContent}</root></mxGraphModel></diagram></mxfile>`
+    let content = xml.replace(/<\/?root>/g, "").trim()
+
+    const lastSelfClose = content.lastIndexOf("/>")
+    const lastMxCellClose = content.lastIndexOf("</mxCell>")
+    const lastValidEnd = Math.max(lastSelfClose, lastMxCellClose)
+    if (lastValidEnd !== -1) {
+        const endOffset = lastMxCellClose > lastSelfClose ? 9 : 2
+        const suffix = content.slice(lastValidEnd + endOffset)
+        if (/^(\s*<\/[^>]+>)*\s*$/.test(suffix)) {
+            content = content.slice(0, lastValidEnd + endOffset)
+        }
+    }
+
+    content = content
+        .replace(/<mxCell[^>]*\bid=["']0["'][^>]*(?:\/>|><\/mxCell>)/g, "")
+        .replace(/<mxCell[^>]*\bid=["']1["'][^>]*(?:\/>|><\/mxCell>)/g, "")
+        .trim()
+
+    return `<mxfile><diagram name="Page-1" id="page-1"><mxGraphModel><root>${rootCells}${content}</root></mxGraphModel></diagram></mxfile>`
 }
 
 /**
@@ -363,6 +495,27 @@ export function replaceXMLParts(
  * @returns null if valid, error message string if invalid
  */
 export function validateMxCellStructure(xml: string): string | null {
+    if (xml.length > MAX_XML_SIZE) {
+        console.warn(
+            `[validateMxCellStructure] XML size (${xml.length}) exceeds ${MAX_XML_SIZE} bytes.`,
+        )
+    }
+
+    const dupAttrError = checkDuplicateStructuralAttributes(xml)
+    if (dupAttrError) {
+        return dupAttrError
+    }
+
+    const tagMismatchError = checkTagMismatches(xml)
+    if (tagMismatchError) {
+        return tagMismatchError
+    }
+
+    const entityError = checkEntityReferences(xml)
+    if (entityError) {
+        return entityError
+    }
+
     const parser = new DOMParser()
     const doc = parser.parseFromString(xml, "text/xml")
 
@@ -492,6 +645,98 @@ export function validateMxCellStructure(xml: string): string | null {
     }
 
     return null
+}
+
+export function autoFixXml(xml: string): { fixed: string; fixes: string[] } {
+    let fixed = String(xml || "")
+    const fixes: string[] = []
+
+    if (/=\\"/.test(fixed)) {
+        fixed = fixed.replace(/\\"/g, '"').replace(/\\n/g, "\n")
+        fixes.push("Fixed JSON-escaped XML")
+    }
+
+    if (/^\s*<!\[CDATA\[/.test(fixed)) {
+        fixed = fixed.replace(/^\s*<!\[CDATA\[/, "").replace(/\]\]>\s*$/, "")
+        fixes.push("Removed CDATA wrapper")
+    }
+
+    if (/&(?!(?:lt|gt|amp|quot|apos|#[0-9]+|#x[0-9a-fA-F]+);)/g.test(fixed)) {
+        fixed = fixed.replace(
+            /&(?!(?:lt|gt|amp|quot|apos|#[0-9]+|#x[0-9a-fA-F]+);)/g,
+            "&amp;",
+        )
+        fixes.push("Escaped unescaped & characters")
+    }
+
+    fixed = fixed.replace(/<Cell(\s|>)/g, "<mxCell$1")
+    fixed = fixed.replace(/<\/Cell>/g, "</mxCell>")
+    fixed = fixed.replace(/<\/mxcell>/g, "</mxCell>")
+    fixed = fixed.replace(/<\/mxgeometry>/g, "</mxGeometry>")
+    fixed = fixed.replace(/<\/mxpoint>/g, "</mxPoint>")
+
+    fixed = fixed.replace(
+        /<mxPoint\b([^>]*)\/>/g,
+        (match, attrs) => (/(\s|^)as=/.test(attrs) ? match : ""),
+    )
+
+    fixed = fixed.replace(
+        /<mxCell([^>]*)\sid\s*=\s*["']\s*["']([^>]*)>/g,
+        (_match, before, after) =>
+            `<mxCell${before} id="cell_${Date.now()}_${Math.random().toString(36).slice(2, 8)}"${after}>`,
+    )
+
+    fixed = fixed.replace(/\s([a-zA-Z_:][a-zA-Z0-9_:.-]*)=\=/g, ' $1=')
+    fixed = fixed.replace(/\bparent==/g, 'parent=')
+    fixed = fixed.replace(/\bstyle==/g, 'style=')
+    fixed = fixed.replace(/\bhtml==/g, 'html=')
+    fixed = fixed.replace(/\brounded==/g, 'rounded=')
+
+    fixed = fixed.replace(/=\s*"([^"]*)"/g, (_match, value) => {
+        const escaped = String(value)
+            .replace(/&(?!lt;|gt;|amp;|quot;|apos;|#\d+;|#x[0-9a-fA-F]+;)/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+        return `="${escaped}"`
+    })
+
+    if (!fixed.includes("<mxGraphModel") && !fixed.includes("<mxfile")) {
+        fixed = fixed
+            .replace(/<mxCell[^>]*\bid=["']0["'][^>]*(?:\/>|><\/mxCell>)/g, "")
+            .replace(/<mxCell[^>]*\bid=["']1["'][^>]*(?:\/>|><\/mxCell>)/g, "")
+            .trim()
+    }
+
+    if (fixed !== xml && fixes.length === 0) {
+        fixes.push("Applied XML normalization")
+    }
+
+    return { fixed, fixes }
+}
+
+export function validateAndFixXml(xml: string): {
+    valid: boolean
+    error: string | null
+    fixed: string | null
+    fixes: string[]
+} {
+    const initialError = validateMxCellStructure(xml)
+    if (!initialError) {
+        return { valid: true, error: null, fixed: null, fixes: [] }
+    }
+
+    const { fixed, fixes } = autoFixXml(xml)
+    const finalError = validateMxCellStructure(fixed)
+    if (!finalError) {
+        return { valid: true, error: null, fixed, fixes }
+    }
+
+    return {
+        valid: false,
+        error: finalError,
+        fixed: fixes.length > 0 ? fixed : null,
+        fixes,
+    }
 }
 
 export function extractDiagramXML(xml_svg_string: string): string {

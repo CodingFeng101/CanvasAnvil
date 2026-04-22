@@ -1,4 +1,4 @@
-import PptxGenJS from "pptxgenjs"
+﻿import PptxGenJS from "pptxgenjs"
 import { PDFDocument, rgb } from "pdf-lib"
 import { generateChatMessage, generateImage, generateVisionChatMessage } from "./ai-client"
 import { buildRisenPrompt } from "./risen-prompt"
@@ -13,6 +13,7 @@ export interface PptPage {
     layout?: string;
     materialLabels?: string[];
     textBlocks?: PptTextBlock[];
+    elements?: PptElement[];
     backgroundImageUrl?: string;
     status?: string;
     id?: string;
@@ -43,6 +44,128 @@ export interface PptTextBlock {
     h: number;
     style?: PptTextStyle;
 }
+
+export interface PptElementBase {
+    id: string;
+    type: "text" | "image" | "shape" | "table" | "chart" | "formula" | "video" | "audio";
+    x: number;
+    y: number;
+    w: number;
+    h: number;
+}
+
+export interface PptTextElement extends PptElementBase {
+    type: "text";
+    text: string;
+    role: PptTextBlock["role"];
+    style?: PptTextStyle;
+}
+
+export interface PptImageElement extends PptElementBase {
+    type: "image";
+    src: string;
+    fit?: "cover" | "contain" | "stretch";
+}
+
+export interface PptShapeElement extends PptElementBase {
+    type: "shape";
+    shape: "rect" | "roundRect" | "triangle" | "parallelogram" | "trapezoid" | "hexagon" | "chevron" | "message" | "line";
+    fill?: string;
+    stroke?: string;
+    strokeWidth?: number;
+}
+
+export interface PptTableElement extends PptElementBase {
+    type: "table";
+    rows: string[][];
+    headerRows?: number;
+    fill?: string;
+    stroke?: string;
+    textColor?: string;
+}
+
+export interface PptChartDatum {
+    label: string;
+    value: number;
+}
+
+export interface PptChartElement extends PptElementBase {
+    type: "chart";
+    chartType: "bar" | "column" | "line" | "area" | "scatter" | "pie" | "ring" | "radar";
+    title?: string;
+    data: PptChartDatum[];
+    color?: string;
+}
+
+export interface PptFormulaElement extends PptElementBase {
+    type: "formula";
+    latex: string;
+    fontSize?: number;
+    color?: string;
+}
+
+export interface PptVideoElement extends PptElementBase {
+    type: "video";
+    src: string;
+    poster?: string;
+    title?: string;
+}
+
+export interface PptAudioElement extends PptElementBase {
+    type: "audio";
+    src: string;
+    title?: string;
+}
+
+export type PptElement =
+    | PptTextElement
+    | PptImageElement
+    | PptShapeElement
+    | PptTableElement
+    | PptChartElement
+    | PptFormulaElement
+    | PptVideoElement
+    | PptAudioElement;
+
+export const resolveTextBlockFontSize = (
+    block: PptTextBlock,
+    canvasWidth: number,
+    canvasHeight: number,
+): number => {
+    const hinted = Number(block.style?.fontSize || 0);
+    if (Number.isFinite(hinted) && hinted > 0) return hinted;
+    return estimateTextBlockFontSize(block, canvasWidth, canvasHeight);
+};
+
+export const textBlocksToPptElements = (textBlocks: PptTextBlock[] = []): PptElement[] =>
+    textBlocks.map((block) => ({
+        id: block.id,
+        type: "text",
+        text: block.text,
+        role: block.role,
+        x: block.x,
+        y: block.y,
+        w: block.w,
+        h: block.h,
+        style: {
+            ...(block.style || {}),
+            fontSize: resolveTextBlockFontSize(block, PPT_REFERENCE_SLIDE_WIDTH, PPT_REFERENCE_SLIDE_HEIGHT),
+        },
+    }));
+
+export const pptElementsToTextBlocks = (elements: PptElement[] = []): PptTextBlock[] =>
+    elements
+        .filter((element): element is PptTextElement => element?.type === "text")
+        .map((element) => ({
+            id: element.id,
+            role: element.role,
+            text: element.text,
+            x: element.x,
+            y: element.y,
+            w: element.w,
+            h: element.h,
+            style: element.style,
+        }));
 
 export const PPT_REFERENCE_SLIDE_WIDTH = 1600;
 export const PPT_REFERENCE_SLIDE_HEIGHT = 900;
@@ -135,12 +258,12 @@ export interface SlideEditRoutingItem {
 }
 
 const normalizeLayoutByLanguage = (layout: string, uiLanguage: "zh" | "en") => {
-    const raw = String(layout || "").trim()
-    if (!raw) return raw
+    const raw = String(layout || "").trim();
+    if (!raw) return raw;
     const key = raw
         .toLowerCase()
         .replace(/\s+/g, "")
-        .replace(/[+_/-]/g, "")
+        .replace(/[+_/-]/g, "");
     const map: Record<string, { zh: string; en: string }> = {
         cover: { zh: "封面页", en: "Cover" },
         titlebullets: { zh: "标题+要点", en: "Title + Bullets" },
@@ -148,27 +271,22 @@ const normalizeLayoutByLanguage = (layout: string, uiLanguage: "zh" | "en") => {
         twocolumn: { zh: "双栏布局", en: "Two-column" },
         lefttextrightimage: { zh: "左文右图", en: "Left text, right image" },
         titleandcontent: { zh: "标题+内容", en: "Title + Content" },
-        封面页: { zh: "封面页", en: "Cover" },
-        标题要点: { zh: "标题+要点", en: "Title + Bullets" },
-        双栏布局: { zh: "双栏布局", en: "Two-column" },
-        左文右图: { zh: "左文右图", en: "Left text, right image" },
-        标题内容: { zh: "标题+内容", en: "Title + Content" },
-    }
-    const hit = map[key]
-    if (!hit) return raw
-    return uiLanguage === "zh" ? hit.zh : hit.en
-}
+    };
+    const hit = map[key];
+    if (!hit) return raw;
+    return uiLanguage === "zh" ? hit.zh : hit.en;
+};
 
 const normalizeSpeakerNote = (note: string, uiLanguage: "zh" | "en") => {
-    const raw = String(note || "").trim()
-    if (!raw) return raw
+    const raw = String(note || "").trim();
+    if (!raw) return raw;
     return raw
-        .replace(/^[\s\-*•\d.、]+/gm, "")
+        .replace(/^[\s\-*•\d.]+/gm, "")
         .replace(/\n{2,}/g, "\n")
         .replace(/\n/g, uiLanguage === "zh" ? "，" : ", ")
         .replace(/\s{2,}/g, " ")
-        .trim()
-}
+        .trim();
+};
 
 type ReferenceFileInput = { filename: string; content: string };
 type ReferenceImageAssetInput = { label: string; caption: string; sourceFile: string; sourcePage?: number };
@@ -285,6 +403,166 @@ const parseColorToRgb = (value?: string) => {
     return rgb(0.07, 0.09, 0.13);
 };
 
+const toHexColor = (value?: string, fallback = "111827") => {
+    const raw = String(value || "").trim();
+    if (!raw) return fallback;
+    const hex = raw.replace(/^#/, "");
+    if (/^[0-9a-fA-F]{6}$/.test(hex)) return hex.toUpperCase();
+    const rgbMatch = raw.match(/rgb\s*\(\s*([\d.]+)\s*,\s*([\d.]+)\s*,\s*([\d.]+)\s*\)/i);
+    if (rgbMatch) {
+        const r = Math.max(0, Math.min(255, Number(rgbMatch[1]))).toString(16).padStart(2, "0");
+        const g = Math.max(0, Math.min(255, Number(rgbMatch[2]))).toString(16).padStart(2, "0");
+        const b = Math.max(0, Math.min(255, Number(rgbMatch[3]))).toString(16).padStart(2, "0");
+        return `${r}${g}${b}`.toUpperCase();
+    }
+    return fallback;
+};
+
+const renderChartSvgDataUri = (element: PptChartElement, width = 600, height = 360) => {
+    const data = Array.isArray(element.data) && element.data.length > 0
+        ? element.data
+        : [{ label: "Q1", value: 42 }, { label: "Q2", value: 76 }, { label: "Q3", value: 58 }];
+    const maxValue = Math.max(...data.map((item) => Math.max(0, Number(item.value || 0))), 1);
+    const color = element.color || "#2563eb";
+    const paletteColor = (index: number) => {
+        if (index === 0) return color;
+        const palette = ["#06B6D4", "#8B5CF6", "#F59E0B", "#22C55E", "#EF4444", "#3B82F6"];
+        return palette[(index - 1) % palette.length];
+    };
+    const points = data.map((item, index) => {
+        const ratio = Math.max(0, Number(item.value || 0)) / maxValue;
+        const x = data.length === 1 ? width / 2 : 64 + (index / Math.max(data.length - 1, 1)) * (width - 148);
+        const y = height - 68 - ratio * (height - 148);
+        return { item, index, ratio, x, y, fill: paletteColor(index) };
+    });
+    const linePath = points.map((point, index) => `${index === 0 ? "M" : "L"} ${point.x} ${point.y}`).join(" ");
+    const areaPath = `${linePath} L ${width - 42} ${height - 54} L 48 ${height - 54} Z`;
+    const slices = data.reduce<{ start: number; item: PptChartDatum; index: number }[]>((acc, item, index) => {
+        const previous = acc[acc.length - 1];
+        const start = previous ? previous.start + Math.max(0, Number(previous.item.value || 0)) : 0;
+        acc.push({ start, item, index });
+        return acc;
+    }, []);
+    const total = data.reduce((sum, item) => sum + Math.max(0, Number(item.value || 0)), 0) || 1;
+    const piePaths = (element.chartType === "pie" || element.chartType === "ring")
+        ? slices.map(({ start, item, index }) => {
+            const begin = (start / total) * Math.PI * 2 - Math.PI / 2;
+            const end = ((start + Math.max(0, Number(item.value || 0))) / total) * Math.PI * 2 - Math.PI / 2;
+            const radius = Math.min(width, height) * 0.26;
+            const cx = width / 2;
+            const cy = height / 2 + 6;
+            const x1 = cx + Math.cos(begin) * radius;
+            const y1 = cy + Math.sin(begin) * radius;
+            const x2 = cx + Math.cos(end) * radius;
+            const y2 = cy + Math.sin(end) * radius;
+            const largeArc = end - begin > Math.PI ? 1 : 0;
+            const fill = paletteColor(index);
+            return `<path d="M ${cx} ${cy} L ${x1} ${y1} A ${radius} ${radius} 0 ${largeArc} 1 ${x2} ${y2} Z" fill="${fill}" opacity="0.92" />`;
+        }).join("")
+        : "";
+    const ringMask = element.chartType === "ring"
+        ? `<circle cx="${width / 2}" cy="${height / 2 + 6}" r="${Math.min(width, height) * 0.13}" fill="#ffffff" />`
+        : "";
+    const radarCenterX = width / 2;
+    const radarCenterY = height / 2 + 4;
+    const radarRadius = Math.min(width, height) * 0.2;
+    const radarAxes = data.map((_, index) => {
+        const angle = -Math.PI / 2 + (index / Math.max(data.length, 1)) * Math.PI * 2;
+        return {
+            x: radarCenterX + Math.cos(angle) * radarRadius,
+            y: radarCenterY + Math.sin(angle) * radarRadius,
+            labelX: radarCenterX + Math.cos(angle) * (radarRadius + 24),
+            labelY: radarCenterY + Math.sin(angle) * (radarRadius + 24),
+        };
+    });
+    const radarGrid = [1, 0.75, 0.5, 0.25].map((ratio) =>
+        `<polygon points="${data.map((_, index) => {
+            const angle = -Math.PI / 2 + (index / Math.max(data.length, 1)) * Math.PI * 2;
+            return `${radarCenterX + Math.cos(angle) * radarRadius * ratio},${radarCenterY + Math.sin(angle) * radarRadius * ratio}`;
+        }).join(" ")}" fill="none" stroke="#E2E8F0" stroke-width="1" />`
+    ).join("");
+    const radarPolygon = points.map((point, index) => {
+        const angle = -Math.PI / 2 + (index / Math.max(data.length, 1)) * Math.PI * 2;
+        return `${radarCenterX + Math.cos(angle) * radarRadius * point.ratio},${radarCenterY + Math.sin(angle) * radarRadius * point.ratio}`;
+    }).join(" ");
+    const chartBadge = `<g><rect x="${width - 122}" y="20" width="92" height="28" rx="14" fill="#F8FAFC" stroke="#E2E8F0" /><text x="${width - 76}" y="38" font-size="12" font-family="Arial" text-anchor="middle" fill="#64748B">${String(element.chartType).toUpperCase()}</text></g>`;
+    const svg = `
+        <svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
+            <rect width="${width}" height="${height}" rx="28" fill="#ffffff" />
+            <rect x="1" y="1" width="${width - 2}" height="${height - 2}" rx="28" fill="none" stroke="#E2E8F0" />
+            ${element.title ? `<text x="30" y="38" font-size="18" font-family="Arial" fill="#64748B">${element.title}</text>` : ""}
+            ${chartBadge}
+            ${element.chartType === "pie" || element.chartType === "ring"
+                ? `${piePaths}${ringMask}`
+                : element.chartType === "radar"
+                    ? `
+                        ${radarGrid}
+                        ${radarAxes.map((axis, index) => `<line x1="${radarCenterX}" y1="${radarCenterY}" x2="${axis.x}" y2="${axis.y}" stroke="#E2E8F0" stroke-width="1" /><text x="${axis.labelX}" y="${axis.labelY}" font-size="12" text-anchor="middle" fill="#64748B">${data[index]?.label || ""}</text>`).join("")}
+                        <polygon points="${radarPolygon}" fill="${color}" fill-opacity="0.18" stroke="${color}" stroke-width="4" />
+                        ${points.map((point, index) => {
+                            const angle = -Math.PI / 2 + (index / Math.max(data.length, 1)) * Math.PI * 2;
+                            const px = radarCenterX + Math.cos(angle) * radarRadius * point.ratio;
+                            const py = radarCenterY + Math.sin(angle) * radarRadius * point.ratio;
+                            return `<circle cx="${px}" cy="${py}" r="5" fill="${paletteColor(index)}" />`;
+                        }).join("")}
+                    `
+                : `
+                    <line x1="40" y1="${height - 54}" x2="${width - 30}" y2="${height - 54}" stroke="#CBD5E1" stroke-width="2" />
+                    <line x1="48" y1="56" x2="48" y2="${height - 48}" stroke="#E2E8F0" stroke-width="2" />
+                    ${element.chartType === "area" ? `<path d="${areaPath}" fill="${color}" fill-opacity="0.18" />` : ""}
+                    ${element.chartType === "line" || element.chartType === "area" ? `<path d="${linePath}" fill="none" stroke="${color}" stroke-width="6" stroke-linecap="round" stroke-linejoin="round" />` : ""}
+                    ${element.chartType === "bar"
+                        ? points.map((point, index) => {
+                            const barWidth = Math.max(90, width - 220);
+                            const barHeight = 18;
+                            const y = 80 + index * 52;
+                            return `<g><text x="38" y="${y + 13}" font-size="13" text-anchor="start" fill="#64748B">${point.item.label}</text><rect x="118" y="${y}" width="${barWidth}" height="${barHeight}" rx="9" fill="#F1F5F9" /><rect x="118" y="${y}" width="${Math.max(18, point.ratio * barWidth)}" height="${barHeight}" rx="9" fill="${paletteColor(index)}" /><text x="${118 + barWidth + 8}" y="${y + 13}" font-size="13" fill="#64748B">${Math.round(Number(point.item.value || 0))}</text></g>`;
+                        }).join("")
+                        : points.map((point, index) => {
+                            const columnWidth = Math.max(32, (width - 184) / Math.max(data.length, 1) - 16);
+                            const x = 68 + index * Math.max(72, (width - 156) / Math.max(data.length, 1));
+                            const barHeight = Math.max(12, point.ratio * (height - 138));
+                            const y = height - 62 - barHeight;
+                            if (element.chartType === "scatter") {
+                                return `<g><circle cx="${point.x}" cy="${point.y}" r="8" fill="${paletteColor(index)}" /><text x="${point.x}" y="${point.y - 18}" font-size="14" text-anchor="middle" fill="#64748B">${Math.round(Number(point.item.value || 0))}</text><text x="${point.x}" y="${height - 28}" font-size="13" text-anchor="middle" fill="#64748B">${point.item.label}</text></g>`;
+                            }
+                            if (element.chartType === "line" || element.chartType === "area") {
+                                return `<g><circle cx="${point.x}" cy="${point.y}" r="8" fill="${paletteColor(index)}" /><text x="${point.x}" y="${point.y - 18}" font-size="14" text-anchor="middle" fill="#64748B">${Math.round(Number(point.item.value || 0))}</text><text x="${point.x}" y="${height - 28}" font-size="13" text-anchor="middle" fill="#64748B">${point.item.label}</text></g>`;
+                            }
+                            return `<g><rect x="${x}" y="${y}" width="${columnWidth}" height="${barHeight}" rx="12" fill="${paletteColor(index)}" /><text x="${x + columnWidth / 2}" y="${y - 10}" font-size="14" text-anchor="middle" fill="#64748B">${Math.round(Number(point.item.value || 0))}</text><text x="${x + columnWidth / 2}" y="${height - 28}" font-size="13" text-anchor="middle" fill="#64748B">${point.item.label}</text></g>`;
+                        }).join("")}
+                `}
+        </svg>
+    `.trim();
+    return `data:image/svg+xml;base64,${btoa(unescape(encodeURIComponent(svg)))}`;
+};
+
+const renderMediaPlaceholderSvgDataUri = (
+    kind: "video" | "audio",
+    title: string,
+    width = 640,
+    height = 360,
+) => {
+    const icon = kind === "video"
+        ? `<polygon points="286,136 286,224 362,180" fill="#ffffff" opacity="0.96" />`
+        : `<path d="M288 140 L324 140 L356 112 L356 248 L324 220 L288 220 Z" fill="#ffffff" opacity="0.96" /><path d="M392 142 C414 160 414 200 392 218" fill="none" stroke="#ffffff" stroke-width="14" stroke-linecap="round" opacity="0.92" />`;
+    const svg = `
+        <svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
+            <defs>
+                <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+                    <stop offset="0%" stop-color="#0f172a" />
+                    <stop offset="100%" stop-color="#1e293b" />
+                </linearGradient>
+            </defs>
+            <rect width="${width}" height="${height}" rx="26" fill="url(#bg)" />
+            <circle cx="${width / 2}" cy="${height / 2 - 18}" r="72" fill="#ffffff" opacity="0.12" />
+            ${icon}
+            <text x="${width / 2}" y="${height - 42}" font-size="28" font-family="Arial" text-anchor="middle" fill="#ffffff">${title}</text>
+        </svg>
+    `.trim();
+    return `data:image/svg+xml;base64,${btoa(unescape(encodeURIComponent(svg)))}`;
+};
+
 const loadImageElement = async (src: string): Promise<HTMLImageElement> =>
     new Promise((resolve, reject) => {
         const img = new Image();
@@ -293,12 +571,241 @@ const loadImageElement = async (src: string): Promise<HTMLImageElement> =>
         img.src = src;
     });
 
+const drawRoundedRect = (
+    ctx: CanvasRenderingContext2D,
+    x: number,
+    y: number,
+    w: number,
+    h: number,
+    radius: number,
+) => {
+    const r = Math.max(0, Math.min(radius, Math.min(w, h) / 2));
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.lineTo(x + w - r, y);
+    ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+    ctx.lineTo(x + w, y + h - r);
+    ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+    ctx.lineTo(x + r, y + h);
+    ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+    ctx.lineTo(x, y + r);
+    ctx.quadraticCurveTo(x, y, x + r, y);
+    ctx.closePath();
+};
+
+const drawGenericShapePath = (
+    ctx: CanvasRenderingContext2D,
+    shape: PptShapeElement["shape"],
+    x: number,
+    y: number,
+    w: number,
+    h: number,
+) => {
+    const radius = Math.min(w, h) * 0.16;
+    const dx = w * 0.18;
+    const inset = w * 0.16;
+    ctx.beginPath();
+    switch (shape) {
+        case "roundRect":
+            drawRoundedRect(ctx, x, y, w, h, radius);
+            return;
+        case "triangle":
+            ctx.moveTo(x + w / 2, y);
+            ctx.lineTo(x + w, y + h);
+            ctx.lineTo(x, y + h);
+            break;
+        case "parallelogram":
+            ctx.moveTo(x + dx, y);
+            ctx.lineTo(x + w, y);
+            ctx.lineTo(x + w - dx, y + h);
+            ctx.lineTo(x, y + h);
+            break;
+        case "trapezoid":
+            ctx.moveTo(x + inset, y);
+            ctx.lineTo(x + w - inset, y);
+            ctx.lineTo(x + w, y + h);
+            ctx.lineTo(x, y + h);
+            break;
+        case "hexagon":
+            ctx.moveTo(x + inset, y);
+            ctx.lineTo(x + w - inset, y);
+            ctx.lineTo(x + w, y + h / 2);
+            ctx.lineTo(x + w - inset, y + h);
+            ctx.lineTo(x + inset, y + h);
+            ctx.lineTo(x, y + h / 2);
+            break;
+        case "chevron": {
+            const arrowInset = w * 0.22;
+            ctx.moveTo(x, y);
+            ctx.lineTo(x + w - arrowInset, y);
+            ctx.lineTo(x + w, y + h / 2);
+            ctx.lineTo(x + w - arrowInset, y + h);
+            ctx.lineTo(x, y + h);
+            ctx.lineTo(x + arrowInset, y + h / 2);
+            break;
+        }
+        case "message": {
+            const tailH = h * 0.18;
+            ctx.moveTo(x + radius, y);
+            ctx.lineTo(x + w - radius, y);
+            ctx.quadraticCurveTo(x + w, y, x + w, y + radius);
+            ctx.lineTo(x + w, y + h - tailH - radius);
+            ctx.quadraticCurveTo(x + w, y + h - tailH, x + w - radius, y + h - tailH);
+            ctx.lineTo(x + w * 0.52, y + h - tailH);
+            ctx.lineTo(x + w * 0.38, y + h);
+            ctx.lineTo(x + w * 0.36, y + h - tailH);
+            ctx.lineTo(x + radius, y + h - tailH);
+            ctx.quadraticCurveTo(x, y + h - tailH, x, y + h - tailH - radius);
+            ctx.lineTo(x, y + radius);
+            ctx.quadraticCurveTo(x, y, x + radius, y);
+            break;
+        }
+        case "rect":
+        default:
+            ctx.rect(x, y, w, h);
+            break;
+    }
+    ctx.closePath();
+};
+
+const normalizeImageToPngDataUri = async (imageUrl: string) => {
+    const dataUri = await urlToDataUri(imageUrl);
+    const img = await loadImageElement(dataUri);
+    const width = Number(img.naturalWidth || img.width || PPT_REFERENCE_SLIDE_WIDTH);
+    const height = Number(img.naturalHeight || img.height || PPT_REFERENCE_SLIDE_HEIGHT);
+    const canvas = document.createElement("canvas");
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) throw new Error("Canvas context unavailable for image normalization");
+    ctx.drawImage(img, 0, 0, width, height);
+    return {
+        dataUrl: canvas.toDataURL("image/png"),
+        width,
+        height,
+    };
+};
+
+const clampCanvasRect = (x: number, y: number, w: number, h: number, canvasWidth: number, canvasHeight: number) => {
+    const clampedX = Math.max(0, Math.min(canvasWidth, x));
+    const clampedY = Math.max(0, Math.min(canvasHeight, y));
+    const maxW = Math.max(0, canvasWidth - clampedX);
+    const maxH = Math.max(0, canvasHeight - clampedY);
+    return {
+        x: clampedX,
+        y: clampedY,
+        w: Math.max(1, Math.min(maxW, w)),
+        h: Math.max(1, Math.min(maxH, h)),
+    };
+};
+
+const sampleAverageColor = (
+    ctx: CanvasRenderingContext2D,
+    x: number,
+    y: number,
+    w: number,
+    h: number,
+) => {
+    const rect = clampCanvasRect(x, y, w, h, ctx.canvas.width, ctx.canvas.height);
+    const imageData = ctx.getImageData(rect.x, rect.y, rect.w, rect.h).data;
+    let r = 0;
+    let g = 0;
+    let b = 0;
+    let count = 0;
+    for (let index = 0; index < imageData.length; index += 4) {
+        const alpha = imageData[index + 3];
+        if (alpha <= 8) continue;
+        r += imageData[index];
+        g += imageData[index + 1];
+        b += imageData[index + 2];
+        count += 1;
+    }
+    if (count === 0) return { r: 255, g: 255, b: 255 };
+    return {
+        r: Math.round(r / count),
+        g: Math.round(g / count),
+        b: Math.round(b / count),
+    };
+};
+
+const rgbToCss = (color: { r: number; g: number; b: number }) => `rgb(${color.r}, ${color.g}, ${color.b})`;
+const rgbToHex = (color: { r: number; g: number; b: number }) =>
+    `#${[color.r, color.g, color.b].map((value) => value.toString(16).padStart(2, "0")).join("")}`;
+const rgbDistance = (a: { r: number; g: number; b: number }, b: { r: number; g: number; b: number }) =>
+    Math.abs(a.r - b.r) + Math.abs(a.g - b.g) + Math.abs(a.b - b.b);
+
+const buildTextReferenceDataUri = async (
+    imageUrl: string,
+    textBlocks: PptTextBlock[],
+) => {
+    const normalized = await normalizeImageToPngDataUri(imageUrl);
+    const seededCanvas = document.createElement("canvas");
+    seededCanvas.width = normalized.width;
+    seededCanvas.height = normalized.height;
+    const seededCtx = seededCanvas.getContext("2d");
+    if (!seededCtx) throw new Error("Canvas context unavailable for seeded background generation");
+    const sourceImage = await loadImageElement(normalized.dataUrl);
+    seededCtx.drawImage(sourceImage, 0, 0, seededCanvas.width, seededCanvas.height);
+
+    const backgroundHints: string[] = [];
+
+    for (const block of textBlocks) {
+        const x = block.x * seededCanvas.width;
+        const y = block.y * seededCanvas.height;
+        const w = block.w * seededCanvas.width;
+        const h = block.h * seededCanvas.height;
+        const inferredFontSize = estimateTextBlockFontSize(block, seededCanvas.width, seededCanvas.height);
+        const padding = Math.max(10, Math.round(inferredFontSize * 0.42));
+        const radius = Math.max(10, Math.round(Math.min(w, h) * 0.12));
+        const maskX = Math.max(0, x - padding);
+        const maskY = Math.max(0, y - padding);
+        const maskW = Math.min(seededCanvas.width - maskX, w + padding * 2);
+        const maskH = Math.min(seededCanvas.height - maskY, h + padding * 2);
+        const samplePadding = Math.max(16, Math.round(padding * 1.2));
+        const topColor = sampleAverageColor(seededCtx, maskX, Math.max(0, maskY - samplePadding), maskW, samplePadding);
+        const bottomColor = sampleAverageColor(seededCtx, maskX, Math.min(seededCanvas.height - samplePadding, maskY + maskH), maskW, samplePadding);
+        const leftColor = sampleAverageColor(seededCtx, Math.max(0, maskX - samplePadding), maskY, samplePadding, maskH);
+        const rightColor = sampleAverageColor(seededCtx, Math.min(seededCanvas.width - samplePadding, maskX + maskW), maskY, samplePadding, maskH);
+        const useVerticalGradient = rgbDistance(topColor, bottomColor) >= rgbDistance(leftColor, rightColor);
+
+        const fillGradient = useVerticalGradient
+            ? seededCtx.createLinearGradient(maskX, maskY, maskX, maskY + maskH)
+            : seededCtx.createLinearGradient(maskX, maskY, maskX + maskW, maskY);
+        if (useVerticalGradient) {
+            fillGradient.addColorStop(0, rgbToCss(topColor));
+            fillGradient.addColorStop(1, rgbToCss(bottomColor));
+        } else {
+            fillGradient.addColorStop(0, rgbToCss(leftColor));
+            fillGradient.addColorStop(1, rgbToCss(rightColor));
+        }
+        seededCtx.save();
+        seededCtx.fillStyle = fillGradient;
+        drawRoundedRect(seededCtx, maskX, maskY, maskW, maskH, radius);
+        seededCtx.fill();
+        seededCtx.restore();
+
+        backgroundHints.push(
+            `${backgroundHints.length + 1}. role=${block.role}; text=${block.text}; box=(x=${block.x.toFixed(3)}, y=${block.y.toFixed(3)}, w=${block.w.toFixed(3)}, h=${block.h.toFixed(3)}); top=${rgbToHex(topColor)}; bottom=${rgbToHex(bottomColor)}; left=${rgbToHex(leftColor)}; right=${rgbToHex(rightColor)}`
+        );
+    }
+
+    return {
+        referenceImageUrl: seededCanvas.toDataURL("image/png"),
+        backgroundHints,
+    };
+};
+
 const renderPageToDataUri = async (
     page: PptPage,
     imageUrl?: string,
     width = PPT_REFERENCE_SLIDE_WIDTH,
     height = PPT_REFERENCE_SLIDE_HEIGHT,
 ): Promise<string> => {
+    const pageElements = Array.isArray(page.elements) ? page.elements : [];
+    const pageTextBlocks =
+        Array.isArray(page.textBlocks) && page.textBlocks.length > 0
+            ? page.textBlocks
+            : pptElementsToTextBlocks(page.elements || []);
     const canvas = document.createElement("canvas");
     canvas.width = width;
     canvas.height = height;
@@ -314,10 +821,115 @@ const renderPageToDataUri = async (
         ctx.drawImage(img, 0, 0, width, height);
     }
 
-    if (Array.isArray(page.textBlocks) && page.textBlocks.length > 0) {
-        for (const block of page.textBlocks) {
+    for (const element of pageElements) {
+        if (element.type === "text") continue;
+        const x = element.x * width;
+        const y = element.y * height;
+        const w = element.w * width;
+        const h = element.h * height;
+
+        if (element.type === "image") {
+            const dataUri = await urlToDataUri(element.src);
+            const img = await loadImageElement(dataUri);
+            ctx.save();
+            ctx.beginPath();
+            ctx.rect(x, y, w, h);
+            ctx.clip();
+            ctx.drawImage(img, x, y, w, h);
+            ctx.restore();
+            continue;
+        }
+
+        if (element.type === "shape") {
+            ctx.save();
+            if (element.shape === "line") {
+                ctx.strokeStyle = element.stroke || "rgba(255,255,255,0.72)";
+                ctx.lineWidth = Math.max(1, element.strokeWidth || 2);
+                ctx.beginPath();
+                ctx.moveTo(x, y + h / 2);
+                ctx.lineTo(x + w, y + h / 2);
+                ctx.stroke();
+            } else {
+                drawGenericShapePath(ctx, element.shape, x, y, w, h);
+                ctx.fillStyle = element.fill || "rgba(255,255,255,0.16)";
+                ctx.fill();
+                if (element.stroke) {
+                    ctx.strokeStyle = element.stroke;
+                    ctx.lineWidth = Math.max(1, element.strokeWidth || 1.5);
+                    ctx.stroke();
+                }
+            }
+            ctx.restore();
+            continue;
+        }
+
+        if (element.type === "table") {
+            const rows = Array.isArray(element.rows) && element.rows.length > 0 ? element.rows : [["A", "B"], ["1", "2"]];
+            const rowHeight = h / Math.max(rows.length, 1);
+            const columnCount = Math.max(...rows.map((row) => row.length), 1);
+            const cellWidth = w / columnCount;
+            const headerRows = Math.max(0, Number(element.headerRows || 0));
+            ctx.save();
+            ctx.fillStyle = element.fill || "rgba(255,255,255,0.95)";
+            ctx.fillRect(x, y, w, h);
+            ctx.strokeStyle = element.stroke || "rgba(148,163,184,0.6)";
+            ctx.lineWidth = 1;
+            ctx.font = `${Math.max(12, Math.min(18, rowHeight * 0.32))}px "Microsoft YaHei"`;
+            ctx.textBaseline = "middle";
+            rows.forEach((row, rowIndex) => {
+                row.forEach((cell, cellIndex) => {
+                    const cellX = x + cellIndex * cellWidth;
+                    const cellY = y + rowIndex * rowHeight;
+                    if (rowIndex < headerRows) {
+                        ctx.fillStyle = "rgba(226,232,240,0.95)";
+                        ctx.fillRect(cellX, cellY, cellWidth, rowHeight);
+                    }
+                    ctx.strokeRect(cellX, cellY, cellWidth, rowHeight);
+                    ctx.fillStyle = element.textColor || "#0f172a";
+                    ctx.fillText(String(cell || ""), cellX + 10, cellY + rowHeight / 2, Math.max(0, cellWidth - 20));
+                });
+            });
+            ctx.restore();
+            continue;
+        }
+
+        if (element.type === "chart") {
+            const chartDataUri = renderChartSvgDataUri(element);
+            const img = await loadImageElement(chartDataUri);
+            ctx.drawImage(img, x, y, w, h);
+            continue;
+        }
+
+        if (element.type === "formula") {
+            ctx.save();
+            drawRoundedRect(ctx, x, y, w, h, Math.min(w, h) * 0.18);
+            ctx.fillStyle = "rgba(255,255,255,0.92)";
+            ctx.fill();
+            ctx.strokeStyle = "rgba(226,232,240,0.92)";
+            ctx.lineWidth = 1.5;
+            ctx.stroke();
+            ctx.fillStyle = element.color || "#0f172a";
+            ctx.font = `${Math.max(14, Number(element.fontSize || 20))}px "Cambria Math","Times New Roman","Microsoft YaHei"`;
+            ctx.textBaseline = "middle";
+            ctx.fillText(element.latex || "E = mc^2", x + 16, y + h / 2, Math.max(0, w - 32));
+            ctx.restore();
+            continue;
+        }
+
+        if (element.type === "video" || element.type === "audio") {
+            const placeholderUri = renderMediaPlaceholderSvgDataUri(
+                element.type,
+                element.title || (element.type === "video" ? "Video" : "Audio"),
+            );
+            const img = await loadImageElement(placeholderUri);
+            ctx.drawImage(img, x, y, w, h);
+        }
+    }
+
+    if (pageTextBlocks.length > 0) {
+        for (const block of pageTextBlocks) {
             const style = block.style || {};
-            const fontSize = estimateTextBlockFontSize(block, width, height);
+            const fontSize = resolveTextBlockFontSize(block, width, height);
             const x = block.x * width;
             const y = block.y * height;
             const w = block.w * width;
@@ -730,6 +1342,9 @@ export const pptService = {
         textBlocks: PptTextBlock[],
         uiLanguage: "zh" | "en" = "zh",
     ): Promise<string> => {
+        if (!Array.isArray(textBlocks) || textBlocks.length === 0) {
+            return slideImageUrl;
+        }
         const textList = textBlocks.length > 0
             ? textBlocks.map((block, idx) => `${idx + 1}. ${block.role}: ${block.text}`).join("\n")
             : [page.title, ...(page.content || [])].filter(Boolean).map((text, idx) => `${idx + 1}. ${text}`).join("\n");
@@ -741,14 +1356,12 @@ export const pptService = {
                 .join("\n")
             : "(none)";
 
-        const prompt = buildRisenPrompt({
-            role: "You are a textless slide background editing agent.",
-            instructions: "Edit the provided slide image in place and remove only true slide-layer text while preserving the slide design pixel-for-pixel everywhere else as much as possible.",
-            input: `language: ${uiLanguage}\nslide-layer text to remove:\n${textList || "(none)"}\n\napproximate text regions:\n${textRegions}`,
-            steps: "1. Remove only the listed slide-layer text inside the listed regions.\n2. Erase the full visible text treatment, including glyph fill, outline, glow, drop shadow, anti-aliased fringe, and other text effects immediately around the letters.\n3. Reconstruct the covered background from immediate surrounding visual cues.\n4. Keep all non-text shapes, icons, charts, photos, gradients, shadows, and composition unchanged.\n5. Preserve the original 16:9 layout exactly.",
-            endGoal: "Produce one 16:9 textless background slide image that preserves the original design.",
-            narrowing: "1. Keep everything else unchanged.\n2. Remove the entire text silhouette cleanly rather than partially fading or blurring it.\n3. Do not redesign, move, resize, crop, recolor, restyle, sharpen, blur, or recompose anything.\n4. Do not touch text inside material images, screenshots, charts, tables, logos, diagrams, or scanned content.\n5. Do not add any new text, icons, decorative elements, or cleanup artifacts.\n6. Output must still look like the same slide, just without the removable slide-layer text.",
-        });
+        const backgroundHints = textBlocks.map((block, idx) =>
+            `${idx + 1}. keep edits strictly inside box=(x=${block.x.toFixed(3)}, y=${block.y.toFixed(3)}, w=${block.w.toFixed(3)}, h=${block.h.toFixed(3)}) and do not modify any pixel outside this box`
+        );
+        const prompt = uiLanguage === "zh"
+            ? `基于原图生成同一页 PPT 的无字底图。只移除下面这些文本框内的文字本身，且只允许修改已给出文本框范围内、被文字笔画实际占据的像素；如果某个文本框里没有文字，就不要做任何修改。文本框外任何像素都绝对不能改动。不要改版式、不要改图片、不要改图标、不要改图表、不要改装饰、不要扩大修改范围。禁止生成任何矩形补丁、纯色块、模糊块、修复块、遮罩边界、文本框痕迹或重新设计的背景。处理后的区域必须与周围原始背景连续一致，看起来像原图里从来没有放过文字。\n\n要删除的文字：\n${textList || "(none)"}\n\n文字位置：\n${textRegions}\n\n严格边界要求：\n${backgroundHints.join("\n") || "(none)"}`
+            : `Create a textless background for this same slide. Remove only the text inside the listed text boxes, and modify only the pixels actually occupied by text glyphs inside those boxes. If a listed text box contains no text, do not change anything in that box. Absolutely do not modify any pixel outside the listed text boxes. Do not alter layout, images, icons, charts, decorations, or the surrounding background. Do not expand the edited area. Do not create any rectangular patch, flat color block, blur patch, inpaint patch, mask edge, textbox residue, or redesigned background. The cleaned area must blend seamlessly with the original nearby background so it looks like the text was never placed there.\n\nText to remove:\n${textList || "(none)"}\n\nText regions:\n${textRegions}\n\nHard boundaries:\n${backgroundHints.join("\n") || "(none)"}`;
 
         return await generateImage({
             prompt,
@@ -924,7 +1537,12 @@ export const pptService = {
 
         for (const page of pages) {
             const slide = pptx.addSlide();
-            const hasTextLayer = Array.isArray(page.textBlocks) && page.textBlocks.length > 0;
+            const pageElements = Array.isArray(page.elements) ? page.elements : [];
+            const pageTextBlocks =
+                Array.isArray(page.textBlocks) && page.textBlocks.length > 0
+                    ? page.textBlocks
+                    : pptElementsToTextBlocks(pageElements);
+            const hasTextLayer = pageTextBlocks.length > 0;
             const editableBackground = page.backgroundImageUrl;
             const fallbackImage = page.id ? images[page.id] : undefined;
             const img = hasTextLayer ? editableBackground : (editableBackground || fallbackImage);
@@ -940,10 +1558,149 @@ export const pptService = {
                 });
             }
 
+            for (const element of pageElements) {
+                if (element.type === "image") {
+                    const dataUri = await urlToDataUri(element.src);
+                    slide.addImage({
+                        data: dataUri,
+                        x: element.x * slideW,
+                        y: element.y * slideH,
+                        w: element.w * slideW,
+                        h: element.h * slideH,
+                        sizing: {
+                            type: element.fit === "contain" ? "contain" : element.fit === "stretch" ? "crop" : "cover",
+                            x: element.x * slideW,
+                            y: element.y * slideH,
+                            w: element.w * slideW,
+                            h: element.h * slideH,
+                        },
+                    });
+                }
+
+                if (element.type === "shape") {
+                    if (element.shape === "line") {
+                        slide.addShape(pptx.ShapeType.line, {
+                            x: element.x * slideW,
+                            y: element.y * slideH + (element.h * slideH) / 2,
+                            w: element.w * slideW,
+                            h: 0,
+                            line: {
+                                color: String(element.stroke || "FFFFFF").replace(/^#/, ""),
+                                width: element.strokeWidth || 1.5,
+                            },
+                        });
+                        continue;
+                    }
+
+                    const pptxShapeType =
+                        element.shape === "roundRect"
+                            ? pptx.ShapeType.roundRect
+                            : element.shape === "triangle"
+                                ? ((pptx.ShapeType as any).triangle || (pptx.ShapeType as any).rtTriangle || pptx.ShapeType.rect)
+                                : element.shape === "parallelogram"
+                                    ? ((pptx.ShapeType as any).parallelogram || pptx.ShapeType.rect)
+                                    : element.shape === "trapezoid"
+                                        ? ((pptx.ShapeType as any).trapezoid || pptx.ShapeType.rect)
+                                        : element.shape === "hexagon"
+                                            ? ((pptx.ShapeType as any).hexagon || pptx.ShapeType.rect)
+                                            : element.shape === "chevron"
+                                                ? ((pptx.ShapeType as any).chevron || pptx.ShapeType.rect)
+                                                : element.shape === "message"
+                                                    ? ((pptx.ShapeType as any).wedgeRoundRectCallout || (pptx.ShapeType as any).wedgeRectCallout || pptx.ShapeType.roundRect)
+                                                    : pptx.ShapeType.rect;
+
+                    slide.addShape(
+                        pptxShapeType,
+                        {
+                            x: element.x * slideW,
+                            y: element.y * slideH,
+                            w: element.w * slideW,
+                            h: element.h * slideH,
+                            fill: element.fill
+                                ? { color: String(element.fill).replace(/^#/, ""), transparency: 0 }
+                                : { color: "FFFFFF", transparency: 100 },
+                            line: {
+                                color: String(element.stroke || "FFFFFF").replace(/^#/, ""),
+                                transparency: element.stroke ? 0 : 100,
+                                width: element.strokeWidth || 1,
+                            },
+                        }
+                    );
+                }
+
+                if (element.type === "table") {
+                    slide.addTable(
+                        element.rows.map((row) => row.map((cell) => ({ text: String(cell || "") }))),
+                        {
+                        x: element.x * slideW,
+                        y: element.y * slideH,
+                        w: element.w * slideW,
+                        h: element.h * slideH,
+                        border: {
+                            type: "solid",
+                            color: toHexColor(element.stroke, "94A3B8"),
+                            pt: 1,
+                        },
+                        fill: { color: element.fill ? toHexColor(element.fill, "FFFFFF") : "FFFFFF" },
+                        color: toHexColor(element.textColor, "111827"),
+                        margin: 0.06,
+                        fontFace: "Aptos",
+                        fontSize: 10,
+                        bold: false,
+                        rowH: Math.max(0.22, (element.h * slideH) / Math.max(element.rows.length || 1, 1)),
+                        }
+                    );
+                    continue;
+                }
+
+                if (element.type === "chart") {
+                    const chartDataUri = renderChartSvgDataUri(element);
+                    slide.addImage({
+                        data: chartDataUri,
+                        x: element.x * slideW,
+                        y: element.y * slideH,
+                        w: element.w * slideW,
+                        h: element.h * slideH,
+                    });
+                    continue;
+                }
+
+                if (element.type === "formula") {
+                    slide.addText(element.latex || "", {
+                        x: element.x * slideW,
+                        y: element.y * slideH,
+                        w: element.w * slideW,
+                        h: element.h * slideH,
+                        fontFace: "Cambria Math",
+                        fontSize: element.fontSize || 18,
+                        color: toHexColor(element.color, "111827"),
+                        margin: 0.06,
+                        fit: "shrink",
+                        breakLine: false,
+                        valign: "middle",
+                    });
+                    continue;
+                }
+
+                if (element.type === "video" || element.type === "audio") {
+                    const mediaTitle = element.title || (element.type === "video" ? "Video" : "Audio");
+                    const placeholderUri = renderMediaPlaceholderSvgDataUri(element.type, mediaTitle);
+                    slide.addImage({
+                        data: placeholderUri,
+                        x: element.x * slideW,
+                        y: element.y * slideH,
+                        w: element.w * slideW,
+                        h: element.h * slideH,
+                    });
+                    slide.addNotes(`[${element.type}] ${mediaTitle}: ${element.src}`);
+                    continue;
+                }
+            }
+
             if (hasTextLayer) {
-                for (const block of page.textBlocks!) {
+                for (const block of pageTextBlocks) {
                     const style = block.style || {};
-                    const fontSize = estimateTextBlockFontSize(block, PPT_REFERENCE_SLIDE_WIDTH, PPT_REFERENCE_SLIDE_HEIGHT);
+                    const fontSize = resolveTextBlockFontSize(block, PPT_REFERENCE_SLIDE_WIDTH, PPT_REFERENCE_SLIDE_HEIGHT);
                     slide.addText(block.text, {
                         x: block.x * slideW,
                         y: block.y * slideH,
@@ -997,3 +1754,6 @@ export const pptService = {
         downloadBlob(pdfBytes, "application/pdf", `${filename}.pdf`);
     }
 };
+
+
+

@@ -60,4 +60,4 @@ For non-security issues, use GitHub Issues and include:
 - steps to reproduce
 - logs / screenshots if helpful
 
-For security issues, please follow `SECURITY.md`.
+For sensitive issues, contact the maintainers through the repository contact channel before opening a public report.

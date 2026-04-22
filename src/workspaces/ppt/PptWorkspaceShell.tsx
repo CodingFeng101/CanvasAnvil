@@ -28,6 +28,7 @@ type Attachment = {
 type CodeActionResult = { ok: boolean; retry?: boolean; error?: string };
 
 const PPT_WORKSPACE_STORAGE_KEY = "CanvasAnvil-ppt-state-v1";
+const PPT_RETURN_STAGE_STORAGE_KEY = "CanvasAnvil-ppt-return-stage-v1";
 const PPT_HISTORY_STORAGE_KEY = "CanvasAnvil-history-ppt-v1";
 const PPT_CHAT_STORAGE_KEY = "chat_history_v2_ppt";
 
@@ -41,8 +42,18 @@ export function PptWorkspaceShell() {
   >([]);
   const [pptResetTick, setPptResetTick] = useState(0);
   const [pptReady, setPptReady] = useState(false);
-  const [pptStage, setPptStage] = useState<"start" | "outline" | "slides">("start");
+  const [pptStage, setPptStage] = useState<"start" | "outline" | "slides">(() => {
+    if (typeof window === "undefined") return "start";
+    try {
+      const saved = localStorage.getItem(PPT_RETURN_STAGE_STORAGE_KEY);
+      return saved === "outline" || saved === "slides" || saved === "start" ? saved : "start";
+    } catch {
+      return "start";
+    }
+  });
   const [pptCreationMode, setPptCreationMode] = useState<"idea" | "outline" | "beautify" | "image_transform">("idea");
+  const [pptExportReviewActive, setPptExportReviewActive] = useState(false);
+  const [pptEmbeddedEditorActive, setPptEmbeddedEditorActive] = useState(false);
 
   const [chatHistory, setChatHistory] = useState<ChatMessage[]>([]);
   const [versionHistory, setVersionHistory] = useState<HistoryItem[]>(() => {
@@ -60,7 +71,9 @@ export function PptWorkspaceShell() {
   const chatPanelRef = useRef<PanelImperativeHandle | null>(null);
   const showPptChat =
     (pptStage === "outline" || pptStage === "slides") &&
-    pptCreationMode !== "image_transform";
+    pptCreationMode !== "image_transform" &&
+    !pptExportReviewActive &&
+    !pptEmbeddedEditorActive;
   const pptChatLocked = !showPptChat || !pptReady;
 
   useEffect(() => {
@@ -70,6 +83,14 @@ export function PptWorkspaceShell() {
     } catch {
     }
   }, [versionHistory]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      localStorage.setItem(PPT_RETURN_STAGE_STORAGE_KEY, pptStage);
+    } catch {
+    }
+  }, [pptStage]);
 
   useEffect(() => {
     if (!didMountRef.current) {
@@ -206,6 +227,8 @@ export function PptWorkspaceShell() {
     setPptReady(false);
     setPptStage("start");
     setPptCreationMode("idea");
+    setPptExportReviewActive(false);
+    setPptEmbeddedEditorActive(false);
     setChatHistory([]);
     setAttachments([]);
     setVersionHistory([]);
@@ -241,6 +264,8 @@ export function PptWorkspaceShell() {
             onPptReadyChange={setPptReady}
             onPptStageChange={setPptStage}
             onCreationModeChange={setPptCreationMode}
+            onExportReviewModeChange={setPptExportReviewActive}
+            onEmbeddedEditorActiveChange={setPptEmbeddedEditorActive}
             incomingEdit={pptIncomingEdit}
             onIncomingEditHandled={() => setPptIncomingEdit(null)}
             onResetWorkspace={clearWorkspace}
@@ -293,4 +318,3 @@ export function PptWorkspaceShell() {
     </ResizablePanelGroup>
   );
 }
-

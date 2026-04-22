@@ -13,10 +13,17 @@ import path from "path"
 import { z } from "zod"
 import { extractText, getDocumentProxy } from "unpdf"
 import mammoth from "mammoth"
+import { generateImageThroughGateway } from "../../lib/ai/gateway"
+import {
+    getImageChannelConfig,
+    getTextChannelConfig,
+    normalizeAIConfig,
+} from "../../lib/ai/provider-registry"
 import {
     getAIModel,
     supportsPromptCaching,
 } from "../../workspaces/flow/next/lib/ai-providers"
+import { formatAvailableShapeLibraries } from "../../workspaces/flow/next/lib/shape-library"
 import {
     getTelemetryConfig,
     setTraceInput,
@@ -549,9 +556,13 @@ async function generateDeepThinkingDiagramImage(args: {
     globalConstraints: string
     processedFilesContext: string
     imageAttachments: ImageAttachment[]
-    baseUrl: string
-    apiKey: string
-    imageModel: string
+    channel: {
+        provider: string
+        apiKey: string
+        baseUrl: string
+        model: string
+        customMapping?: string
+    }
 }): Promise<string | null> {
     let promptText = ""
     try {
@@ -587,45 +598,15 @@ async function generateDeepThinkingDiagramImage(args: {
         ].join("\n\n")
     }
 
-    const content: any[] = [
-        {
-            type: "text",
-            text: promptText,
-        },
-    ]
-
-    for (const attachment of args.imageAttachments) {
-        if (!attachment.url) continue
-        content.push({
-            type: "image_url",
-            image_url: { url: attachment.url },
-        })
-    }
-
-    const response = await fetch(`${args.baseUrl}/chat/completions`, {
-        method: "POST",
-        headers: {
-            Authorization: `Bearer ${args.apiKey}`,
-            "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-            model: args.imageModel,
-            messages: [{ role: "user", content }],
-            stream: false,
-        }),
+    return await generateImageThroughGateway({
+        channel: args.channel,
+        prompt: promptText,
+        referenceImageUrl: args.imageAttachments[0]?.url,
+        additionalReferenceImageUrls: args.imageAttachments
+            .slice(1)
+            .map((item) => item.url)
+            .filter(Boolean),
     })
-
-    if (!response.ok) {
-        const text = await response.text()
-        throw new Error(
-            `Image model request failed with status ${response.status}: ${text}`,
-        )
-    }
-
-    const result = await response.json()
-    const imageUrl = parseImageGenerationResponse(result)
-    if (!imageUrl) return null
-    return await convertRemoteImageToDataUrl(imageUrl)
 }
 
 function validateUploadedFiles(uploadedFiles: UploadedFilePayload[]): {
@@ -831,23 +812,29 @@ async function handleChatRequest(req: Request): Promise<Response> {
     }
     // === FILE VALIDATION END ===
 
+    const normalizedClientConfig = normalizeAIConfig(
+        typeof bodyAIConfig === "object" && bodyAIConfig ? bodyAIConfig : {},
+    )
+    const textChannel = getTextChannelConfig(normalizedClientConfig)
+    const imageChannel = getImageChannelConfig(normalizedClientConfig)
+
     // Read client AI provider overrides from headers first, then body fallback.
     const clientOverrides = {
         provider:
             req.headers.get("x-ai-provider") ||
             (typeof bodyAIConfig.provider === "string"
                 ? bodyAIConfig.provider
-                : null),
+                : textChannel.provider || null),
         baseUrl:
             req.headers.get("x-ai-base-url") ||
             (typeof bodyAIConfig.baseUrl === "string"
                 ? bodyAIConfig.baseUrl
-                : null),
+                : textChannel.baseUrl || null),
         apiKey:
             req.headers.get("x-ai-api-key") ||
             (typeof bodyAIConfig.apiKey === "string"
                 ? bodyAIConfig.apiKey
-                : null),
+                : textChannel.apiKey || null),
         modelId:
             req.headers.get("x-ai-model") ||
             req.headers.get("x-ai-chat-model") ||
@@ -855,17 +842,18 @@ async function handleChatRequest(req: Request): Promise<Response> {
                 ? bodyAIConfig.chatModel
                 : typeof bodyAIConfig.modelId === "string"
                   ? bodyAIConfig.modelId
-                  : null),
+                  : textChannel.model || null),
     }
     const imageModelId =
         req.headers.get("x-ai-image-model") ||
         (typeof bodyAIConfig.imageModel === "string"
             ? bodyAIConfig.imageModel
-            : null)
+            : imageChannel.model || null)
 
     // Get AI model with optional client overrides
     const { model, providerOptions, headers, modelId } =
         getAIModel(clientOverrides)
+
 
     // Check if model supports prompt caching
     const shouldCache = supportsPromptCaching(modelId)
@@ -965,7 +953,6 @@ async function handleChatRequest(req: Request): Promise<Response> {
           )
         : []
     const fileParts = [...partsFileParts, ...contentImageParts]
-
     const imageAttachments: ImageAttachment[] = fileParts
         .map((part: any) => {
             const url =
@@ -994,30 +981,25 @@ async function handleChatRequest(req: Request): Promise<Response> {
 
     let deepThinkingImageDataUrl: string | null = null
     if (shouldUseDeepThinking) {
-        const imageBaseUrl =
-            (typeof clientOverrides.baseUrl === "string" &&
-            clientOverrides.baseUrl.trim()
-                ? clientOverrides.baseUrl
-                : process.env.AI_BASE_URL || process.env.OPENAI_BASE_URL || "")
-                .trim()
-        const imageApiKey =
-            (typeof clientOverrides.apiKey === "string" &&
-            clientOverrides.apiKey.trim()
-                ? clientOverrides.apiKey
-                : process.env.AI_API_KEY || process.env.OPENAI_API_KEY || "")
-                .trim()
         const deepThinkingImageModel = String(imageModelId || "").trim()
 
-        if (imageBaseUrl && imageApiKey && deepThinkingImageModel) {
+        const effectiveImageChannel = {
+            ...imageChannel,
+            model: deepThinkingImageModel || imageChannel.model,
+        }
+
+        if (
+            effectiveImageChannel.baseUrl &&
+            effectiveImageChannel.apiKey &&
+            effectiveImageChannel.model
+        ) {
             try {
                 deepThinkingImageDataUrl = await generateDeepThinkingDiagramImage({
                     userText: lastMessageText,
                     globalConstraints: globalConstraintsRaw,
                     processedFilesContext: parsedFilesContext,
                     imageAttachments,
-                    baseUrl: imageBaseUrl,
-                    apiKey: imageApiKey,
-                    imageModel: deepThinkingImageModel,
+                    channel: effectiveImageChannel,
                 })
                 console.log(
                     "[DeepThinking] Generated draft image:",
@@ -1410,41 +1392,16 @@ ${parsedFilesContext ? `\n\nParsed file summaries:\n"""md\n${parsedFilesContext}
                     },
                     tools: {
                         display_diagram: {
-                            description: `Display a diagram on draw.io. Pass the XML content inside <root> tags.
+                            description: `Display a new diagram on draw.io.
 
-VALIDATION RULES (XML will be rejected if violated):
-1. All mxCell elements must be DIRECT children of <root> - never nested
+Preferred output: mxCell elements only. The app will wrap them into the full mxfile structure automatically.
+
+Rules:
+1. All mxCell elements must be direct children of root
 2. Every mxCell needs a unique id
-3. Every mxCell (except id="0") needs a valid parent attribute
-4. Edge source/target must reference existing cell IDs
-5. Escape special chars in values: &lt; &gt; &amp; &quot;
-6. Always start with: <mxCell id="0"/><mxCell id="1" parent="0"/>
-
-Example with swimlanes and edges (note: all mxCells are siblings):
-<root>
-  <mxCell id="0"/>
-  <mxCell id="1" parent="0"/>
-  <mxCell id="lane1" value="Frontend" style="swimlane;" vertex="1" parent="1">
-    <mxGeometry x="40" y="40" width="200" height="200" as="geometry"/>
-  </mxCell>
-  <mxCell id="step1" value="Step 1" style="rounded=1;" vertex="1" parent="lane1">
-    <mxGeometry x="20" y="60" width="160" height="40" as="geometry"/>
-  </mxCell>
-  <mxCell id="lane2" value="Backend" style="swimlane;" vertex="1" parent="1">
-    <mxGeometry x="280" y="40" width="200" height="200" as="geometry"/>
-  </mxCell>
-  <mxCell id="step2" value="Step 2" style="rounded=1;" vertex="1" parent="lane2">
-    <mxGeometry x="20" y="60" width="160" height="40" as="geometry"/>
-  </mxCell>
-  <mxCell id="edge1" style="edgeStyle=orthogonalEdgeStyle;endArrow=classic;" edge="1" parent="1" source="step1" target="step2">
-    <mxGeometry relative="1" as="geometry"/>
-  </mxCell>
-</root>
-
-Notes:
-- For AWS diagrams, use **AWS 2025 icons**.
-- For animated connectors, add "flowAnimation=1" to edge style.
-`,
+3. Every mxCell must have a valid parent attribute
+4. Edge source/target must reference existing cell ids
+5. Escape special characters inside XML attribute values`,
                             inputSchema: z.object({
                                 xml: z
                                     .string()
@@ -1454,34 +1411,100 @@ Notes:
                             }),
                         },
                         edit_diagram: {
-                            description: `Edit specific parts of the current diagram by replacing exact line matches. Use this tool to make targeted fixes without regenerating the entire XML.
-CRITICAL: Copy-paste the EXACT search pattern from the "Current diagram XML" in system context. Do NOT reorder attributes or reformat - the attribute order in draw.io XML varies and you MUST match it exactly.
-IMPORTANT: Keep edits concise:
-- COPY the exact mxCell line from the current XML (attribute order matters!)
-- Only include the lines that are changing, plus 1-2 surrounding lines for context if needed
-- Break large changes into multiple smaller edits
-- Each search must contain complete lines (never truncate mid-line)
-- First match only - be specific enough to target the right element
+                            description: `Edit the current diagram by applying node-level operations.
 
-IMPORTANT JSON ESCAPING: Every " inside string values MUST be escaped as \\". Example: x=\\"100\\" y=\\"200\\" - BOTH quotes need backslashes!`,
+Operations:
+- update: replace an existing mxCell by id
+- add: append one new mxCell by id
+- delete: remove one mxCell by id; descendants and connected edges are removed automatically
+
+Rules:
+- For update/add, new_xml must contain exactly one mxCell element
+- The mxCell id inside new_xml must match cell_id
+- Use display_diagram instead if the change is effectively a redraw`,
                             inputSchema: z.object({
-                                edits: z
+                                operations: z
                                     .array(
                                         z.object({
-                                            search: z
+                                            operation: z
                                                 .string()
                                                 .describe(
-                                                    "EXACT lines copied from current XML (preserve attribute order!)",
+                                                    'Operation to perform: "update", "add", or "delete"',
                                                 ),
-                                            replace: z
+                                            cell_id: z
                                                 .string()
-                                                .describe("Replacement lines"),
+                                                .describe(
+                                                    "Target mxCell id. For add/update, it must match the id in new_xml.",
+                                                ),
+                                            new_xml: z
+                                                .string()
+                                                .optional()
+                                                .describe(
+                                                    "Complete mxCell XML element for add/update.",
+                                                ),
                                         }),
                                     )
                                     .describe(
-                                        "Array of search/replace pairs to apply sequentially",
+                                        "Array of diagram operations to apply sequentially",
                                     ),
                             }),
+                        },
+                        append_diagram: {
+                            description: `Continue generating diagram XML after display_diagram was truncated.
+
+Rules:
+- Continue from the exact point where the previous fragment ended
+- Do not repeat previously emitted cells
+- Do not emit wrapper tags`,
+                            inputSchema: z.object({
+                                xml: z
+                                    .string()
+                                    .describe(
+                                        "Continuation XML fragment to append",
+                                    ),
+                            }),
+                        },
+                        get_shape_library: {
+                            description: `Load a shape/icon library Markdown reference before creating specialized icon-library diagrams.`,
+                            inputSchema: z.object({
+                                library: z
+                                    .string()
+                                    .describe(
+                                        `Library name. Available first-pass libraries: ${formatAvailableShapeLibraries()}`,
+                                    ),
+                            }),
+                            execute: async ({ library }) => {
+                                const sanitizedLibrary = String(library || "")
+                                    .toLowerCase()
+                                    .replace(/[^a-z0-9_-]/g, "")
+
+                                if (!sanitizedLibrary) {
+                                    return `Invalid library name. Available: ${formatAvailableShapeLibraries()}`
+                                }
+
+                                const baseDir = path.join(
+                                    process.cwd(),
+                                    "docs",
+                                    "shape-libraries",
+                                )
+                                const filePath = path.join(
+                                    baseDir,
+                                    `${sanitizedLibrary}.md`,
+                                )
+                                const resolvedPath = path.resolve(filePath)
+                                if (!resolvedPath.startsWith(path.resolve(baseDir))) {
+                                    return "Invalid library path."
+                                }
+
+                                try {
+                                    return await readFile(resolvedPath, "utf8")
+                                } catch (error) {
+                                    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+                                        return `Library "${library}" not found. Available: ${formatAvailableShapeLibraries()}`
+                                    }
+                                    return `Failed to load library "${library}".`
+                                }
+                            },
                         },
                     },
                     ...(process.env.TEMPERATURE !== undefined && {

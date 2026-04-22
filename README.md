@@ -9,12 +9,8 @@
 </p>
 
 <p align="center">
-  <a href="README.md">English</a> ·
-  <a href="README.zh-CN.md">Simplified Chinese</a> ·
-  <a href="README.zh-TW.md">Traditional Chinese</a> ·
-  <a href="README.ja-JP.md">Japanese</a> ·
-  <a href="README.ko-KR.md">Korean</a> ·
-  <a href="README.fr-FR.md">French</a>
+  <a href="README.md">English</a> |
+  <a href="README.zh-CN.md">Simplified Chinese</a>
 </p>
 
 <p align="center">

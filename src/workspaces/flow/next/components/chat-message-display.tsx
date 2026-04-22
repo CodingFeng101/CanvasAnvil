@@ -11,10 +11,8 @@ import {
     FileCode,
     FileText,
     Loader2,
-    Minus,
     Pencil,
     Play,
-    Plus,
     RotateCcw,
     X,
 } from "lucide-react"
@@ -30,66 +28,45 @@ import {
 import { ScrollArea } from "@/workspaces/flow/next/components/ui/scroll-area"
 import { useLanguage } from "@/workspaces/flow/next/contexts/language-context"
 import {
-    convertToLegalXml,
-    replaceXMLParts,
-    replaceNodes,
-    validateMxCellStructure,
-} from "@/workspaces/flow/next/lib/utils"
+    applyDiagramOperations,
+    isMxCellXmlComplete,
+    type DiagramOperation,
+} from "@/workspaces/flow/next/lib/diagram-operations"
+import { convertToLegalXml, replaceNodes, validateMxCellStructure } from "@/workspaces/flow/next/lib/utils"
 import { CodeBlock } from "./code-block"
-
-interface EditPair {
-    search: string
-    replace: string
-}
 
 // Tool part interface for type safety
 interface ToolPartLike {
     type: string
     toolCallId: string
     state?: string
-    input?: { xml?: string; edits?: EditPair[] } & Record<string, unknown>
+    input?: { xml?: string; operations?: DiagramOperation[] } & Record<string, unknown>
     output?: string
 }
 
-function EditDiffDisplay({ edits }: { edits: EditPair[] }) {
+function OperationsDisplay({ operations }: { operations: DiagramOperation[] }) {
     return (
         <div className="space-y-3">
-            {edits.map((edit, index) => (
+            {operations.map((operation, index) => (
                 <div
-                    key={`${(edit.search || "").slice(0, 50)}-${(edit.replace || "").slice(0, 50)}-${index}`}
+                    key={`${operation.operation}-${operation.cell_id}-${index}`}
                     className="rounded-lg border border-border/50 overflow-hidden bg-background/50"
                 >
                     <div className="px-3 py-1.5 bg-muted/40 border-b border-border/30 flex items-center gap-2">
-                        <span className="text-xs font-medium text-muted-foreground">
-                            Change {index + 1}
+                        <span className="text-xs font-medium text-muted-foreground uppercase">
+                            {operation.operation}
+                        </span>
+                        <span className="text-[11px] text-muted-foreground">
+                            cell_id: {operation.cell_id}
                         </span>
                     </div>
-                    <div className="divide-y divide-border/30">
-                        {/* Search (old) */}
+                    {operation.new_xml && (
                         <div className="px-3 py-2">
-                            <div className="flex items-center gap-1.5 mb-1.5">
-                                <Minus className="w-3 h-3 text-red-500" />
-                                <span className="text-[10px] font-medium text-red-600 uppercase tracking-wide">
-                                    Remove
-                                </span>
-                            </div>
-                            <pre className="text-[11px] font-mono text-red-700 bg-red-50 rounded px-2 py-1.5 overflow-x-auto whitespace-pre-wrap break-all">
-                                {edit.search}
+                            <pre className="text-[11px] font-mono text-foreground bg-muted/40 rounded px-2 py-1.5 overflow-x-auto whitespace-pre-wrap break-all">
+                                {operation.new_xml}
                             </pre>
                         </div>
-                        {/* Replace (new) */}
-                        <div className="px-3 py-2">
-                            <div className="flex items-center gap-1.5 mb-1.5">
-                                <Plus className="w-3 h-3 text-green-500" />
-                                <span className="text-[10px] font-medium text-green-600 uppercase tracking-wide">
-                                    Add
-                                </span>
-                            </div>
-                            <pre className="text-[11px] font-mono text-green-700 bg-green-50 rounded px-2 py-1.5 overflow-x-auto whitespace-pre-wrap break-all">
-                                {edit.replace}
-                            </pre>
-                        </div>
-                    </div>
+                    )}
                 </div>
             ))}
         </div>
@@ -215,6 +192,7 @@ export function ChatMessageDisplay({
     const { chartXML, loadDiagram: onDisplayChart } = useDiagram()
     const messagesEndRef = useRef<HTMLDivElement>(null)
     const previousXML = useRef<string>("")
+    const assembledXmlRef = useRef<string>("")
     const processedToolCalls = processedToolCallsRef
     const [expandedTools, setExpandedTools] = useState<Record<string, boolean>>(
         {},
@@ -285,8 +263,8 @@ export function ChatMessageDisplay({
                         const err = onDisplayChart(nextXml, true)
                         return !err
                     }
-                    if (Array.isArray(parsed?.edits) && parsed.edits.length > 0) {
-                        const editedXml = replaceXMLParts(baseXML, parsed.edits)
+                    if (Array.isArray(parsed?.operations) && parsed.operations.length > 0) {
+                        const editedXml = applyDiagramOperations(baseXML, parsed.operations)
                         const err = onDisplayChart(editedXml, true)
                         return !err
                     }
@@ -340,6 +318,13 @@ export function ChatMessageDisplay({
     }, [messages])
 
     useEffect(() => {
+        if (!messages.length) {
+            assembledXmlRef.current = ""
+            previousXML.current = ""
+        }
+    }, [messages.length])
+
+    useEffect(() => {
         if (editingMessageId && editTextareaRef.current) {
             editTextareaRef.current.focus()
         }
@@ -360,21 +345,24 @@ export function ChatMessageDisplay({
                             }))
                         }
 
-                        if (
-                            part.type === "tool-display_diagram" &&
-                            input?.xml
-                        ) {
-                            const xml = input.xml as string
-                            if (
-                                state === "input-streaming" ||
-                                state === "input-available"
-                            ) {
+                        if (part.type === "tool-display_diagram" && input?.xml) {
+                            const xml = String(input.xml)
+                            assembledXmlRef.current = xml
+                            if (state === "input-streaming" || state === "input-available") {
                                 handleDisplayChart(xml)
-                            } else if (
-                                state === "output-available" &&
-                                !processedToolCalls.current.has(toolCallId)
-                            ) {
+                            } else if (!processedToolCalls.current.has(toolCallId)) {
                                 handleDisplayChart(xml)
+                                processedToolCalls.current.add(toolCallId)
+                            }
+                        }
+
+                        if (part.type === "tool-append_diagram" && input?.xml) {
+                            const combinedXml = `${assembledXmlRef.current}${String(input.xml)}`
+                            if (state === "input-streaming" || state === "input-available") {
+                                handleDisplayChart(combinedXml)
+                            } else if (!processedToolCalls.current.has(toolCallId)) {
+                                assembledXmlRef.current = combinedXml
+                                handleDisplayChart(combinedXml)
                                 processedToolCalls.current.add(toolCallId)
                             }
                         }
@@ -403,6 +391,10 @@ export function ChatMessageDisplay({
                     return "Generate Diagram"
                 case "edit_diagram":
                     return "Edit Diagram"
+                case "append_diagram":
+                    return "Append Diagram"
+                case "get_shape_library":
+                    return "Get Shape Library"
                 default:
                     return name
             }
@@ -432,8 +424,8 @@ export function ChatMessageDisplay({
                             </span>
                         )}
                         {state === "output-error" && (
-                            <span className="text-xs font-medium text-red-600 bg-red-50 px-2 py-0.5 rounded-full">
-                                Error
+                            <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${((toolName === "display_diagram" || toolName === "append_diagram") && !isMxCellXmlComplete(String(input?.xml || ""))) ? "text-yellow-700 bg-yellow-50" : "text-red-600 bg-red-50"}`}>
+                                {((toolName === "display_diagram" || toolName === "append_diagram") && !isMxCellXmlComplete(String(input?.xml || ""))) ? "Truncated" : "Error"}
                             </span>
                         )}
                         {input && Object.keys(input).length > 0 && (
@@ -456,8 +448,8 @@ export function ChatMessageDisplay({
                         {typeof input === "object" && input.xml ? (
                             <CodeBlock code={input.xml} language="xml" onApply={applyCodeToDiagram} />
                         ) : typeof input === "object" &&
-                          input.edits &&
-                          Array.isArray(input.edits) ? (
+                          input.operations &&
+                          Array.isArray(input.operations) ? (
                             <div className="space-y-2">
                                 <div className="flex justify-end">
                                     <button
@@ -468,7 +460,7 @@ export function ChatMessageDisplay({
                                                     {
                                                         type: "flow_patch",
                                                         mode: "patch",
-                                                        edits: input.edits,
+                                                        operations: input.operations,
                                                     },
                                                     null,
                                                     2,
@@ -483,8 +475,13 @@ export function ChatMessageDisplay({
                                         <span>Apply</span>
                                     </button>
                                 </div>
-                                <EditDiffDisplay edits={input.edits} />
+                                <OperationsDisplay operations={input.operations} />
                             </div>
+                        ) : toolName === "get_shape_library" &&
+                          typeof output === "string" ? (
+                            <pre className="text-[11px] whitespace-pre-wrap break-words overflow-x-auto max-h-56 bg-muted/40 rounded px-3 py-2">
+                                {output}
+                            </pre>
                         ) : typeof input === "object" &&
                           Object.keys(input).length > 0 ? (
                             <CodeBlock
@@ -500,6 +497,15 @@ export function ChatMessageDisplay({
                         {output}
                     </div>
                 )}
+                {output &&
+                    toolName === "get_shape_library" &&
+                    state === "output-available" && (
+                        <div className="px-4 py-3 border-t border-border/40">
+                            <pre className="text-[11px] whitespace-pre-wrap break-words overflow-x-auto max-h-56 bg-muted/40 rounded px-3 py-2">
+                                {String(output)}
+                            </pre>
+                        </div>
+                    )}
             </div>
         )
     }

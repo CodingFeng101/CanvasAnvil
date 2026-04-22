@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useLayoutEffect, useRef } from 'react';
 import { motion } from "framer-motion";
 import { generateImage, generateChatMessage } from '@/lib/ai-client';
-import { pptService, PptPage, type PptTextBlock, type SlideEditRoutingItem, estimateTextBlockFontSize, PPT_REFERENCE_SLIDE_HEIGHT, PPT_REFERENCE_SLIDE_WIDTH } from '@/lib/ppt-service';
+import { pptService, PptPage, type PptElement, type PptTextBlock, type SlideEditRoutingItem, resolveTextBlockFontSize, PPT_REFERENCE_SLIDE_HEIGHT, PPT_REFERENCE_SLIDE_WIDTH, textBlocksToPptElements } from '@/lib/ppt-service';
 import { getTemplateGenerationPrompt } from '@/lib/ppt-prompts';
 import {
   clearPersistedPptWorkspaceState,
@@ -10,7 +10,7 @@ import {
   savePersistedPptTemplateLibraryState,
   savePersistedPptWorkspaceState,
 } from '@/lib/ppt-persistence';
-import { Loader2, Plus, Image as ImageIcon, MessageSquarePlus, Upload, Presentation, Sparkles, Check, Play, FileText, Download, Lightbulb, X, ArrowLeft, ArrowRight, Eye, Trash2, Maximize2, Minimize2 } from 'lucide-react';
+import { Loader2, Plus, Image as ImageIcon, MessageSquarePlus, Upload, Presentation, Sparkles, Check, Play, FileText, Download, Lightbulb, X, ArrowLeft, ArrowRight, Eye, Trash2, Maximize2, Minimize2, RefreshCcw } from 'lucide-react';
 import {
   ContextMenu,
   ContextMenuContent,
@@ -22,6 +22,20 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "
 import { Textarea } from "@/workspaces/ppt/ui/textarea";
 import { useUiLanguage } from "@/lib/use-ui-language";
 import { useFileProcessor as useFlowFileProcessor } from "@/workspaces/flow/next/lib/use-file-processor";
+import {
+  canvasAnvilToEditorSlide,
+  editorSlideToExportPayload,
+  PptEditorBridge,
+  PptReviewOverlay,
+  PptReviewSidebar,
+  type EditableResizeHandle,
+  type ReviewResizeHandle as BridgeReviewResizeHandle,
+} from "@/features/ppt-editor";
+import {
+  buildPptistBootstrapPayload,
+  CANVASANVIL_PPTIST_MESSAGE_TYPE,
+  type PptistLabBootstrapPayload,
+} from "@/features/ppt-editor/adapters/toPptistLab";
 
 interface SlideData {
   id: string;
@@ -35,11 +49,14 @@ interface SlideData {
 type SlideRenderLayer = {
   backgroundImageUrl: string;
   textBlocks: PptTextBlock[];
+  elements: PptElement[];
   status: "pending" | "ready" | "failed";
   error?: string;
 };
 
 type SlideImageVersionType = "generated" | "edited" | "derived_textless";
+
+type EditableExtractionStatus = "idle" | "extracting" | "done" | "failed";
 
 type SlideImageVersion = {
   id: string;
@@ -50,8 +67,12 @@ type SlideImageVersion = {
   sourceVersionId?: string;
 };
 
+const SYNTHETIC_PRIMARY_VERSION_PREFIX = "synthetic-primary:";
+
 const hasRenderableTextBlocks = (layer?: SlideRenderLayer) =>
   Array.isArray(layer?.textBlocks) && layer.textBlocks.length > 0;
+
+const cloneSerializable = <T,>(value: T): T => JSON.parse(JSON.stringify(value));
 
 const migrateLegacyTextlessVersions = (rawState: any) => {
   if (!rawState || typeof rawState !== "object") return rawState;
@@ -122,6 +143,14 @@ const textToLines = (value: string) =>
     .map((item) => item.trim())
     .filter(Boolean);
 
+const deriveTextElementsFromBlocks = (textBlocks: PptTextBlock[] = []): PptElement[] =>
+  textBlocksToPptElements(textBlocks);
+
+const mergeTextBlocksIntoElements = (textBlocks: PptTextBlock[] = [], elements: PptElement[] = []): PptElement[] => {
+  const nonTextElements = elements.filter((element) => element?.type !== "text");
+  return [...nonTextElements, ...deriveTextElementsFromBlocks(textBlocks)];
+};
+
 interface PptData {
   theme?: string;
   slides: SlideData[];
@@ -190,6 +219,8 @@ interface PptWorkspaceProps {
   onPptReadyChange?: (ready: boolean) => void;
   onPptStageChange?: (stage: "start" | "outline" | "slides") => void;
   onCreationModeChange?: (mode: "idea" | "outline" | "beautify" | "image_transform") => void;
+  onExportReviewModeChange?: (active: boolean) => void;
+  onEmbeddedEditorActiveChange?: (active: boolean) => void;
   incomingEdit?: { id: string; payload: string } | null;
   onIncomingEditHandled?: (id: string) => void;
   onResetWorkspace?: () => void;
@@ -253,7 +284,7 @@ function TextBlockOverlay({
   const slideScale = Math.min(canvasWidth / PPT_REFERENCE_SLIDE_WIDTH, canvasHeight / PPT_REFERENCE_SLIDE_HEIGHT);
   const referenceFontSize = Math.max(
     10,
-    estimateTextBlockFontSize(block, PPT_REFERENCE_SLIDE_WIDTH, PPT_REFERENCE_SLIDE_HEIGHT)
+    resolveTextBlockFontSize(block, PPT_REFERENCE_SLIDE_WIDTH, PPT_REFERENCE_SLIDE_HEIGHT)
   );
   const estimatedFontSize = Math.max(10, referenceFontSize * slideScale);
   const [resolvedFontSize, setResolvedFontSize] = useState(estimatedFontSize);
@@ -488,6 +519,18 @@ const readLegacyUploadedTemplates = (): UploadTemplate[] => {
   }
 };
 
+type ReviewDraftRect = {
+  startX: number;
+  startY: number;
+  currentX: number;
+  currentY: number;
+};
+
+type ReviewResizeHandle = "n" | "s" | "e" | "w" | "ne" | "nw" | "se" | "sw";
+
+const REVIEW_BOX_COLOR = "#22d3ee";
+const REVIEW_BOX_SELECTED_COLOR = "#f59e0b";
+
 const readLegacyHiddenPresetTemplateIds = (): string[] => {
   if (typeof window === "undefined") return [];
   try {
@@ -510,6 +553,8 @@ const PRESET_TEMPLATES: PresetTemplate[] = [
 
 const MODEL_CONCURRENCY = 5;
 const BEAUTIFY_CONCURRENCY = 5;
+const EDITABLE_EXPORT_CONCURRENCY = 3;
+const EDITABLE_REVIEW_CONCURRENCY = 4;
 const BEAUTIFY_RETRY_MAX_ATTEMPTS = 3;
 const BEAUTIFY_RETRY_BASE_DELAY_MS = 1200;
 
@@ -593,10 +638,12 @@ const normalizePersistedRenderLayers = (value: any): Record<string, Record<strin
       if (typeof versionId !== "string" || !layer || typeof layer !== "object" || Array.isArray(layer)) continue;
       const backgroundImageUrl = typeof (layer as any).backgroundImageUrl === "string" ? (layer as any).backgroundImageUrl : "";
       const textBlocks = Array.isArray((layer as any).textBlocks) ? (layer as any).textBlocks : [];
+      const elements = Array.isArray((layer as any).elements) ? (layer as any).elements : deriveTextElementsFromBlocks(textBlocks);
       const status = (layer as any).status === "pending" || (layer as any).status === "failed" ? (layer as any).status : "ready";
       nextVersions[versionId] = {
         backgroundImageUrl,
         textBlocks,
+        elements,
         status,
         error: typeof (layer as any).error === "string" ? (layer as any).error : undefined,
       };
@@ -658,7 +705,18 @@ const normalizePersistedStringArray = (value: any): string[] => {
   return value.map((item: any) => String(item));
 };
 
-export function PptWorkspace({ data, onAddToChat, onPptReadyChange, onPptStageChange, onCreationModeChange, incomingEdit, onIncomingEditHandled, onResetWorkspace }: PptWorkspaceProps) {
+export function PptWorkspace({
+  data,
+  onAddToChat,
+  onPptReadyChange,
+  onPptStageChange,
+  onCreationModeChange,
+  onExportReviewModeChange,
+  onEmbeddedEditorActiveChange,
+  incomingEdit,
+  onIncomingEditHandled,
+  onResetWorkspace
+}: PptWorkspaceProps) {
   const uiLang = useUiLanguage();
   const tr = (zh: string, en: string) => (uiLang === "zh" ? zh : en);
   const initialPptStateRef = useRef<any>(undefined);
@@ -755,10 +813,12 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, onPptStageCh
         if (typeof versionId !== "string" || !layer || typeof layer !== "object" || Array.isArray(layer)) continue;
         const backgroundImageUrl = typeof (layer as any).backgroundImageUrl === "string" ? (layer as any).backgroundImageUrl : "";
         const textBlocks = Array.isArray((layer as any).textBlocks) ? (layer as any).textBlocks : [];
+        const elements = Array.isArray((layer as any).elements) ? (layer as any).elements : deriveTextElementsFromBlocks(textBlocks);
         const status = (layer as any).status === "pending" || (layer as any).status === "failed" ? (layer as any).status : "ready";
         nextVersions[versionId] = {
           backgroundImageUrl,
           textBlocks,
+          elements,
           status,
           error: typeof (layer as any).error === "string" ? (layer as any).error : undefined,
         };
@@ -895,13 +955,68 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, onPptStageCh
     startY: number;
     canvasWidth: number;
     canvasHeight: number;
+    handle?: ReviewResizeHandle;
   }>(null);
   const [slideshowOpen, setSlideshowOpen] = useState(false);
   const [slideshowIndex, setSlideshowIndex] = useState(0);
   const [slideshowFullscreen, setSlideshowFullscreen] = useState(false);
   const slideshowRootRef = useRef<HTMLDivElement | null>(null);
+  const slideshowStartIndexRef = useRef<number | null>(null);
   const [exportMenuOpen, setExportMenuOpen] = useState(false);
+  const [exportReviewMode, setExportReviewMode] = useState(false);
+  const [embeddedPptistPayload, setEmbeddedPptistPayload] = useState<PptistLabBootstrapPayload | null>(null);
+  const [embeddedPptistSessionId, setEmbeddedPptistSessionId] = useState(0);
+  const [editableExtractionStatusBySlideId, setEditableExtractionStatusBySlideId] = useState<Record<string, EditableExtractionStatus>>({});
+  const [reviewPreparingSlideIds, setReviewPreparingSlideIds] = useState<string[]>([]);
+  const [selectedReviewTextBlockId, setSelectedReviewTextBlockId] = useState<string | null>(null);
+  const [reviewDrawMode, setReviewDrawMode] = useState(false);
+  const [reviewDraftRect, setReviewDraftRect] = useState<ReviewDraftRect | null>(null);
+  const [reviewPanelWidth, setReviewPanelWidth] = useState(420);
   const exportMenuRef = useRef<HTMLDivElement | null>(null);
+  const reviewDrawRef = useRef<null | {
+    slideId: string;
+    rect: DOMRect;
+    startX: number;
+    startY: number;
+  }>(null);
+  const reviewPanelResizeRef = useRef<null | { startClientX: number; startWidth: number }>(null);
+  const pptistIframeRef = useRef<HTMLIFrameElement | null>(null);
+  const reviewLayerPromiseRef = useRef<Record<string, Promise<{ versionId: string; imageUrl: string; layer: SlideRenderLayer } | null>>>({});
+  const editableElementDragRef = useRef<null | {
+    slideId: string;
+    startClientX: number;
+    startClientY: number;
+    canvasWidth: number;
+    canvasHeight: number;
+    items: Array<{
+      elementId: string;
+      startX: number;
+      startY: number;
+      w: number;
+      h: number;
+      type: PptElement["type"];
+    }>;
+  }>(null);
+  const editableElementResizeRef = useRef<null | {
+    slideId: string;
+    elementId: string;
+    startClientX: number;
+    startClientY: number;
+    startX: number;
+    startY: number;
+    startW: number;
+    startH: number;
+    canvasWidth: number;
+    canvasHeight: number;
+    handle: EditableResizeHandle;
+  }>(null);
+  const editableSelectionRef = useRef<null | {
+    slideId: string;
+    rect: DOMRect;
+    startX: number;
+    startY: number;
+    baseSelectionIds: string[];
+  }>(null);
   const [materialPreview, setMaterialPreview] = useState<{ open: boolean; slideTitle: string; item: SlideMaterialImage | null }>({
     open: false,
     slideTitle: "",
@@ -909,6 +1024,14 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, onPptStageCh
   });
   const [windowDimensions, setWindowDimensions] = useState({ width: 0, height: 0 });
   const [previewCanvasSize, setPreviewCanvasSize] = useState({ width: 1100, height: 619 });
+  const [editableCanvasScale, setEditableCanvasScale] = useState(0.64);
+  useEffect(() => {
+    onExportReviewModeChange?.(exportReviewMode);
+  }, [exportReviewMode, onExportReviewModeChange]);
+
+  useEffect(() => {
+    onEmbeddedEditorActiveChange?.(!!embeddedPptistPayload);
+  }, [embeddedPptistPayload, onEmbeddedEditorActiveChange]);
   const isParsingReferenceFiles = Array.from(referencePdfData.values()).some((x) => x.isExtracting);
   const referenceFiles: ReferenceFile[] = referenceUploadFiles
     .map((file) => {
@@ -1911,17 +2034,20 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, onPptStageCh
   }, [incomingEdit?.id]);
 
   const getSlideVersionMeta = (slideId: string) => {
+      const visibleVersions = getVisibleSlideVersions(slideId);
       const versions = imageVersions[slideId] || [];
-      const visibleVersions = versions;
       const requestedVersionId = currentImageVersionId[slideId] || "";
+      const preferredDefaultVersion =
+        [...visibleVersions].reverse().find((item) => item.type !== "derived_textless") ||
+        visibleVersions[visibleVersions.length - 1];
       const resolvedVersionId =
         (requestedVersionId && visibleVersions.some((item) => item.id === requestedVersionId)
           ? requestedVersionId
-          : visibleVersions[visibleVersions.length - 1]?.id) ||
+          : preferredDefaultVersion?.id) ||
         requestedVersionId ||
         versions[versions.length - 1]?.id ||
         "";
-      const version = resolvedVersionId ? versions.find((x) => x.id === resolvedVersionId) : undefined;
+      const version = resolvedVersionId ? visibleVersions.find((x) => x.id === resolvedVersionId) : undefined;
       return {
         versionId: resolvedVersionId,
         version,
@@ -1930,7 +2056,18 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, onPptStageCh
   };
   const getVisibleSlideVersions = (slideId: string) => {
     const versions = imageVersions[slideId] || [];
-    return versions;
+    const hasPrimaryVersion = versions.some((version) => version.type !== "derived_textless");
+    if (hasPrimaryVersion || !generatedImages[slideId]) return versions;
+    return [
+      {
+        id: `${SYNTHETIC_PRIMARY_VERSION_PREFIX}${slideId}`,
+        url: generatedImages[slideId],
+        timestamp: Date.now(),
+        type: "generated" as const,
+        instruction: tr("原始版本", "Original version"),
+      },
+      ...versions,
+    ];
   };
   const getSlideImageUrl = (slideId: string) => getSlideVersionMeta(slideId).imageUrl;
   const getOriginalSlideVersion = (slideId: string) => {
@@ -1942,8 +2079,100 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, onPptStageCh
     if (!versionId) return undefined;
     return renderLayers[slideId]?.[versionId];
   };
+  const getTextlessBackgroundVersion = (slideId: string) => {
+    const versions = imageVersions[slideId] || [];
+    return versions.find((version) => version.type === "derived_textless");
+  };
+  const getEditableExtractionStatus = (slideId: string): EditableExtractionStatus =>
+    editableExtractionStatusBySlideId[slideId] || "idle";
   const getSlideBackgroundUrl = (slideId: string) => {
     return getSlideImageUrl(slideId) || "";
+  };
+  const getCurrentReviewLayerInfo = (slideId: string) => {
+    const { versionId, imageUrl } = getSlideVersionMeta(slideId);
+    return {
+      versionId,
+      imageUrl,
+      layer: versionId ? renderLayers[slideId]?.[versionId] : undefined,
+    };
+  };
+  const isReviewPreparing = (slideId?: string | null) => !!slideId && reviewPreparingSlideIds.includes(slideId);
+  const extractReviewTextLayer = async (slide: SlideData, slideImageUrl: string): Promise<SlideRenderLayer> => {
+    const existingLayer = getSlideRenderLayer(slide.id);
+    const persistedSlideImageUrl = await persistImageUrlIfNeeded(slideImageUrl);
+    const page: PptPage = {
+      id: slide.id,
+      title: slide.title,
+      content: slide.content,
+      description: slide.description,
+      note: slide.note,
+      layout: slide.layout,
+    };
+    const textBlocks = await pptService.extractSlideTextBlocks(page, persistedSlideImageUrl, uiLang as "zh" | "en");
+    return {
+      backgroundImageUrl: persistedSlideImageUrl,
+      textBlocks,
+      elements: mergeTextBlocksIntoElements(textBlocks, existingLayer?.elements || []),
+      status: "ready",
+    } satisfies SlideRenderLayer;
+  };
+  const ensureEditableReviewLayer = async (slide: SlideData) => {
+    const { versionId, imageUrl, layer } = getCurrentReviewLayerInfo(slide.id);
+    if (!versionId || !imageUrl) return null;
+    if (hasRenderableTextBlocks(layer)) {
+      return { versionId, imageUrl, layer };
+    }
+    if (reviewLayerPromiseRef.current[slide.id]) {
+      return await reviewLayerPromiseRef.current[slide.id];
+    }
+    const task = (async () => {
+      setReviewPreparingSlideIds((current) => (current.includes(slide.id) ? current : [...current, slide.id]));
+      setRenderLayerState(slide.id, versionId, {
+        backgroundImageUrl: imageUrl,
+        textBlocks: Array.isArray(layer?.textBlocks) ? layer.textBlocks : [],
+        elements: deriveTextElementsFromBlocks(Array.isArray(layer?.textBlocks) ? layer.textBlocks : []),
+        status: "pending",
+        error: undefined,
+      });
+      try {
+        const nextLayer = await extractReviewTextLayer(slide, imageUrl);
+        setRenderLayerState(slide.id, versionId, nextLayer);
+        return { versionId, imageUrl, layer: nextLayer };
+      } finally {
+        setReviewPreparingSlideIds((current) => current.filter((id) => id !== slide.id));
+        delete reviewLayerPromiseRef.current[slide.id];
+      }
+    })();
+    reviewLayerPromiseRef.current[slide.id] = task;
+    return await task;
+  };
+  const createDefaultTextBlock = (
+    slideId: string,
+    x: number,
+    y: number,
+    w: number,
+    h: number,
+  ): PptTextBlock => {
+    const layer = getSlideRenderLayer(slideId);
+    const titleExists = (layer?.textBlocks || []).some((block) => block.role === "title");
+    const role: PptTextBlock["role"] = !titleExists && y < 0.2 ? "title" : "bullet";
+    return {
+      id: `manual-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+      role,
+      text: "",
+      x: Math.max(0, Math.min(0.95, x)),
+      y: Math.max(0, Math.min(0.95, y)),
+      w: Math.max(role === "title" ? 0.18 : 0.1, Math.min(1 - x, w)),
+      h: Math.max(role === "title" ? 0.08 : 0.06, Math.min(1 - y, h)),
+      style: {
+        fontFamily: uiLang === "zh" ? "Microsoft YaHei" : "Aptos",
+        fontSize: role === "title" ? 30 : 20,
+        fontWeight: role === "title" ? 700 : 500,
+        color: role === "title" ? "#ffffff" : "#111827",
+        align: "left",
+        lineHeight: role === "title" ? 1.12 : 1.35,
+      },
+    };
   };
 
   const normalizeSlideEditType = (
@@ -1999,6 +2228,7 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, onPptStageCh
           [versionId]: {
             ...layer,
             textBlocks,
+            elements: mergeTextBlocksIntoElements(textBlocks, layer.elements),
           },
         },
       };
@@ -2055,6 +2285,7 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, onPptStageCh
       {
         ...layer,
         textBlocks: nextBlocks,
+        elements: mergeTextBlocksIntoElements(nextBlocks, layer.elements),
       },
       tr("文字层调整", "Text layer update"),
     );
@@ -2077,6 +2308,7 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, onPptStageCh
           [versionId]: {
             ...layer,
             textBlocks: nextBlocks,
+            elements: mergeTextBlocksIntoElements(nextBlocks, layer.elements),
           },
         },
       };
@@ -2096,10 +2328,135 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, onPptStageCh
       })
     );
   };
-
-  const updateSlideTextBlockPosition = (slideId: string, blockId: string, nextX: number, nextY: number, targetVersionId?: string) => {
+  const updateSlideTextBlockRect = (
+    slideId: string,
+    blockId: string,
+    nextRect: Partial<Pick<PptTextBlock, "x" | "y" | "w" | "h">>,
+    targetVersionId?: string,
+  ) => {
     const { versionId: currentVersionId } = getSlideVersionMeta(slideId);
     const versionId = targetVersionId || currentVersionId;
+    if (!versionId) return;
+    setRenderLayers((prev) => {
+      const layer = prev[slideId]?.[versionId];
+      if (!layer) return prev;
+      const nextBlocks = layer.textBlocks.map((block) => {
+        if (block.id !== blockId) return block;
+        const minW = Math.max(0.05, block.role === "title" ? 0.18 : block.role === "tag" ? 0.07 : 0.1);
+        const minH = Math.max(0.04, block.role === "title" ? 0.08 : block.role === "tag" ? 0.045 : 0.06);
+        let x = typeof nextRect.x === "number" ? nextRect.x : block.x;
+        let y = typeof nextRect.y === "number" ? nextRect.y : block.y;
+        let w = typeof nextRect.w === "number" ? nextRect.w : block.w;
+        let h = typeof nextRect.h === "number" ? nextRect.h : block.h;
+        w = Math.max(minW, Math.min(1, w));
+        h = Math.max(minH, Math.min(1, h));
+        x = Math.max(0, Math.min(1 - w, x));
+        y = Math.max(0, Math.min(1 - h, y));
+        return { ...block, x, y, w, h };
+      });
+      return {
+        ...prev,
+        [slideId]: {
+          ...(prev[slideId] || {}),
+          [versionId]: {
+            ...layer,
+            textBlocks: nextBlocks,
+            elements: mergeTextBlocksIntoElements(nextBlocks, layer.elements),
+          },
+        },
+      };
+    });
+  };
+  const updateSlideTextBlockRole = (slideId: string, blockId: string, nextRole: PptTextBlock["role"]) => {
+    const { versionId } = getSlideVersionMeta(slideId);
+    if (!versionId) return;
+    setRenderLayers((prev) => {
+      const layer = prev[slideId]?.[versionId];
+      if (!layer) return prev;
+      const nextBlocks = layer.textBlocks.map((block) =>
+        block.id === blockId
+          ? {
+              ...block,
+              role: nextRole,
+              style: {
+                ...block.style,
+                fontWeight:
+                  typeof block.style?.fontWeight === "number"
+                    ? block.style.fontWeight
+                    : nextRole === "title"
+                      ? 700
+                      : nextRole === "tag"
+                        ? 800
+                        : 500,
+              },
+            }
+          : block
+      );
+      return {
+        ...prev,
+        [slideId]: {
+          ...(prev[slideId] || {}),
+          [versionId]: {
+            ...layer,
+            textBlocks: nextBlocks,
+            elements: mergeTextBlocksIntoElements(nextBlocks, layer.elements),
+          },
+        },
+      };
+    });
+  };
+  const updateSlideTextBlockStyle = (slideId: string, blockId: string, stylePatch: Partial<NonNullable<PptTextBlock["style"]>>) => {
+    const { versionId } = getSlideVersionMeta(slideId);
+    if (!versionId) return;
+    setRenderLayers((prev) => {
+      const layer = prev[slideId]?.[versionId];
+      if (!layer) return prev;
+      const nextBlocks = layer.textBlocks.map((block) =>
+        block.id === blockId
+          ? {
+              ...block,
+              style: {
+                ...(block.style || {}),
+                ...stylePatch,
+              },
+            }
+          : block
+      );
+      return {
+        ...prev,
+        [slideId]: {
+          ...(prev[slideId] || {}),
+          [versionId]: {
+            ...layer,
+            textBlocks: nextBlocks,
+            elements: mergeTextBlocksIntoElements(nextBlocks, layer.elements),
+          },
+        },
+      };
+    });
+  };
+  const appendSlideTextBlock = (slideId: string, block: PptTextBlock) => {
+    const { versionId } = getSlideVersionMeta(slideId);
+    if (!versionId) return;
+    setRenderLayers((prev) => {
+      const layer = prev[slideId]?.[versionId];
+      if (!layer) return prev;
+      const nextBlocks = [...layer.textBlocks, block];
+      return {
+        ...prev,
+        [slideId]: {
+          ...(prev[slideId] || {}),
+          [versionId]: {
+            ...layer,
+            textBlocks: nextBlocks,
+            elements: mergeTextBlocksIntoElements(nextBlocks, layer.elements),
+          },
+        },
+      };
+    });
+  };
+  const appendSlideElement = (slideId: string, element: PptElement) => {
+    const { versionId } = getSlideVersionMeta(slideId);
     if (!versionId) return;
     setRenderLayers((prev) => {
       const layer = prev[slideId]?.[versionId];
@@ -2110,19 +2467,76 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, onPptStageCh
           ...(prev[slideId] || {}),
           [versionId]: {
             ...layer,
-            textBlocks: layer.textBlocks.map((block) =>
-              block.id === blockId
-                ? {
-                    ...block,
-                    x: Math.max(0, Math.min(1 - block.w, nextX)),
-                    y: Math.max(0, Math.min(1 - block.h, nextY)),
-                  }
-                : block
-            ),
+            elements: [...(layer.elements || []), element],
           },
         },
       };
     });
+  };
+  const updateSlideElement = (slideId: string, elementId: string, patch: Partial<PptElement>) => {
+    const { versionId } = getSlideVersionMeta(slideId);
+    if (!versionId) return;
+    setRenderLayers((prev) => {
+      const layer = prev[slideId]?.[versionId];
+      if (!layer) return prev;
+      const nextElements = (layer.elements || []).map((element) => (element.id === elementId ? { ...element, ...patch } as PptElement : element));
+      return {
+        ...prev,
+        [slideId]: {
+          ...(prev[slideId] || {}),
+          [versionId]: {
+            ...layer,
+            elements: nextElements,
+          },
+        },
+      };
+    });
+  };
+  const deleteSlideElement = (slideId: string, elementId: string) => {
+    const { versionId } = getSlideVersionMeta(slideId);
+    if (!versionId) return;
+    setRenderLayers((prev) => {
+      const layer = prev[slideId]?.[versionId];
+      if (!layer) return prev;
+      const nextElements = (layer.elements || []).filter((element) => element.id !== elementId);
+      const nextTextBlocks = layer.textBlocks.filter((block) => block.id !== elementId);
+      return {
+        ...prev,
+        [slideId]: {
+          ...(prev[slideId] || {}),
+          [versionId]: {
+            ...layer,
+            textBlocks: nextTextBlocks,
+            elements: nextElements,
+          },
+        },
+      };
+    });
+  };
+  const deleteSlideTextBlock = (slideId: string, blockId: string) => {
+    const { versionId } = getSlideVersionMeta(slideId);
+    if (!versionId) return;
+    setRenderLayers((prev) => {
+      const layer = prev[slideId]?.[versionId];
+      if (!layer) return prev;
+      const nextBlocks = layer.textBlocks.filter((block) => block.id !== blockId);
+      return {
+        ...prev,
+        [slideId]: {
+          ...(prev[slideId] || {}),
+          [versionId]: {
+            ...layer,
+            textBlocks: nextBlocks,
+            elements: mergeTextBlocksIntoElements(nextBlocks, layer.elements),
+          },
+        },
+      };
+    });
+    setSelectedReviewTextBlockId((current) => (current === blockId ? null : current));
+  };
+
+  const updateSlideTextBlockPosition = (slideId: string, blockId: string, nextX: number, nextY: number, targetVersionId?: string) => {
+    updateSlideTextBlockRect(slideId, blockId, { x: nextX, y: nextY }, targetVersionId);
   };
 
   const updateSlideTextBlockSize = (
@@ -2132,32 +2546,7 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, onPptStageCh
     nextH: number,
     targetVersionId?: string,
   ) => {
-    const { versionId: currentVersionId } = getSlideVersionMeta(slideId);
-    const versionId = targetVersionId || currentVersionId;
-    if (!versionId) return;
-    setRenderLayers((prev) => {
-      const layer = prev[slideId]?.[versionId];
-      if (!layer) return prev;
-      return {
-        ...prev,
-        [slideId]: {
-          ...(prev[slideId] || {}),
-          [versionId]: {
-            ...layer,
-            textBlocks: layer.textBlocks.map((block) => {
-              if (block.id !== blockId) return block;
-              const minW = Math.max(0.05, block.role === "title" ? 0.18 : block.role === "tag" ? 0.07 : 0.1);
-              const minH = Math.max(0.04, block.role === "title" ? 0.08 : block.role === "tag" ? 0.045 : 0.06);
-              return {
-                ...block,
-                w: Math.max(minW, Math.min(1 - block.x, nextW)),
-                h: Math.max(minH, Math.min(1 - block.y, nextH)),
-              };
-            }),
-          },
-        },
-      };
-    });
+    updateSlideTextBlockRect(slideId, blockId, { w: nextW, h: nextH }, targetVersionId);
   };
 
   const beginTextBlockDrag = (slideId: string, sourceVersionId: string) => {
@@ -2187,13 +2576,46 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, onPptStageCh
       if (resize) {
         const dw = (event.clientX - resize.startClientX) / Math.max(resize.canvasWidth, 1);
         const dh = (event.clientY - resize.startClientY) / Math.max(resize.canvasHeight, 1);
-        updateSlideTextBlockSize(
-          resize.slideId,
-          resize.blockId,
-          resize.startW + dw,
-          resize.startH + dh,
-          resize.versionId,
-        );
+        if (!resize.handle || resize.handle === "se") {
+          updateSlideTextBlockSize(
+            resize.slideId,
+            resize.blockId,
+            resize.startW + dw,
+            resize.startH + dh,
+            resize.versionId,
+          );
+        } else {
+          const minW = 0.05;
+          const minH = 0.04;
+          let nextX = resize.startX;
+          let nextY = resize.startY;
+          let nextW = resize.startW;
+          let nextH = resize.startH;
+          if (resize.handle.includes("e")) nextW = resize.startW + dw;
+          if (resize.handle.includes("s")) nextH = resize.startH + dh;
+          if (resize.handle.includes("w")) {
+            nextX = resize.startX + dw;
+            nextW = resize.startW - dw;
+          }
+          if (resize.handle.includes("n")) {
+            nextY = resize.startY + dh;
+            nextH = resize.startH - dh;
+          }
+          if (nextW < minW) {
+            if (resize.handle.includes("w")) nextX -= minW - nextW;
+            nextW = minW;
+          }
+          if (nextH < minH) {
+            if (resize.handle.includes("n")) nextY -= minH - nextH;
+            nextH = minH;
+          }
+          updateSlideTextBlockRect(
+            resize.slideId,
+            resize.blockId,
+            { x: nextX, y: nextY, w: nextW, h: nextH },
+            resize.versionId,
+          );
+        }
       }
     };
     const stopDrag = () => {
@@ -2211,6 +2633,103 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, onPptStageCh
       window.removeEventListener("pointercancel", stopDrag);
     };
   }, [draggingTextBlockId, resizingTextBlockId]);
+  useEffect(() => {
+    const activeSlide = localSlides[currentSlideIndex];
+    if (!exportReviewMode) {
+      setSelectedReviewTextBlockId(null);
+      setReviewDrawMode(false);
+      setReviewDraftRect(null);
+      return;
+    }
+    const layer = activeSlide ? getSlideRenderLayer(activeSlide.id) : undefined;
+    const blocks = layer?.textBlocks || [];
+    if (blocks.length === 0) {
+      setSelectedReviewTextBlockId(null);
+      return;
+    }
+    if (!selectedReviewTextBlockId || !blocks.some((block) => block.id === selectedReviewTextBlockId)) {
+      setSelectedReviewTextBlockId(blocks[0].id);
+    }
+  }, [exportReviewMode, localSlides, currentSlideIndex, renderLayers, selectedReviewTextBlockId]);
+  useEffect(() => {
+    if (!reviewDrawRef.current) return;
+    const handlePointerMove = (event: PointerEvent) => {
+      const draft = reviewDrawRef.current;
+      if (!draft) return;
+      const nextX = Math.max(0, Math.min(1, (event.clientX - draft.rect.left) / Math.max(draft.rect.width, 1)));
+      const nextY = Math.max(0, Math.min(1, (event.clientY - draft.rect.top) / Math.max(draft.rect.height, 1)));
+      setReviewDraftRect({
+        startX: draft.startX,
+        startY: draft.startY,
+        currentX: nextX,
+        currentY: nextY,
+      });
+    };
+    const stopPointer = () => {
+      const draft = reviewDrawRef.current;
+      reviewDrawRef.current = null;
+      if (!draft || !reviewDraftRect) {
+        setReviewDraftRect(null);
+        return;
+      }
+      const minX = Math.min(reviewDraftRect.startX, reviewDraftRect.currentX);
+      const minY = Math.min(reviewDraftRect.startY, reviewDraftRect.currentY);
+      const width = Math.abs(reviewDraftRect.currentX - reviewDraftRect.startX);
+      const height = Math.abs(reviewDraftRect.currentY - reviewDraftRect.startY);
+      setReviewDraftRect(null);
+      if (width < 0.025 || height < 0.025) return;
+      const block = createDefaultTextBlock(draft.slideId, minX, minY, width, height);
+      appendSlideTextBlock(draft.slideId, block);
+      setSelectedReviewTextBlockId(block.id);
+      setReviewDrawMode(false);
+    };
+    window.addEventListener("pointermove", handlePointerMove);
+    window.addEventListener("pointerup", stopPointer);
+    window.addEventListener("pointercancel", stopPointer);
+    return () => {
+      window.removeEventListener("pointermove", handlePointerMove);
+      window.removeEventListener("pointerup", stopPointer);
+      window.removeEventListener("pointercancel", stopPointer);
+    };
+  }, [reviewDraftRect]);
+  useEffect(() => {
+    const handlePointerMove = (event: PointerEvent) => {
+      const draft = reviewPanelResizeRef.current;
+      if (!draft) return;
+      const delta = draft.startClientX - event.clientX;
+      setReviewPanelWidth(Math.max(320, Math.min(720, draft.startWidth + delta)));
+    };
+    const stopPointer = () => {
+      reviewPanelResizeRef.current = null;
+    };
+    window.addEventListener("pointermove", handlePointerMove);
+    window.addEventListener("pointerup", stopPointer);
+    window.addEventListener("pointercancel", stopPointer);
+    return () => {
+      window.removeEventListener("pointermove", handlePointerMove);
+      window.removeEventListener("pointerup", stopPointer);
+      window.removeEventListener("pointercancel", stopPointer);
+    };
+  }, []);
+  const handleReviewCanvasPointerDown = (event: React.PointerEvent<HTMLDivElement>, slide: SlideData) => {
+    if (!reviewDrawMode) return;
+    const rect = previewCanvasRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const startX = Math.max(0, Math.min(1, (event.clientX - rect.left) / Math.max(rect.width, 1)));
+    const startY = Math.max(0, Math.min(1, (event.clientY - rect.top) / Math.max(rect.height, 1)));
+    reviewDrawRef.current = {
+      slideId: slide.id,
+      rect,
+      startX,
+      startY,
+    };
+    setReviewDraftRect({
+      startX,
+      startY,
+      currentX: startX,
+      currentY: startY,
+    });
+  };
 
   const renderSlideTextBlocks = (
     slide: SlideData,
@@ -2223,7 +2742,7 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, onPptStageCh
     const scale = Math.max(0.45, Math.min(1.8, Math.min(canvasWidth / 1100, canvasHeight / 619)));
     return layer.textBlocks.map((block) => {
       const style = block.style || {};
-      const fontSize = Math.max(10, estimateTextBlockFontSize(block, canvasWidth, canvasHeight));
+      const fontSize = Math.max(10, resolveTextBlockFontSize(block, canvasWidth, canvasHeight));
       const isDragging = draggingTextBlockId === block.id;
       const paddingX = Math.max(6, Math.round((block.role === "title" ? 14 : 12) * scale));
       const paddingY = Math.max(4, Math.round((block.role === "title" ? 10 : 8) * scale));
@@ -2385,7 +2904,7 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, onPptStageCh
           const style = block.style || {};
           const refFontSize = Math.max(
             10,
-            estimateTextBlockFontSize(block, PPT_REFERENCE_SLIDE_WIDTH, PPT_REFERENCE_SLIDE_HEIGHT)
+            resolveTextBlockFontSize(block, PPT_REFERENCE_SLIDE_WIDTH, PPT_REFERENCE_SLIDE_HEIGHT)
           );
           const previewFontSize = refFontSize * PPT_POINT_TO_CSS_PX;
           const lineHeightRatio = Number(style.lineHeight || (block.role === "title" ? 1.12 : block.role === "tag" ? 1.05 : 1.35));
@@ -2448,7 +2967,7 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, onPptStageCh
       const style = block.style || {};
       const refFontSize = Math.max(
         10,
-        estimateTextBlockFontSize(block, PPT_REFERENCE_SLIDE_WIDTH, PPT_REFERENCE_SLIDE_HEIGHT)
+        resolveTextBlockFontSize(block, PPT_REFERENCE_SLIDE_WIDTH, PPT_REFERENCE_SLIDE_HEIGHT)
       );
       const previewFontSize = refFontSize * PPT_POINT_TO_CSS_PX;
       const isEditing = editingTextBlockId === block.id;
@@ -2608,37 +3127,250 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, onPptStageCh
     outerHeight = PPT_REFERENCE_SLIDE_HEIGHT,
   ) => {
     const backgroundUrl = getSlideBackgroundUrl(slide.id);
-    const scale = Math.min(
-      outerWidth / PPT_REFERENCE_SLIDE_WIDTH,
-      outerHeight / PPT_REFERENCE_SLIDE_HEIGHT
-    ) || 1;
-
     if (!backgroundUrl) return null;
 
     return (
-      <div className="absolute inset-0 overflow-hidden">
-        <div
-          className="absolute left-0 top-0"
-          style={{
-            width: `${PPT_REFERENCE_SLIDE_WIDTH}px`,
-            height: `${PPT_REFERENCE_SLIDE_HEIGHT}px`,
-            transform: `scale(${scale})`,
-            transformOrigin: "top left",
-          }}
-        >
-          <img
-            src={backgroundUrl}
-            className="absolute inset-0 w-full h-full object-cover bg-white"
-            alt={`Slide ${slide.id}`}
+      <PptEditorBridge
+        slide={canvasAnvilToEditorSlide(slide, {
+          renderLayer: getSlideRenderLayer(slide.id),
+          backgroundImageUrl: backgroundUrl,
+        })}
+        canvasWidth={outerWidth}
+        canvasHeight={outerHeight}
+        showElements={false}
+      />
+    );
+  };
+  const renderReviewSelectionOverlay = (slide: SlideData) => {
+    const layer = getSlideRenderLayer(slide.id);
+    if (!layer) return null;
+    const resizeHandles: Array<{ key: ReviewResizeHandle; className: string; cursor: string }> = [
+      { key: "n", className: "left-1/2 top-0 -translate-x-1/2 -translate-y-1/2", cursor: "ns-resize" },
+      { key: "s", className: "left-1/2 bottom-0 -translate-x-1/2 translate-y-1/2", cursor: "ns-resize" },
+      { key: "e", className: "right-0 top-1/2 translate-x-1/2 -translate-y-1/2", cursor: "ew-resize" },
+      { key: "w", className: "left-0 top-1/2 -translate-x-1/2 -translate-y-1/2", cursor: "ew-resize" },
+      { key: "ne", className: "right-0 top-0 translate-x-1/2 -translate-y-1/2", cursor: "nesw-resize" },
+      { key: "nw", className: "left-0 top-0 -translate-x-1/2 -translate-y-1/2", cursor: "nwse-resize" },
+      { key: "se", className: "right-0 bottom-0 translate-x-1/2 translate-y-1/2", cursor: "nwse-resize" },
+      { key: "sw", className: "left-0 bottom-0 -translate-x-1/2 translate-y-1/2", cursor: "nesw-resize" },
+    ];
+
+    return (
+      <div
+        className="absolute inset-0 z-20"
+        style={{ cursor: reviewDrawMode ? "crosshair" : "default" }}
+        onPointerDown={(event) => handleReviewCanvasPointerDown(event, slide)}
+      >
+        {layer.textBlocks.map((block, index) => {
+          const isSelected = selectedReviewTextBlockId === block.id;
+          const borderColor = isSelected ? REVIEW_BOX_SELECTED_COLOR : REVIEW_BOX_COLOR;
+          const fillColor = isSelected ? "rgba(245,158,11,0.18)" : "rgba(34,211,238,0.12)";
+          return (
+            <div
+              key={`review-box-${block.id}`}
+              className="absolute"
+              style={{
+                left: `${block.x * 100}%`,
+                top: `${block.y * 100}%`,
+                width: `${block.w * 100}%`,
+                height: `${block.h * 100}%`,
+                border: `2px solid ${borderColor}`,
+                background: fillColor,
+                boxShadow: isSelected ? `0 0 0 2px rgba(255,255,255,0.25), 0 0 18px ${borderColor}` : "none",
+                pointerEvents: "auto",
+                cursor: reviewDrawMode ? "crosshair" : "move",
+              }}
+              onPointerDown={(event) => {
+                if (reviewDrawMode) return;
+                event.preventDefault();
+                event.stopPropagation();
+                const rect = previewCanvasRef.current?.getBoundingClientRect();
+                if (!rect) return;
+                const { versionId } = getSlideVersionMeta(slide.id);
+                if (!versionId) return;
+                setSelectedReviewTextBlockId(block.id);
+                textBlockDragRef.current = {
+                  slideId: slide.id,
+                  versionId,
+                  blockId: block.id,
+                  startClientX: event.clientX,
+                  startClientY: event.clientY,
+                  startX: block.x,
+                  startY: block.y,
+                  blockW: block.w,
+                  blockH: block.h,
+                  canvasWidth: rect.width,
+                  canvasHeight: rect.height,
+                };
+                setDraggingTextBlockId(block.id);
+              }}
+            >
+              <div className="absolute left-1 top-1 rounded bg-black/70 px-1.5 py-0.5 text-[10px] font-medium text-white shadow-sm">
+                {`#${index + 1}`}
+              </div>
+              {isSelected
+                ? resizeHandles.map((handle) => (
+                    <button
+                      key={handle.key}
+                      type="button"
+                      className={`absolute z-20 rounded-full border-2 border-white shadow-sm ${handle.className}`}
+                      style={{
+                        width: "12px",
+                        height: "12px",
+                        background: borderColor,
+                        cursor: handle.cursor,
+                      }}
+                      title={tr("缩放文字框", "Resize text box")}
+                      onPointerDown={(event) => {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        const rect = previewCanvasRef.current?.getBoundingClientRect();
+                        if (!rect) return;
+                        const { versionId } = getSlideVersionMeta(slide.id);
+                        if (!versionId) return;
+                        textBlockResizeRef.current = {
+                          slideId: slide.id,
+                          versionId,
+                          blockId: block.id,
+                          startClientX: event.clientX,
+                          startClientY: event.clientY,
+                          startW: block.w,
+                          startH: block.h,
+                          startX: block.x,
+                          startY: block.y,
+                          canvasWidth: rect.width,
+                          canvasHeight: rect.height,
+                          handle: handle.key,
+                        };
+                        setResizingTextBlockId(block.id);
+                      }}
+                    />
+                  ))
+                : null}
+            </div>
+          );
+        })}
+        {reviewDraftRect ? (
+          <div
+            className="absolute border-2 border-dashed"
+            style={{
+              left: `${Math.min(reviewDraftRect.startX, reviewDraftRect.currentX) * 100}%`,
+              top: `${Math.min(reviewDraftRect.startY, reviewDraftRect.currentY) * 100}%`,
+              width: `${Math.abs(reviewDraftRect.currentX - reviewDraftRect.startX) * 100}%`,
+              height: `${Math.abs(reviewDraftRect.currentY - reviewDraftRect.startY) * 100}%`,
+              borderColor: REVIEW_BOX_SELECTED_COLOR,
+              background: "rgba(245,158,11,0.14)",
+              pointerEvents: "none",
+            }}
           />
-        </div>
+        ) : null}
       </div>
     );
   };
 
   const activeSlides = localSlides.length > 0 ? localSlides : [];
+  const isAnyEditableExtractionRunning = activeSlides.some((slide) => getEditableExtractionStatus(slide.id) === "extracting");
+  const allReviewLayersPrepared =
+    activeSlides.length > 0 &&
+    activeSlides.every((slide) => {
+      const layer = getSlideRenderLayer(slide.id);
+      return layer?.status === "ready" || layer?.status === "failed";
+    });
+  const allEditableExtractionsDone =
+    activeSlides.length > 0 && activeSlides.every((slide) => getEditableExtractionStatus(slide.id) === "done");
   const currentSlide = activeSlides[currentSlideIndex];
   const currentSlideImage = currentSlide ? getSlideBackgroundUrl(currentSlide.id) : "";
+  const currentReviewLayer = currentSlide ? getSlideRenderLayer(currentSlide.id) : undefined;
+  const selectedReviewBlock =
+    currentReviewLayer?.textBlocks.find((block) => block.id === selectedReviewTextBlockId) || null;
+  const extractionDoneCount = activeSlides.filter((slide) => getEditableExtractionStatus(slide.id) === "done").length;
+  const extractionFailedCount = activeSlides.filter((slide) => getEditableExtractionStatus(slide.id) === "failed").length;
+  const preparedReviewLayerCount = activeSlides.filter((slide) => {
+    const layer = getSlideRenderLayer(slide.id);
+    return layer?.status === "ready" || layer?.status === "failed";
+  }).length;
+  const reviewPhase: "boxes" | "text" = isAnyEditableExtractionRunning ? "text" : "boxes";
+  const renderReviewSidebarBridge = () => (
+    <PptReviewSidebar
+      panelWidth={reviewPanelWidth}
+      slideNumber={currentSlide ? currentSlideIndex + 1 : null}
+      textBlocks={currentReviewLayer?.textBlocks || []}
+      selectedTextBlockId={selectedReviewTextBlockId}
+      isScanning={!!currentSlide && isReviewPreparing(currentSlide.id) && !hasRenderableTextBlocks(currentReviewLayer)}
+      isExtracting={isAnyEditableExtractionRunning}
+      canExtract={allReviewLayersPrepared}
+      canStartEditing={allEditableExtractionsDone}
+      reviewPhase={reviewPhase}
+      extractionSummary={tr(
+        isAnyEditableExtractionRunning
+          ? `文本提取中 ${extractionDoneCount}/${activeSlides.length} 页`
+          : allReviewLayersPrepared
+          ? `文本提取完成 ${extractionDoneCount}/${activeSlides.length} 页${extractionFailedCount > 0 ? `，失败 ${extractionFailedCount} 页` : ""}`
+          : `文本框准备中 ${preparedReviewLayerCount}/${activeSlides.length} 页`,
+        isAnyEditableExtractionRunning
+          ? `${extractionDoneCount}/${activeSlides.length} slides text extracted`
+          : allReviewLayersPrepared
+          ? `${extractionDoneCount}/${activeSlides.length} slides text extracted${extractionFailedCount > 0 ? `, ${extractionFailedCount} failed` : ""}`
+          : `${preparedReviewLayerCount}/${activeSlides.length} text-box layers prepared`
+      )}
+      reviewDrawMode={reviewDrawMode}
+      tr={tr}
+      onPanelResizeStart={(event) => {
+        event.preventDefault();
+        reviewPanelResizeRef.current = { startClientX: event.clientX, startWidth: reviewPanelWidth };
+      }}
+      onExtract={() => void handleExtractEditableText()}
+      onStartEditing={() => void handleDownloadEditablePpt()}
+      onToggleDrawMode={() => setReviewDrawMode((current) => !current)}
+      onSelectBlock={setSelectedReviewTextBlockId}
+      onDeleteBlock={(blockId) => {
+        if (!currentSlide) return;
+        deleteSlideTextBlock(currentSlide.id, blockId);
+      }}
+      onChangeText={(blockId, nextText) => {
+        if (!currentSlide) return;
+        updateSlideTextBlock(currentSlide.id, blockId, nextText);
+      }}
+      onChangeRectField={(blockId, field, value) => {
+        if (!currentSlide) return;
+        const nextValue = Number.parseFloat(value);
+        if (!Number.isFinite(nextValue)) return;
+        updateSlideTextBlockRect(
+          currentSlide.id,
+          blockId,
+          field === "x"
+            ? { x: nextValue }
+            : field === "y"
+              ? { y: nextValue }
+              : field === "w"
+                ? { w: nextValue }
+                : { h: nextValue }
+        );
+      }}
+    />
+  );
+  const handleEditableAssetChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file || !currentSlide) return;
+    const dataUrl = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result || ""));
+      reader.onerror = () => reject(reader.error || new Error("Failed to read image"));
+      reader.readAsDataURL(file);
+    });
+    const id = `image-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    appendSlideElement(currentSlide.id, {
+      id,
+      type: "image",
+      src: dataUrl,
+      fit: "cover",
+      x: 0.62,
+      y: 0.1,
+      w: 0.22,
+      h: 0.22,
+    });
+    event.target.value = "";
+  };
   const failedBeautifyCount = activeSlides.reduce((n, s) => n + (beautifyFailures[s.id] ? 1 : 0), 0);
   const failedImageTransformCount = activeSlides.reduce((n, s) => n + (imageTransformFailures[s.id] ? 1 : 0), 0);
   const currentSlideFailure = currentSlide
@@ -2646,6 +3378,12 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, onPptStageCh
     : "";
 
   const formatImageVersionLabel = (version: SlideImageVersion, index: number) => {
+    if (version.type === "derived_textless") {
+      return tr("无字底图", "Textless background");
+    }
+    if (version.instruction === tr("原始版本", "Original version") || version.instruction === tr("原始页面", "Original full slide")) {
+      return tr("原始版本", "Original version");
+    }
     return tr(`第 ${index + 1} 版`, `Version ${index + 1}`);
   };
 
@@ -2689,12 +3427,15 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, onPptStageCh
 
   const openSlideshow = () => {
     if (activeSlides.length === 0) return;
+    slideshowStartIndexRef.current = currentSlideIndex;
     setSlideshowOpen(true);
   };
 
   useEffect(() => {
       if (!slideshowOpen) return;
-      setSlideshowIndex(currentSlideIndex);
+      const startIndex = slideshowStartIndexRef.current ?? currentSlideIndex;
+      setSlideshowIndex(startIndex);
+      slideshowStartIndexRef.current = null;
       const timer = window.setTimeout(() => {
         void enterSlideshowFullscreen();
       }, 0);
@@ -2760,18 +3501,63 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, onPptStageCh
     if (isExporting) setExportMenuOpen(false);
   }, [isExporting]);
 
+  const postEmbeddedPptistPayload = (payload: PptistLabBootstrapPayload | null) => {
+    if (!payload || typeof window === "undefined") return false;
+    const iframeWindow = pptistIframeRef.current?.contentWindow;
+    if (!iframeWindow) return false;
+    const targetOrigin = `${window.location.protocol}//${window.location.hostname}:5174`;
+    iframeWindow.postMessage(
+      {
+        type: CANVASANVIL_PPTIST_MESSAGE_TYPE,
+        payload,
+      },
+      targetOrigin,
+    );
+    return true;
+  };
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const handleEmbeddedPptistMessage = (event: MessageEvent) => {
+      const expectedOrigin = `${window.location.protocol}//${window.location.hostname}:5174`;
+      if (event.origin !== expectedOrigin) return;
+      const data = event.data;
+      if (!data || typeof data !== "object") return;
+      if ((data as { type?: string }).type !== "canvasanvil:ppt-return") return;
+      resetToStart();
+    };
+    window.addEventListener("message", handleEmbeddedPptistMessage);
+    return () => window.removeEventListener("message", handleEmbeddedPptistMessage);
+  }, []);
+
+  useEffect(() => {
+    if (!embeddedPptistPayload) return;
+    const timer = window.setTimeout(() => {
+      postEmbeddedPptistPayload(embeddedPptistPayload);
+    }, 80);
+    return () => window.clearTimeout(timer);
+  }, [embeddedPptistPayload, embeddedPptistSessionId]);
+
   const setRenderLayerState = (slideId: string, versionId: string, layer: SlideRenderLayer) => {
+      const normalizedLayer: SlideRenderLayer = {
+        ...layer,
+        textBlocks: Array.isArray(layer.textBlocks) ? layer.textBlocks : [],
+        elements: Array.isArray(layer.elements) && layer.elements.length > 0
+          ? layer.elements
+          : deriveTextElementsFromBlocks(layer.textBlocks || []),
+      };
       setRenderLayers((prev) => ({
           ...prev,
           [slideId]: {
               ...(prev[slideId] || {}),
-              [versionId]: layer,
+              [versionId]: normalizedLayer,
           },
       }));
   };
 
   const processRenderedSlideVersion = async (slide: SlideData, slideImageUrl: string, versionId: string) => {
       try {
+          const existingLayer = renderLayers[slide.id]?.[versionId];
           const persistedSlideImageUrl = await persistImageUrlIfNeeded(slideImageUrl);
           const page: PptPage = {
             id: slide.id,
@@ -2803,6 +3589,7 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, onPptStageCh
           return {
               backgroundImageUrl: backgroundImageUrl || persistedSlideImageUrl,
               textBlocks: reviewedTextBlocks,
+              elements: mergeTextBlocksIntoElements(reviewedTextBlocks, existingLayer?.elements || []),
               status: "ready",
           } satisfies SlideRenderLayer;
       } catch (error) {
@@ -2811,12 +3598,81 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, onPptStageCh
           const failedLayer = {
               backgroundImageUrl: persistedSlideImageUrl,
               textBlocks: [],
+              elements: [],
               status: "failed",
               error: error instanceof Error ? error.message : "Failed to process slide",
           } satisfies SlideRenderLayer;
           setRenderLayerState(slide.id, versionId, failedLayer);
           return failedLayer;
       }
+  };
+
+  const upsertTextlessBackgroundVersion = async (
+    slideId: string,
+    sourceVersionId: string,
+    backgroundImageUrl: string,
+  ) => {
+    const persistedUrl = await persistImageUrlIfNeeded(backgroundImageUrl);
+    const nextTimestamp = Date.now();
+    setImageVersions((prev) => {
+      const current = prev[slideId] || [];
+      const existing = current.find(
+        (version) => version.type === "derived_textless" && version.sourceVersionId === sourceVersionId,
+      );
+      if (existing) {
+        return {
+          ...prev,
+          [slideId]: current.map((version) =>
+            version.id === existing.id
+              ? { ...version, url: persistedUrl, timestamp: nextTimestamp }
+              : version
+          ),
+        };
+      }
+      return {
+        ...prev,
+        [slideId]: [
+          ...current,
+          {
+            id: `v-textless-${nextTimestamp}-${Math.random().toString(16).slice(2)}`,
+            url: persistedUrl,
+            timestamp: nextTimestamp,
+            type: "derived_textless",
+            sourceVersionId,
+          },
+        ],
+      };
+    });
+    return persistedUrl;
+  };
+
+  const extractEditableReviewSlide = async (slide: SlideData) => {
+    const { versionId, imageUrl } = getSlideVersionMeta(slide.id);
+    if (!versionId || !imageUrl) return;
+    setEditableExtractionStatusBySlideId((prev) => ({ ...prev, [slide.id]: "extracting" }));
+    setReviewPreparingSlideIds((current) => (current.includes(slide.id) ? current : [...current, slide.id]));
+    setRenderLayerState(slide.id, versionId, {
+      backgroundImageUrl: imageUrl,
+      textBlocks: [],
+      elements: [],
+      status: "pending",
+      error: undefined,
+    });
+    try {
+      const nextLayer = await processRenderedSlideVersion(slide, imageUrl, versionId);
+      setRenderLayerState(slide.id, versionId, nextLayer);
+      if (nextLayer.status === "failed") {
+        setEditableExtractionStatusBySlideId((prev) => ({ ...prev, [slide.id]: "failed" }));
+        return;
+      }
+      await upsertTextlessBackgroundVersion(slide.id, versionId, nextLayer.backgroundImageUrl || imageUrl);
+      setEditableExtractionStatusBySlideId((prev) => ({ ...prev, [slide.id]: "done" }));
+    } catch (error) {
+      console.error("Failed to extract editable review slide", error);
+      setEditableExtractionStatusBySlideId((prev) => ({ ...prev, [slide.id]: "failed" }));
+    } finally {
+      setReviewPreparingSlideIds((current) => current.filter((id) => id !== slide.id));
+    }
   };
 
   const pushImageVersion = (
@@ -2844,6 +3700,48 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, onPptStageCh
   const pushImageVersionAndProcess = async (slide: SlideData, url: string, type: "generated" | "edited", instruction?: string) => {
       const persistedUrl = await persistImageUrlIfNeeded(url);
       return pushImageVersion(slide.id, persistedUrl, type, instruction);
+  };
+
+  const ensurePrimaryImageVersions = async (slides: SlideData[]) => {
+    const ensuredEntries = await Promise.all(
+      slides.map(async (slide) => {
+        const existingVersions = imageVersions[slide.id] || [];
+        if (existingVersions.some((version) => version.type !== "derived_textless")) {
+          return null;
+        }
+        const fallbackUrl = generatedImages[slide.id];
+        if (!fallbackUrl) return null;
+        const persistedUrl = await persistImageUrlIfNeeded(fallbackUrl);
+        return {
+          slideId: slide.id,
+          version: {
+            id: `v-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+            url: persistedUrl,
+            timestamp: Date.now(),
+            type: "generated" as const,
+            instruction: tr("原始版本", "Original version"),
+          },
+        };
+      })
+    );
+
+    const validEntries = ensuredEntries.filter((item): item is NonNullable<typeof item> => !!item);
+    if (validEntries.length === 0) return;
+
+    setImageVersions((prev) => {
+      const next = { ...prev };
+      for (const entry of validEntries) {
+        next[entry.slideId] = [...(next[entry.slideId] || []), entry.version];
+      }
+      return next;
+    });
+    setCurrentImageVersionId((prev) => {
+      const next = { ...prev };
+      for (const entry of validEntries) {
+        if (!next[entry.slideId]) next[entry.slideId] = entry.version.id;
+      }
+      return next;
+    });
   };
 
   const createTwoStageSlideProgressTracker = (
@@ -3639,6 +4537,7 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, onPptStageCh
     setRenderLayerState(slide.id, reconstructedVersionId, {
       backgroundImageUrl: persistedSourceUrl,
       textBlocks: [],
+      elements: [],
       status: "pending",
     });
 
@@ -4209,20 +5108,16 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, onPptStageCh
   };
 
   const toRenderablePage = (slide: SlideData): PptPage => {
-    return {
-      id: slide.id,
-      title: slide.title,
-      content: slide.content,
-      description: slide.description,
-      note: slide.note,
-      layout: slide.layout,
-      textBlocks: [],
+    const editorSlide = canvasAnvilToEditorSlide(slide, {
       backgroundImageUrl: getSlideImageUrl(slide.id) || undefined,
-      status: "completed",
-    };
+    });
+    return editorSlideToExportPayload(editorSlide).page;
   };
 
-  const buildEditableExportPage = async (slide: SlideData): Promise<PptPage> => {
+  const buildEditableExportPage = async (
+    slide: SlideData,
+    options?: { regenerateBackground?: boolean }
+  ): Promise<PptPage> => {
     const { versionId, imageUrl } = getSlideVersionMeta(slide.id);
     const basePage: PptPage = {
       id: slide.id,
@@ -4232,19 +5127,57 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, onPptStageCh
       note: slide.note,
       layout: slide.layout,
       textBlocks: [],
+      elements: [],
       backgroundImageUrl: imageUrl || undefined,
       status: "completed",
     };
     if (!versionId || !imageUrl) return basePage;
     let layer = renderLayers[slide.id]?.[versionId];
     if (!hasRenderableTextBlocks(layer)) {
-      layer = await processRenderedSlideVersion(slide, imageUrl, versionId);
+      layer = (await ensureEditableReviewLayer(slide))?.layer;
     }
     if (!layer || !hasRenderableTextBlocks(layer)) return basePage;
+    let exportTextBlocks = layer.textBlocks.filter((block) => block.text.trim().length > 0);
+    if (exportTextBlocks.length === 0) return basePage;
+    const textlessVersion = getTextlessBackgroundVersion(slide.id);
+    let backgroundImageUrl = textlessVersion?.url || layer.backgroundImageUrl || imageUrl;
+    if (options?.regenerateBackground) {
+      backgroundImageUrl = await pptService.generateTextlessPageImage(
+        basePage,
+        imageUrl,
+        exportTextBlocks,
+        uiLang as "zh" | "en"
+      );
+      backgroundImageUrl = await persistImageUrlIfNeeded(backgroundImageUrl || imageUrl);
+      exportTextBlocks = await pptService.reviewSlideTextBlocks(
+        basePage,
+        imageUrl,
+        backgroundImageUrl || imageUrl,
+        exportTextBlocks,
+        uiLang as "zh" | "en"
+      );
+      const refilledElements = mergeTextBlocksIntoElements(exportTextBlocks, layer.elements);
+      layer = {
+        ...layer,
+        backgroundImageUrl,
+        textBlocks: exportTextBlocks,
+        elements: refilledElements,
+      };
+      setRenderLayerState(slide.id, versionId, layer);
+    }
     return {
-      ...basePage,
-      textBlocks: layer.textBlocks,
-      backgroundImageUrl: layer.backgroundImageUrl || imageUrl,
+      ...editorSlideToExportPayload(
+        canvasAnvilToEditorSlide(slide, {
+          renderLayer: {
+            ...layer,
+            backgroundImageUrl,
+            textBlocks: exportTextBlocks,
+            elements: mergeTextBlocksIntoElements(exportTextBlocks, layer.elements),
+          },
+          backgroundImageUrl,
+        })
+      ).page,
+      backgroundImageUrl,
     };
   };
 
@@ -4312,21 +5245,88 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, onPptStageCh
     }
   };
 
+  const startEditableExportReview = async () => {
+    if (activeSlides.length === 0) return;
+    await ensurePrimaryImageVersions(activeSlides);
+    setExportReviewMode(true);
+    setEditableExtractionStatusBySlideId((prev) => {
+      const next = { ...prev };
+      for (const item of activeSlides) {
+        if (!next[item.id]) next[item.id] = "idle";
+      }
+      return next;
+    });
+    const slide = activeSlides[currentSlideIndex] || activeSlides[0];
+    if (!slide) return;
+    try {
+      await ensureEditableReviewLayer(slide);
+      const restSlides = activeSlides.filter((item) => item.id !== slide.id);
+      void runInParallel(
+        restSlides.map((item) => async () => {
+          await ensureEditableReviewLayer(item);
+        }),
+        EDITABLE_REVIEW_CONCURRENCY,
+      ).catch((error) => {
+        console.error("Failed to prefetch editable review layers", error);
+      });
+    } catch (e) {
+      console.error("Failed to prepare editable export review", e);
+      alert(tr("可编辑导出准备失败", "Failed to prepare editable export review"));
+    }
+  };
+
   const handleDownloadEditablePpt = async () => {
+    if (!exportReviewMode) {
+      await startEditableExportReview();
+      return;
+    }
+    if (!allEditableExtractionsDone) return;
     if (isExporting) return;
     setIsExporting("pptx_editable");
     try {
-      const pages: PptPage[] = [];
-      for (const slide of activeSlides) {
-        pages.push(await buildEditableExportPage(slide));
+      const pages = new Array<PptPage | null>(activeSlides.length).fill(null);
+      const tasks = activeSlides.map((slide, index) => async () => {
+        pages[index] = await buildEditableExportPage(slide);
+      });
+      await runInParallel(tasks, EDITABLE_EXPORT_CONCURRENCY);
+      if (pages.some((page) => !page)) {
+        throw new Error("Missing editable export page");
       }
-      const images = buildCurrentSlideImagesMap();
-      await pptService.exportPptx(pages, images, `presentation-editable-${Date.now()}`);
+      const payload = buildPptistBootstrapPayload(pages as PptPage[]);
+      setEmbeddedPptistPayload(payload);
+      setEmbeddedPptistSessionId(Date.now());
+      setExportReviewMode(false);
+      setReviewDrawMode(false);
+      setReviewDraftRect(null);
+      setSelectedReviewTextBlockId(null);
     } catch (e) {
       console.error("Editable export failed", e);
-      alert(tr("瀵煎嚭鍙紪杈?PPTX 澶辫触", "Editable PPTX export failed"));
+      alert(tr("进入可编辑 PPT 编辑器失败", "Failed to open editable PPT editor"));
     } finally {
       setIsExporting(null);
+    }
+  };
+
+  const handleExtractEditableText = async (targetSlideId?: string) => {
+    if (!exportReviewMode || isAnyEditableExtractionRunning) return;
+    if (!targetSlideId && !allReviewLayersPrepared) return;
+    const targets = (targetSlideId
+      ? activeSlides.filter((slide) => slide.id === targetSlideId)
+      : activeSlides).filter(Boolean);
+    if (targets.length === 0) return;
+    try {
+      if (targetSlideId) {
+        await extractEditableReviewSlide(targets[0]);
+        return;
+      }
+      await runInParallel(
+        targets.map((slide) => async () => {
+          await extractEditableReviewSlide(slide);
+        }),
+        EDITABLE_REVIEW_CONCURRENCY,
+      );
+    } catch (error) {
+      console.error("Editable text extraction failed", error);
     }
   };
 
@@ -4351,11 +5351,23 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, onPptStageCh
     setBeautifyUseTemplate(false);
     setBeautifyFile(null);
     setImageTransformFile(null);
+    setExportReviewMode(false);
+    setEditableExtractionStatusBySlideId({});
+    setEmbeddedPptistPayload(null);
+    setEmbeddedPptistSessionId(0);
+    setSelectedReviewTextBlockId(null);
+    setReviewDrawMode(false);
+    setReviewDraftRect(null);
     setBeautifyFailures({});
     setImageTransformFailures({});
     setReferenceUploadFiles([]);
     setSlideMaterials({});
     setMaterialPickerSlideId(null);
+    setReviewPreparingSlideIds([]);
+    setRenderLayers({});
+    setImageVersions({});
+    setCurrentImageVersionId({});
+    setGeneratedImages({});
     setTemplateImage(null);
     setSelectedTemplateId(null);
     setProgress({ current: 0, total: 0, message: "" });
@@ -4371,10 +5383,9 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, onPptStageCh
     resetGenerationState();
     setCreationStep("idle");
   };
-
   const createOutlineSlide = (displayIndex: number): SlideData => ({
     id: `slide-${Date.now()}-${Math.random().toString(16).slice(2)}`,
-    title: tr(`第 ${displayIndex + 1} 页`, `Slide ${displayIndex + 1}`),
+    title: tr(`? ${displayIndex + 1} ?`, `Slide ${displayIndex + 1}`),
     content: [],
     description: "",
     note: "",
@@ -4382,18 +5393,125 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, onPptStageCh
   });
 
   const handleAddOutlineSlide = (afterIndex?: number) => {
+    let nextIndex = 0;
     setLocalSlides((prev) => {
       const insertAt = typeof afterIndex === "number"
         ? Math.max(0, Math.min(afterIndex + 1, prev.length))
         : prev.length;
+      nextIndex = insertAt;
       const next = [...prev];
       next.splice(insertAt, 0, createOutlineSlide(insertAt));
       return next;
     });
+    setCurrentSlideIndex(nextIndex);
+  };
+
+  const handleDuplicateOutlineSlide = (slideId?: string) => {
+    const sourceId = slideId || localSlides[currentSlideIndex]?.id;
+    if (!sourceId) return;
+    const sourceIndex = localSlides.findIndex((slide) => slide.id === sourceId);
+    if (sourceIndex < 0) return;
+    const sourceSlide = localSlides[sourceIndex];
+    const duplicatedId = `slide-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    const duplicatedSlide: SlideData = {
+      ...cloneSerializable(sourceSlide),
+      id: duplicatedId,
+      title: `${sourceSlide.title || tr("????", "Untitled slide")} ${tr("??", "Copy")}`,
+    };
+    const insertAt = sourceIndex + 1;
+
+    setLocalSlides((prev) => {
+      const next = [...prev];
+      next.splice(insertAt, 0, duplicatedSlide);
+      return next;
+    });
+
+    const sourceRenderLayerMap = renderLayers[sourceId];
+    if (sourceRenderLayerMap) {
+      const duplicatedLayerMap = Object.fromEntries(
+        Object.entries(cloneSerializable(sourceRenderLayerMap)).map(([versionId, layer]) => {
+          const duplicatedTextBlocks = Array.isArray(layer.textBlocks) ? layer.textBlocks : [];
+          const duplicatedElements = Array.isArray(layer.elements) ? layer.elements : [];
+          return [
+            versionId,
+            {
+              ...layer,
+              textBlocks: duplicatedTextBlocks.map((block, index) => ({
+                ...block,
+                id: `${duplicatedId}-${versionId}-text-${index + 1}`,
+              })),
+              elements: duplicatedElements.map((element, index) => ({
+                ...element,
+                id: `${duplicatedId}-${versionId}-element-${index + 1}`,
+              })),
+            } satisfies SlideRenderLayer,
+          ];
+        }),
+      );
+      setRenderLayers((prev) => ({
+        ...prev,
+        [duplicatedId]: duplicatedLayerMap,
+      }));
+    }
+
+    if (generatedImages[sourceId]) {
+      setGeneratedImages((prev) => ({
+        ...prev,
+        [duplicatedId]: prev[sourceId],
+      }));
+    }
+
+    const sourceVersions = imageVersions[sourceId];
+    if (Array.isArray(sourceVersions) && sourceVersions.length > 0) {
+      const clonedVersions = sourceVersions.map((version, index) => ({
+        ...cloneSerializable(version),
+        id: `${duplicatedId}-version-${index + 1}-${Math.random().toString(16).slice(2, 8)}`,
+        timestamp: Date.now() + index,
+      }));
+      setImageVersions((prev) => ({
+        ...prev,
+        [duplicatedId]: clonedVersions,
+      }));
+      const sourceCurrentVersionId = currentImageVersionId[sourceId];
+      const sourceCurrentIndex = sourceVersions.findIndex((version) => version.id === sourceCurrentVersionId);
+      setCurrentImageVersionId((prev) => ({
+        ...prev,
+        [duplicatedId]: clonedVersions[Math.max(0, sourceCurrentIndex)]?.id || clonedVersions[clonedVersions.length - 1]?.id,
+      }));
+    }
+
+    if (slideMaterials[sourceId]) {
+      setSlideMaterials((prev) => ({
+        ...prev,
+        [duplicatedId]: cloneSerializable(prev[sourceId]),
+      }));
+    }
+
+    if (beautifyFailures[sourceId]) {
+      setBeautifyFailures((prev) => ({
+        ...prev,
+        [duplicatedId]: prev[sourceId],
+      }));
+    }
+
+    if (imageTransformFailures[sourceId]) {
+      setImageTransformFailures((prev) => ({
+        ...prev,
+        [duplicatedId]: prev[sourceId],
+      }));
+    }
+
+    setCurrentSlideIndex(insertAt);
   };
 
   const handleDeleteOutlineSlide = (slideId: string) => {
+    const deleteIndex = localSlides.findIndex((slide) => slide.id === slideId);
     setLocalSlides((prev) => prev.filter((s) => s.id !== slideId));
+    setCurrentSlideIndex((prev) => {
+      if (deleteIndex < 0) return prev;
+      if (prev < deleteIndex) return prev;
+      return Math.max(0, Math.min(prev - 1, localSlides.length - 2));
+    });
     setGeneratedImages((prev) => {
       if (!(slideId in prev)) return prev;
       const next = { ...prev };
@@ -4483,7 +5601,7 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, onPptStageCh
 
                 <div className="space-y-8">
                     {/* Template Selection */}
-                    {creationMode !== "image_transform" ? (
+                    {creationMode !== "image_transform" && !exportReviewMode ? (
                     <div className="space-y-4">
                         <label className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 flex items-center gap-2">
                             <span className="w-6 h-6 rounded-full bg-blue-100 text-blue-600 text-xs flex items-center justify-center font-bold">1</span>
@@ -5242,8 +6360,11 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, onPptStageCh
   return (
     <div className="w-full h-full bg-zinc-100 dark:bg-zinc-900 flex flex-col">
       {/* Toolbar */}
-      <div className="h-14 px-4 bg-white dark:bg-zinc-800 border-b border-zinc-200 dark:border-zinc-700 flex justify-between items-center shadow-sm z-10">
-        <div className="flex items-center gap-4">
+      {!embeddedPptistPayload ? (
+      <div className="relative z-50 h-14 px-4 bg-white dark:bg-zinc-800 border-b border-zinc-200 dark:border-zinc-700 flex justify-between items-center shadow-sm">
+        <div className="flex items-center gap-4 [&>h2]:hidden">
+            <h2 className="hidden font-semibold text-sm text-foreground">{tr("PPT 演示文稿", "PPT Deck")}</h2>
+            <div className="font-semibold text-sm text-foreground">{tr("PPT \u6f14\u793a\u6587\u7a3f", "PPT Deck")}</div>
             <button
                 onClick={handleBackToStart}
                 title={tr("返回开始", "Back to start")}
@@ -5254,7 +6375,7 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, onPptStageCh
             </button>
             <h2 className="font-semibold text-sm text-foreground">{tr("PPT 演示文稿", "PPT Deck")}</h2>
             <div className="h-4 w-px bg-border"></div>
-            <div ref={exportMenuRef} className="relative">
+            <div ref={exportMenuRef} className="relative z-[60]">
               <button
                 onClick={() => setExportMenuOpen((open) => !open)}
                 disabled={activeSlides.length === 0 || !!isExporting}
@@ -5269,7 +6390,7 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, onPptStageCh
                   initial={{ opacity: 0, y: -6 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ duration: 0.16, ease: "easeOut" }}
-                  className="absolute left-0 top-full z-40 mt-2 min-w-[190px] rounded-xl border border-zinc-200 bg-white p-2 shadow-xl dark:border-zinc-700 dark:bg-zinc-800"
+                  className="absolute left-0 top-full z-[70] mt-2 min-w-[190px] rounded-xl border border-zinc-200 bg-white p-2 shadow-xl dark:border-zinc-700 dark:bg-zinc-800"
                 >
                   <button
                     type="button"
@@ -5304,6 +6425,16 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, onPptStageCh
                 </motion.div>
               ) : null}
             </div>
+            {embeddedPptistPayload ? (
+              <button
+                onClick={() => setEmbeddedPptistPayload(null)}
+                title={tr("退出编辑器", "Exit editor")}
+                className="flex items-center gap-2 px-3 py-1.5 bg-zinc-100 dark:bg-zinc-700 hover:bg-zinc-200 dark:hover:bg-zinc-600 text-xs rounded transition-colors shadow-sm"
+              >
+                <ArrowLeft className="w-3.5 h-3.5" />
+                <span>{tr("退出编辑器", "Exit editor")}</span>
+              </button>
+            ) : null}
             {creationMode === "beautify" && (
               <button
                 onClick={handleRetryFailedBeautify}
@@ -5331,8 +6462,23 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, onPptStageCh
             <span>{activeSlides.length > 0 ? tr(`第 ${currentSlideIndex + 1} / ${activeSlides.length} 页`, `Slide ${currentSlideIndex + 1} / ${activeSlides.length}`) : tr("空文档", "Empty")}</span>
         </div>
       </div>
+      ) : null}
 
       {/* Main View */}
+      {embeddedPptistPayload ? (
+        <div className="flex-1 overflow-hidden bg-zinc-950">
+          <iframe
+            key={embeddedPptistSessionId}
+            ref={pptistIframeRef}
+            src={`${window.location.protocol}//${window.location.hostname}:5174/?canvasanvil=embedded&session=${embeddedPptistSessionId}`}
+            className="h-full w-full border-0 bg-white"
+            title="PPTist Editor"
+            onLoad={() => {
+              postEmbeddedPptistPayload(embeddedPptistPayload);
+            }}
+          />
+        </div>
+      ) : (
       <div className="flex-1 flex overflow-hidden">
         {/* Thumbnails */}
         <div className="w-64 bg-zinc-50 dark:bg-zinc-900 border-r border-border overflow-y-auto p-4 space-y-4">
@@ -5350,7 +6496,7 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, onPptStageCh
                         : 'border-transparent hover:border-zinc-300 dark:hover:border-zinc-700 bg-white dark:bg-zinc-800 shadow-sm'
                     }`}
                     >
-                    {creationMode !== "image_transform" ? (
+                    {creationMode !== "image_transform" && !exportReviewMode ? (
                       <div
                         className="absolute top-1 left-1 z-20"
                         onClick={(e) => e.stopPropagation()}
@@ -5386,6 +6532,22 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, onPptStageCh
                     <div className="absolute bottom-1 right-1 bg-black/60 text-white text-[10px] px-1.5 rounded-sm backdrop-blur-sm">
                         {index + 1}
                     </div>
+                    {exportReviewMode && getEditableExtractionStatus(slide.id) === "done" ? (
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        className="absolute left-1 top-1 z-20 h-6 gap-1 px-2 text-[10px] shadow-sm"
+                        disabled={isAnyEditableExtractionRunning}
+                        onClick={(event) => {
+                          event.preventDefault();
+                          event.stopPropagation();
+                          void handleExtractEditableText(slide.id);
+                        }}
+                      >
+                        <RefreshCcw className="h-3 w-3" />
+                        {tr("重新提取", "Re-extract")}
+                      </Button>
+                    ) : null}
                     {slideFailure ? (
                       <div
                         className="absolute top-1 right-1 bg-red-600/90 text-white text-[10px] px-1.5 py-0.5 rounded-sm max-w-[85%] truncate"
@@ -5394,9 +6556,22 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, onPptStageCh
                         {creationMode === "image_transform" ? tr("转化失败", "Transform failed") : tr("美化失败", "Beautify failed")}
                       </div>
                     ) : null}
+                    {exportReviewMode ? (
+                      <div className="absolute bottom-1 left-1 rounded-sm bg-black/60 px-1.5 py-0.5 text-[10px] text-white backdrop-blur-sm">
+                        {getEditableExtractionStatus(slide.id) === "done"
+                          ? tr("文字已提取", "Text extracted")
+                          : getEditableExtractionStatus(slide.id) === "extracting"
+                            ? tr("文字提取中", "Extracting text")
+                            : isReviewPreparing(slide.id)
+                              ? tr("文本框识别中", "Preparing text boxes")
+                              : getSlideRenderLayer(slide.id)?.status === "ready"
+                                ? tr("文本框已就绪", "Text boxes ready")
+                                : tr("待准备", "Pending")}
+                      </div>
+                    ) : null}
                     </div>
                 </ContextMenuTrigger>
-                {creationMode !== "image_transform" ? (
+                {creationMode !== "image_transform" && !exportReviewMode ? (
                   <ContextMenuContent>
                       <ContextMenuItem onClick={() => handleAddSlideToChat(slide)} className="gap-2">
                           <MessageSquarePlus className="w-4 h-4" />
@@ -5424,15 +6599,17 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, onPptStageCh
         {/* Preview */}
         <div className="flex-1 p-4 flex items-center justify-center bg-zinc-200/50 dark:bg-zinc-950/50 overflow-auto relative">
           <div className="absolute top-4 left-4 z-30 flex items-center gap-2 bg-white/80 dark:bg-zinc-900/70 backdrop-blur rounded-xl border border-border/50 px-3 py-2 shadow-sm">
-            <Button
-              size="sm"
-              className="h-7 px-2 text-xs"
-              onClick={handleGenerateAiImage}
-              disabled={!currentSlide || isGeneratingImage}
-            >
-              {isGeneratingImage ? <Loader2 className="w-3 h-3 mr-1 animate-spin" /> : null}
-              {tr("重新渲染本页", "Regenerate this slide")}
-            </Button>
+            {!exportReviewMode ? (
+              <Button
+                size="sm"
+                className="h-7 px-2 text-xs"
+                onClick={handleGenerateAiImage}
+                disabled={!currentSlide || isGeneratingImage}
+              >
+                {isGeneratingImage ? <Loader2 className="w-3 h-3 mr-1 animate-spin" /> : null}
+                {tr("重新渲染本页", "Regenerate this slide")}
+              </Button>
+            ) : null}
             {currentSlide && getVisibleSlideVersions(currentSlide.id).length > 0 && (
               <select
                 className="h-7 text-xs rounded-md border border-input bg-background px-2"
@@ -5440,9 +6617,12 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, onPptStageCh
                   (() => {
                     const visibleVersions = getVisibleSlideVersions(currentSlide.id);
                     const currentVersionId = currentImageVersionId[currentSlide.id];
+                    const preferredVersion =
+                      [...visibleVersions].reverse().find((item) => item.type !== "derived_textless") ||
+                      visibleVersions[visibleVersions.length - 1];
                     return visibleVersions.some((item) => item.id === currentVersionId)
                       ? currentVersionId
-                      : visibleVersions[visibleVersions.length - 1]?.id || "";
+                      : preferredVersion?.id || "";
                   })()
                 }
                 onChange={(e) => {
@@ -5452,13 +6632,14 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, onPptStageCh
                   const v = versions.find(x => x.id === versionId);
                   if (v) {
                     setCurrentImageVersionId(prev => ({ ...prev, [slideId]: versionId }));
-                    setGeneratedImages(prev => ({ ...prev, [slideId]: v.url }));
                   }
                 }}
               >
                 {getVisibleSlideVersions(currentSlide.id).map((v, idx) => (
                   <option key={v.id} value={v.id}>
-                    {formatImageVersionLabel(v, idx)} · {new Date(v.timestamp).toLocaleString()}
+                    {v.type === "derived_textless"
+                      ? formatImageVersionLabel(v, idx)
+                      : `${formatImageVersionLabel(v, idx)} · ${new Date(v.timestamp).toLocaleString()}`}
                   </option>
                 ))}
               </select>
@@ -5478,38 +6659,45 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, onPptStageCh
                         className="relative w-full max-w-[1100px] bg-white shadow-2xl rounded-sm overflow-hidden flex flex-col transition-transform duration-300 outline-none"
                         style={{ aspectRatio: "16/9" }}
                     >
-                        {/* Display either generated image or DOM layout */}
-                        {currentSlideImage ? (
-                            renderScaledSlideScene(currentSlide, true, previewCanvasSize.width, previewCanvasSize.height)
-                        ) : (
+                        <PptEditorBridge
+                          slide={currentSlide ? canvasAnvilToEditorSlide(currentSlide, {
+                            renderLayer: currentReviewLayer,
+                            backgroundImageUrl: currentSlideImage || undefined,
+                          }) : null}
+                          canvasWidth={previewCanvasSize.width}
+                          canvasHeight={previewCanvasSize.height}
+                          showElements={exportReviewMode}
+                          showTextElements={false}
+                          showImageElements
+                          showShapeElements
+                          emptyState={
                             <div className="w-full h-full p-12 flex flex-col relative">
-                                {/* Background Template */}
-                                {templateImage && (
-                                    <img src={templateImage} className="absolute inset-0 w-full h-full object-cover opacity-30 pointer-events-none" alt="Template" />
-                                )}
+                              {templateImage && (
+                                <img src={templateImage} className="absolute inset-0 w-full h-full object-cover opacity-30 pointer-events-none" alt="Template" />
+                              )}
 
-                                {/* Slide Content */}
-                                <div className="relative z-10 h-full flex flex-col">
-                                    <h1 className="text-4xl font-bold mb-8 text-zinc-900 border-b-4 border-blue-600 pb-4 w-fit pr-12">
-                                        {currentSlide.title}
-                                    </h1>
-                                    <div className="flex-1 space-y-6">
-                                        {(currentSlide.content || []).map((point, i) => (
-                                            <div key={i} className="flex gap-4 text-2xl text-zinc-700 leading-relaxed items-start">
-                                                <span className="text-blue-600 mt-2">•</span>
-                                                <span>{point}</span>
-                                            </div>
-                                        ))}
+                              <div className="relative z-10 h-full flex flex-col">
+                                <h1 className="mb-8 w-fit border-b-4 border-blue-600 pb-4 pr-12 text-4xl font-bold text-zinc-900">
+                                  {currentSlide.title}
+                                </h1>
+                                <div className="flex-1 space-y-6">
+                                  {(currentSlide.content || []).map((point, i) => (
+                                    <div key={i} className="flex items-start gap-4 text-2xl leading-relaxed text-zinc-700">
+                                      <span className="mt-2 text-blue-600">•</span>
+                                      <span>{point}</span>
                                     </div>
-                                    
-                                    {/* Footer/Note Placeholder */}
-                                    <div className="mt-auto pt-8 flex justify-between text-sm text-zinc-400 border-t border-zinc-100">
-                                        <span>Generated by Unified AI Workspace</span>
-                                        <span>{currentSlideIndex + 1}</span>
-                                    </div>
+                                  ))}
                                 </div>
+                                <div className="mt-auto flex justify-between border-t border-zinc-100 pt-8 text-sm text-zinc-400">
+                                  <span>Generated by Unified AI Workspace</span>
+                                  <span>{currentSlideIndex + 1}</span>
+                                </div>
+                              </div>
                             </div>
-                        )}
+                          }
+                        >
+                          {exportReviewMode && currentSlideImage ? renderReviewSelectionOverlay(currentSlide) : null}
+                        </PptEditorBridge>
                         
                         {/* Overlay Label if Generated */}
                         {(isApplyingEdits || isGeneratingImage) && (
@@ -5522,7 +6710,7 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, onPptStageCh
                         )}
                     </div>
                 </ContextMenuTrigger>
-                {creationMode !== "image_transform" ? (
+                {creationMode !== "image_transform" && !exportReviewMode ? (
                   <ContextMenuContent>
                       <ContextMenuItem onClick={() => handleAddSlideToChat(currentSlide)} className="gap-2">
                           <MessageSquarePlus className="w-4 h-4" />
@@ -5538,7 +6726,9 @@ export function PptWorkspace({ data, onAddToChat, onPptReadyChange, onPptStageCh
             </div>
           )}
         </div>
+        {exportReviewMode ? renderReviewSidebarBridge() : null}
       </div>
+      )}
 
       <Dialog open={slideshowOpen} onOpenChange={(open) => (open ? setSlideshowOpen(true) : closeSlideshow())}>
         <DialogContent className="inset-0 left-0 top-0 translate-x-0 translate-y-0 w-screen h-screen max-w-none sm:max-w-none rounded-none p-0 bg-black/95 border-none">

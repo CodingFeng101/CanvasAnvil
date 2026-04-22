@@ -46,7 +46,10 @@ export function useQuotaManager(config: QuotaConfig): {
         if (topConfigRaw) {
             try {
                 const topConfig = JSON.parse(topConfigRaw) || {}
-                if (String(topConfig.apiKey || "").trim()) {
+                if (
+                    String(topConfig.textApiKey || topConfig.apiKey || "").trim() ||
+                    String(topConfig.imageApiKey || "").trim()
+                ) {
                     return true
                 }
             } catch {
