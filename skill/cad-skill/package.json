@@ -1,0 +1,14 @@
+{
+  "name": "cad-skill",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "generate:image": "node scripts/generate-cad-image.mjs",
+    "export:2d": "node scripts/export-cad-2d-image.mjs",
+    "build:bundle": "node scripts/build-cad-bundle.mjs"
+  },
+  "dependencies": {
+    "playwright": "^1.59.1"
+  }
+}

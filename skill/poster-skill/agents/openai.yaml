@@ -1,0 +1,7 @@
+interface:
+  display_name: "Poster Skill"
+  short_description: "Generate single-poster images with provider-based image routing and local file export."
+  default_prompt: "Use $poster-skill to generate a final poster image and save it locally."
+
+policy:
+  allow_implicit_invocation: true

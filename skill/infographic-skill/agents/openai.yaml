@@ -1,0 +1,7 @@
+interface:
+  display_name: "Infographic Skill"
+  short_description: "Generate single-frame infographic images with structured information and local export."
+  default_prompt: "Use $infographic-skill to generate a final infographic image and save it locally."
+
+policy:
+  allow_implicit_invocation: true

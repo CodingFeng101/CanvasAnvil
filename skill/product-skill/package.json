@@ -1,0 +1,10 @@
+{
+  "name": "product-skill",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "generate:image": "node scripts/generate-product-image.mjs",
+    "build:bundle": "node scripts/build-product-bundle.mjs"
+  }
+}

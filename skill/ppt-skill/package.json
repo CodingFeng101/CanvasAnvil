@@ -1,0 +1,12 @@
+{
+  "name": "ppt-skill",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "generate:template": "node scripts/generate-ppt-template-image.mjs",
+    "generate:deck": "node scripts/generate-ppt-deck-images.mjs",
+    "export:pdf": "node scripts/export-pdf.mjs",
+    "export:image-ppt": "node scripts/build-image-ppt.mjs"
+  }
+}

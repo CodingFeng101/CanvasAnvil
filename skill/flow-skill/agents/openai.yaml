@@ -1,0 +1,7 @@
+interface:
+  display_name: "Flow Skill"
+  short_description: "Create and edit draw.io diagrams with XML validation, shape-library guidance, and browser preview bundling."
+  default_prompt: "Use $flow-skill to generate or edit a draw.io diagram and produce a previewable bundle."
+
+policy:
+  allow_implicit_invocation: true

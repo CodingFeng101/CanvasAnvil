@@ -4,6 +4,36 @@ All notable changes to this project will be documented in this file.
 
 The format is based on Keep a Changelog, and the project aims to follow Semantic Versioning.
 
+## [2.0.0] - 2026-04-22
+
+### Added
+
+- Added three new canvases: `Poster`, `Infographic`, and `Product`.
+- Embedded `pptist-lab` directly inside the PPT workspace for editable PPT authoring.
+- Added a staged editable PPT review flow with automatic text-box detection, manual box correction, text extraction, and per-slide re-extraction.
+- Added local skill definitions for `Flow`, `CAD`, `PPT`, `Poster`, `Infographic`, and `Product` workflows under `skill/`.
+- Added configurable image-provider support for image-generation skills via `config/image-provider.json`, covering the supported built-in providers.
+- Added script-backed skill workflows for image generation, diagram export, CAD output bundling, PPT template generation, slide image rendering, PDF export, and image-based PPT export.
+
+### Changed
+
+- Promoted the release version from `1.0.2` to the next major release, `2.0.0`.
+- Expanded CanvasAnvil from `Flow | CAD | PPT` to `Flow | CAD | PPT | Poster | Infographic | Product`.
+- Updated editable PPT export to separate `text box review`, `text extraction`, and `start editing`.
+- Kept both the original slide image and the derived `textless background` version available during review.
+- Improved extracted text mapping so the embedded PPT editor keeps more of the original size, color, weight, spacing, alignment, and line-height.
+- Reduced repository documentation to English and Simplified Chinese only.
+- Standardized skill prompts and `SKILL.md` files around English instructions while keeping UI-language-specific output labels where needed.
+- Simplified the PPT skill export scope to `PDF` and image-based `PPT` deliverables.
+- Updated the CAD skill BOM output contract to produce `cad_bom.csv` instead of `cad_bom.json`.
+- Updated the Flow skill bundle workflow to skip standalone HTML preview generation by default.
+
+### Fixed
+
+- Fixed editable PPT export popup blocking by switching to an embedded editor flow.
+- Fixed oversized editable-export bootstrap payloads that previously overflowed browser storage.
+- Fixed review-mode state issues around text-box preparation, extraction progress, per-slide re-extraction visibility, and version switching.
+
 ## [1.0.2] - 2026-04-15
 
 ### Changed

@@ -1,0 +1,7 @@
+interface:
+  display_name: "Product Skill"
+  short_description: "Generate single-frame product visuals with provider-based image routing and local export."
+  default_prompt: "Use $product-skill to generate a final product visual image and save it locally."
+
+policy:
+  allow_implicit_invocation: true

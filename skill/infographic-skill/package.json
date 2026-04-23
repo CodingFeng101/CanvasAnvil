@@ -1,0 +1,10 @@
+{
+  "name": "infographic-skill",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "generate:image": "node scripts/generate-infographic-image.mjs",
+    "build:bundle": "node scripts/build-infographic-bundle.mjs"
+  }
+}

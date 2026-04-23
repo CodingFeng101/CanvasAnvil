@@ -1,0 +1,13 @@
+{
+  "name": "flow-skill",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "export:image": "node scripts/export-drawio-image.mjs",
+    "build:bundle": "node scripts/build-flow-bundle.mjs"
+  },
+  "dependencies": {
+    "playwright": "^1.59.1"
+  }
+}
