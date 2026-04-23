@@ -76,12 +76,12 @@ CanvasAnvil 为每个画布都提供了专用本地 skill，用来保证工作�
 
 <table>
   <tr>
-    <td width="50%" align="center"><img src="public/examples/flow/01.png" alt="流程图示例：学术研究框架图" width="100%" height="340" style="object-fit:contain;border-radius:10px;background:#ffffff;" /><br/><strong>学术研究框架图</strong></td>
-    <td width="50%" align="center"><img src="public/examples/flow/02.png" alt="流程图示例：智能问答系统架构图" width="100%" height="340" style="object-fit:contain;border-radius:10px;background:#ffffff;" /><br/><strong>智能问答系统架构图</strong></td>
+    <td width="50%" align="center"><img src="public/examples/readme-previews/flow/01.png" alt="流程图示例：学术研究框架图" width="100%" /><br/><strong>学术研究框架图</strong></td>
+    <td width="50%" align="center"><img src="public/examples/readme-previews/flow/02.png" alt="流程图示例：智能问答系统架构图" width="100%" /><br/><strong>智能问答系统架构图</strong></td>
   </tr>
   <tr>
-    <td width="50%" align="center"><img src="public/examples/flow/03.png" alt="流程图示例：项目实施路线图" width="100%" height="340" style="object-fit:contain;border-radius:10px;background:#ffffff;" /><br/><strong>项目实施路线图</strong></td>
-    <td width="50%" align="center"><img src="public/examples/flow/04.png" alt="流程图示例：课程设计思维导图" width="100%" height="340" style="object-fit:contain;border-radius:10px;background:#ffffff;" /><br/><strong>课程设计思维导图</strong></td>
+    <td width="50%" align="center"><img src="public/examples/readme-previews/flow/03.png" alt="流程图示例：项目实施路线图" width="100%" /><br/><strong>项目实施路线图</strong></td>
+    <td width="50%" align="center"><img src="public/examples/readme-previews/flow/04.png" alt="流程图示例：课程设计思维导图" width="100%" /><br/><strong>课程设计思维导图</strong></td>
   </tr>
 </table>
 
@@ -118,37 +118,21 @@ CanvasAnvil 为每个画布都提供了专用本地 skill，用来保证工作�
 <table>
   <tr>
     <td width="50%" align="center" valign="top">
-      <table cellspacing="0" cellpadding="2">
-        <tr><td><img src="public/examples/ppt/ppt1/01.png" alt="AI 时代的高效内容创作第 1 页" width="100%" /></td><td><img src="public/examples/ppt/ppt1/02.png" alt="AI 时代的高效内容创作第 2 页" width="100%" /></td><td><img src="public/examples/ppt/ppt1/03.png" alt="AI 时代的高效内容创作第 3 页" width="100%" /></td></tr>
-        <tr><td><img src="public/examples/ppt/ppt1/04.png" alt="AI 时代的高效内容创作第 4 页" width="100%" /></td><td><img src="public/examples/ppt/ppt1/05.png" alt="AI 时代的高效内容创作第 5 页" width="100%" /></td><td><img src="public/examples/ppt/ppt1/06.png" alt="AI 时代的高效内容创作第 6 页" width="100%" /></td></tr>
-        <tr><td><img src="public/examples/ppt/ppt1/07.png" alt="AI 时代的高效内容创作第 7 页" width="100%" /></td><td><img src="public/examples/ppt/ppt1/08.png" alt="AI 时代的高效内容创作第 8 页" width="100%" /></td><td><img src="public/examples/ppt/ppt1/09.png" alt="AI 时代的高效内容创作第 9 页" width="100%" /></td></tr>
-      </table>
+      <img src="public/examples/readme-previews/ppt/ppt1.png" alt="AI 时代的高效内容创作整套预览" width="100%" />
       <strong>AI 时代的高效内容创作</strong>
     </td>
     <td width="50%" align="center" valign="top">
-      <table cellspacing="0" cellpadding="2">
-        <tr><td><img src="public/examples/ppt/ppt2/01.png" alt="智能协作驱动未来增长第 1 页" width="100%" /></td><td><img src="public/examples/ppt/ppt2/02.png" alt="智能协作驱动未来增长第 2 页" width="100%" /></td><td><img src="public/examples/ppt/ppt2/03.png" alt="智能协作驱动未来增长第 3 页" width="100%" /></td></tr>
-        <tr><td><img src="public/examples/ppt/ppt2/04.png" alt="智能协作驱动未来增长第 4 页" width="100%" /></td><td><img src="public/examples/ppt/ppt2/05.png" alt="智能协作驱动未来增长第 5 页" width="100%" /></td><td><img src="public/examples/ppt/ppt2/06.png" alt="智能协作驱动未来增长第 6 页" width="100%" /></td></tr>
-        <tr><td><img src="public/examples/ppt/ppt2/07.png" alt="智能协作驱动未来增长第 7 页" width="100%" /></td><td><img src="public/examples/ppt/ppt2/08.png" alt="智能协作驱动未来增长第 8 页" width="100%" /></td><td><img src="public/examples/ppt/ppt2/09.png" alt="智能协作驱动未来增长第 9 页" width="100%" /></td></tr>
-      </table>
+      <img src="public/examples/readme-previews/ppt/ppt2.png" alt="智能协作驱动未来增长整套预览" width="100%" />
       <strong>智能协作驱动未来增长</strong>
     </td>
   </tr>
   <tr>
     <td width="50%" align="center" valign="top">
-      <table cellspacing="0" cellpadding="2">
-        <tr><td><img src="public/examples/ppt/ppt3/01.png" alt="AI 驱动业务创新第 1 页" width="100%" /></td><td><img src="public/examples/ppt/ppt3/02.png" alt="AI 驱动业务创新第 2 页" width="100%" /></td><td><img src="public/examples/ppt/ppt3/03.png" alt="AI 驱动业务创新第 3 页" width="100%" /></td></tr>
-        <tr><td><img src="public/examples/ppt/ppt3/04.png" alt="AI 驱动业务创新第 4 页" width="100%" /></td><td><img src="public/examples/ppt/ppt3/05.png" alt="AI 驱动业务创新第 5 页" width="100%" /></td><td><img src="public/examples/ppt/ppt3/06.png" alt="AI 驱动业务创新第 6 页" width="100%" /></td></tr>
-        <tr><td><img src="public/examples/ppt/ppt3/07.png" alt="AI 驱动业务创新第 7 页" width="100%" /></td><td><img src="public/examples/ppt/ppt3/08.png" alt="AI 驱动业务创新第 8 页" width="100%" /></td><td><img src="public/examples/ppt/ppt3/09.png" alt="AI 驱动业务创新第 9 页" width="100%" /></td></tr>
-      </table>
+      <img src="public/examples/readme-previews/ppt/ppt3.png" alt="AI 驱动业务创新整套预览" width="100%" />
       <strong>AI 驱动业务创新</strong>
     </td>
     <td width="50%" align="center" valign="top">
-      <table cellspacing="0" cellpadding="2">
-        <tr><td><img src="public/examples/ppt/ppt4/01.png" alt="绿色低碳转型与智慧园区建设第 1 页" width="100%" /></td><td><img src="public/examples/ppt/ppt4/02.png" alt="绿色低碳转型与智慧园区建设第 2 页" width="100%" /></td><td><img src="public/examples/ppt/ppt4/03.png" alt="绿色低碳转型与智慧园区建设第 3 页" width="100%" /></td></tr>
-        <tr><td><img src="public/examples/ppt/ppt4/04.png" alt="绿色低碳转型与智慧园区建设第 4 页" width="100%" /></td><td><img src="public/examples/ppt/ppt4/05.png" alt="绿色低碳转型与智慧园区建设第 5 页" width="100%" /></td><td><img src="public/examples/ppt/ppt4/06.png" alt="绿色低碳转型与智慧园区建设第 6 页" width="100%" /></td></tr>
-        <tr><td><img src="public/examples/ppt/ppt4/07.png" alt="绿色低碳转型与智慧园区建设第 7 页" width="100%" /></td><td><img src="public/examples/ppt/ppt4/08.png" alt="绿色低碳转型与智慧园区建设第 8 页" width="100%" /></td><td><img src="public/examples/ppt/ppt4/09.png" alt="绿色低碳转型与智慧园区建设第 9 页" width="100%" /></td></tr>
-      </table>
+      <img src="public/examples/readme-previews/ppt/ppt4.png" alt="绿色低碳转型与智慧园区建设整套预览" width="100%" />
       <strong>绿色低碳转型与智慧园区建设</strong>
     </td>
   </tr>

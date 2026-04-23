@@ -76,12 +76,12 @@ Turn structured prompts into clear diagrams for research, systems, delivery plan
 
 <table>
   <tr>
-    <td width="50%" align="center"><img src="public/examples/flow/01.png" alt="Flow example: academic research framework" width="100%" height="340" style="object-fit:contain;border-radius:10px;background:#ffffff;" /><br/><strong>Academic Research Framework</strong></td>
-    <td width="50%" align="center"><img src="public/examples/flow/02.png" alt="Flow example: intelligent Q&A system architecture" width="100%" height="340" style="object-fit:contain;border-radius:10px;background:#ffffff;" /><br/><strong>Intelligent Q&A System Architecture</strong></td>
+    <td width="50%" align="center"><img src="public/examples/readme-previews/flow/01.png" alt="Flow example: academic research framework" width="100%" /><br/><strong>Academic Research Framework</strong></td>
+    <td width="50%" align="center"><img src="public/examples/readme-previews/flow/02.png" alt="Flow example: intelligent Q&A system architecture" width="100%" /><br/><strong>Intelligent Q&A System Architecture</strong></td>
   </tr>
   <tr>
-    <td width="50%" align="center"><img src="public/examples/flow/03.png" alt="Flow example: project implementation roadmap" width="100%" height="340" style="object-fit:contain;border-radius:10px;background:#ffffff;" /><br/><strong>Project Implementation Roadmap</strong></td>
-    <td width="50%" align="center"><img src="public/examples/flow/04.png" alt="Flow example: course design mind map" width="100%" height="340" style="object-fit:contain;border-radius:10px;background:#ffffff;" /><br/><strong>Course Design Mind Map</strong></td>
+    <td width="50%" align="center"><img src="public/examples/readme-previews/flow/03.png" alt="Flow example: project implementation roadmap" width="100%" /><br/><strong>Project Implementation Roadmap</strong></td>
+    <td width="50%" align="center"><img src="public/examples/readme-previews/flow/04.png" alt="Flow example: course design mind map" width="100%" /><br/><strong>Course Design Mind Map</strong></td>
   </tr>
 </table>
 
@@ -118,37 +118,21 @@ Generate full presentations through a controlled pipeline: outline first, visual
 <table>
   <tr>
     <td width="50%" align="center" valign="top">
-      <table cellspacing="0" cellpadding="2">
-        <tr><td><img src="public/examples/ppt/ppt1/01.png" alt="AI content creation workflow slide 1" width="100%" /></td><td><img src="public/examples/ppt/ppt1/02.png" alt="AI content creation workflow slide 2" width="100%" /></td><td><img src="public/examples/ppt/ppt1/03.png" alt="AI content creation workflow slide 3" width="100%" /></td></tr>
-        <tr><td><img src="public/examples/ppt/ppt1/04.png" alt="AI content creation workflow slide 4" width="100%" /></td><td><img src="public/examples/ppt/ppt1/05.png" alt="AI content creation workflow slide 5" width="100%" /></td><td><img src="public/examples/ppt/ppt1/06.png" alt="AI content creation workflow slide 6" width="100%" /></td></tr>
-        <tr><td><img src="public/examples/ppt/ppt1/07.png" alt="AI content creation workflow slide 7" width="100%" /></td><td><img src="public/examples/ppt/ppt1/08.png" alt="AI content creation workflow slide 8" width="100%" /></td><td><img src="public/examples/ppt/ppt1/09.png" alt="AI content creation workflow slide 9" width="100%" /></td></tr>
-      </table>
+      <img src="public/examples/readme-previews/ppt/ppt1.png" alt="AI content creation workflow deck preview" width="100%" />
       <strong>AI Content Creation Workflow</strong>
     </td>
     <td width="50%" align="center" valign="top">
-      <table cellspacing="0" cellpadding="2">
-        <tr><td><img src="public/examples/ppt/ppt2/01.png" alt="Intelligent collaboration growth slide 1" width="100%" /></td><td><img src="public/examples/ppt/ppt2/02.png" alt="Intelligent collaboration growth slide 2" width="100%" /></td><td><img src="public/examples/ppt/ppt2/03.png" alt="Intelligent collaboration growth slide 3" width="100%" /></td></tr>
-        <tr><td><img src="public/examples/ppt/ppt2/04.png" alt="Intelligent collaboration growth slide 4" width="100%" /></td><td><img src="public/examples/ppt/ppt2/05.png" alt="Intelligent collaboration growth slide 5" width="100%" /></td><td><img src="public/examples/ppt/ppt2/06.png" alt="Intelligent collaboration growth slide 6" width="100%" /></td></tr>
-        <tr><td><img src="public/examples/ppt/ppt2/07.png" alt="Intelligent collaboration growth slide 7" width="100%" /></td><td><img src="public/examples/ppt/ppt2/08.png" alt="Intelligent collaboration growth slide 8" width="100%" /></td><td><img src="public/examples/ppt/ppt2/09.png" alt="Intelligent collaboration growth slide 9" width="100%" /></td></tr>
-      </table>
+      <img src="public/examples/readme-previews/ppt/ppt2.png" alt="Intelligent collaboration growth deck preview" width="100%" />
       <strong>Intelligent Collaboration Growth</strong>
     </td>
   </tr>
   <tr>
     <td width="50%" align="center" valign="top">
-      <table cellspacing="0" cellpadding="2">
-        <tr><td><img src="public/examples/ppt/ppt3/01.png" alt="AI-driven business innovation slide 1" width="100%" /></td><td><img src="public/examples/ppt/ppt3/02.png" alt="AI-driven business innovation slide 2" width="100%" /></td><td><img src="public/examples/ppt/ppt3/03.png" alt="AI-driven business innovation slide 3" width="100%" /></td></tr>
-        <tr><td><img src="public/examples/ppt/ppt3/04.png" alt="AI-driven business innovation slide 4" width="100%" /></td><td><img src="public/examples/ppt/ppt3/05.png" alt="AI-driven business innovation slide 5" width="100%" /></td><td><img src="public/examples/ppt/ppt3/06.png" alt="AI-driven business innovation slide 6" width="100%" /></td></tr>
-        <tr><td><img src="public/examples/ppt/ppt3/07.png" alt="AI-driven business innovation slide 7" width="100%" /></td><td><img src="public/examples/ppt/ppt3/08.png" alt="AI-driven business innovation slide 8" width="100%" /></td><td><img src="public/examples/ppt/ppt3/09.png" alt="AI-driven business innovation slide 9" width="100%" /></td></tr>
-      </table>
+      <img src="public/examples/readme-previews/ppt/ppt3.png" alt="AI-driven business innovation deck preview" width="100%" />
       <strong>AI-Driven Business Innovation</strong>
     </td>
     <td width="50%" align="center" valign="top">
-      <table cellspacing="0" cellpadding="2">
-        <tr><td><img src="public/examples/ppt/ppt4/01.png" alt="Low-carbon smart campus transformation slide 1" width="100%" /></td><td><img src="public/examples/ppt/ppt4/02.png" alt="Low-carbon smart campus transformation slide 2" width="100%" /></td><td><img src="public/examples/ppt/ppt4/03.png" alt="Low-carbon smart campus transformation slide 3" width="100%" /></td></tr>
-        <tr><td><img src="public/examples/ppt/ppt4/04.png" alt="Low-carbon smart campus transformation slide 4" width="100%" /></td><td><img src="public/examples/ppt/ppt4/05.png" alt="Low-carbon smart campus transformation slide 5" width="100%" /></td><td><img src="public/examples/ppt/ppt4/06.png" alt="Low-carbon smart campus transformation slide 6" width="100%" /></td></tr>
-        <tr><td><img src="public/examples/ppt/ppt4/07.png" alt="Low-carbon smart campus transformation slide 7" width="100%" /></td><td><img src="public/examples/ppt/ppt4/08.png" alt="Low-carbon smart campus transformation slide 8" width="100%" /></td><td><img src="public/examples/ppt/ppt4/09.png" alt="Low-carbon smart campus transformation slide 9" width="100%" /></td></tr>
-      </table>
+      <img src="public/examples/readme-previews/ppt/ppt4.png" alt="Low-carbon smart campus transformation deck preview" width="100%" />
       <strong>Low-Carbon Smart Campus Transformation</strong>
     </td>
   </tr>
