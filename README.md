@@ -26,9 +26,13 @@
   <a href="README.zh-CN.md">Chinese</a>
 </p>
 
+<p align="center">
+  <strong>⭐ If CanvasAnvil helps your workflow, please star the repo and fork it for your own canvas experiments.</strong>
+</p>
+
 > CanvasAnvil brings diagramming, interior design workflows, presentation production, poster creation, infographic composition, and product storytelling into one unified workspace.
 
-## ✦ Release
+## 🌈 Release
 
 Current release: `v2.0.0`
 
@@ -37,8 +41,9 @@ Current release: `v2.0.0`
 - Improved Flow generation continuity so oversized diagrams can continue after truncation
 - Expanded canvas editing with better partial modification workflows
 - Added built-in icon-library support for richer visual composition
+- Improved compatibility across major model providers
 
-## ◇ Creative Canvases
+## 🎨 Creative Canvases
 
 | Workspace | Focus | Typical output |
 | --- | --- | --- |
@@ -49,7 +54,7 @@ Current release: `v2.0.0`
 | `Infographic` | information design and visual explanation | explainer graphics, thematic information boards, comparison charts |
 | `Product` | product storytelling and feature communication | product showcase pages, selling-point visuals, launch pages |
 
-## ⚙ Skills
+## 🧰 Skills
 
 CanvasAnvil includes dedicated local skills for each canvas so workflows stay opinionated, repeatable, and easier to maintain.
 
@@ -68,7 +73,7 @@ CanvasAnvil includes dedicated local skills for each canvas so workflows stay op
 
 All skills use the host text model by default. Only image generation requires explicit provider configuration.
 
-## ◎ Flow Canvas
+## 🔷 Flow Canvas
 
 Turn structured prompts into clear diagrams for research, systems, delivery plans, and teaching maps, then keep refining layout, labels, and node relationships in one place.
 
@@ -85,7 +90,7 @@ Turn structured prompts into clear diagrams for research, systems, delivery plan
   </tr>
 </table>
 
-## ◫ Interior Design Canvas
+## 🏠 Interior Design Canvas
 
 Move from concept framing to drawable outputs by combining planning boards, 2D layouts, render briefs, and material-list delivery in one workflow.
 
@@ -109,7 +114,7 @@ Move from concept framing to drawable outputs by combining planning boards, 2D l
   </tr>
 </table>
 
-## ▣ PPT Canvas
+## 📑 PPT Canvas
 
 Generate full presentations through a controlled pipeline: outline first, visual production second, then export as editable PPT, PDF, or image-based PPT.
 
@@ -138,7 +143,7 @@ Generate full presentations through a controlled pipeline: outline first, visual
   </tr>
 </table>
 
-## ✺ Poster Canvas
+## 📣 Poster Canvas
 
 Create high-impact single-frame visuals built for announcements, campaigns, events, and brand moments where composition has to carry fast.
 
@@ -155,7 +160,7 @@ Create high-impact single-frame visuals built for announcements, campaigns, even
   </tr>
 </table>
 
-## ◈ Infographic Canvas
+## 📊 Infographic Canvas
 
 Translate dense information into visual explanation boards that stay readable, structured, and presentation-ready.
 
@@ -172,7 +177,7 @@ Translate dense information into visual explanation boards that stay readable, s
   </tr>
 </table>
 
-## ⬢ Product Canvas
+## 🛍️ Product Canvas
 
 Present products through feature-led layouts that combine hero imagery, selling points, and narrative structure for launch and showcase use.
 
@@ -189,7 +194,7 @@ Present products through feature-led layouts that combine hero imagery, selling 
   </tr>
 </table>
 
-## ▶ Quick Start
+## 🚀 Quick Start
 
 1. Install dependencies
 
@@ -222,27 +227,27 @@ npm run check
 npm run build
 ```
 
-## ⌘ Common Commands
+## 🧪 Common Commands
 
 - `npm run dev:full`: start the web app and local API service together
 - `npm run check`: run TypeScript checks
 - `npm run build`: build the production bundle
 
-## ☰ Development Notes
+## 📝 Development Notes
 
 - AI configuration is read from local app settings; image-generation workflows use the configured image provider
 - Local development depends on the API service for routes such as `/api/ppt-ai`
 - After changing local API route wiring in `vite.config.ts`, restart the dev server
 
-## ⌂ Docs
+## 📚 Docs
 
 - Deployment guide: [deploy/README.md](deploy/README.md)
 
-## ⚖ License
+## ⚖️ License
 
 CanvasAnvil is licensed under the GNU Affero General Public License v3.0 (AGPL-3.0).
 See [LICENSE](LICENSE) for the full license text.
 
-## ✉ Contact
+## 💌 Contact
 
 - `3524962421@qq.com`
