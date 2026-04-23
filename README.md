@@ -1,192 +1,211 @@
 <p align="center">
-  <img src="public/logo.png" alt="CanvasAnvil hero" width="100%" />
+  <img src="public/logo.png" alt="CanvasAnvil hero" width="92%" />
 </p>
 
 <h1 align="center">CanvasAnvil</h1>
 
 <p align="center">
-  <strong>A multi-canvas AI creation platform for Flow, CAD, PPT, Poster, Infographic, and Product storytelling.</strong>
+  <strong>AI-powered multi-canvas creation for Flow, CAD, PPT, Poster, Infographic, and Product storytelling.</strong>
 </p>
 
 <p align="center">
-  <a href="README.md">English</a> |
-  <a href="README.zh-CN.md">Simplified Chinese</a>
+  <img alt="version" src="https://img.shields.io/badge/version-v2.0.0-blue" />
+  <img alt="license" src="https://img.shields.io/badge/license-AGPL--3.0-green" />
+  <img alt="React" src="https://img.shields.io/badge/React-18.3-61dafb?logo=react&logoColor=white" />
+  <img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-5.8-3178c6?logo=typescript&logoColor=white" />
+  <img alt="Vite" src="https://img.shields.io/badge/Vite-6.3-646cff?logo=vite&logoColor=white" />
+  <img alt="workspaces" src="https://img.shields.io/badge/workspaces-6-orange" />
+  <img alt="PRs welcome" src="https://img.shields.io/badge/PRs-welcome-brightgreen" />
 </p>
 
 <p align="center">
-  <img alt="version" src="https://img.shields.io/badge/version-v2.0.0-2563eb?style=for-the-badge" />
-  <img alt="workspaces" src="https://img.shields.io/badge/workspaces-6-0f766e?style=for-the-badge" />
-  <img alt="license" src="https://img.shields.io/badge/license-AGPL--3.0-f97316?style=for-the-badge" />
-  <img alt="stack" src="https://img.shields.io/badge/stack-Vite%20%2B%20React%20%2B%20TypeScript-7c3aed?style=for-the-badge" />
+  <a href="#creative-canvases">Canvases</a> ·
+  <a href="#skills">Skills</a> ·
+  <a href="#ppt-canvas">PPT Showcase</a> ·
+  <a href="#quick-start">Quick Start</a> ·
+  <a href="README.zh-CN.md">Chinese</a>
 </p>
 
 > CanvasAnvil brings diagramming, interior design workflows, presentation production, poster creation, infographic composition, and product storytelling into one unified workspace.
 
-## Release
+## ✦ Release
 
 Current release: `v2.0.0`
 
-- `v2.0.0`: added Poster, Infographic, and Product canvases, added local workflow skills, embedded the editable PPT editor, and expanded compatibility across more models and providers
-- `v1.0.2`: moved PPT to an image-first workflow and deferred OCR/text refill to editable PPT export
-- `v1.0.1`: improved persistence stability for PPT and CAD assets
-
-## What's New in v2.0.0
-
-- Added three new canvases: `Poster`, `Infographic`, and `Product`
-- Embedded `pptist-lab` directly inside the PPT workspace for editable PPT authoring
-- Updated editable PPT export to run through `text box review -> text extraction -> start editing`
-- Kept both the original slide image and the `textless background` version available during PPT review
-- Improved extracted text mapping so more of the original size, color, weight, spacing, alignment, and line-height carry into the embedded editor
-- Expanded compatibility across more AI models and providers for more flexible workspace configuration
 - Added local workflow skills for `Flow`, `CAD`, `PPT`, `Poster`, `Infographic`, and `Product`
-- Added script-backed skill workflows for diagram export, CAD bundles, PPT template/deck generation, image generation, PDF export, and image-based PPT export
-- Standardized skill image-generation configuration through `config/image-provider.json`
-- Updated CAD skill BOM output to `cad_bom.csv`
-- Updated Flow skill bundles to skip standalone HTML preview generation by default
+- Added the embedded PPT editor for editable presentation workflows
+- Improved Flow generation continuity so oversized diagrams can continue after truncation
+- Expanded canvas editing with better partial modification workflows
+- Added built-in icon-library support for richer visual composition
 
-## Example Assets
-
-Each canvas has a dedicated example-asset directory under `public/examples/`.
-
-| Canvas | Example directory | Suggested naming |
-| --- | --- | --- |
-| `Flow` | `public/examples/flow/` | `01.png`, `02.png`, `03.png`, `04.png` |
-| `CAD` | `public/examples/cad/` | `01.png` through `09.png` |
-| `PPT` | `public/examples/ppt/` | `01.png` through `09.png` |
-| `Poster` | `public/examples/poster/` | `01.png` through `04.png` |
-| `Infographic` | `public/examples/infographic/` | `01.png` through `04.png` |
-| `Product` | `public/examples/product/` | `01.png` through `04.png` |
-
-Keep example images lightweight and web-ready. The README showcase tables read from these paths.
-
-## Workspace Overview
+## ◇ Creative Canvases
 
 | Workspace | Focus | Typical output |
 | --- | --- | --- |
 | `Flow` | structured diagram generation and partial editing | flowcharts, architecture diagrams, logic diagrams |
-| `CAD` | interior workflow planning and spatial analysis | boards, 2D plans, render tasks, BOM |
-| `PPT` | structured slide generation and editable export | presentations, pitch decks, visual slides |
-| `Poster` | single-surface visual composition | posters, key visuals, campaign graphics |
-| `Infographic` | structured visual storytelling | data summaries, explainers, information boards |
-| `Product` | product-intro storytelling | feature pages, launch visuals, product narratives |
+| `CAD` | interior planning, drawing coordination, and delivery packaging | concept boards, 2D drawings, render briefs, material lists |
+| `PPT` | structured presentation generation and mixed export workflows | presentations, pitch decks, editable decks, report slides |
+| `Poster` | single-frame visual communication | event posters, promotional posters, campaign key visuals |
+| `Infographic` | information design and visual explanation | explainer graphics, thematic information boards, comparison charts |
+| `Product` | product storytelling and feature communication | product showcase pages, selling-point visuals, launch pages |
 
-## Flow Canvas
+## ⚙ Skills
 
-Turn structured prompts into clean diagrams, then keep iterating on layout, labels, and node relationships inside the same canvas.
+CanvasAnvil includes dedicated local skills for each canvas so workflows stay opinionated, repeatable, and easier to maintain.
 
-### Showcase
+- `flow-skill` · Diagram generation and packaging
+  Outputs clean diagram assets and skips standalone HTML preview by default.
+- `cad-skill` · Interior-delivery workflow
+  Exports drawing bundles and a CSV material list for downstream delivery.
+- `ppt-skill` · Full presentation production
+  Enforces outline review before generation and supports editable PPT, PDF, and image-based PPT output.
+- `poster-skill` · Single-frame campaign visuals
+  Focuses on strong composition, typography, and poster-ready output.
+- `infographic-skill` · Information-to-visual translation
+  Organizes dense content into readable infographic layouts.
+- `product-skill` · Feature-led product storytelling
+  Builds showcase visuals around positioning, selling points, and launch messaging.
 
-<table>
-  <tr>
-    <td width="50%" align="center"><img src="public/examples/flow/01.png" alt="Flow example 1" width="100%" /><br/>System architecture</td>
-    <td width="50%" align="center"><img src="public/examples/flow/02.png" alt="Flow example 2" width="100%" /><br/>Business process</td>
-  </tr>
-  <tr>
-    <td width="50%" align="center"><img src="public/examples/flow/03.png" alt="Flow example 3" width="100%" /><br/>Data pipeline</td>
-    <td width="50%" align="center"><img src="public/examples/flow/04.png" alt="Flow example 4" width="100%" /><br/>Logic mapping</td>
-  </tr>
-</table>
+All skills use the host text model by default. Only image generation requires explicit provider configuration.
 
-## Interior Design Canvas
+## ◎ Flow Canvas
 
-Build interior-design workflows that connect planning boards, 2D layouts, material thinking, render orchestration, and BOM-oriented outputs.
-
-### Showcase
-
-<table>
-  <tr>
-    <td width="33.33%" align="center"><img src="public/examples/cad/01.png" alt="CAD example 1" width="100%" /><br/>Planning board</td>
-    <td width="33.33%" align="center"><img src="public/examples/cad/02.png" alt="CAD example 2" width="100%" /><br/>2D layout</td>
-    <td width="33.33%" align="center"><img src="public/examples/cad/03.png" alt="CAD example 3" width="100%" /><br/>Living room concept</td>
-  </tr>
-  <tr>
-    <td width="33.33%" align="center"><img src="public/examples/cad/04.png" alt="CAD example 4" width="100%" /><br/>Material board</td>
-    <td width="33.33%" align="center"><img src="public/examples/cad/05.png" alt="CAD example 5" width="100%" /><br/>Lighting strategy</td>
-    <td width="33.33%" align="center"><img src="public/examples/cad/06.png" alt="CAD example 6" width="100%" /><br/>Render task</td>
-  </tr>
-  <tr>
-    <td width="33.33%" align="center"><img src="public/examples/cad/07.png" alt="CAD example 7" width="100%" /><br/>Functional zoning</td>
-    <td width="33.33%" align="center"><img src="public/examples/cad/08.png" alt="CAD example 8" width="100%" /><br/>BOM-oriented summary</td>
-    <td width="33.33%" align="center"><img src="public/examples/cad/09.png" alt="CAD example 9" width="100%" /><br/>Final presentation board</td>
-  </tr>
-</table>
-
-## PPT Canvas
-
-Generate structured decks, iterate in an image-first workflow, review text boxes before extraction, and continue editing inside the embedded PPT editor.
+Turn structured prompts into clear diagrams for research, systems, delivery plans, and teaching maps, then keep refining layout, labels, and node relationships in one place.
 
 ### Showcase
 
 <table>
   <tr>
-    <td width="33.33%" align="center"><img src="public/examples/ppt/01.png" alt="PPT example 1" width="100%" /><br/>Cover slide</td>
-    <td width="33.33%" align="center"><img src="public/examples/ppt/02.png" alt="PPT example 2" width="100%" /><br/>Agenda slide</td>
-    <td width="33.33%" align="center"><img src="public/examples/ppt/03.png" alt="PPT example 3" width="100%" /><br/>Business layout</td>
+    <td width="50%" align="center"><img src="public/examples/flow/01.png" alt="Flow example: academic research framework" width="100%" height="340" style="object-fit:contain;border-radius:10px;background:#ffffff;" /><br/><strong>Academic Research Framework</strong></td>
+    <td width="50%" align="center"><img src="public/examples/flow/02.png" alt="Flow example: intelligent Q&A system architecture" width="100%" height="340" style="object-fit:contain;border-radius:10px;background:#ffffff;" /><br/><strong>Intelligent Q&A System Architecture</strong></td>
   </tr>
   <tr>
-    <td width="33.33%" align="center"><img src="public/examples/ppt/04.png" alt="PPT example 4" width="100%" /><br/>Data storytelling</td>
-    <td width="33.33%" align="center"><img src="public/examples/ppt/05.png" alt="PPT example 5" width="100%" /><br/>Teaching slide</td>
-    <td width="33.33%" align="center"><img src="public/examples/ppt/06.png" alt="PPT example 6" width="100%" /><br/>Tech presentation</td>
-  </tr>
-  <tr>
-    <td width="33.33%" align="center"><img src="public/examples/ppt/07.png" alt="PPT example 7" width="100%" /><br/>Product deck</td>
-    <td width="33.33%" align="center"><img src="public/examples/ppt/08.png" alt="PPT example 8" width="100%" /><br/>Infographic slide</td>
-    <td width="33.33%" align="center"><img src="public/examples/ppt/09.png" alt="PPT example 9" width="100%" /><br/>Editable export result</td>
+    <td width="50%" align="center"><img src="public/examples/flow/03.png" alt="Flow example: project implementation roadmap" width="100%" height="340" style="object-fit:contain;border-radius:10px;background:#ffffff;" /><br/><strong>Project Implementation Roadmap</strong></td>
+    <td width="50%" align="center"><img src="public/examples/flow/04.png" alt="Flow example: course design mind map" width="100%" height="340" style="object-fit:contain;border-radius:10px;background:#ffffff;" /><br/><strong>Course Design Mind Map</strong></td>
   </tr>
 </table>
 
-## Poster Canvas
+## ◫ Interior Design Canvas
 
-Create single-frame campaign visuals with fast composition, strong typography, and poster-oriented layout control.
+Move from concept framing to drawable outputs by combining planning boards, 2D layouts, render briefs, and material-list delivery in one workflow.
 
 ### Showcase
 
 <table>
   <tr>
-    <td width="50%" align="center"><img src="public/examples/poster/01.png" alt="Poster example 1" width="100%" /><br/>Campaign poster</td>
-    <td width="50%" align="center"><img src="public/examples/poster/02.png" alt="Poster example 2" width="100%" /><br/>Event poster</td>
+    <td width="33.33%" align="center"><img src="public/examples/cad/01.png" alt="CAD renovation plan layout" width="100%" /><br/><strong>Renovation Plan Layout</strong></td>
+    <td width="33.33%" align="center"><img src="public/examples/cad/02.png" alt="CAD floor finish plan" width="100%" /><br/><strong>Floor Finish Plan</strong></td>
+    <td width="33.33%" align="center"><img src="public/examples/cad/03.png" alt="CAD reflected ceiling plan" width="100%" /><br/><strong>Reflected Ceiling Plan</strong></td>
   </tr>
   <tr>
-    <td width="50%" align="center"><img src="public/examples/poster/03.png" alt="Poster example 3" width="100%" /><br/>Brand visual</td>
-    <td width="50%" align="center"><img src="public/examples/poster/04.png" alt="Poster example 4" width="100%" /><br/>Launch poster</td>
+    <td width="33.33%" align="center"><img src="public/examples/cad/04.png" alt="CAD wall setting out plan" width="100%" /><br/><strong>Wall Setting-Out Plan</strong></td>
+    <td width="33.33%" align="center"><img src="public/examples/cad/05.png" alt="CAD MEP plan" width="100%" /><br/><strong>MEP Coordination Plan</strong></td>
+    <td width="33.33%" align="center"><img src="public/examples/cad/06.png" alt="CAD elevation index and interior elevations" width="100%" /><br/><strong>Elevation Index + Interior Elevations</strong></td>
+  </tr>
+  <tr>
+    <td width="33.33%" align="center"><img src="public/examples/cad/07.png" alt="CAD detail drawings" width="100%" /><br/><strong>Detail Drawings</strong></td>
+    <td width="33.33%" align="center"></td>
+    <td width="33.33%" align="center"></td>
   </tr>
 </table>
 
-## Infographic Canvas
+## ▣ PPT Canvas
 
-Translate information-heavy content into structured visual narratives that stay readable and presentation-ready.
+Generate full presentations through a controlled pipeline: outline first, visual production second, then export as editable PPT, PDF, or image-based PPT.
 
 ### Showcase
 
 <table>
   <tr>
-    <td width="50%" align="center"><img src="public/examples/infographic/01.png" alt="Infographic example 1" width="100%" /><br/>Data summary</td>
-    <td width="50%" align="center"><img src="public/examples/infographic/02.png" alt="Infographic example 2" width="100%" /><br/>Process explainer</td>
+    <td width="50%" align="center" valign="top">
+      <table cellspacing="0" cellpadding="2">
+        <tr><td><img src="public/examples/ppt/ppt1/01.png" alt="AI content creation workflow slide 1" width="100%" /></td><td><img src="public/examples/ppt/ppt1/02.png" alt="AI content creation workflow slide 2" width="100%" /></td><td><img src="public/examples/ppt/ppt1/03.png" alt="AI content creation workflow slide 3" width="100%" /></td></tr>
+        <tr><td><img src="public/examples/ppt/ppt1/04.png" alt="AI content creation workflow slide 4" width="100%" /></td><td><img src="public/examples/ppt/ppt1/05.png" alt="AI content creation workflow slide 5" width="100%" /></td><td><img src="public/examples/ppt/ppt1/06.png" alt="AI content creation workflow slide 6" width="100%" /></td></tr>
+        <tr><td><img src="public/examples/ppt/ppt1/07.png" alt="AI content creation workflow slide 7" width="100%" /></td><td><img src="public/examples/ppt/ppt1/08.png" alt="AI content creation workflow slide 8" width="100%" /></td><td><img src="public/examples/ppt/ppt1/09.png" alt="AI content creation workflow slide 9" width="100%" /></td></tr>
+      </table>
+      <strong>AI Content Creation Workflow</strong>
+    </td>
+    <td width="50%" align="center" valign="top">
+      <table cellspacing="0" cellpadding="2">
+        <tr><td><img src="public/examples/ppt/ppt2/01.png" alt="Intelligent collaboration growth slide 1" width="100%" /></td><td><img src="public/examples/ppt/ppt2/02.png" alt="Intelligent collaboration growth slide 2" width="100%" /></td><td><img src="public/examples/ppt/ppt2/03.png" alt="Intelligent collaboration growth slide 3" width="100%" /></td></tr>
+        <tr><td><img src="public/examples/ppt/ppt2/04.png" alt="Intelligent collaboration growth slide 4" width="100%" /></td><td><img src="public/examples/ppt/ppt2/05.png" alt="Intelligent collaboration growth slide 5" width="100%" /></td><td><img src="public/examples/ppt/ppt2/06.png" alt="Intelligent collaboration growth slide 6" width="100%" /></td></tr>
+        <tr><td><img src="public/examples/ppt/ppt2/07.png" alt="Intelligent collaboration growth slide 7" width="100%" /></td><td><img src="public/examples/ppt/ppt2/08.png" alt="Intelligent collaboration growth slide 8" width="100%" /></td><td><img src="public/examples/ppt/ppt2/09.png" alt="Intelligent collaboration growth slide 9" width="100%" /></td></tr>
+      </table>
+      <strong>Intelligent Collaboration Growth</strong>
+    </td>
   </tr>
   <tr>
-    <td width="50%" align="center"><img src="public/examples/infographic/03.png" alt="Infographic example 3" width="100%" /><br/>Comparison board</td>
-    <td width="50%" align="center"><img src="public/examples/infographic/04.png" alt="Infographic example 4" width="100%" /><br/>Timeline layout</td>
+    <td width="50%" align="center" valign="top">
+      <table cellspacing="0" cellpadding="2">
+        <tr><td><img src="public/examples/ppt/ppt3/01.png" alt="AI-driven business innovation slide 1" width="100%" /></td><td><img src="public/examples/ppt/ppt3/02.png" alt="AI-driven business innovation slide 2" width="100%" /></td><td><img src="public/examples/ppt/ppt3/03.png" alt="AI-driven business innovation slide 3" width="100%" /></td></tr>
+        <tr><td><img src="public/examples/ppt/ppt3/04.png" alt="AI-driven business innovation slide 4" width="100%" /></td><td><img src="public/examples/ppt/ppt3/05.png" alt="AI-driven business innovation slide 5" width="100%" /></td><td><img src="public/examples/ppt/ppt3/06.png" alt="AI-driven business innovation slide 6" width="100%" /></td></tr>
+        <tr><td><img src="public/examples/ppt/ppt3/07.png" alt="AI-driven business innovation slide 7" width="100%" /></td><td><img src="public/examples/ppt/ppt3/08.png" alt="AI-driven business innovation slide 8" width="100%" /></td><td><img src="public/examples/ppt/ppt3/09.png" alt="AI-driven business innovation slide 9" width="100%" /></td></tr>
+      </table>
+      <strong>AI-Driven Business Innovation</strong>
+    </td>
+    <td width="50%" align="center" valign="top">
+      <table cellspacing="0" cellpadding="2">
+        <tr><td><img src="public/examples/ppt/ppt4/01.png" alt="Low-carbon smart campus transformation slide 1" width="100%" /></td><td><img src="public/examples/ppt/ppt4/02.png" alt="Low-carbon smart campus transformation slide 2" width="100%" /></td><td><img src="public/examples/ppt/ppt4/03.png" alt="Low-carbon smart campus transformation slide 3" width="100%" /></td></tr>
+        <tr><td><img src="public/examples/ppt/ppt4/04.png" alt="Low-carbon smart campus transformation slide 4" width="100%" /></td><td><img src="public/examples/ppt/ppt4/05.png" alt="Low-carbon smart campus transformation slide 5" width="100%" /></td><td><img src="public/examples/ppt/ppt4/06.png" alt="Low-carbon smart campus transformation slide 6" width="100%" /></td></tr>
+        <tr><td><img src="public/examples/ppt/ppt4/07.png" alt="Low-carbon smart campus transformation slide 7" width="100%" /></td><td><img src="public/examples/ppt/ppt4/08.png" alt="Low-carbon smart campus transformation slide 8" width="100%" /></td><td><img src="public/examples/ppt/ppt4/09.png" alt="Low-carbon smart campus transformation slide 9" width="100%" /></td></tr>
+      </table>
+      <strong>Low-Carbon Smart Campus Transformation</strong>
+    </td>
   </tr>
 </table>
 
-## Product Canvas
+## ✺ Poster Canvas
 
-Present products through feature-focused layouts that combine specifications, key selling points, and hero imagery.
+Create high-impact single-frame visuals built for announcements, campaigns, events, and brand moments where composition has to carry fast.
 
 ### Showcase
 
 <table>
   <tr>
-    <td width="50%" align="center"><img src="public/examples/product/01.png" alt="Product example 1" width="100%" /><br/>Product hero page</td>
-    <td width="50%" align="center"><img src="public/examples/product/02.png" alt="Product example 2" width="100%" /><br/>Feature comparison</td>
+    <td width="50%" align="center"><img src="public/examples/poster/01.png" alt="Poster example: Youth Design Forum 2026" width="100%" /><br/><strong>Youth Design Forum 2026</strong></td>
+    <td width="50%" align="center"><img src="public/examples/poster/02.png" alt="Poster example: Jiangnan Guochao Culture Festival" width="100%" /><br/><strong>Jiangnan Guochao Culture Festival</strong></td>
   </tr>
   <tr>
-    <td width="50%" align="center"><img src="public/examples/product/03.png" alt="Product example 3" width="100%" /><br/>Spec sheet</td>
-    <td width="50%" align="center"><img src="public/examples/product/04.png" alt="Product example 4" width="100%" /><br/>Launch narrative</td>
+    <td width="50%" align="center"><img src="public/examples/poster/03.png" alt="Poster example: Urban Summer Indie Music Festival" width="100%" /><br/><strong>Urban Summer Indie Music Festival</strong></td>
+    <td width="50%" align="center"><img src="public/examples/poster/04.png" alt="Poster example: Future Intelligent Technology Summit 2026" width="100%" /><br/><strong>Future Intelligent Technology Summit 2026</strong></td>
   </tr>
 </table>
 
-## Quick Start
+## ◈ Infographic Canvas
+
+Translate dense information into visual explanation boards that stay readable, structured, and presentation-ready.
+
+### Showcase
+
+<table>
+  <tr>
+    <td width="50%" align="center"><img src="public/examples/infographic/01.png" alt="Infographic example: AI computing power growth trend" width="100%" /><br/><strong>AI Computing Power Growth Trend</strong></td>
+    <td width="50%" align="center"><img src="public/examples/infographic/02.png" alt="Infographic example: smart car user priorities" width="100%" /><br/><strong>Smart Car User Priorities</strong></td>
+  </tr>
+  <tr>
+    <td width="50%" align="center"><img src="public/examples/infographic/03.png" alt="Infographic example: healthy daily routine guide" width="100%" /><br/><strong>Healthy Daily Routine Guide</strong></td>
+    <td width="50%" align="center"><img src="public/examples/infographic/04.png" alt="Infographic example: low-carbon lifestyle guide" width="100%" /><br/><strong>Low-Carbon Lifestyle Guide</strong></td>
+  </tr>
+</table>
+
+## ⬢ Product Canvas
+
+Present products through feature-led layouts that combine hero imagery, selling points, and narrative structure for launch and showcase use.
+
+### Showcase
+
+<table>
+  <tr>
+    <td width="50%" align="center"><img src="public/examples/product/01.png" alt="Product example: wireless noise-cancelling earbuds" width="100%" /><br/><strong>Wireless Noise-Cancelling Earbuds</strong></td>
+    <td width="50%" align="center"><img src="public/examples/product/02.png" alt="Product example: flagship gaming laptop" width="100%" /><br/><strong>Flagship Gaming Laptop</strong></td>
+  </tr>
+  <tr>
+    <td width="50%" align="center"><img src="public/examples/product/03.png" alt="Product example: brightening essence skincare" width="100%" /><br/><strong>Brightening Essence Skincare</strong></td>
+    <td width="50%" align="center"><img src="public/examples/product/04.png" alt="Product example: intelligent electric SUV" width="100%" /><br/><strong>Intelligent Electric SUV</strong></td>
+  </tr>
+</table>
+
+## ▶ Quick Start
 
 1. Install dependencies
 
@@ -196,23 +215,16 @@ npm install
 
 2. Start local development
 
-CanvasAnvil uses two dev services during editable PPT work:
-
-- Main app on `5173`
-- `pptist-lab` on `5174`
+CanvasAnvil has both a web app and a local API service. Use the combined dev command so the frontend proxy routes and local API endpoints are available.
 
 ```bash
-npm run dev
-
-cd pptist-lab
-npm install
-npm run dev -- --host 127.0.0.1 --port 5174
+npm run dev:full
 ```
 
 Default URLs:
 
-- Main app: `http://127.0.0.1:5173`
-- PPT editor service: `http://127.0.0.1:5174`
+- Web app: `http://127.0.0.1:5173`
+- API service: `http://127.0.0.1:8080`
 
 3. Run type checks
 
@@ -226,34 +238,27 @@ npm run check
 npm run build
 ```
 
-## Useful Scripts
+## ⌘ Common Commands
 
-- `npm run dev`: start the main Vite app on the root project
-- `npm run dev:full`: start the web and API dev servers together
-- `npm run dev:web`: start the frontend dev server
-- `npm run dev:api`: start the API dev server
-- `cd pptist-lab && npm run dev -- --host 127.0.0.1 --port 5174`: start the embedded PPT editor service
+- `npm run dev:full`: start the web app and local API service together
 - `npm run check`: run TypeScript checks
-- `npm run lint`: run ESLint
-- `npm run build`: build for production
-- `npm run preview`: preview the built app
-- `npm start`: run the API server
+- `npm run build`: build the production bundle
 
-## Development Notes
+## ☰ Development Notes
 
-- AI configuration is read from local app settings and can be routed to custom providers
-- PPT local development depends on the local `/api/ppt-ai` proxy route
+- AI configuration is read from local app settings; image-generation workflows use the configured image provider
+- Local development depends on the API service for routes such as `/api/ppt-ai`
 - After changing local API route wiring in `vite.config.ts`, restart the dev server
 
-## Docs
+## ⌂ Docs
 
 - Deployment guide: [deploy/README.md](deploy/README.md)
 
-## License
+## ⚖ License
 
 CanvasAnvil is licensed under the GNU Affero General Public License v3.0 (AGPL-3.0).
 See [LICENSE](LICENSE) for the full license text.
 
-## Contact
+## ✉ Contact
 
 - `3524962421@qq.com`
