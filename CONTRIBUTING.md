@@ -1,63 +1,103 @@
-# Contributing
+# Contributing to CanvasAnvil
 
-Thanks for your interest in contributing to CanvasAnvil.
+Thanks for taking the time to improve CanvasAnvil. This project combines multiple creative workspaces, so the most helpful contributions are focused, reproducible, and easy to review.
 
-## Getting Started
+## 🚀 Local Setup
 
 Prerequisites:
 
 - Node.js 20+
-- npm 9+ (or the npm that ships with Node.js)
+- npm 9+ or the npm version bundled with your Node.js installation
 
-Install and run:
+Install dependencies:
 
 ```bash
 npm install
-npm run dev
 ```
 
-Quality checks:
+Start the full local development stack:
+
+```bash
+npm run dev:full
+```
+
+Default local services:
+
+- 🧩 Main app: [http://127.0.0.1:8001](http://127.0.0.1:8001)
+- 📑 PPTist Lab: [http://127.0.0.1:8003](http://127.0.0.1:8003)
+
+## ✅ Quality Checks
+
+Before opening a pull request, run:
 
 ```bash
 npm run check
-npm run lint
 ```
 
-## What To Contribute
+If your change touches `pptist-lab`, also run:
 
-- Bug fixes
-- Performance and stability improvements
-- Documentation improvements
-- UX improvements for the Flow/CAD/PPT canvases
+```bash
+npm --prefix pptist-lab run type-check
+```
 
-If you plan to do a large change, open an issue first to align on direction.
+## 🧭 What To Contribute
 
-## Pull Request Guidelines
+Good contribution areas include:
 
-- Keep PRs focused and small when possible.
-- Describe the problem and the approach clearly.
-- Include screenshots or short recordings for UI changes.
-- Run `npm run check` before submitting.
+- 🐛 Bug fixes with clear reproduction steps
+- ⚡ Performance and stability improvements
+- 📝 Documentation improvements
+- 🎨 UX improvements for Flow, CAD, PPT, Poster, Infographic, and Product workspaces
+- 📦 Deployment improvements for the main app and standalone `pptist-lab` service
 
-## Coding Style
+For large changes, open an issue first so the direction can be discussed before implementation.
 
-- TypeScript: prefer explicit types on public APIs.
-- Keep changes consistent with existing code patterns in the edited area.
-- Avoid unrelated formatting-only refactors.
+## 📌 Pull Request Guidelines
 
-## Commit Messages
+- Keep pull requests focused and scoped to one clear outcome.
+- Describe the problem, the approach, and any tradeoffs.
+- Include screenshots or short recordings for visible UI changes.
+- Mention any deployment or configuration changes explicitly.
+- Run the relevant checks before submitting.
+- Avoid mixing unrelated formatting-only edits into functional changes.
 
-No strict format required, but keep messages clear and descriptive, e.g.:
+## 🧱 Coding Style
 
-- `fix: handle missing svgedit assets in prod`
-- `docs: improve deploy guide`
+- Follow the patterns already used in the files you edit.
+- Prefer TypeScript types for public APIs and shared data structures.
+- Keep abstractions small and justified by real duplication or complexity.
+- Keep user-facing text clear and consistent in English and Simplified Chinese where applicable.
 
-## Reporting Issues
+## 🧹 Files Not To Commit
 
-For non-security issues, use GitHub Issues and include:
+Do not commit local runtime artifacts or temporary debugging files, such as:
 
-- what you expected vs what happened
-- steps to reproduce
-- logs / screenshots if helpful
+- `.tmp-*`
+- `*.log`
+- local downloaded bundles
+- build output directories
+- machine-specific environment files
+
+If a file is only useful for local debugging, leave it out of the pull request.
+
+## 🏷️ Commit Messages
+
+Use clear, descriptive commit messages. Conventional-style messages are preferred:
+
+```text
+fix: handle missing ppt editor origin in production
+docs: improve dual-service deployment guide
+feat: add portal entry for product canvas
+```
+
+## 🛡️ Reporting Issues
+
+For non-security issues, open a GitHub issue and include:
+
+- What you expected
+- What actually happened
+- Steps to reproduce
+- Logs, screenshots, or recordings when helpful
+- Browser and deployment environment if the issue is UI or deployment related
 
 For sensitive issues, contact the maintainers through the repository contact channel before opening a public report.
