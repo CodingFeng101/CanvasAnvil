@@ -46,7 +46,7 @@
 
 当前在线访问地址：
 
-- CanvasAnvil：`https://canvasanvil.codingfgd.asia`
+- 🔗 CanvasAnvil：[https://canvasanvil.codingfgd.asia](https://canvasanvil.codingfgd.asia)
 
 PPT 编辑器已改为独立 `pptist-lab` 服务部署，并通过 CanvasAnvil 的 PPT 工作区嵌入使用。
 
@@ -224,8 +224,8 @@ npm run dev:full
 
 生产部署时，CanvasAnvil 采用双服务部署：
 
-- 主应用：CanvasAnvil Web App
-- PPT 编辑器：独立 `pptist-lab` 静态服务
+- 🧩 主应用：CanvasAnvil Web App
+- 📑 PPT 编辑器：独立 `pptist-lab` 静态服务
 
 Docker 和传统部署方式都需要同时启动这两个服务。详细配置见 [deploy/README.zh-CN.md](deploy/README.zh-CN.md)。
 

@@ -46,7 +46,7 @@ Current release: `v2.1.0`
 
 Current online access URL:
 
-- CanvasAnvil: `https://canvasanvil.codingfgd.asia`
+- 🔗 CanvasAnvil: [https://canvasanvil.codingfgd.asia](https://canvasanvil.codingfgd.asia)
 
 The editable PPT editor is deployed as a standalone `pptist-lab` service and is embedded through the CanvasAnvil PPT workspace.
 
@@ -224,8 +224,8 @@ Default URLs:
 
 For production deployment, CanvasAnvil now uses a dual-service setup:
 
-- Main app: CanvasAnvil Web App
-- PPT editor: standalone `pptist-lab` static service
+- 🧩 Main app: CanvasAnvil Web App
+- 📑 PPT editor: standalone `pptist-lab` static service
 
 Docker and traditional deployments must run both services. See [deploy/README.md](deploy/README.md) for detailed deployment configuration.
 
