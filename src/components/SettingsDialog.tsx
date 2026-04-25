@@ -125,7 +125,7 @@ function ProviderField({
         <SelectTrigger className="h-10 w-full rounded-xl border-border/70 bg-background shadow-sm transition-colors hover:border-border hover:bg-muted/20">
           <SelectValue placeholder="Select provider" />
         </SelectTrigger>
-        <SelectContent className="rounded-xl border-border/70 bg-background/95 p-1 shadow-xl backdrop-blur">
+        <SelectContent className="max-h-[260px] overflow-y-auto rounded-xl border-border/70 bg-background/95 p-1 shadow-xl backdrop-blur">
           {options.map((option) => (
             <SelectItem
               key={option.id}

@@ -40,7 +40,7 @@ const { screening } = storeToRefs(screenStore)
 
 const isAudienceMode = new URLSearchParams(window.location.search).get('mode') === 'audience'
 const isEmbeddedCanvasAnvilMode = new URLSearchParams(window.location.search).get('canvasanvil') === 'embedded'
-const expectedParentOrigin = `${window.location.protocol}//${window.location.hostname}:5173`
+const expectedParentOrigin = `${window.location.protocol}//${window.location.hostname}:8001`
 
 if (import.meta.env.MODE !== 'development') {
   window.onbeforeunload = () => false

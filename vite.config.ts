@@ -119,7 +119,7 @@ function createLocalApiPlugin(): Plugin {
 function createPptistLabProxyPlugin(): Plugin {
   const attachProxy = (middlewares: Connect.ServerStack) => {
     const proxy = createProxyMiddleware({
-      target: "http://127.0.0.1:5174",
+      target: "http://127.0.0.1:8003",
       changeOrigin: true,
       ws: true,
       pathRewrite: {
@@ -145,6 +145,14 @@ function createPptistLabProxyPlugin(): Plugin {
 
 // https://vite.dev/config/
 export default defineConfig({
+  server: {
+    host: "0.0.0.0",
+    port: 8001,
+  },
+  preview: {
+    host: "0.0.0.0",
+    port: 8001,
+  },
   optimizeDeps: {
     entries: ["index.html"],
   },

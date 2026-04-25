@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <img alt="version" src="https://img.shields.io/badge/version-v2.0.0-blue" />
+  <img alt="version" src="https://img.shields.io/badge/version-v2.1.0-blue" />
   <img alt="license" src="https://img.shields.io/badge/license-AGPL--3.0-green" />
   <img alt="React" src="https://img.shields.io/badge/React-18.3-61dafb?logo=react&logoColor=white" />
   <img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-5.8-3178c6?logo=typescript&logoColor=white" />
@@ -34,14 +34,21 @@
 
 ## 🌈 版本发布
 
-当前版本：`v2.0.0`
+当前版本：`v2.1.0`
 
-- 新增 `Flow`、`CAD`、`PPT`、`Poster`、`Infographic`、`Product` 六个画布的本地 workflow skills
-- 新增嵌入式 PPT 编辑器，支持可编辑演示文稿流程
-- 优化流程画布的超长内容续生成能力，截断后可以继续生成
-- 强化画布局部修改能力，提升局部编辑体验
-- 新增内置图标库支持，方便更丰富的视觉表达
-- 增强对各大模型厂商的兼容适配
+- 更新 CanvasAnvil 门户界面，优化入口体验与产品导航结构
+- 新增 `pptist-lab` 独立部署方式，支持 PPT 编辑器作为独立服务运行
+- 统一主应用与独立 PPT 编辑器服务的本地和部署端口规划
+- 更新并同步在线访问地址为 `https://canvasanvil.codingfgd.asia`
+- 优化 PPT 编辑器在域名、HTTPS 与反向代理生产环境下的嵌入兼容性
+
+## 🌐 在线使用
+
+当前在线访问地址：
+
+- CanvasAnvil：`https://canvasanvil.codingfgd.asia`
+
+PPT 编辑器已改为独立 `pptist-lab` 服务部署，并通过 CanvasAnvil 的 PPT 工作区嵌入使用。
 
 ## 🎨 创作画布
 
@@ -204,7 +211,7 @@ npm install
 
 2. 启动本地开发
 
-CanvasAnvil 本地开发需要同时启动 Web 应用和本地 API 服务，这样前端代理路由和本地接口才能正常工作。
+CanvasAnvil 统一使用两个本地端口：主应用运行在 `8001`，PPTist Lab 运行在 `8003`。使用组合命令可以同时启动两个服务。
 
 ```bash
 npm run dev:full
@@ -212,8 +219,15 @@ npm run dev:full
 
 默认访问地址：
 
-- Web 应用：`http://127.0.0.1:5173`
-- API 服务：`http://127.0.0.1:8080`
+- 主应用：`http://127.0.0.1:8001`
+- PPTist Lab：`http://127.0.0.1:8003`
+
+生产部署时，CanvasAnvil 采用双服务部署：
+
+- 主应用：CanvasAnvil Web App
+- PPT 编辑器：独立 `pptist-lab` 静态服务
+
+Docker 和传统部署方式都需要同时启动这两个服务。详细配置见 [deploy/README.zh-CN.md](deploy/README.zh-CN.md)。
 
 3. 运行类型检查
 
@@ -229,7 +243,8 @@ npm run build
 
 ## 🧪 常用命令
 
-- `npm run dev:full`：同时启动 Web 应用和本地 API 服务
+- `npm run dev:full`：启动 `8001` 端口的主应用和 `8003` 端口的 PPTist Lab
+- `cd pptist-lab && npm run dev`：在 `8003` 端口启动 PPTist Lab
 - `npm run check`：执行 TypeScript 检查
 - `npm run build`：构建生产版本
 

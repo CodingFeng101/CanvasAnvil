@@ -146,7 +146,7 @@ const isEmbeddedCanvasAnvilMode = new URLSearchParams(window.location.search).ge
 
 const getCanvasAnvilReturnUrl = () => {
   if (import.meta.env.MODE === 'development') {
-    return 'http://127.0.0.1:5173/'
+    return `${window.location.protocol}//${window.location.hostname}:8001/`
   }
   return '/'
 }
@@ -165,7 +165,7 @@ const handleReturnToCanvasAnvil = () => {
   if (isEmbeddedCanvasAnvilMode) {
     window.parent.postMessage(
       { type: CANVASANVIL_PPT_RETURN_MESSAGE_TYPE },
-      `${window.location.protocol}//${window.location.hostname}:5173`
+      `${window.location.protocol}//${window.location.hostname}:8001`
     )
     return
   }

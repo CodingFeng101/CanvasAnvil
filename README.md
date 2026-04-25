@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <img alt="version" src="https://img.shields.io/badge/version-v2.0.0-blue" />
+  <img alt="version" src="https://img.shields.io/badge/version-v2.1.0-blue" />
   <img alt="license" src="https://img.shields.io/badge/license-AGPL--3.0-green" />
   <img alt="React" src="https://img.shields.io/badge/React-18.3-61dafb?logo=react&logoColor=white" />
   <img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-5.8-3178c6?logo=typescript&logoColor=white" />
@@ -34,14 +34,21 @@
 
 ## 🌈 Release
 
-Current release: `v2.0.0`
+Current release: `v2.1.0`
 
-- Added local workflow skills for `Flow`, `CAD`, `PPT`, `Poster`, `Infographic`, and `Product`
-- Added the embedded PPT editor for editable presentation workflows
-- Improved Flow generation continuity so oversized diagrams can continue after truncation
-- Expanded canvas editing with better partial modification workflows
-- Added built-in icon-library support for richer visual composition
-- Improved compatibility across major model providers
+- Refreshed the CanvasAnvil portal interface with clearer product navigation.
+- Added standalone `pptist-lab` deployment for the editable PPT editor.
+- Standardized local and deployment ports around the main app and the dedicated PPT editor service.
+- Updated the online access URL to `https://canvasanvil.codingfgd.asia`.
+- Improved PPT editor embedding compatibility for domain, HTTPS, and reverse-proxy deployments.
+
+## 🌐 Online Access
+
+Current online access URL:
+
+- CanvasAnvil: `https://canvasanvil.codingfgd.asia`
+
+The editable PPT editor is deployed as a standalone `pptist-lab` service and is embedded through the CanvasAnvil PPT workspace.
 
 ## 🎨 Creative Canvases
 
@@ -204,7 +211,7 @@ npm install
 
 2. Start local development
 
-CanvasAnvil has both a web app and a local API service. Use the combined dev command so the frontend proxy routes and local API endpoints are available.
+CanvasAnvil uses two local ports: the main app runs on `8001`, and PPTist Lab runs on `8003`. Use the combined dev command to start both.
 
 ```bash
 npm run dev:full
@@ -212,8 +219,15 @@ npm run dev:full
 
 Default URLs:
 
-- Web app: `http://127.0.0.1:5173`
-- API service: `http://127.0.0.1:8080`
+- Main app: `http://127.0.0.1:8001`
+- PPTist Lab: `http://127.0.0.1:8003`
+
+For production deployment, CanvasAnvil now uses a dual-service setup:
+
+- Main app: CanvasAnvil Web App
+- PPT editor: standalone `pptist-lab` static service
+
+Docker and traditional deployments must run both services. See [deploy/README.md](deploy/README.md) for detailed deployment configuration.
 
 3. Run type checks
 
@@ -229,7 +243,8 @@ npm run build
 
 ## 🧪 Common Commands
 
-- `npm run dev:full`: start the web app and local API service together
+- `npm run dev:full`: start the main app on `8001` and PPTist Lab on `8003`
+- `cd pptist-lab && npm run dev`: start PPTist Lab on port `8003`
 - `npm run check`: run TypeScript checks
 - `npm run build`: build the production bundle
 

@@ -4,6 +4,24 @@ All notable changes to this project will be documented in this file.
 
 The format is based on Keep a Changelog, and the project aims to follow Semantic Versioning.
 
+## [2.1.0] - 2026-04-25
+
+### Added
+
+- Added a standalone deployment path for `pptist-lab`, allowing the PPT editor to run as an independent service alongside the main CanvasAnvil app.
+- Added deployment documentation for the dual-service setup, covering the main application port and the dedicated PPT editor port.
+
+### Changed
+
+- Updated the CanvasAnvil portal interface with a refreshed entry experience and clearer product navigation.
+- Standardized the deployment ports around the main CanvasAnvil app and the standalone PPT editor service.
+- Updated and synchronized the online access URL to `https://canvasanvil.codingfgd.asia`.
+- Updated the PPT editor embedding flow so production deployments behind domain and HTTPS reverse proxy can resolve the correct parent window origin.
+
+### Fixed
+
+- Fixed production PPT editor embedding issues caused by mismatched `postMessage` origins when the main app is served from HTTPS default port and the PPT editor is served from a dedicated HTTPS port.
+
 ## [2.0.0] - 2026-04-22
 
 ### Added

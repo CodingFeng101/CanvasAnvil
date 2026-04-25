@@ -5,14 +5,14 @@
   "license": "AGPL-3.0-only",
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "dev:full": "concurrently -k -n WEB,API -c cyan,magenta \"npm:dev:web\" \"npm:dev:api\"",
-    "dev:web": "vite",
+    "dev": "vite --host 0.0.0.0 --port 8001",
+    "dev:full": "concurrently -k -n APP,PPTIST -c cyan,magenta \"npm:dev:web\" \"npm --prefix pptist-lab run dev\"",
+    "dev:web": "vite --host 0.0.0.0 --port 8001",
     "dev:api": "tsx watch api/server.ts",
     "start": "tsx api/server.ts",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
-    "preview": "vite preview",
+    "preview": "vite preview --host 0.0.0.0 --port 8001",
     "check": "tsc -b --noEmit"
   },
   "dependencies": {

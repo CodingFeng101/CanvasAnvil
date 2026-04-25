@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { Toaster } from "sonner";
-import { ChartNoAxesCombined, FileCode, Hammer, Layers, Package, Presentation, ScrollText, Square } from "lucide-react";
+import { ChartNoAxesCombined, FileCode, Layers, Package, Presentation, ScrollText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { SettingsDialog } from "@/components/SettingsDialog";
 import { LandingPage } from "@/pages/LandingPage";
@@ -14,10 +14,26 @@ import { PptWorkspaceShell } from "@/workspaces/ppt/PptWorkspaceShell";
 import { PosterWorkspaceShell } from "@/workspaces/poster/PosterWorkspaceShell";
 import { InfographicWorkspaceShell } from "@/workspaces/infographic/InfographicWorkspaceShell";
 import { ProductWorkspaceShell } from "@/workspaces/product/ProductWorkspaceShell";
+import type { PortalWorkspace } from "@/pages/portal/data";
 
 type WorkspaceType = "flow" | "cad" | "ppt" | "poster" | "infographic" | "product";
 const APP_VIEW_STORAGE_KEY = "CanvasAnvil-app-view-v1";
 const APP_WORKSPACE_STORAGE_KEY = "CanvasAnvil-active-workspace-v1";
+
+function BrandIcon({ className }: { className?: string }) {
+  return (
+    <span className={cn("inline-flex h-10 w-10 shrink-0 items-center justify-center", className)}>
+      <svg viewBox="0 0 48 48" role="img" aria-label="CanvasAnvil" className="h-full w-full drop-shadow-[0_8px_18px_rgba(35,108,255,0.22)]">
+        <path d="M24 3.8 42 12.8 24 21.8 6 12.8 24 3.8Z" fill="#236CFF" />
+        <path d="M24 8.6 32.4 12.8 24 17 15.6 12.8 24 8.6Z" fill="#8EC1FF" />
+        <path d="M8.8 17.5 24 25.1l15.2-7.6v5.7L24 30.8 8.8 23.2v-5.7Z" fill="#0B77F4" />
+        <path d="M16.5 29.3h15l-2.7 4.4h-9.6l-2.7-4.4Z" fill="#053EA8" />
+        <path d="M13.3 36.6h21.4v4.2H13.3v-4.2Z" fill="#236CFF" />
+        <path d="M10 41.4h28v3.4H10v-3.4Z" fill="#053EA8" />
+      </svg>
+    </span>
+  );
+}
 
 class ErrorBoundary extends React.Component<{ children: React.ReactNode }, { error: Error | null }> {
   state: { error: Error | null } = { error: null };
@@ -81,7 +97,16 @@ function App() {
     localStorage.setItem(APP_WORKSPACE_STORAGE_KEY, activeWorkspace);
   }, [activeWorkspace]);
 
-  if (showLanding) return <LandingPage onStart={() => setShowLanding(false)} />;
+  if (showLanding) {
+    return (
+      <LandingPage
+        onStart={(workspace?: PortalWorkspace) => {
+          if (workspace) setActiveWorkspace(workspace);
+          setShowLanding(false);
+        }}
+      />
+    );
+  }
 
   return (
     <div className="h-screen w-screen flex flex-col bg-background overflow-hidden font-sans">
@@ -92,12 +117,7 @@ function App() {
           className="flex items-center gap-2.5 font-semibold text-lg tracking-tight text-foreground/90 cursor-pointer justify-self-start"
           onClick={() => setShowLanding(true)}
         >
-          <div className="relative p-1.5 bg-blue-600/10 rounded-lg shadow-sm ring-1 ring-blue-600/20">
-            <Square className="w-5 h-5 text-blue-600" />
-            <div className="absolute -bottom-1 -right-1 rounded-full bg-background p-0.5 ring-1 ring-blue-600/25">
-              <Hammer className="w-3 h-3 text-blue-700" />
-            </div>
-          </div>
+          <BrandIcon className="h-10 w-10" />
           <span>CanvasAnvil</span>
         </div>
 

@@ -118,6 +118,21 @@ export function PptWorkspaceShell() {
     }
   }, [pptChatLocked, isChatCollapsed]);
 
+  useEffect(() => {
+    if (!showPptChat || pptChatLocked) return;
+    const timer = window.setTimeout(() => {
+      const panel = chatPanelRef.current;
+      if (!panel) return;
+      try {
+        if (!panel.isCollapsed?.()) return;
+        panel.resize("32%");
+        setIsChatCollapsed(false);
+      } catch {
+      }
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [showPptChat, pptChatLocked]);
+
   const toggleCollapse = () => {
     if (pptChatLocked) return;
     const panel = chatPanelRef.current;
@@ -251,7 +266,11 @@ export function PptWorkspaceShell() {
   };
 
   return (
-    <ResizablePanelGroup orientation="horizontal" className="h-full" style={{ height: "100%" }}>
+    <ResizablePanelGroup
+      orientation="horizontal"
+      className="h-full"
+      style={{ height: "100%" }}
+    >
       <ResizablePanel
         defaultSize={pptChatLocked ? "100%" : "68%"}
         minSize="30%"

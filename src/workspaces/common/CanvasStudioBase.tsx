@@ -1,4 +1,4 @@
-import type { CSSProperties, ChangeEvent, ReactNode, TextareaHTMLAttributes } from "react";
+﻿import type { CSSProperties, ChangeEvent, ReactNode, TextareaHTMLAttributes } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Download,
@@ -109,15 +109,71 @@ type CanvasVersionItem = {
   createdAt: number;
 };
 
-const STYLE_OPTIONS = ["简约", "科技", "国风", "卡通", "商务", "清新", "复古", "暗黑", "手绘"];
-const COLOR_OPTIONS = ["蓝色", "红色", "绿色", "橙色", "黑金", "青色", "粉色", "银灰", "米白", "紫色"];
-const COMPOSITION_OPTIONS = ["上中下", "左中右", "居中对称", "对角线", "满版"];
-const FOCUS_OPTIONS = ["顶部", "中部", "底部", "左右两侧"];
-const WHITESPACE_OPTIONS = ["少", "中", "多"];
-const CHART_OPTIONS = ["自动", "柱状图", "饼图", "环形图", "时间轴", "进度条"];
-const ORIENTATION_OPTIONS = ["纵向", "横向"];
-const BACKGROUND_OPTIONS = ["纯色", "渐变", "简约场景", "真实场景", "透明"];
-const LIGHTING_OPTIONS = ["无", "柔和", "强烈", "侧光", "顶光"];
+const STYLE_OPTIONS = ["minimal", "tech", "chinese", "cartoon", "business", "fresh", "retro", "dark", "handdrawn"];
+const COLOR_OPTIONS = ["blue", "red", "green", "orange", "blackGold", "cyan", "pink", "silver", "ivory", "purple"];
+const COMPOSITION_OPTIONS = ["vertical", "horizontal", "centered", "diagonal", "fullBleed"];
+const FOCUS_OPTIONS = ["top", "middle", "bottom", "sides"];
+const WHITESPACE_OPTIONS = ["low", "medium", "high"];
+const CHART_OPTIONS = ["auto", "bar", "pie", "donut", "timeline", "progress"];
+const ORIENTATION_OPTIONS = ["portrait", "landscape"];
+const BACKGROUND_OPTIONS = ["solid", "gradient", "minimalScene", "realScene", "transparent"];
+const LIGHTING_OPTIONS = ["none", "soft", "strong", "side", "topLight"];
+
+const OPTION_LABELS: Record<string, { zh: string; en: string }> = {
+  minimal: { zh: "极简", en: "Minimal" },
+  tech: { zh: "科技", en: "Tech" },
+  chinese: { zh: "中式", en: "Chinese" },
+  cartoon: { zh: "卡通", en: "Cartoon" },
+  business: { zh: "商务", en: "Business" },
+  fresh: { zh: "清新", en: "Fresh" },
+  retro: { zh: "复古", en: "Retro" },
+  dark: { zh: "暗色", en: "Dark" },
+  handdrawn: { zh: "手绘", en: "Hand-drawn" },
+  blue: { zh: "蓝色", en: "Blue" },
+  red: { zh: "红色", en: "Red" },
+  green: { zh: "绿色", en: "Green" },
+  orange: { zh: "橙色", en: "Orange" },
+  blackGold: { zh: "黑金", en: "Black Gold" },
+  cyan: { zh: "青色", en: "Cyan" },
+  pink: { zh: "粉色", en: "Pink" },
+  silver: { zh: "银灰", en: "Silver Gray" },
+  ivory: { zh: "象牙白", en: "Ivory" },
+  purple: { zh: "紫色", en: "Purple" },
+  vertical: { zh: "上中下", en: "Top / Middle / Bottom" },
+  horizontal: { zh: "左中右", en: "Left / Center / Right" },
+  centered: { zh: "中心对称", en: "Centered Symmetry" },
+  diagonal: { zh: "对角线", en: "Diagonal" },
+  fullBleed: { zh: "满版", en: "Full Bleed" },
+  top: { zh: "顶部", en: "Top" },
+  middle: { zh: "中部", en: "Middle" },
+  bottom: { zh: "底部", en: "Bottom" },
+  sides: { zh: "左右两侧", en: "Both Sides" },
+  low: { zh: "低", en: "Low" },
+  medium: { zh: "中", en: "Medium" },
+  high: { zh: "高", en: "High" },
+  auto: { zh: "自动", en: "Auto" },
+  bar: { zh: "柱状图", en: "Bar Chart" },
+  pie: { zh: "饼图", en: "Pie Chart" },
+  donut: { zh: "环形图", en: "Donut Chart" },
+  timeline: { zh: "时间线", en: "Timeline" },
+  progress: { zh: "进度条", en: "Progress Bar" },
+  portrait: { zh: "竖版", en: "Portrait" },
+  landscape: { zh: "横版", en: "Landscape" },
+  solid: { zh: "纯色", en: "Solid" },
+  gradient: { zh: "渐变", en: "Gradient" },
+  minimalScene: { zh: "极简场景", en: "Minimal Scene" },
+  realScene: { zh: "真实场景", en: "Real Scene" },
+  transparent: { zh: "透明", en: "Transparent" },
+  none: { zh: "无", en: "None" },
+  soft: { zh: "柔和", en: "Soft" },
+  strong: { zh: "强烈", en: "Strong" },
+  side: { zh: "侧光", en: "Side Light" },
+};
+OPTION_LABELS.topLight = { zh: "顶光", en: "Top Light" };
+
+const optionText = (value: string, lang: "zh" | "en") => OPTION_LABELS[value]?.[lang] || value;
+const localizeOptions = (options: string[], lang: "zh" | "en") =>
+  options.map((value) => ({ value, label: optionText(value, lang) }));
 
 const MODE_PRESETS: Record<CanvasStudioMode, SizePreset[]> = {
   poster: [
@@ -196,6 +252,15 @@ function getDefaultProductText(form: CanvasFormState): ProductTextState {
 
 function buildPrompt(mode: CanvasStudioMode, form: CanvasFormState) {
   const size = resolveCanvasSize(mode, form);
+  const style = optionText(form.style, "zh");
+  const color = optionText(form.color, "zh");
+  const composition = optionText(form.composition, "zh");
+  const focus = optionText(form.focus, "zh");
+  const whitespace = optionText(form.whitespace, "zh");
+  const chartType = optionText(form.chartType, "zh");
+  const orientation = optionText(form.orientation, "zh");
+  const backgroundType = optionText(form.backgroundType, "zh");
+  const lighting = optionText(form.lighting, "zh");
   const sellingPoints = form.sellingPointsText
     .split(/\r?\n/)
     .map((item) => item.trim())
@@ -205,12 +270,12 @@ function buildPrompt(mode: CanvasStudioMode, form: CanvasFormState) {
     .map((item) => item.trim())
     .filter(Boolean);
   if (mode === "poster") {
-    return `生成一张${size.width}x${size.height}的中文海报，风格${form.style}，主色调${form.color}，主题“${form.theme}”，构图${form.composition}，视觉重点${form.focus}，留白${form.whitespace}，分辨率${form.dpi}DPI，卖点：${sellingPoints.join("、") || "无"}。画面需要高级、清晰、适合品牌传播。`;
+    return `生成一张${size.width}x${size.height}的中文海报，风格${style}，主色调${color}，主题“${form.theme}”，构图${composition}，视觉重点${focus}，留白${whitespace}，分辨率${form.dpi}DPI，卖点：${sellingPoints.join("、") || "无"}。画面需要高级、清晰、适合品牌传播。`;
   }
   if (mode === "infographic") {
-    return `生成一张${size.width}x${size.height}的信息图，主题“${form.theme}”，主色调${form.color}，风格${form.style}，内容要点：${bulletPoints.join("、") || "无"}，数据：${form.dataText || "无"}，图表偏向${form.chartType}，排版${form.orientation}。要求结构清晰，信息层级明确。`;
+    return `生成一张${size.width}x${size.height}的信息图，主题“${form.theme}”，主色调${color}，风格${style}，内容要点：${bulletPoints.join("、") || "无"}，数据：${form.dataText || "无"}，图表偏向${chartType}，排版${orientation}。要求结构清晰，信息层级明确。`;
   }
-  return `生成一张${size.width}x${size.height}的产品介绍图，产品名“${form.productName}”，风格${form.style}，主色调${form.color}，背景${form.backgroundType}，光影${form.lighting}，卖点：${sellingPoints.join("、") || "无"}。画面要突出主体产品，适合电商宣传。`;
+  return `生成一张${size.width}x${size.height}的产品介绍图，产品名“${form.productName}”，风格${style}，主色调${color}，背景${backgroundType}，光影${lighting}，卖点：${sellingPoints.join("、") || "无"}。画面要突出主体产品，适合电商宣传。`;
 }
 
 function resolveCanvasSize(mode: CanvasStudioMode, form: CanvasFormState) {
@@ -488,6 +553,15 @@ function CanvasHistoryDialog({
 export function CanvasStudioBase({ mode }: { mode: CanvasStudioMode }) {
   const uiLang = useUiLanguage();
   const tr = (zh: string, en: string) => (uiLang === "zh" ? zh : en);
+  const styleOptions = useMemo(() => localizeOptions(STYLE_OPTIONS, uiLang), [uiLang]);
+  const colorOptions = useMemo(() => localizeOptions(COLOR_OPTIONS, uiLang), [uiLang]);
+  const compositionOptions = useMemo(() => localizeOptions(COMPOSITION_OPTIONS, uiLang), [uiLang]);
+  const focusOptions = useMemo(() => localizeOptions(FOCUS_OPTIONS, uiLang), [uiLang]);
+  const whitespaceOptions = useMemo(() => localizeOptions(WHITESPACE_OPTIONS, uiLang), [uiLang]);
+  const chartOptions = useMemo(() => localizeOptions(CHART_OPTIONS, uiLang), [uiLang]);
+  const orientationOptions = useMemo(() => localizeOptions(ORIENTATION_OPTIONS, uiLang), [uiLang]);
+  const backgroundOptions = useMemo(() => localizeOptions(BACKGROUND_OPTIONS, uiLang), [uiLang]);
+  const lightingOptions = useMemo(() => localizeOptions(LIGHTING_OPTIONS, uiLang), [uiLang]);
   const draftStorageKey = getStorageKey(mode, "draft");
   const defaultForm = useMemo(() => {
     const base = getDefaultForm(mode);
@@ -900,7 +974,7 @@ export function CanvasStudioBase({ mode }: { mode: CanvasStudioMode }) {
                             </Select>
                           </ControlField>
                           <ControlField label={tr("主色调", "Primary Color")}>
-                            <StyledSelect value={form.color} onChange={(value) => updateForm({ color: value })} options={COLOR_OPTIONS} />
+                            <StyledSelect value={form.color} onChange={(value) => updateForm({ color: value })} options={colorOptions} />
                           </ControlField>
                         </div>
                       ) : mode === "product" ? (
@@ -920,7 +994,7 @@ export function CanvasStudioBase({ mode }: { mode: CanvasStudioMode }) {
                             </Select>
                           </ControlField>
                           <ControlField label={tr("主色调", "Primary Color")}>
-                            <StyledSelect value={form.color} onChange={(value) => updateForm({ color: value })} options={COLOR_OPTIONS} />
+                            <StyledSelect value={form.color} onChange={(value) => updateForm({ color: value })} options={colorOptions} />
                           </ControlField>
                         </div>
                       ) : (
@@ -940,7 +1014,7 @@ export function CanvasStudioBase({ mode }: { mode: CanvasStudioMode }) {
                             </Select>
                           </ControlField>
                           <ControlField label={tr("留白程度", "Whitespace")}>
-                            <StyledSelect value={form.whitespace} onChange={(value) => updateForm({ whitespace: value })} options={WHITESPACE_OPTIONS} />
+                            <StyledSelect value={form.whitespace} onChange={(value) => updateForm({ whitespace: value })} options={whitespaceOptions} />
                           </ControlField>
                         </div>
                       )}
@@ -961,7 +1035,7 @@ export function CanvasStudioBase({ mode }: { mode: CanvasStudioMode }) {
                           <StyledSelect value={form.dpi} onChange={(value) => updateForm({ dpi: value as "72" | "300" })} options={[{ value: "72", label: "72 DPI" }, { value: "300", label: "300 DPI" }]} />
                         </ControlField>
                         <ControlField label={tr("风格", "Style")}>
-                          <StyledSelect value={form.style} onChange={(value) => updateForm({ style: value })} options={STYLE_OPTIONS} />
+                          <StyledSelect value={form.style} onChange={(value) => updateForm({ style: value })} options={styleOptions} />
                         </ControlField>
                       </div>
 
@@ -972,10 +1046,10 @@ export function CanvasStudioBase({ mode }: { mode: CanvasStudioMode }) {
                           </ControlField>
                           <div className="grid grid-cols-2 gap-3">
                             <ControlField label={tr("构图", "Composition")}>
-                              <StyledSelect value={form.composition} onChange={(value) => updateForm({ composition: value })} options={COMPOSITION_OPTIONS} />
+                              <StyledSelect value={form.composition} onChange={(value) => updateForm({ composition: value })} options={compositionOptions} />
                             </ControlField>
                             <ControlField label={tr("视觉重点", "Focus")}>
-                              <StyledSelect value={form.focus} onChange={(value) => updateForm({ focus: value })} options={FOCUS_OPTIONS} />
+                              <StyledSelect value={form.focus} onChange={(value) => updateForm({ focus: value })} options={focusOptions} />
                             </ControlField>
                           </div>
                           <ControlField label={tr("卖点", "Selling Points")}>
@@ -997,10 +1071,10 @@ export function CanvasStudioBase({ mode }: { mode: CanvasStudioMode }) {
                           </ControlField>
                           <div className="grid grid-cols-2 gap-3">
                             <ControlField label={tr("图表倾向", "Chart Type")}>
-                              <StyledSelect value={form.chartType} onChange={(value) => updateForm({ chartType: value })} options={CHART_OPTIONS} />
+                              <StyledSelect value={form.chartType} onChange={(value) => updateForm({ chartType: value })} options={chartOptions} />
                             </ControlField>
                             <ControlField label={tr("排版方向", "Orientation")}>
-                              <StyledSelect value={form.orientation} onChange={(value) => updateForm({ orientation: value })} options={ORIENTATION_OPTIONS} />
+                              <StyledSelect value={form.orientation} onChange={(value) => updateForm({ orientation: value })} options={orientationOptions} />
                             </ControlField>
                           </div>
                         </>
@@ -1016,10 +1090,10 @@ export function CanvasStudioBase({ mode }: { mode: CanvasStudioMode }) {
                           </ControlField>
                           <div className="grid grid-cols-2 gap-3">
                             <ControlField label={tr("背景类型", "Background")}>
-                              <StyledSelect value={form.backgroundType} onChange={(value) => updateForm({ backgroundType: value })} options={BACKGROUND_OPTIONS} />
+                              <StyledSelect value={form.backgroundType} onChange={(value) => updateForm({ backgroundType: value })} options={backgroundOptions} />
                             </ControlField>
                             <ControlField label={tr("光影效果", "Lighting")}>
-                              <StyledSelect value={form.lighting} onChange={(value) => updateForm({ lighting: value })} options={LIGHTING_OPTIONS} />
+                              <StyledSelect value={form.lighting} onChange={(value) => updateForm({ lighting: value })} options={lightingOptions} />
                             </ControlField>
                           </div>
                         </>

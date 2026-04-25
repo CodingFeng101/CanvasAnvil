@@ -5,7 +5,7 @@
         style="width: 60%;"
         :value="richTextAttrs.fontname"
         search
-        searchLabel="鎼滅储瀛椾綋"
+        searchLabel="搜索字体"
         autofocus
         @update:value="value => emitRichTextCommand('fontname', value as string)"
         :options="FONTS"
@@ -18,7 +18,7 @@
         style="width: 40%;"
         :value="richTextAttrs.fontsize"
         search
-        searchLabel="鎼滅储瀛楀彿"
+        searchLabel="搜索字号"
         autofocus
         @update:value="value => emitRichTextCommand('fontsize', value as string)"
         :options="fontSizeOptions.map(item => ({
@@ -39,7 +39,7 @@
             @update:modelValue="value => emitRichTextCommand('color', value)"
           />
         </template>
-        <TextColorButton first v-tooltip="'鏂囧瓧棰滆壊'" :color="richTextAttrs.color">
+        <TextColorButton first v-tooltip="'文字颜色'" :color="richTextAttrs.color">
           <i-icon-park-outline:text />
         </TextColorButton>
       </Popover>
@@ -50,48 +50,48 @@
             @update:modelValue="value => emitRichTextCommand('backcolor', value)"
           />
         </template>
-        <TextColorButton v-tooltip="'鏂囧瓧楂樹寒'" :color="richTextAttrs.backcolor">
+        <TextColorButton v-tooltip="'文字背景色'" :color="richTextAttrs.backcolor">
           <i-icon-park-outline:high-light />
         </TextColorButton>
       </Popover>
-      <Button 
+      <Button
         class="font-size-btn"
         style="width: 20%;"
-        v-tooltip="'澧炲ぇ瀛楀彿'"
+        v-tooltip="'增大字号'"
         @click="emitRichTextCommand('fontsize-add')"
       ><i-icon-park-outline:font-size />+</Button>
       <Button
         last
         class="font-size-btn"
         style="width: 20%;"
-        v-tooltip="'鍑忓皬瀛楀彿'"
+        v-tooltip="'减小字号'"
         @click="emitRichTextCommand('fontsize-reduce')"
       ><i-icon-park-outline:font-size />-</Button>
     </ButtonGroup>
 
     <ButtonGroup class="row">
-      <CheckboxButton 
+      <CheckboxButton
         style="flex: 1;"
         :checked="richTextAttrs.bold"
-        v-tooltip="'鍔犵矖'"
+        v-tooltip="'加粗'"
         @click="emitRichTextCommand('bold')"
       ><i-icon-park-outline:text-bold /></CheckboxButton>
-      <CheckboxButton 
+      <CheckboxButton
         style="flex: 1;"
         :checked="richTextAttrs.em"
-        v-tooltip="'鏂滀綋'"
+        v-tooltip="'斜体'"
         @click="emitRichTextCommand('em')"
       ><i-icon-park-outline:text-italic /></CheckboxButton>
-      <CheckboxButton 
+      <CheckboxButton
         style="flex: 1;"
         :checked="richTextAttrs.underline"
-        v-tooltip="'涓嬪垝绾?'"
+        v-tooltip="'下划线'"
         @click="emitRichTextCommand('underline')"
       ><i-icon-park-outline:text-underline /></CheckboxButton>
-      <CheckboxButton 
+      <CheckboxButton
         style="flex: 1;"
         :checked="richTextAttrs.strikethrough"
-        v-tooltip="'鍒犻櫎绾?'"
+        v-tooltip="'删除线'"
         @click="emitRichTextCommand('strikethrough')"
       ><i-icon-park-outline:strikethrough /></CheckboxButton>
     </ButtonGroup>
@@ -112,13 +112,13 @@
       <CheckboxButton
         style="flex: 1;"
         :checked="richTextAttrs.code"
-        v-tooltip="'琛屽唴浠ｇ爜'"
+        v-tooltip="'代码块'"
         @click="emitRichTextCommand('code')"
       ><i-icon-park-outline:code /></CheckboxButton>
       <CheckboxButton
         style="flex: 1;"
         :checked="richTextAttrs.blockquote"
-        v-tooltip="'寮曠敤'"
+        v-tooltip="'引用'"
         @click="emitRichTextCommand('blockquote')"
       ><i-icon-park-outline:quote /></CheckboxButton>
     </ButtonGroup>
@@ -158,16 +158,16 @@
     </ButtonGroup>
     <Divider />
 
-    <RadioGroup 
-      class="row" 
-      button-style="solid" 
+    <RadioGroup
+      class="row"
+      button-style="solid"
       :value="richTextAttrs.align"
       @update:value="value => emitRichTextCommand('align', value)"
     >
-      <RadioButton value="left" v-tooltip="'宸﹀榻?'" style="flex: 1;"><i-icon-park-outline:align-text-left /></RadioButton>
-      <RadioButton value="center" v-tooltip="'灞呬腑'" style="flex: 1;"><i-icon-park-outline:align-text-center /></RadioButton>
-      <RadioButton value="right" v-tooltip="'鍙冲榻?'" style="flex: 1;"><i-icon-park-outline:align-text-right /></RadioButton>
-      <RadioButton value="justify" v-tooltip="'涓ょ瀵归綈'" style="flex: 1;"><i-icon-park-outline:align-text-both /></RadioButton>
+      <RadioButton value="left" v-tooltip="'左对齐'" style="flex: 1;"><i-icon-park-outline:align-text-left /></RadioButton>
+      <RadioButton value="center" v-tooltip="'居中对齐'" style="flex: 1;"><i-icon-park-outline:align-text-center /></RadioButton>
+      <RadioButton value="right" v-tooltip="'右对齐'" style="flex: 1;"><i-icon-park-outline:align-text-right /></RadioButton>
+      <RadioButton value="justify" v-tooltip="'两端对齐'" style="flex: 1;"><i-icon-park-outline:align-text-both /></RadioButton>
     </RadioGroup>
 
     <div class="row" passive>
@@ -176,15 +176,15 @@
           first
           :type="richTextAttrs.bulletList ? 'primary' : 'default'"
           style="flex: 1;"
-          v-tooltip="'椤圭洰绗﹀彿'"
+          v-tooltip="'项目符号列表'"
           @click="emitRichTextCommand('bulletList')"
         ><i-icon-park-outline:list /></Button>
         <Popover trigger="click" v-model:value="bulletListPanelVisible">
           <template #content>
             <div class="list-wrap">
-              <ul class="list" 
-                v-for="item in bulletListStyleTypeOption" 
-                :key="item" 
+              <ul class="list"
+                v-for="item in bulletListStyleTypeOption"
+                :key="item"
                 :style="{ listStyleType: item }"
                 @click="emitRichTextCommand('bulletList', item)"
               >
@@ -201,15 +201,15 @@
           first
           :type="richTextAttrs.orderedList ? 'primary' : 'default'"
           style="flex: 1;"
-          v-tooltip="'缂栧彿'"
+          v-tooltip="'有序列表'"
           @click="emitRichTextCommand('orderedList')"
         ><i-icon-park-outline:ordered-list /></Button>
         <Popover trigger="click" v-model:value="orderedListPanelVisible">
           <template #content>
             <div class="list-wrap">
-              <ul class="list" 
-                v-for="item in orderedListStyleTypeOption" 
-                :key="item" 
+              <ul class="list"
+                v-for="item in orderedListStyleTypeOption"
+                :key="item"
                 :style="{ listStyleType: item }"
                 @click="emitRichTextCommand('orderedList', item)"
               >
@@ -224,20 +224,20 @@
 
     <div class="row">
       <ButtonGroup style="flex: 1;" passive>
-        <Button first style="flex: 1;" v-tooltip="'鍑忓皬娈佃惤缂╄繘'" @click="emitRichTextCommand('indent', '-1')"><i-icon-park-outline:indent-left /></Button>
+        <Button first style="flex: 1;" v-tooltip="'减小段落缩进'" @click="emitRichTextCommand('indent', '-1')"><i-icon-park-outline:indent-left /></Button>
         <Popover trigger="click" v-model:value="indentLeftPanelVisible">
           <template #content>
-            <PopoverMenuItem center @click="emitRichTextCommand('textIndent', '-1')">鍑忓皬棣栬缂╄繘</PopoverMenuItem>
+            <PopoverMenuItem center @click="emitRichTextCommand('textIndent', '-1')">减小首行缩进</PopoverMenuItem>
           </template>
           <Button last class="popover-btn"><i-icon-park-outline:down /></Button>
         </Popover>
       </ButtonGroup>
       <div style="width: 10px;"></div>
       <ButtonGroup style="flex: 1;" passive>
-        <Button first style="flex: 1;" v-tooltip="'澧炲ぇ娈佃惤缂╄繘'" @click="emitRichTextCommand('indent', '+1')"><i-icon-park-outline:indent-right /></Button>
+        <Button first style="flex: 1;" v-tooltip="'增大段落缩进'" @click="emitRichTextCommand('indent', '+1')"><i-icon-park-outline:indent-right /></Button>
         <Popover trigger="click" v-model:value="indentRightPanelVisible">
           <template #content>
-            <PopoverMenuItem center @click="emitRichTextCommand('textIndent', '+1')">澧炲ぇ棣栬缂╄繘</PopoverMenuItem>
+            <PopoverMenuItem center @click="emitRichTextCommand('textIndent', '+1')">增大首行缩进</PopoverMenuItem>
           </template>
           <Button last class="popover-btn"><i-icon-park-outline:down /></Button>
         </Popover>
@@ -301,7 +301,7 @@ const openLinkPopover = () => {
 }
 const updateLink = (link?: string) => {
   const linkRegExp = /^(https?):\/\/[\w\-]+(\.[\w\-]+)+([\w\-.,@?^=%&:\/~+#]*[\w\-@?^=%&\/~+#])?$/
-  if (!link || !linkRegExp.test(link)) return message.error('涓嶆槸姝ｇ‘鐨勭綉椤甸摼鎺ュ湴鍧€')
+  if (!link || !linkRegExp.test(link)) return message.error('不是正确的网页链接地址')
 
   emitRichTextCommand('link', link)
   linkPopoverVisible.value = false
@@ -316,7 +316,8 @@ const removeLink = () => {
 <style lang="scss" scoped>
 .rich-text-base {
   user-select: none;
-}.row {
+}
+.row {
   width: 100%;
   display: flex;
   align-items: center;
@@ -384,5 +385,4 @@ const removeLink = () => {
 .popover-btn {
   padding: 0 3px;
 }
-
 </style>

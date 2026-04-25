@@ -3503,24 +3503,38 @@ export function PptWorkspace({
 
   const postEmbeddedPptistPayload = (payload: PptistLabBootstrapPayload | null) => {
     if (!payload || typeof window === "undefined") return false;
-    const iframeWindow = pptistIframeRef.current?.contentWindow;
+    const iframe = pptistIframeRef.current;
+    const iframeWindow = iframe?.contentWindow;
     if (!iframeWindow) return false;
-    const targetOrigin = `${window.location.protocol}//${window.location.hostname}:5174`;
-    iframeWindow.postMessage(
-      {
-        type: CANVASANVIL_PPTIST_MESSAGE_TYPE,
-        payload,
-      },
-      targetOrigin,
-    );
+    const targetOrigin = (() => {
+      try {
+        return new URL(iframe?.src || "", window.location.href).origin;
+      } catch {
+        return `${window.location.protocol}//${window.location.hostname}:8003`;
+      }
+    })();
+    try {
+      iframeWindow.postMessage(
+        {
+          type: CANVASANVIL_PPTIST_MESSAGE_TYPE,
+          payload,
+        },
+        targetOrigin,
+      );
+    } catch {
+      return false;
+    }
     return true;
   };
 
   useEffect(() => {
     if (typeof window === "undefined") return;
     const handleEmbeddedPptistMessage = (event: MessageEvent) => {
-      const expectedOrigin = `${window.location.protocol}//${window.location.hostname}:5174`;
-      if (event.origin !== expectedOrigin) return;
+      const expectedOrigins = new Set([
+        `${window.location.protocol}//${window.location.hostname}:8003`,
+        window.location.origin,
+      ]);
+      if (!expectedOrigins.has(event.origin)) return;
       const data = event.data;
       if (!data || typeof data !== "object") return;
       if ((data as { type?: string }).type !== "canvasanvil:ppt-return") return;
@@ -5416,7 +5430,7 @@ export function PptWorkspace({
     const duplicatedSlide: SlideData = {
       ...cloneSerializable(sourceSlide),
       id: duplicatedId,
-      title: `${sourceSlide.title || tr("????", "Untitled slide")} ${tr("??", "Copy")}`,
+      title: `${sourceSlide.title || tr("未命名幻灯片", "Untitled slide")} ${tr("副本", "Copy")}`,
     };
     const insertAt = sourceIndex + 1;
 
@@ -6470,7 +6484,7 @@ export function PptWorkspace({
           <iframe
             key={embeddedPptistSessionId}
             ref={pptistIframeRef}
-            src={`${window.location.protocol}//${window.location.hostname}:5174/?canvasanvil=embedded&session=${embeddedPptistSessionId}`}
+            src={`${window.location.protocol}//${window.location.hostname}:8003/?canvasanvil=embedded&session=${embeddedPptistSessionId}`}
             className="h-full w-full border-0 bg-white"
             title="PPTist Editor"
             onLoad={() => {
