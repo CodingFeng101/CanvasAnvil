@@ -33,17 +33,6 @@
 
 > CanvasAnvil brings diagramming, interior design workflows, presentation production, poster creation, infographic composition, and product storytelling into one unified workspace.
 
-## 🎨 Creative Canvases
-
-| Workspace | Focus | Typical output |
-| --- | --- | --- |
-| `Flow` | structured diagram generation and partial editing | flowcharts, architecture diagrams, logic diagrams |
-| `CAD` | interior planning, drawing coordination, and delivery packaging | concept boards, 2D drawings, render briefs, material lists |
-| `PPT` | structured presentation generation and mixed export workflows | presentations, pitch decks, editable decks, report slides |
-| `Poster` | single-frame visual communication | event posters, promotional posters, campaign key visuals |
-| `Infographic` | information design and visual explanation | explainer graphics, thematic information boards, comparison charts |
-| `Product` | product storytelling and feature communication | product showcase pages, selling-point visuals, launch pages |
-
 ## 🔷 Flow Canvas
 
 Turn structured prompts into clear diagrams for research, systems, delivery plans, and teaching maps, then keep refining layout, labels, and node relationships in one place.
@@ -165,6 +154,16 @@ Present products through feature-led layouts that combine hero imagery, selling 
   </tr>
 </table>
 
+## 🎨 Creative Canvases
+
+| Workspace | Focus | Typical output |
+| --- | --- | --- |
+| `Flow` | structured diagram generation and partial editing | flowcharts, architecture diagrams, logic diagrams |
+| `CAD` | interior planning, drawing coordination, and delivery packaging | concept boards, 2D drawings, render briefs, material lists |
+| `PPT` | structured presentation generation and mixed export workflows | presentations, pitch decks, editable decks, report slides |
+| `Poster` | single-frame visual communication | event posters, promotional posters, campaign key visuals |
+| `Infographic` | information design and visual explanation | explainer graphics, thematic information boards, comparison charts |
+| `Product` | product storytelling and feature communication | product showcase pages, selling-point visuals, launch pages |
 
 ## 🌈 Release
 
