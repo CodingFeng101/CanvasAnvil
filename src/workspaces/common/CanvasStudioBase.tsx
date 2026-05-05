@@ -310,6 +310,70 @@ function updateProductTextBlocks(blocks: PptTextBlock[], text: ProductTextState)
   });
 }
 
+function buildGenerationContext(mode: CanvasStudioMode, form: CanvasFormState) {
+  const size = resolveCanvasSize(mode, form);
+  const style = optionText(form.style, "zh");
+  const color = optionText(form.color, "zh");
+  const composition = optionText(form.composition, "zh");
+  const focus = optionText(form.focus, "zh");
+  const whitespace = optionText(form.whitespace, "zh");
+  const chartType = optionText(form.chartType, "zh");
+  const orientation = optionText(form.orientation, "zh");
+  const backgroundType = optionText(form.backgroundType, "zh");
+  const lighting = optionText(form.lighting, "zh");
+  const sellingPoints = form.sellingPointsText
+    .split(/\r?\n/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+  const bulletPoints = form.bulletPointsText
+    .split(/\r?\n/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+
+  if (mode === "poster") {
+    return [
+      `当前画布参数：`,
+      `- 尺寸：${size.width}x${size.height}`,
+      `- 分辨率：${form.dpi} DPI`,
+      `- 风格：${style}`,
+      `- 主色调：${color}`,
+      `- 构图：${composition}`,
+      `- 视觉重点：${focus}`,
+      `- 留白：${whitespace}`,
+      `- 主题：${form.theme || "未填写"}`,
+      `- 卖点：${sellingPoints.join("、") || "无"}`,
+    ].join("\n");
+  }
+
+  if (mode === "infographic") {
+    return [
+      `当前画布参数：`,
+      `- 尺寸：${size.width}x${size.height}`,
+      `- 风格：${style}`,
+      `- 主色调：${color}`,
+      `- 构图：${composition}`,
+      `- 视觉重点：${focus}`,
+      `- 留白：${whitespace}`,
+      `- 主题：${form.theme || "未填写"}`,
+      `- 图表类型：${chartType}`,
+      `- 排版方向：${orientation}`,
+      `- 要点：${bulletPoints.join("、") || "无"}`,
+      `- 数据：${form.dataText || "无"}`,
+    ].join("\n");
+  }
+
+  return [
+    `当前画布参数：`,
+    `- 尺寸：${size.width}x${size.height}`,
+    `- 风格：${style}`,
+    `- 主色调：${color}`,
+    `- 背景：${backgroundType}`,
+    `- 光影：${lighting}`,
+    `- 主题：${form.productName || "未填写"}`,
+    `- 卖点：${sellingPoints.join("、") || "无"}`,
+  ].join("\n");
+}
+
 async function loadImage(url: string) {
   const image = new Image();
   image.crossOrigin = "anonymous";
@@ -737,11 +801,14 @@ export function CanvasStudioBase({ mode }: { mode: CanvasStudioMode }) {
   };
 
   const buildInteractionPrompt = (userRequest: string) => {
+    const context = buildGenerationContext(mode, form);
     if (mode === "poster") {
       return [
         "Edit the provided poster image according to the user's request.",
         "Use the current generated image as the main reference.",
-        "Keep the overall subject and composition unless the user explicitly asks to change them.",
+        "Keep the overall subject, composition, and canvas orientation unless the user explicitly asks to change them.",
+        "Preserve the original aspect ratio and do not rotate the layout from landscape to portrait.",
+        context,
         `User request: ${userRequest}`,
       ].join(" ");
     }
@@ -750,6 +817,8 @@ export function CanvasStudioBase({ mode }: { mode: CanvasStudioMode }) {
         "Edit the provided infographic image according to the user's request.",
         "Use the current generated image as the main reference.",
         "Preserve the infographic style and layout logic unless the user explicitly asks to change them.",
+        "Preserve the original aspect ratio and do not rotate the layout from landscape to portrait unless requested.",
+        context,
         `User request: ${userRequest}`,
       ].join(" ");
     }
@@ -757,6 +826,7 @@ export function CanvasStudioBase({ mode }: { mode: CanvasStudioMode }) {
       "Edit the provided product showcase image according to the user's request.",
       "Use the current generated image as the main reference.",
       "Keep product identity stable. The uploaded product image is a hard reference constraint.",
+      context,
       `User request: ${userRequest}`,
     ].join(" ");
   };

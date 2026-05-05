@@ -72,6 +72,14 @@ export interface ImageRoute {
   supportsReferenceImages: boolean;
 }
 
+export interface ImageProviderCapabilities {
+  supportsGeneration: boolean;
+  supportsEdits: boolean;
+  supportsMask: boolean;
+  supportsReferenceImages: boolean;
+  supportsMultiReferenceImages: boolean;
+}
+
 const TEXT_VISION_RULES: Array<{ provider: AIProviderId; patterns: RegExp[] }> = [
   {
     provider: "openai",
@@ -150,6 +158,112 @@ const IMAGE_REFERENCE_RULES: Array<{ provider: AIProviderId; patterns: RegExp[] 
   {
     provider: "tencent",
     patterns: [/hunyuan/i],
+  },
+];
+
+const IMAGE_CAPABILITY_RULES: Array<{
+  provider: AIProviderId;
+  patterns: RegExp[];
+  capabilities: Partial<ImageProviderCapabilities>;
+}> = [
+  {
+    provider: "openai",
+    patterns: [/gpt-image/i, /dall-e/i],
+    capabilities: {
+      supportsGeneration: true,
+      supportsEdits: true,
+      supportsMask: true,
+      supportsReferenceImages: true,
+      supportsMultiReferenceImages: false,
+    },
+  },
+  {
+    provider: "aliyun",
+    patterns: [/wan/i, /qwen-image/i],
+    capabilities: {
+      supportsGeneration: true,
+      supportsEdits: true,
+      supportsMask: false,
+      supportsReferenceImages: true,
+      supportsMultiReferenceImages: true,
+    },
+  },
+  {
+    provider: "bytedance",
+    patterns: [/seedream/i],
+    capabilities: {
+      supportsGeneration: true,
+      supportsEdits: true,
+      supportsMask: false,
+      supportsReferenceImages: true,
+      supportsMultiReferenceImages: true,
+    },
+  },
+  {
+    provider: "zhipu",
+    patterns: [/glm-image/i, /cogview/i],
+    capabilities: {
+      supportsGeneration: true,
+      supportsEdits: true,
+      supportsMask: false,
+      supportsReferenceImages: true,
+      supportsMultiReferenceImages: false,
+    },
+  },
+  {
+    provider: "tencent",
+    patterns: [/hunyuan/i],
+    capabilities: {
+      supportsGeneration: true,
+      supportsEdits: true,
+      supportsMask: false,
+      supportsReferenceImages: true,
+      supportsMultiReferenceImages: false,
+    },
+  },
+  {
+    provider: "google",
+    patterns: [/imagen/i],
+    capabilities: {
+      supportsGeneration: true,
+      supportsEdits: true,
+      supportsMask: true,
+      supportsReferenceImages: true,
+      supportsMultiReferenceImages: false,
+    },
+  },
+  {
+    provider: "xai",
+    patterns: [/grok/i],
+    capabilities: {
+      supportsGeneration: true,
+      supportsEdits: true,
+      supportsMask: false,
+      supportsReferenceImages: true,
+      supportsMultiReferenceImages: false,
+    },
+  },
+  {
+    provider: "bfl",
+    patterns: [/flux/i],
+    capabilities: {
+      supportsGeneration: true,
+      supportsEdits: true,
+      supportsMask: true,
+      supportsReferenceImages: true,
+      supportsMultiReferenceImages: true,
+    },
+  },
+  {
+    provider: "adobe",
+    patterns: [/firefly/i],
+    capabilities: {
+      supportsGeneration: true,
+      supportsEdits: true,
+      supportsMask: true,
+      supportsReferenceImages: true,
+      supportsMultiReferenceImages: false,
+    },
   },
 ];
 
@@ -244,6 +358,45 @@ export function resolveImageRoute(channel: AIChannelConfig): ImageRoute {
       ? "openai-images"
       : "openai-chat-image",
     supportsReferenceImages: matchesRule(provider, channel.model, IMAGE_REFERENCE_RULES),
+  };
+}
+
+export function resolveImageCapabilities(channel: AIChannelConfig): ImageProviderCapabilities {
+  const provider = String(channel.provider || "").toLowerCase();
+  const model = String(channel.model || "");
+
+  const matched = IMAGE_CAPABILITY_RULES.find(
+    (rule) => rule.provider === provider && rule.patterns.some((pattern) => pattern.test(model)),
+  );
+
+  if (matched) {
+    return {
+      supportsGeneration: true,
+      supportsEdits: true,
+      supportsMask: false,
+      supportsReferenceImages: false,
+      supportsMultiReferenceImages: false,
+      ...matched.capabilities,
+    };
+  }
+
+  if (provider === "custom") {
+    const spec = String(channel.customMapping || "").trim() ? parseCustomProviderMapping(channel.customMapping) : null;
+    return {
+      supportsGeneration: true,
+      supportsEdits: Boolean(spec?.supportsReferenceImages),
+      supportsMask: false,
+      supportsReferenceImages: Boolean(spec?.supportsReferenceImages),
+      supportsMultiReferenceImages: Boolean(spec?.supportsReferenceImages),
+    };
+  }
+
+  return {
+    supportsGeneration: true,
+    supportsEdits: false,
+    supportsMask: false,
+    supportsReferenceImages: false,
+    supportsMultiReferenceImages: false,
   };
 }
 

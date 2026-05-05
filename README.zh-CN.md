@@ -19,10 +19,11 @@
 </p>
 
 <p align="center">
-  <a href="#创作画布">创作画布</a> ·
-  <a href="#skills">Skills</a> ·
-  <a href="#ppt-演示画布">PPT 展示</a> ·
-  <a href="#快速开始">快速开始</a> ·
+  <a href="#创作画布">创作画布</a> |
+  <a href="#ppt-演示画布">PPT 展示</a> |
+  <a href="#视频教程">视频教程</a> |
+  <a href="#skills">Skills</a> |
+  <a href="#快速开始">快速开始</a> |
   <a href="README.md">English</a>
 </p>
 
@@ -31,24 +32,6 @@
 </p>
 
 > CanvasAnvil 将流程图、室内设计工作流、PPT 制作、海报、信息图和产品介绍整合到一个统一工作区中。
-
-## 🌈 版本发布
-
-当前版本：`v2.1.0`
-
-- 更新 CanvasAnvil 门户界面，优化入口体验与产品导航结构
-- 新增 `pptist-lab` 独立部署方式，支持 PPT 编辑器作为独立服务运行
-- 统一主应用与独立 PPT 编辑器服务的本地和部署端口规划
-- 更新并同步在线访问地址为 `https://canvasanvil.codingfgd.asia`
-- 优化 PPT 编辑器在域名、HTTPS 与反向代理生产环境下的嵌入兼容性
-
-## 🌐 在线使用
-
-当前在线访问地址：
-
-- 🔗 CanvasAnvil：[https://canvasanvil.codingfgd.asia](https://canvasanvil.codingfgd.asia)
-
-PPT 编辑器已改为独立 `pptist-lab` 服务部署，并通过 CanvasAnvil 的 PPT 工作区嵌入使用。
 
 ## 🎨 创作画布
 
@@ -60,25 +43,6 @@ PPT 编辑器已改为独立 `pptist-lab` 服务部署，并通过 CanvasAnvil �
 | `海报` | 单张视觉传达与版式表达 | 活动海报、宣传海报、主视觉物料 |
 | `信息图` | 信息设计与可视化讲解 | 讲解型信息图、主题信息板、对比图表 |
 | `产品介绍` | 产品叙事与卖点表达 | 产品展示页、卖点视觉页、上线宣传页 |
-
-## 🧰 Skills
-
-CanvasAnvil 为每个画布都提供了专用本地 skill，用来保证工作流稳定、输出一致，而不是把所有任务都塞进同一条通用提示链。
-
-- `flow-skill` · 流程图生成与打包
-  输出整洁的图表资源，并默认跳过独立 HTML 预览。
-- `cad-skill` · 室内设计交付流程
-  导出图纸打包结果与 CSV 材料清单，便于后续交付。
-- `ppt-skill` · 完整演示稿生产
-  强制先确认大纲，再生成整套演示稿，并导出可编辑 PPT、PDF 或图片版 PPT。
-- `poster-skill` · 单张海报视觉生成
-  强调海报级构图、字体层次和成品表达。
-- `infographic-skill` · 信息图组织与讲解
-  负责高密度信息整理、视觉讲解和信息图版式。
-- `product-skill` · 产品卖点展示物料
-  围绕产品定位、卖点和展示视觉组织内容。
-
-所有 skill 默认使用宿主文本模型。只有生图能力需要单独配置图片生成供应商。
 
 ## 🔷 流程绘制画布
 
@@ -200,6 +164,48 @@ CanvasAnvil 为每个画布都提供了专用本地 skill，用来保证工作�
     <td width="50%" align="center"><img src="public/examples/product/04.png" alt="产品示例：智能纯电 SUV" width="100%" /><br/><strong>智能纯电 SUV</strong></td>
   </tr>
 </table>
+
+
+## 🌈 版本发布
+
+当前版本：`v2.1.0`
+
+- 更新 CanvasAnvil 门户界面，优化入口体验与产品导航结构
+- 新增 `pptist-lab` 独立部署方式，支持 PPT 编辑器作为独立服务运行
+- 统一主应用与独立 PPT 编辑器服务的本地和部署端口规划
+- 更新并同步在线访问地址为 `https://canvasanvil.codingfgd.asia`
+- 优化 PPT 编辑器在域名、HTTPS 与反向代理生产环境下的嵌入兼容性
+
+## 🌐 在线使用
+
+当前在线访问地址：
+
+- 🔗 CanvasAnvil：[https://canvasanvil.codingfgd.asia](https://canvasanvil.codingfgd.asia)
+
+PPT 编辑器已改为独立 `pptist-lab` 服务部署，并通过 CanvasAnvil 的 PPT 工作区嵌入使用。
+
+## 🎬 视频教程
+
+- Bilibili 教程：[https://b23.tv/RzhdtYZ](https://b23.tv/RzhdtYZ)
+
+## 🧰 Skills
+
+CanvasAnvil 为每个画布都提供了专用本地 skill，用来保证工作流稳定、输出一致，而不是把所有任务都塞进同一条通用提示链。
+
+- `flow-skill` · 流程图生成与打包
+  输出整洁的图表资源，并默认跳过独立 HTML 预览。
+- `cad-skill` · 室内设计交付流程
+  导出图纸打包结果与 CSV 材料清单，便于后续交付。
+- `ppt-skill` · 完整演示稿生产
+  强制先确认大纲，再生成整套演示稿，并导出可编辑 PPT、PDF 或图片版 PPT。
+- `poster-skill` · 单张海报视觉生成
+  强调海报级构图、字体层次和成品表达。
+- `infographic-skill` · 信息图组织与讲解
+  负责高密度信息整理、视觉讲解和信息图版式。
+- `product-skill` · 产品卖点展示物料
+  围绕产品定位、卖点和展示视觉组织内容。
+
+所有 skill 默认使用宿主文本模型。只有生图能力需要单独配置图片生成供应商。
 
 ## 🚀 快速开始
 

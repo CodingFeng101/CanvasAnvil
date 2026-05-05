@@ -19,10 +19,11 @@
 </p>
 
 <p align="center">
-  <a href="#creative-canvases">Canvases</a> ·
-  <a href="#skills">Skills</a> ·
-  <a href="#ppt-canvas">PPT Showcase</a> ·
-  <a href="#quick-start">Quick Start</a> ·
+  <a href="#creative-canvases">Canvases</a> |
+  <a href="#ppt-canvas">PPT Showcase</a> |
+  <a href="#video-tutorial">Video Tutorial</a> |
+  <a href="#skills">Skills</a> |
+  <a href="#quick-start">Quick Start</a> |
   <a href="README.zh-CN.md">Chinese</a>
 </p>
 
@@ -31,24 +32,6 @@
 </p>
 
 > CanvasAnvil brings diagramming, interior design workflows, presentation production, poster creation, infographic composition, and product storytelling into one unified workspace.
-
-## 🌈 Release
-
-Current release: `v2.1.0`
-
-- Refreshed the CanvasAnvil portal interface with clearer product navigation.
-- Added standalone `pptist-lab` deployment for the editable PPT editor.
-- Standardized local and deployment ports around the main app and the dedicated PPT editor service.
-- Updated the online access URL to `https://canvasanvil.codingfgd.asia`.
-- Improved PPT editor embedding compatibility for domain, HTTPS, and reverse-proxy deployments.
-
-## 🌐 Online Access
-
-Current online access URL:
-
-- 🔗 CanvasAnvil: [https://canvasanvil.codingfgd.asia](https://canvasanvil.codingfgd.asia)
-
-The editable PPT editor is deployed as a standalone `pptist-lab` service and is embedded through the CanvasAnvil PPT workspace.
 
 ## 🎨 Creative Canvases
 
@@ -60,25 +43,6 @@ The editable PPT editor is deployed as a standalone `pptist-lab` service and is 
 | `Poster` | single-frame visual communication | event posters, promotional posters, campaign key visuals |
 | `Infographic` | information design and visual explanation | explainer graphics, thematic information boards, comparison charts |
 | `Product` | product storytelling and feature communication | product showcase pages, selling-point visuals, launch pages |
-
-## 🧰 Skills
-
-CanvasAnvil includes dedicated local skills for each canvas so workflows stay opinionated, repeatable, and easier to maintain.
-
-- `flow-skill` · Diagram generation and packaging
-  Outputs clean diagram assets and skips standalone HTML preview by default.
-- `cad-skill` · Interior-delivery workflow
-  Exports drawing bundles and a CSV material list for downstream delivery.
-- `ppt-skill` · Full presentation production
-  Enforces outline review before generation and supports editable PPT, PDF, and image-based PPT output.
-- `poster-skill` · Single-frame campaign visuals
-  Focuses on strong composition, typography, and poster-ready output.
-- `infographic-skill` · Information-to-visual translation
-  Organizes dense content into readable infographic layouts.
-- `product-skill` · Feature-led product storytelling
-  Builds showcase visuals around positioning, selling points, and launch messaging.
-
-All skills use the host text model by default. Only image generation requires explicit provider configuration.
 
 ## 🔷 Flow Canvas
 
@@ -200,6 +164,48 @@ Present products through feature-led layouts that combine hero imagery, selling 
     <td width="50%" align="center"><img src="public/examples/product/04.png" alt="Product example: intelligent electric SUV" width="100%" /><br/><strong>Intelligent Electric SUV</strong></td>
   </tr>
 </table>
+
+
+## 🌈 Release
+
+Current release: `v2.1.0`
+
+- Refreshed the CanvasAnvil portal interface with clearer product navigation.
+- Added standalone `pptist-lab` deployment for the editable PPT editor.
+- Standardized local and deployment ports around the main app and the dedicated PPT editor service.
+- Updated the online access URL to `https://canvasanvil.codingfgd.asia`.
+- Improved PPT editor embedding compatibility for domain, HTTPS, and reverse-proxy deployments.
+
+## 🌐 Online Access
+
+Current online access URL:
+
+- 🔗 CanvasAnvil: [https://canvasanvil.codingfgd.asia](https://canvasanvil.codingfgd.asia)
+
+The editable PPT editor is deployed as a standalone `pptist-lab` service and is embedded through the CanvasAnvil PPT workspace.
+
+## Video Tutorial
+
+- Bilibili tutorial: [https://b23.tv/RzhdtYZ](https://b23.tv/RzhdtYZ)
+
+## 🧰 Skills
+
+CanvasAnvil includes dedicated local skills for each canvas so workflows stay opinionated, repeatable, and easier to maintain.
+
+- `flow-skill` · Diagram generation and packaging
+  Outputs clean diagram assets and skips standalone HTML preview by default.
+- `cad-skill` · Interior-delivery workflow
+  Exports drawing bundles and a CSV material list for downstream delivery.
+- `ppt-skill` · Full presentation production
+  Enforces outline review before generation and supports editable PPT, PDF, and image-based PPT output.
+- `poster-skill` · Single-frame campaign visuals
+  Focuses on strong composition, typography, and poster-ready output.
+- `infographic-skill` · Information-to-visual translation
+  Organizes dense content into readable infographic layouts.
+- `product-skill` · Feature-led product storytelling
+  Builds showcase visuals around positioning, selling points, and launch messaging.
+
+All skills use the host text model by default. Only image generation requires explicit provider configuration.
 
 ## 🚀 Quick Start
 

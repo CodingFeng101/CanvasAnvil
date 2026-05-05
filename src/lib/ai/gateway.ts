@@ -2,6 +2,7 @@ import {
   type AIChannelConfig,
   type CustomProviderMappingSpec,
   parseCustomProviderMapping,
+  resolveImageCapabilities,
   resolveImageRoute,
   resolveTextRoute,
 } from "./provider-registry";
@@ -22,6 +23,15 @@ export interface ImageGatewayRequest {
   referenceImageUrl?: string;
   additionalReferenceImageUrls?: string[];
   maskImageUrl?: string;
+}
+
+type ImageAdapter = {
+  supports(request: ImageGatewayRequest): boolean;
+  generate(request: ImageGatewayRequest): Promise<string>;
+};
+
+function shouldUseEditFlow(req: ImageGatewayRequest, capabilities?: { supportsEdits: boolean }) {
+  return Boolean(req.referenceImageUrl && capabilities?.supportsEdits);
 }
 
 function joinUrl(baseUrl: string, endpoint: string): string {
@@ -151,6 +161,22 @@ function extractImageUrlFromOpenAIContent(content: any): string | null {
   return null;
 }
 
+function extractImageUrlFromAliyunContent(content: any): string | null {
+  if (Array.isArray(content)) {
+    const imagePart = content.find((part) => part?.image);
+    if (imagePart?.image) return String(imagePart.image);
+    const textPart = content.find((part) => part?.text && typeof part.text === "string");
+    if (textPart?.text) {
+      const markdownMatch = textPart.text.match(/!\[.*?\]\((.*?)\)/);
+      if (markdownMatch?.[1]) return markdownMatch[1];
+      if (/^https?:\/\//i.test(textPart.text.trim()) || textPart.text.trim().startsWith("data:image")) {
+        return textPart.text.trim();
+      }
+    }
+  }
+  return null;
+}
+
 async function convertRemoteImageToDataUrl(url: string): Promise<string> {
   if (url.startsWith("data:image")) return url;
   const response = await fetch(url);
@@ -210,7 +236,7 @@ async function requestOpenAIImages(req: ImageGatewayRequest): Promise<string> {
 }
 
 async function requestOpenAIImageEdit(req: ImageGatewayRequest): Promise<string> {
-  if (!req.referenceImageUrl || !req.maskImageUrl) {
+  if (!req.referenceImageUrl) {
     return await requestOpenAIImages(req);
   }
 
@@ -218,7 +244,9 @@ async function requestOpenAIImageEdit(req: ImageGatewayRequest): Promise<string>
   form.append("model", req.channel.model);
   form.append("prompt", req.prompt);
   form.append("image", await dataUrlToFile(req.referenceImageUrl, "slide.png"));
-  form.append("mask", await dataUrlToFile(req.maskImageUrl, "mask.png"));
+  if (req.maskImageUrl) {
+    form.append("mask", await dataUrlToFile(req.maskImageUrl, "mask.png"));
+  }
 
   const response = await fetch(joinUrl(req.channel.baseUrl, "/images/edits"), {
     method: "POST",
@@ -293,6 +321,93 @@ async function requestOpenAIChatImage(req: ImageGatewayRequest): Promise<string>
   return await convertRemoteImageToDataUrl(url);
 }
 
+async function requestAliyunImage(req: ImageGatewayRequest): Promise<string> {
+  const content: any[] = [];
+  for (const url of [
+    ...(req.referenceImageUrl ? [req.referenceImageUrl] : []),
+    ...(req.additionalReferenceImageUrls || []),
+  ]) {
+    content.push({ image: url });
+  }
+  content.push({ text: req.prompt });
+
+  const response = await fetch(joinUrl(req.channel.baseUrl, "/services/aigc/multimodal-generation/generation"), {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${req.channel.apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model: req.channel.model,
+      input: {
+        messages: [
+          {
+            role: "user",
+            content,
+          },
+        ],
+      },
+      parameters: {
+        n: 1,
+        watermark: false,
+      },
+    }),
+  });
+
+  const text = await response.text();
+  let parsed: any = null;
+  try {
+    parsed = text ? JSON.parse(text) : null;
+  } catch {
+    parsed = null;
+  }
+  if (!response.ok) {
+    throw new Error(parsed?.message || parsed?.error?.message || parsed?.error || text || `Request failed with status ${response.status}`);
+  }
+
+  const url = extractImageUrlFromAliyunContent(parsed?.output?.choices?.[0]?.message?.content);
+  if (!url) {
+    throw new Error("Aliyun image request succeeded but returned no image URL.");
+  }
+  return await convertRemoteImageToDataUrl(url);
+}
+
+const openaiImageAdapter: ImageAdapter = {
+  supports: (req) => String(req.channel.provider || "").toLowerCase() === "openai",
+  generate: async (req) => {
+    const capabilities = resolveImageCapabilities(req.channel);
+    if (shouldUseEditFlow(req, capabilities)) {
+      return await requestOpenAIImageEdit(req);
+    }
+    return await requestOpenAIImages(req);
+  },
+};
+
+const xaiImageAdapter: ImageAdapter = {
+  supports: (req) => String(req.channel.provider || "").toLowerCase() === "xai",
+  generate: async (req) => {
+    // xAI image APIs are OpenAI-style at the transport layer in current provider support.
+    const capabilities = resolveImageCapabilities(req.channel);
+    if (shouldUseEditFlow(req, capabilities)) {
+      return await requestOpenAIImageEdit(req);
+    }
+    return await requestOpenAIImages(req);
+  },
+};
+
+const aliyunImageAdapter: ImageAdapter = {
+  supports: (req) => String(req.channel.provider || "").toLowerCase() === "aliyun",
+  generate: async (req) => {
+    return await requestAliyunImage(req);
+  },
+};
+
+const imageAdapters: ImageAdapter[] = [openaiImageAdapter, xaiImageAdapter, aliyunImageAdapter];
+
+function findImageAdapter(req: ImageGatewayRequest): ImageAdapter | null {
+  return imageAdapters.find((adapter) => adapter.supports(req)) || null;
+}
+
 export async function generateTextThroughGateway(req: TextGatewayRequest): Promise<string> {
   const route = resolveTextRoute(req.channel);
   if (route.protocol === "custom") {
@@ -342,6 +457,7 @@ export async function generateTextThroughGateway(req: TextGatewayRequest): Promi
 
 export async function generateImageThroughGateway(req: ImageGatewayRequest): Promise<string> {
   const route = resolveImageRoute(req.channel);
+  const capabilities = resolveImageCapabilities(req.channel);
   if (route.protocol === "custom") {
     const spec = parseCustomProviderMapping(req.channel.customMapping);
     if (!spec) throw new Error("Custom image mapping is required.");
@@ -367,25 +483,27 @@ export async function generateImageThroughGateway(req: ImageGatewayRequest): Pro
     return await convertRemoteImageToDataUrl(url);
   }
 
-  if (route.protocol === "openai-images") {
-    if (req.referenceImageUrl && req.maskImageUrl) {
-      return await requestOpenAIImageEdit(req);
-    }
-    return await requestOpenAIImages(req);
+  const adapter = findImageAdapter(req);
+  if (adapter) {
+    return await adapter.generate(req);
   }
 
-  if (route.protocol === "openai-images-fallback-chat-image") {
+  if (shouldUseEditFlow(req, capabilities)) {
+    return await requestOpenAIImageEdit(req);
+  }
+
+  if (route.protocol === "openai-images" || route.protocol === "openai-images-fallback-chat-image") {
     try {
-      if (req.referenceImageUrl && req.maskImageUrl) {
-        return await requestOpenAIImageEdit(req);
-      }
       return await requestOpenAIImages(req);
     } catch (imagesError) {
-      try {
-        return await requestOpenAIChatImage(req);
-      } catch {
-        throw imagesError;
+      if (route.protocol === "openai-images-fallback-chat-image") {
+        try {
+          return await requestOpenAIChatImage(req);
+        } catch {
+          throw imagesError;
+        }
       }
+      throw imagesError;
     }
   }
 
