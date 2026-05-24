@@ -12,11 +12,9 @@ export type AIProviderId =
   | "xai"
   | "google"
   | "anthropic"
-  | "bfl"
-  | "adobe"
   | "custom";
 
-export type TextProtocol = "openai-chat" | "custom";
+export type TextProtocol = "openai-chat" | "google-gemini" | "anthropic-messages" | "custom";
 export type ImageProtocol = "openai-images" | "openai-chat-image" | "openai-images-fallback-chat-image" | "custom";
 
 export interface CustomProviderMappingSpec {
@@ -152,10 +150,6 @@ const IMAGE_REFERENCE_RULES: Array<{ provider: AIProviderId; patterns: RegExp[] 
     patterns: [/seedream/i],
   },
   {
-    provider: "zhipu",
-    patterns: [/glm-image/i, /cogview/i],
-  },
-  {
     provider: "tencent",
     patterns: [/hunyuan/i],
   },
@@ -200,17 +194,6 @@ const IMAGE_CAPABILITY_RULES: Array<{
     },
   },
   {
-    provider: "zhipu",
-    patterns: [/glm-image/i, /cogview/i],
-    capabilities: {
-      supportsGeneration: true,
-      supportsEdits: true,
-      supportsMask: false,
-      supportsReferenceImages: true,
-      supportsMultiReferenceImages: false,
-    },
-  },
-  {
     provider: "tencent",
     patterns: [/hunyuan/i],
     capabilities: {
@@ -232,39 +215,6 @@ const IMAGE_CAPABILITY_RULES: Array<{
       supportsMultiReferenceImages: false,
     },
   },
-  {
-    provider: "xai",
-    patterns: [/grok/i],
-    capabilities: {
-      supportsGeneration: true,
-      supportsEdits: true,
-      supportsMask: false,
-      supportsReferenceImages: true,
-      supportsMultiReferenceImages: false,
-    },
-  },
-  {
-    provider: "bfl",
-    patterns: [/flux/i],
-    capabilities: {
-      supportsGeneration: true,
-      supportsEdits: true,
-      supportsMask: true,
-      supportsReferenceImages: true,
-      supportsMultiReferenceImages: true,
-    },
-  },
-  {
-    provider: "adobe",
-    patterns: [/firefly/i],
-    capabilities: {
-      supportsGeneration: true,
-      supportsEdits: true,
-      supportsMask: true,
-      supportsReferenceImages: true,
-      supportsMultiReferenceImages: false,
-    },
-  },
 ];
 
 export const TEXT_PROVIDER_OPTIONS: ProviderOption[] = [
@@ -272,27 +222,23 @@ export const TEXT_PROVIDER_OPTIONS: ProviderOption[] = [
   { id: "ollama", label: "Ollama", defaultBaseUrl: "http://localhost:11434/v1" },
   { id: "deepseek", label: "DeepSeek", defaultBaseUrl: "https://api.deepseek.com/v1" },
   { id: "kimi", label: "Kimi", defaultBaseUrl: "https://api.moonshot.cn/v1" },
-  { id: "aliyun", label: "Alibaba Bailian" },
-  { id: "tencent", label: "Tencent Hunyuan" },
-  { id: "bytedance", label: "Bytedance Ark" },
-  { id: "zhipu", label: "Zhipu" },
-  { id: "baidu", label: "Baidu Qianfan" },
-  { id: "minimax", label: "MiniMax" },
-  { id: "xai", label: "xAI" },
-  { id: "google", label: "Google" },
-  { id: "anthropic", label: "Anthropic" },
+  { id: "aliyun", label: "Alibaba Bailian", defaultBaseUrl: "https://dashscope.aliyuncs.com/compatible-mode/v1" },
+  { id: "tencent", label: "Tencent Hunyuan", defaultBaseUrl: "https://api.hunyuan.cloud.tencent.com/v1" },
+  { id: "bytedance", label: "Bytedance Ark", defaultBaseUrl: "https://ark.cn-beijing.volces.com/api/v3" },
+  { id: "zhipu", label: "Zhipu", defaultBaseUrl: "https://open.bigmodel.cn/api/paas/v4" },
+  { id: "baidu", label: "Baidu Qianfan", defaultBaseUrl: "https://qianfan.baidubce.com/v2" },
+  { id: "minimax", label: "MiniMax", defaultBaseUrl: "https://api.minimax.io/v1" },
+  { id: "xai", label: "xAI", defaultBaseUrl: "https://api.x.ai/v1" },
+  { id: "google", label: "Google", defaultBaseUrl: "https://generativelanguage.googleapis.com/v1beta" },
+  { id: "anthropic", label: "Anthropic", defaultBaseUrl: "https://api.anthropic.com/v1" },
 ];
 
 export const IMAGE_PROVIDER_OPTIONS: ProviderOption[] = [
   { id: "openai", label: "OpenAI", defaultBaseUrl: "https://api.openai.com/v1" },
-  { id: "aliyun", label: "Alibaba Wanx" },
-  { id: "tencent", label: "Tencent Hunyuan Image" },
-  { id: "bytedance", label: "Bytedance Seedream" },
-  { id: "zhipu", label: "Zhipu" },
-  { id: "google", label: "Google Imagen" },
-  { id: "xai", label: "xAI" },
-  { id: "bfl", label: "Black Forest Labs" },
-  { id: "adobe", label: "Adobe Firefly" },
+  { id: "aliyun", label: "Alibaba Wanx", defaultBaseUrl: "https://dashscope.aliyuncs.com/api/v1" },
+  { id: "tencent", label: "Tencent Hunyuan Image", defaultBaseUrl: "https://tokenhub.tencentmaas.com/v1/api/image/lite" },
+  { id: "bytedance", label: "Bytedance Seedream", defaultBaseUrl: "https://ark.cn-beijing.volces.com/api/v3" },
+  { id: "google", label: "Google Imagen", defaultBaseUrl: "https://generativelanguage.googleapis.com/v1beta" },
 ];
 
 function matchesRule(provider: string, model: string, rules: Array<{ provider: AIProviderId; patterns: RegExp[] }>) {
@@ -327,6 +273,20 @@ export function resolveTextRoute(channel: AIChannelConfig): TextRoute {
     return {
       protocol: "custom",
       supportsVision: spec?.supportsVision === true,
+    };
+  }
+
+  if (provider === "google") {
+    return {
+      protocol: "google-gemini",
+      supportsVision: true,
+    };
+  }
+
+  if (provider === "anthropic") {
+    return {
+      protocol: "anthropic-messages",
+      supportsVision: true,
     };
   }
 
@@ -425,7 +385,9 @@ export function normalizeAIConfig(rawConfig: Partial<AIConfig> | null | undefine
   const requestedTextProvider = String((raw.textProvider || "openai") as string).trim() || "openai";
   const requestedImageProvider = String((raw.imageProvider || "openai") as string).trim() || "openai";
   const textProvider = requestedTextProvider === "custom" ? "openai" : requestedTextProvider;
-  const imageProvider = requestedImageProvider === "custom" ? "openai" : requestedImageProvider;
+  const imageProvider = IMAGE_PROVIDER_OPTIONS.some((option) => option.id === requestedImageProvider)
+    ? requestedImageProvider
+    : "openai";
   const textApiKey = String((raw.textApiKey || raw.apiKey || "") as string).trim();
   const imageApiKey = String((raw.imageApiKey || raw.apiKey || "") as string).trim();
   const textBaseUrl =

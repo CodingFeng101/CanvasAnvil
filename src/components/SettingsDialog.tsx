@@ -45,11 +45,7 @@ const IMAGE_PROVIDER_LINKS: Partial<Record<AIProviderId, string>> = {
   aliyun: "https://bailian.console.aliyun.com/?tab=model#/api-key",
   tencent: "https://console.cloud.tencent.com/hunyuan/api-key",
   bytedance: "https://console.volcengine.com/ark/region:ark+cn-beijing/apiKey",
-  zhipu: "https://open.bigmodel.cn/usercenter/apikeys",
   google: "https://console.cloud.google.com/vertex-ai/publishers/google/model-garden/imagen",
-  xai: "https://console.x.ai/",
-  bfl: "https://docs.bfl.ai/",
-  adobe: "https://developer.adobe.com/console",
 };
 
 const MINERU_LINK = "https://mineru.net/";
