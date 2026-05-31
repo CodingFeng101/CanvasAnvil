@@ -185,7 +185,7 @@ PPT 编辑器已改为独立 `pptist-lab` 服务部署，并通过 CanvasAnvil �
 
 ## 🎬 视频教程
 
-- Bilibili 教程：[https://b23.tv/RzhdtYZ](https://b23.tv/RzhdtYZ)
+- Bilibili 教程：[https://b23.tv/pFWv7iI](https://b23.tv/pFWv7iI)
 
 ## 🧰 Skills
 

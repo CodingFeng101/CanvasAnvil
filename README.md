@@ -185,7 +185,7 @@ The editable PPT editor is deployed as a standalone `pptist-lab` service and is 
 
 ## Video Tutorial
 
-- Bilibili tutorial: [https://b23.tv/RzhdtYZ](https://b23.tv/RzhdtYZ)
+- Bilibili tutorial: [https://b23.tv/pFWv7iI](https://b23.tv/pFWv7iI)
 
 ## 🧰 Skills
 
