@@ -271,3 +271,9 @@ CanvasAnvil 采用 GNU Affero General Public License v3.0（AGPL-3.0）协议发
 ## 💌 联系方式
 
 - `3524962421@qq.com`
+
+## 💬 加入社区
+
+欢迎加入「智构开源社」群聊，一起交流 CanvasAnvil 及开源项目相关内容。
+
+![智构开源社微信群二维码](public/community/wechat-group.png)
