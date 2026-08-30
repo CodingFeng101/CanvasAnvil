@@ -21,7 +21,7 @@ import {
     isTarGzFile,
     MAX_EXTRACTED_CHARS,
 } from "@/workspaces/flow/next/lib/pdf-utils"
-import { getAIConfig } from "@/lib/ai-client"
+import { getAIConfig } from "@/ai/client"
 
 export interface FileData {
     text: string

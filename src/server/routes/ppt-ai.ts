@@ -1,27 +1,18 @@
-import {
-    generateImageThroughGateway,
-    generateTextThroughGateway,
-} from "../../lib/ai/gateway"
-import {
-    getImageChannelConfig,
-    getTextChannelConfig,
-    normalizeAIConfig,
-    type AIConfig,
-} from "../../lib/ai/provider-registry"
+import { generateImage } from "../../ai/image"
+import { generateText } from "../../ai/text"
+import { getImageChannel, getTextChannel, normalizeAIConfig } from "../../ai/config"
+import type { AIConfig, MultimodalMessage } from "../../ai/types"
 
-type ProxyChatMessage = {
-    role: "system" | "user" | "assistant"
-    content: any
-}
+/**
+ * Non-streaming model proxy for the CAD and PPT workspaces.
+ *
+ * The browser never talks to the provider directly, so the API key stays out
+ * of cross-origin requests and remote images can be inlined server-side.
+ */
 
-type PptAIRequestBody =
+type RequestBody =
+    | { kind: "chat"; aiConfig?: Partial<AIConfig>; messages?: MultimodalMessage[]; model?: string }
     | {
-          kind: "chat"
-          aiConfig?: Partial<AIConfig>
-          messages?: ProxyChatMessage[]
-          model?: string
-      }
-      | {
           kind: "image"
           aiConfig?: Partial<AIConfig>
           prompt?: string
@@ -33,75 +24,53 @@ type PptAIRequestBody =
 
 const jsonHeaders = { "Content-Type": "application/json" }
 
-function getErrorMessage(error: unknown) {
-    return error instanceof Error ? error.message : "Unknown error"
-}
+const badRequest = (error: string) =>
+    Response.json({ error }, { status: 400, headers: jsonHeaders })
+
+const optionalString = (value: unknown) =>
+    typeof value === "string" && value ? value : undefined
 
 export async function POST(req: Request) {
     try {
-        const body = (await req.json()) as PptAIRequestBody
+        const body = (await req.json()) as RequestBody
         const config = normalizeAIConfig(body?.aiConfig)
 
         if (body.kind === "chat") {
             const messages = Array.isArray(body.messages) ? body.messages : []
-            const textChannel = getTextChannelConfig(config)
-            textChannel.model = String(body.model || textChannel.model || "").trim()
+            const channel = { ...getTextChannel(config), model: String(body.model || config.textModel || "").trim() }
 
-            if (!textChannel.apiKey || !textChannel.model || messages.length === 0) {
-                return Response.json(
-                    { error: "Missing text model, API key, or messages." },
-                    { status: 400, headers: jsonHeaders },
-                )
+            if (!channel.apiKey || !channel.model || messages.length === 0) {
+                return badRequest("Missing text model, API key, or messages.")
             }
 
-            const content = await generateTextThroughGateway({
-                channel: textChannel,
-                messages,
-            })
+            const content = await generateText({ channel, messages })
             return Response.json({ content }, { headers: jsonHeaders })
         }
 
         if (body.kind === "image") {
             const prompt = String(body.prompt || "").trim()
-            const imageChannel = getImageChannelConfig(config)
-            imageChannel.model = String(body.model || imageChannel.model || "").trim()
+            const channel = { ...getImageChannel(config), model: String(body.model || config.imageModel || "").trim() }
 
-            if (!imageChannel.apiKey || !imageChannel.model || !prompt) {
-                return Response.json(
-                    { error: "Missing image model, API key, or prompt." },
-                    { status: 400, headers: jsonHeaders },
-                )
+            if (!channel.apiKey || !channel.model || !prompt) {
+                return badRequest("Missing image model, API key, or prompt.")
             }
 
-            const url = await generateImageThroughGateway({
-                channel: imageChannel,
+            const url = await generateImage({
+                channel,
                 prompt,
-                referenceImageUrl:
-                    typeof body.referenceImageUrl === "string"
-                        ? body.referenceImageUrl
-                        : undefined,
-                maskImageUrl:
-                    typeof body.maskImageUrl === "string"
-                        ? body.maskImageUrl
-                        : undefined,
-                additionalReferenceImageUrls: Array.isArray(
-                    body.additionalReferenceImageUrls,
-                )
-                    ? body.additionalReferenceImageUrls
-                          .map((x) => String(x || ""))
-                          .filter(Boolean)
+                referenceImageUrl: optionalString(body.referenceImageUrl),
+                maskImageUrl: optionalString(body.maskImageUrl),
+                additionalReferenceImageUrls: Array.isArray(body.additionalReferenceImageUrls)
+                    ? body.additionalReferenceImageUrls.map((x) => String(x || "")).filter(Boolean)
                     : [],
             })
             return Response.json({ url }, { headers: jsonHeaders })
         }
 
-        return Response.json(
-            { error: "Unsupported PPT AI request kind." },
-            { status: 400, headers: jsonHeaders },
-        )
+        return badRequest("Unsupported PPT AI request kind.")
     } catch (error) {
         return Response.json(
-            { error: getErrorMessage(error) },
+            { error: error instanceof Error ? error.message : "Unknown error" },
             { status: 500, headers: jsonHeaders },
         )
     }

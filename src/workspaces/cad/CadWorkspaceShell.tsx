@@ -16,8 +16,8 @@ import {
   type PanelImperativeHandle,
 } from "@/workspaces/cad/ui/resizable";
 import { CAD_SYSTEM_PROMPT } from "@/lib/system-prompts";
-import type { ChatMessage } from "@/lib/ai-client";
-import { generateImage } from "@/lib/ai-client";
+import type { ChatMessage } from "@/ai/client";
+import { generateImage } from "@/ai/client";
 import { CadWorkspace } from "@/workspaces/cad/workspace/CadWorkspace";
 import { ChatPanel as CadChatPanel } from "@/workspaces/cad/chat/ChatPanel";
 

@@ -1,7 +1,7 @@
 ﻿import React, { useState, useRef, useEffect } from 'react';
 import { PanelRightClose, PanelRightOpen } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { streamChatMessage, generateChatMessage, ChatMessage, getAIConfig } from '@/lib/ai-client';
+import { streamChatMessage, generateChatMessage, ChatMessage, getAIConfig } from '@/ai/client';
 import { DRAWIO_SYSTEM_PROMPT } from '@/lib/system-prompts';
 import { ButtonWithTooltip } from '@/workspaces/cad/chat/components/button-with-tooltip';
 import { ChatInput } from '@/workspaces/cad/chat/ChatInput';

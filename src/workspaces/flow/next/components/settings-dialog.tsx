@@ -2,7 +2,7 @@
 
 import { Moon, Sun } from "lucide-react"
 import { useEffect, useState } from "react"
-import { getAIConfig as getWorkspaceAIConfig } from "@/lib/ai-client"
+import { getAIConfig as getWorkspaceAIConfig } from "@/ai/client"
 import { Button } from "@/workspaces/flow/next/components/ui/button"
 import {
     Dialog,
@@ -110,15 +110,9 @@ export function SettingsDialog({
             )
             setCloseProtection(storedCloseProtection !== "false")
 
-            const workspaceConfig = getWorkspaceAIConfig()
-            setTopSettings({
-                textApiKey: String(workspaceConfig.textApiKey || workspaceConfig.apiKey || ""),
-                textBaseUrl: String(workspaceConfig.textBaseUrl || workspaceConfig.baseUrl || ""),
-                textModel: String(workspaceConfig.textModel || workspaceConfig.chatModel || ""),
-                imageApiKey: String(workspaceConfig.imageApiKey || workspaceConfig.apiKey || ""),
-                imageBaseUrl: String(workspaceConfig.imageBaseUrl || workspaceConfig.baseUrl || ""),
-                imageModel: String(workspaceConfig.imageModel || workspaceConfig.imageModelLegacy || ""),
-            })
+            const { textApiKey, textBaseUrl, textModel, imageApiKey, imageBaseUrl, imageModel } =
+                getWorkspaceAIConfig()
+            setTopSettings({ textApiKey, textBaseUrl, textModel, imageApiKey, imageBaseUrl, imageModel })
 
             setError("")
         }

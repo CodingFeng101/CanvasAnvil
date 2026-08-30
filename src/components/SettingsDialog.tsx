@@ -1,54 +1,32 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { ExternalLink, Eye, EyeOff, Loader2, Save, Settings, X } from "lucide-react";
 import { toast } from "sonner";
-import { getAIConfig, saveAIConfig, type AIConfig } from "@/lib/ai-client";
+import { getAIConfig, normalizeAIConfig, saveAIConfig } from "@/ai/config";
+import type { AIConfig } from "@/ai/types";
 import { Button } from "@/components/ui/button";
 import { getUiLanguage, setUiLanguage, type UiLanguage } from "@/lib/ui-language";
 import { t } from "@/lib/i18n";
-import {
-  IMAGE_PROVIDER_OPTIONS,
-  TEXT_PROVIDER_OPTIONS,
-  getDefaultBaseUrl,
-  normalizeAIConfig,
-  type AIProviderId,
-} from "@/lib/ai/provider-registry";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/workspaces/flow/next/components/ui/select";
 
-type ChannelKind = "text" | "image";
-type TestState = "idle" | "testing";
-
-const TEXT_PROVIDER_LINKS: Partial<Record<AIProviderId, string>> = {
-  openai: "https://platform.openai.com/api-keys",
-  ollama: "https://ollama.com/download",
-  deepseek: "https://platform.deepseek.com/api_keys",
-  kimi: "https://platform.moonshot.cn/console/api-keys",
-  aliyun: "https://bailian.console.aliyun.com/?tab=model#/api-key",
-  tencent: "https://console.cloud.tencent.com/hunyuan/api-key",
-  bytedance: "https://console.volcengine.com/ark/region:ark+cn-beijing/apiKey",
-  zhipu: "https://open.bigmodel.cn/usercenter/apikeys",
-  baidu: "https://console.bce.baidu.com/qianfan/ais/console/applicationConsole/application",
-  minimax: "https://platform.minimaxi.com/user-center/basic-information/interface-key",
-  xai: "https://console.x.ai/",
-  google: "https://aistudio.google.com/app/apikey",
-  anthropic: "https://console.anthropic.com/settings/keys",
-};
-
-const IMAGE_PROVIDER_LINKS: Partial<Record<AIProviderId, string>> = {
-  openai: "https://platform.openai.com/api-keys",
-  aliyun: "https://bailian.console.aliyun.com/?tab=model#/api-key",
-  tencent: "https://console.cloud.tencent.com/hunyuan/api-key",
-  bytedance: "https://console.volcengine.com/ark/region:ark+cn-beijing/apiKey",
-  google: "https://console.cloud.google.com/vertex-ai/publishers/google/model-garden/imagen",
-};
+/**
+ * Model settings.
+ *
+ * Every model is reached over the OpenAI HTTP protocol, so a channel is fully
+ * described by base URL + key + model name. Pointing the base URL at a
+ * vendor's OpenAI-compatible endpoint is all that switching providers takes;
+ * there is no provider list to keep in sync.
+ */
 
 const MINERU_LINK = "https://mineru.net/";
+const OPENAI_KEYS_LINK = "https://platform.openai.com/api-keys";
+
+type ChannelKey = "text" | "image";
+type TestState = "idle" | "testing";
+
+const CHANNEL_FIELDS = {
+  text: { apiKey: "textApiKey", baseUrl: "textBaseUrl", model: "textModel" },
+  image: { apiKey: "imageApiKey", baseUrl: "imageBaseUrl", model: "imageModel" },
+} as const satisfies Record<ChannelKey, Record<"apiKey" | "baseUrl" | "model", keyof AIConfig>>;
 
 function SectionCard({
   title,
@@ -75,64 +53,30 @@ function SectionCard({
   );
 }
 
-function LinkText({
-  href,
-  uiLang,
-}: {
-  href?: string;
-  uiLang: UiLanguage;
-}) {
-  if (!href) return null;
-  return (
-    <a
-      href={href}
-      target="_blank"
-      rel="noreferrer"
-      className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
-    >
-      {uiLang === "zh" ? "获取 Key" : "Get Key"}
-      <ExternalLink className="h-3.5 w-3.5" />
-    </a>
-  );
-}
+const inputClass =
+  "flex h-10 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm shadow-sm transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50";
 
-function ProviderField({
+function TextField({
   label,
   value,
   onChange,
-  options,
-  docsUrl,
-  uiLang,
+  placeholder,
 }: {
   label: string;
   value: string;
-  onChange: (value: AIProviderId) => void;
-  options: Array<{ id: AIProviderId; label: string }>;
-  docsUrl?: string;
-  uiLang: UiLanguage;
+  onChange: (value: string) => void;
+  placeholder: string;
 }) {
   return (
     <div className="space-y-2">
-      <div className="flex items-center justify-between gap-3">
-        <label className="text-sm font-medium text-foreground">{label}</label>
-        <LinkText href={docsUrl} uiLang={uiLang} />
-      </div>
-      <Select value={value} onValueChange={(next) => onChange(next as AIProviderId)}>
-        <SelectTrigger className="h-10 w-full rounded-xl border-border/70 bg-background shadow-sm transition-colors hover:border-border hover:bg-muted/20">
-          <SelectValue placeholder="Select provider" />
-        </SelectTrigger>
-        <SelectContent className="max-h-[260px] overflow-y-auto rounded-xl border-border/70 bg-background/95 p-1 shadow-xl backdrop-blur">
-          {options.map((option) => (
-            <SelectItem
-              key={option.id}
-              value={option.id}
-              className="rounded-lg py-2 text-sm data-[highlighted]:bg-muted data-[highlighted]:text-foreground"
-            >
-              {option.label}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
+      <label className="text-sm font-medium text-foreground">{label}</label>
+      <input
+        type="text"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className={inputClass}
+        placeholder={placeholder}
+      />
     </div>
   );
 }
@@ -142,8 +86,6 @@ function SecretInput({
   value,
   onChange,
   placeholder,
-  visible,
-  onToggle,
   docsUrl,
   uiLang,
 }: {
@@ -151,28 +93,37 @@ function SecretInput({
   value: string;
   onChange: (value: string) => void;
   placeholder: string;
-  visible: boolean;
-  onToggle: () => void;
   docsUrl?: string;
   uiLang: UiLanguage;
 }) {
+  const [visible, setVisible] = useState(false);
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between gap-3">
         <label className="text-sm font-medium text-foreground">{label}</label>
-        <LinkText href={docsUrl} uiLang={uiLang} />
+        {docsUrl ? (
+          <a
+            href={docsUrl}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
+          >
+            {uiLang === "zh" ? "获取 Key" : "Get Key"}
+            <ExternalLink className="h-3.5 w-3.5" />
+          </a>
+        ) : null}
       </div>
       <div className="relative">
         <input
           type={visible ? "text" : "password"}
           value={value}
           onChange={(e) => onChange(e.target.value)}
-          className="flex h-10 w-full rounded-lg border border-input bg-background px-3 py-2 pr-10 text-sm shadow-sm transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+          className={`${inputClass} pr-10`}
           placeholder={placeholder}
         />
         <button
           type="button"
-          onClick={onToggle}
+          onClick={() => setVisible((prev) => !prev)}
           className="absolute inset-y-0 right-0 flex w-10 items-center justify-center text-muted-foreground transition-colors hover:text-foreground"
           aria-label={visible ? "Hide secret" : "Show secret"}
         >
@@ -183,43 +134,84 @@ function SecretInput({
   );
 }
 
-function TestButton({
-  label,
-  state,
-  onClick,
+function ChannelCard({
+  channel,
+  title,
+  description,
+  modelPlaceholder,
+  testLabel,
+  config,
+  onChange,
+  onTest,
+  testState,
+  uiLang,
 }: {
-  label: string;
-  state: TestState;
-  onClick: () => void;
+  channel: ChannelKey;
+  title: string;
+  description: string;
+  modelPlaceholder: string;
+  testLabel: string;
+  config: AIConfig;
+  onChange: (patch: Partial<AIConfig>) => void;
+  onTest: () => void;
+  testState: TestState;
+  uiLang: UiLanguage;
 }) {
-  const loading = state === "testing";
+  const fields = CHANNEL_FIELDS[channel];
   return (
-    <Button type="button" variant="outline" className="h-9 rounded-lg" onClick={onClick} disabled={loading}>
-      {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-      {label}
-    </Button>
+    <SectionCard
+      title={title}
+      description={description}
+      actions={
+        <Button
+          type="button"
+          variant="outline"
+          className="h-9 rounded-lg"
+          onClick={onTest}
+          disabled={testState === "testing"}
+        >
+          {testState === "testing" ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+          {testLabel}
+        </Button>
+      }
+    >
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+        <TextField
+          label="Model"
+          value={config[fields.model]}
+          onChange={(value) => onChange({ [fields.model]: value } as Partial<AIConfig>)}
+          placeholder={modelPlaceholder}
+        />
+        <TextField
+          label="Base URL"
+          value={config[fields.baseUrl]}
+          onChange={(value) => onChange({ [fields.baseUrl]: value } as Partial<AIConfig>)}
+          placeholder="https://api.openai.com/v1"
+        />
+        <SecretInput
+          label="API Key"
+          value={config[fields.apiKey]}
+          onChange={(value) => onChange({ [fields.apiKey]: value } as Partial<AIConfig>)}
+          placeholder="sk-..."
+          docsUrl={OPENAI_KEYS_LINK}
+          uiLang={uiLang}
+        />
+      </div>
+    </SectionCard>
   );
 }
 
 export function SettingsDialog() {
   const [isOpen, setIsOpen] = useState(false);
-  const [config, setConfig] = useState<AIConfig>(normalizeAIConfig(getAIConfig()));
+  const [config, setConfig] = useState<AIConfig>(() => getAIConfig());
   const [uiLang, setUiLangState] = useState<UiLanguage>(() => getUiLanguage());
-  const [showTextKey, setShowTextKey] = useState(false);
-  const [showImageKey, setShowImageKey] = useState(false);
-  const [showMineruKey, setShowMineruKey] = useState(false);
-  const [textTestState, setTextTestState] = useState<TestState>("idle");
-  const [imageTestState, setImageTestState] = useState<TestState>("idle");
+  const [testState, setTestState] = useState<Record<ChannelKey, TestState>>({ text: "idle", image: "idle" });
 
   useEffect(() => {
     if (!isOpen) return;
-    setConfig(normalizeAIConfig(getAIConfig()));
+    setConfig(getAIConfig());
     setUiLangState(getUiLanguage());
-    setShowTextKey(false);
-    setShowImageKey(false);
-    setShowMineruKey(false);
-    setTextTestState("idle");
-    setImageTestState("idle");
+    setTestState({ text: "idle", image: "idle" });
   }, [isOpen]);
 
   useEffect(() => {
@@ -228,34 +220,40 @@ export function SettingsDialog() {
   }, [uiLang, isOpen]);
 
   const isZh = uiLang === "zh";
+  const patch = (values: Partial<AIConfig>) => setConfig((prev) => ({ ...prev, ...values }));
 
-  const textProviderLink = useMemo(
-    () => TEXT_PROVIDER_LINKS[config.textProvider as AIProviderId],
-    [config.textProvider],
-  );
-  const imageProviderLink = useMemo(
-    () => IMAGE_PROVIDER_LINKS[config.imageProvider as AIProviderId],
-    [config.imageProvider],
-  );
-
-  const handleProviderChange = (kind: ChannelKind, provider: AIProviderId) => {
+  /** Send one real request through the same proxy the workspaces use. */
+  const testChannel = async (channel: ChannelKey) => {
     const normalized = normalizeAIConfig(config);
-    const defaultBaseUrl = getDefaultBaseUrl(provider, kind);
-
-    if (kind === "text") {
-      setConfig({
-        ...normalized,
-        textProvider: provider,
-        textBaseUrl: defaultBaseUrl || normalized.textBaseUrl,
-      });
+    const fields = CHANNEL_FIELDS[channel];
+    if (!normalized[fields.apiKey] || !normalized[fields.baseUrl] || !normalized[fields.model]) {
+      toast.error(
+        isZh ? "请先填写 Model、Base URL 和 API Key" : "Please fill model, base URL, and API key first",
+      );
       return;
     }
 
-    setConfig({
-      ...normalized,
-      imageProvider: provider,
-      imageBaseUrl: defaultBaseUrl || normalized.imageBaseUrl,
-    });
+    setTestState((prev) => ({ ...prev, [channel]: "testing" }));
+    try {
+      const response = await fetch("/api/ppt-ai", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(
+          channel === "text"
+            ? { kind: "chat", aiConfig: normalized, messages: [{ role: "user", content: "Reply with OK only." }] }
+            : { kind: "image", aiConfig: normalized, prompt: "A simple blue square icon on white background." },
+        ),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok || (channel === "image" && !payload?.url)) {
+        throw new Error(String(payload?.error || "Model test failed"));
+      }
+      toast.success(isZh ? "模型可用" : "Model is working");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : isZh ? "模型测试失败" : "Model test failed");
+    } finally {
+      setTestState((prev) => ({ ...prev, [channel]: "idle" }));
+    }
   };
 
   const handleSave = () => {
@@ -263,66 +261,6 @@ export function SettingsDialog() {
     setUiLanguage(uiLang);
     setIsOpen(false);
     toast.success(isZh ? "配置已保存" : "Settings saved");
-  };
-
-  const handleTestText = async () => {
-    const normalized = normalizeAIConfig(config);
-    if (!normalized.textApiKey || !normalized.textBaseUrl || !normalized.textModel) {
-      toast.error(isZh ? "请先填写文本模型的 Key、Base URL 和 Model" : "Please fill text API key, base URL, and model first");
-      return;
-    }
-
-    try {
-      setTextTestState("testing");
-      const response = await fetch("/api/ppt-ai", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          kind: "chat",
-          aiConfig: normalized,
-          messages: [{ role: "user", content: "Reply with OK only." }],
-        }),
-      });
-      const payload = await response.json().catch(() => ({}));
-      if (!response.ok) {
-        throw new Error(String(payload?.error || "Text model test failed"));
-      }
-      toast.success(isZh ? "文本模型可用" : "Text model is working");
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : isZh ? "文本模型测试失败" : "Text model test failed");
-    } finally {
-      setTextTestState("idle");
-    }
-  };
-
-  const handleTestImage = async () => {
-    const normalized = normalizeAIConfig(config);
-    if (!normalized.imageApiKey || !normalized.imageBaseUrl || !normalized.imageModel) {
-      toast.error(isZh ? "请先填写生图模型的 Key、Base URL 和 Model" : "Please fill image API key, base URL, and model first");
-      return;
-    }
-
-    try {
-      setImageTestState("testing");
-      const response = await fetch("/api/ppt-ai", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          kind: "image",
-          aiConfig: normalized,
-          prompt: "A simple blue square icon on white background.",
-        }),
-      });
-      const payload = await response.json().catch(() => ({}));
-      if (!response.ok || !payload?.url) {
-        throw new Error(String(payload?.error || "Image model test failed"));
-      }
-      toast.success(isZh ? "生图模型可用" : "Image model is working");
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : isZh ? "生图模型测试失败" : "Image model test failed");
-    } finally {
-      setImageTestState("idle");
-    }
   };
 
   return (
@@ -346,9 +284,7 @@ export function SettingsDialog() {
                   <h2 className="text-lg font-semibold tracking-tight text-foreground">
                     {t(uiLang, "settings.title")}
                   </h2>
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    {t(uiLang, "settings.subtitle")}
-                  </p>
+                  <p className="mt-1 text-xs text-muted-foreground">{t(uiLang, "settings.subtitle")}</p>
                 </div>
                 <Button
                   variant="ghost"
@@ -383,119 +319,39 @@ export function SettingsDialog() {
                   </div>
                 </SectionCard>
 
-                <SectionCard
+                <ChannelCard
+                  channel="text"
                   title={isZh ? "文本模型" : "Text Model"}
                   description={
                     isZh
-                      ? "用于聊天、文本生成和图片理解。上传图片时会直接交给模型处理，由模型真实返回是否支持。"
-                      : "Used for chat, text generation, and image understanding. Image uploads are sent directly to the model, which decides whether they are supported."
+                      ? "用于聊天、文本生成和图片理解。任何 OpenAI 兼容端点都可以，把 Base URL 指过去即可。"
+                      : "Used for chat, text generation, and image understanding. Any OpenAI-compatible endpoint works — just point the base URL at it."
                   }
-                  actions={
-                    <TestButton
-                      label={isZh ? "测试文本模型" : "Test Text Model"}
-                      state={textTestState}
-                      onClick={handleTestText}
-                    />
-                  }
-                >
-                  <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                    <ProviderField
-                      label="Provider"
-                      value={config.textProvider}
-                      onChange={(value) => handleProviderChange("text", value)}
-                      options={TEXT_PROVIDER_OPTIONS}
-                      docsUrl={textProviderLink}
-                      uiLang={uiLang}
-                    />
-                    <div className="space-y-2">
-                      <label className="text-sm font-medium text-foreground">Model</label>
-                      <input
-                        type="text"
-                        value={config.textModel}
-                        onChange={(e) => setConfig({ ...config, textModel: e.target.value })}
-                        className="flex h-10 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm shadow-sm transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
-                        placeholder="gpt-4o-mini"
-                      />
-                    </div>
-                    <SecretInput
-                      label="API Key"
-                      value={config.textApiKey}
-                      onChange={(value) => setConfig({ ...config, textApiKey: value })}
-                      placeholder="sk-..."
-                      visible={showTextKey}
-                      onToggle={() => setShowTextKey((prev) => !prev)}
-                      docsUrl={textProviderLink}
-                      uiLang={uiLang}
-                    />
-                    <div className="space-y-2">
-                      <label className="text-sm font-medium text-foreground">Base URL</label>
-                      <input
-                        type="text"
-                        value={config.textBaseUrl}
-                        onChange={(e) => setConfig({ ...config, textBaseUrl: e.target.value })}
-                        className="flex h-10 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm shadow-sm transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
-                        placeholder="https://api.example.com/v1"
-                      />
-                    </div>
-                  </div>
-                </SectionCard>
+                  modelPlaceholder="gpt-4o-mini"
+                  testLabel={isZh ? "测试文本模型" : "Test Text Model"}
+                  config={config}
+                  onChange={patch}
+                  onTest={() => testChannel("text")}
+                  testState={testState.text}
+                  uiLang={uiLang}
+                />
 
-                <SectionCard
+                <ChannelCard
+                  channel="image"
                   title={isZh ? "生图模型" : "Image Model"}
                   description={
                     isZh
                       ? "仅用于图片生成，与文本模型完全独立。"
                       : "Used only for image generation and fully separate from the text model."
                   }
-                  actions={
-                    <TestButton
-                      label={isZh ? "测试生图模型" : "Test Image Model"}
-                      state={imageTestState}
-                      onClick={handleTestImage}
-                    />
-                  }
-                >
-                  <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                    <ProviderField
-                      label="Provider"
-                      value={config.imageProvider}
-                      onChange={(value) => handleProviderChange("image", value)}
-                      options={IMAGE_PROVIDER_OPTIONS}
-                      docsUrl={imageProviderLink}
-                      uiLang={uiLang}
-                    />
-                    <div className="space-y-2">
-                      <label className="text-sm font-medium text-foreground">Model</label>
-                      <input
-                        type="text"
-                        value={config.imageModel}
-                        onChange={(e) => setConfig({ ...config, imageModel: e.target.value })}
-                        className="flex h-10 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm shadow-sm transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
-                        placeholder="gpt-image-1"
-                      />
-                    </div>
-                    <SecretInput
-                      label="API Key"
-                      value={config.imageApiKey}
-                      onChange={(value) => setConfig({ ...config, imageApiKey: value })}
-                      placeholder="sk-..."
-                      visible={showImageKey}
-                      onToggle={() => setShowImageKey((prev) => !prev)}
-                      docsUrl={imageProviderLink}
-                      uiLang={uiLang}
-                    />
-                    <div className="space-y-2">
-                      <label className="text-sm font-medium text-foreground">Base URL</label>
-                      <input
-                        type="text"
-                        value={config.imageBaseUrl}
-                        onChange={(e) => setConfig({ ...config, imageBaseUrl: e.target.value })}
-                        className="flex h-10 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm shadow-sm transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
-                        placeholder="https://api.example.com/v1"
-                      />
-                    </div>
-                  </div>
-                </SectionCard>
+                  modelPlaceholder="gpt-image-1"
+                  testLabel={isZh ? "测试生图模型" : "Test Image Model"}
+                  config={config}
+                  onChange={patch}
+                  onTest={() => testChannel("image")}
+                  testState={testState.image}
+                  uiLang={uiLang}
+                />
 
                 <SectionCard
                   title={isZh ? "其他" : "Other"}
@@ -503,11 +359,9 @@ export function SettingsDialog() {
                 >
                   <SecretInput
                     label="MinerU Token"
-                    value={config.fileParserApiToken || ""}
-                    onChange={(value) => setConfig({ ...config, fileParserApiToken: value })}
+                    value={config.fileParserApiToken}
+                    onChange={(value) => patch({ fileParserApiToken: value })}
                     placeholder={isZh ? "留空则使用本地解析" : "Leave empty to use local extraction"}
-                    visible={showMineruKey}
-                    onToggle={() => setShowMineruKey((prev) => !prev)}
                     docsUrl={MINERU_LINK}
                     uiLang={uiLang}
                   />
@@ -515,11 +369,7 @@ export function SettingsDialog() {
               </div>
 
               <div className="flex justify-end gap-3 border-t border-border/50 bg-muted/5 p-4 px-6">
-                <Button
-                  variant="outline"
-                  onClick={() => setIsOpen(false)}
-                  className="rounded-lg hover:bg-muted"
-                >
+                <Button variant="outline" onClick={() => setIsOpen(false)} className="rounded-lg hover:bg-muted">
                   {t(uiLang, "common.cancel")}
                 </Button>
                 <Button onClick={handleSave} className="gap-2 rounded-lg shadow-sm">

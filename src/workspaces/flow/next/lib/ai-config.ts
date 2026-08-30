@@ -1,43 +1,23 @@
-import { STORAGE_KEYS } from "./storage"
-import { getAIConfig as getWorkspaceAIConfig } from "@/lib/ai-client"
+import { STORAGE_KEYS } from "@/workspaces/flow/next/lib/storage"
+import { DEFAULT_AI_CONFIG, getAIConfig as getWorkspaceAIConfig } from "@/ai/config"
+import type { AIConfig } from "@/ai/types"
 
 /**
- * Get AI configuration from localStorage.
- * Returns API keys and settings for custom AI providers.
- * Uses top-bar workspace settings as the primary source.
+ * The Flow workspace sends its model settings to `/api/chat` alongside an
+ * optional deployment access code. The model settings themselves are the
+ * shared workspace config; only the access code is Flow-specific.
  */
-export function getAIConfig() {
+export interface FlowRequestConfig {
+    accessCode: string
+    ai: AIConfig
+}
+
+export function getAIConfig(): FlowRequestConfig {
     if (typeof window === "undefined") {
-        return {
-            accessCode: "",
-            aiProvider: "openai",
-            aiBaseUrl: "",
-            aiApiKey: "",
-            aiModel: "",
-            aiImageModel: "",
-            aiImageProvider: "openai",
-            aiImageBaseUrl: "",
-            aiImageApiKey: "",
-        }
+        return { accessCode: "", ai: DEFAULT_AI_CONFIG }
     }
-
-    const topConfig = getWorkspaceAIConfig()
-    const topApiKey = String(topConfig.textApiKey || topConfig.apiKey || "").trim()
-    const topBaseUrl = String(topConfig.textBaseUrl || topConfig.baseUrl || "").trim()
-    const topChatModel = String(topConfig.textModel || topConfig.chatModel || "").trim()
-    const topImageModel = String(topConfig.imageModel || topConfig.imageModelLegacy || "").trim()
-    const topImageApiKey = String(topConfig.imageApiKey || topConfig.apiKey || "").trim()
-    const topImageBaseUrl = String(topConfig.imageBaseUrl || topConfig.baseUrl || "").trim()
-
     return {
         accessCode: localStorage.getItem(STORAGE_KEYS.accessCode) || "",
-        aiProvider: String(topConfig.textProvider || "openai"),
-        aiBaseUrl: topBaseUrl,
-        aiApiKey: topApiKey,
-        aiModel: topChatModel,
-        aiImageModel: topImageModel,
-        aiImageProvider: String(topConfig.imageProvider || "openai"),
-        aiImageBaseUrl: topImageBaseUrl,
-        aiImageApiKey: topImageApiKey,
+        ai: getWorkspaceAIConfig(),
     }
 }

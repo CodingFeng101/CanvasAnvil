@@ -972,11 +972,9 @@ Please fix the XML issues. Ensure cell_id values exist in the current XML and th
         // Reset auto-retry count on user-initiated message
         autoRetryCountRef.current = 0
 
-        const config = getAIConfig()
-        const modelToUse = String(config.aiModel || defaultModel || "").trim()
-        const imageModelToUse = String(
-            (config as { aiImageModel?: string }).aiImageModel || "",
-        ).trim()
+        const { accessCode, ai } = getAIConfig()
+        const modelToUse = String(ai.textModel || defaultModel || "").trim()
+        const imageModelToUse = String(ai.imageModel || "").trim()
         const globalConstraints = localStorage.getItem(STORAGE_GLOBAL_CONSTRAINTS_KEY) || ""
 
         // Safe parts access
@@ -1039,38 +1037,17 @@ Please fix the XML issues. Ensure cell_id values exist in the current XML and th
                     uploadedFiles,
                     deepThinkingEnabled,
                     aiConfig: {
-                        provider: config.aiProvider,
-                        baseUrl: config.aiBaseUrl,
-                        apiKey: config.aiApiKey,
-                        chatModel: modelToUse,
-                        imageModel: imageModelToUse,
-                        textProvider: config.aiProvider,
-                        textBaseUrl: config.aiBaseUrl,
-                        textApiKey: config.aiApiKey,
+                        ...ai,
                         textModel: modelToUse,
-                        imageProvider:
-                            (config as { aiImageProvider?: string }).aiImageProvider ||
-                            config.aiProvider,
-                        imageBaseUrl:
-                            (config as { aiImageBaseUrl?: string }).aiImageBaseUrl ||
-                            config.aiBaseUrl,
-                        imageApiKey:
-                            (config as { aiImageApiKey?: string }).aiImageApiKey ||
-                            config.aiApiKey,
+                        imageModel: imageModelToUse,
                     },
                     aiConstraints: globalConstraints,
                 },
                 headers: {
-                    "x-access-code": config.accessCode,
-                    ...(config.aiProvider && {
-                        "x-ai-provider": config.aiProvider,
-                    }),
-                    ...(config.aiBaseUrl && {
-                        "x-ai-base-url": config.aiBaseUrl,
-                    }),
-                    ...(config.aiApiKey && { "x-ai-api-key": config.aiApiKey }),
+                    "x-access-code": accessCode,
+                    ...(ai.textBaseUrl && { "x-ai-base-url": ai.textBaseUrl }),
+                    ...(ai.textApiKey && { "x-ai-api-key": ai.textApiKey }),
                     ...(modelToUse && { "x-ai-model": modelToUse }),
-                    ...(modelToUse && { "x-ai-chat-model": modelToUse }),
                     ...(imageModelToUse && {
                         "x-ai-image-model": imageModelToUse,
                     }),

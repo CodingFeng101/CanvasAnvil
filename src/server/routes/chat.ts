@@ -13,16 +13,10 @@ import path from "path"
 import { z } from "zod"
 import { extractText, getDocumentProxy } from "unpdf"
 import mammoth from "mammoth"
-import { generateImageThroughGateway } from "../../lib/ai/gateway"
-import {
-    getImageChannelConfig,
-    getTextChannelConfig,
-    normalizeAIConfig,
-} from "../../lib/ai/provider-registry"
-import {
-    getAIModel,
-    supportsPromptCaching,
-} from "../../workspaces/flow/next/lib/ai-providers"
+import { generateImage } from "../../ai/image"
+import { getImageChannel, getTextChannel, normalizeAIConfig } from "../../ai/config"
+import type { AIChannel } from "../../ai/types"
+import { getChatModel } from "../../ai/server-model"
 import { formatAvailableShapeLibraries } from "../../workspaces/flow/next/lib/shape-library"
 import {
     getTelemetryConfig,
@@ -163,16 +157,9 @@ async function extractUploadedFileText(file: UploadedFilePayload): Promise<strin
     return providedText || cleanExtractedText(buffer.toString("utf8"))
 }
 
-async function summarizeChunk(
-    model: any,
-    providerOptions: any,
-    headers: any,
-    chunk: string,
-): Promise<string> {
+async function summarizeChunk(model: any, chunk: string): Promise<string> {
     return generateSummaryWithRetry({
         model,
-        providerOptions,
-        headers,
         system:
             "R - Role\nYou are a strict summarizer.\n\nI - Instructions\nOutput only direct summary text.\n\nE - End Goal\nProduce a concise faithful summary.\n\nN - Narrowing\nNo questions. No instructions. No extra framing.",
         user: `任务：仅根据下述文本输出摘要（<=300字）。禁止提问、禁止让用户补充内容、禁止输出模板化客套。\n\n文本：\n${chunk}`,
@@ -238,8 +225,6 @@ function isBadSummaryText(text: string): boolean {
 
 async function generateSummaryWithRetry(args: {
     model: any
-    providerOptions: any
-    headers: any
     system: string
     user: string
     maxOutputTokens: number
@@ -253,8 +238,6 @@ async function generateSummaryWithRetry(args: {
                 { role: "system" as const, content: args.system },
                 { role: "user" as const, content: args.user },
             ],
-            ...(args.providerOptions && { providerOptions: args.providerOptions }),
-            ...(args.headers && { headers: args.headers }),
             maxOutputTokens: args.maxOutputTokens,
         })
         const text = sanitizeSummaryText(
@@ -267,23 +250,16 @@ async function generateSummaryWithRetry(args: {
     return extractiveFallbackSummary(args.fallbackSource, args.maxChars)
 }
 
-async function summarizeBlockMethod(args: {
-    model: any
-    providerOptions: any
-    headers: any
-    text: string
-}): Promise<string> {
+async function summarizeBlockMethod(args: { model: any; text: string }): Promise<string> {
     const chunks = splitByApproxTokens(args.text, CHUNK_TOKEN_TARGET)
     const partial = await runWithConcurrency(
         chunks,
         SUMMARY_CONCURRENCY,
-        (chunk) => summarizeChunk(args.model, args.providerOptions, args.headers, chunk),
+        (chunk) => summarizeChunk(args.model, chunk),
     )
     const merged = partial.filter(Boolean).join("\n")
     return generateSummaryWithRetry({
         model: args.model,
-        providerOptions: args.providerOptions,
-        headers: args.headers,
         system:
             "R - Role\nYou merge chunk summaries.\n\nI - Instructions\nOutput only concise faithful summary text.\n\nE - End Goal\nProduce one merged summary.\n\nN - Narrowing\nNo questions. No instructions. No extra framing.",
         user: `任务：将以下分块摘要合并为完整摘要（<=1000字）。禁止提问、禁止请求补充材料，仅输出摘要正文。\n\n${merged}`,
@@ -293,17 +269,12 @@ async function summarizeBlockMethod(args: {
     })
 }
 
-async function summarizeRecursiveMethod(args: {
-    model: any
-    providerOptions: any
-    headers: any
-    text: string
-}): Promise<string> {
+async function summarizeRecursiveMethod(args: { model: any; text: string }): Promise<string> {
     const baseChunks = splitByApproxTokens(args.text, 3000)
     let level = await runWithConcurrency(
         baseChunks,
         SUMMARY_CONCURRENCY,
-        (chunk) => summarizeChunk(args.model, args.providerOptions, args.headers, chunk),
+        (chunk) => summarizeChunk(args.model, chunk),
     )
     level = level.filter(Boolean)
 
@@ -318,8 +289,6 @@ async function summarizeRecursiveMethod(args: {
             async (group) =>
                 generateSummaryWithRetry({
                     model: args.model,
-                    providerOptions: args.providerOptions,
-                    headers: args.headers,
                     system:
                         "R - Role\nYou merge summaries into a higher-level summary.\n\nI - Instructions\nOutput only summary text.\n\nE - End Goal\nProduce one higher-level merged summary.\n\nN - Narrowing\nNo questions. No instructions. No extra framing.",
                     user: `任务：把这组摘要提炼成更高层摘要（<=350字）。禁止提问、禁止让用户补充，只输出摘要。\n\n${group}`,
@@ -333,8 +302,6 @@ async function summarizeRecursiveMethod(args: {
 
     return generateSummaryWithRetry({
         model: args.model,
-        providerOptions: args.providerOptions,
-        headers: args.headers,
         system:
             "R - Role\nYou produce final executive summaries.\n\nI - Instructions\nKeep hierarchical fidelity and avoid hallucination. Output only summary text.\n\nE - End Goal\nProduce one final executive summary.\n\nN - Narrowing\nNo questions. No requests for more info. No extra framing.",
         user: `任务：输出最终摘要（<=1000字）。禁止提问、禁止请求更多信息，仅输出摘要正文。\n\n${level.join("\n")}`,
@@ -556,13 +523,7 @@ async function generateDeepThinkingDiagramImage(args: {
     globalConstraints: string
     processedFilesContext: string
     imageAttachments: ImageAttachment[]
-    channel: {
-        provider: string
-        apiKey: string
-        baseUrl: string
-        model: string
-        customMapping?: string
-    }
+    channel: AIChannel
 }): Promise<string | null> {
     let promptText = ""
     try {
@@ -598,7 +559,7 @@ async function generateDeepThinkingDiagramImage(args: {
         ].join("\n\n")
     }
 
-    return await generateImageThroughGateway({
+    return await generateImage({
         channel: args.channel,
         prompt: promptText,
         referenceImageUrl: args.imageAttachments[0]?.url,
@@ -815,51 +776,21 @@ async function handleChatRequest(req: Request): Promise<Response> {
     const normalizedClientConfig = normalizeAIConfig(
         typeof bodyAIConfig === "object" && bodyAIConfig ? bodyAIConfig : {},
     )
-    const textChannel = getTextChannelConfig(normalizedClientConfig)
-    const imageChannel = getImageChannelConfig(normalizedClientConfig)
-
-    // Read client AI provider overrides from headers first, then body fallback.
-    const clientOverrides = {
-        provider:
-            req.headers.get("x-ai-provider") ||
-            (typeof bodyAIConfig.provider === "string"
-                ? bodyAIConfig.provider
-                : textChannel.provider || null),
-        baseUrl:
-            req.headers.get("x-ai-base-url") ||
-            (typeof bodyAIConfig.baseUrl === "string"
-                ? bodyAIConfig.baseUrl
-                : textChannel.baseUrl || null),
-        apiKey:
-            req.headers.get("x-ai-api-key") ||
-            (typeof bodyAIConfig.apiKey === "string"
-                ? bodyAIConfig.apiKey
-                : textChannel.apiKey || null),
-        modelId:
-            req.headers.get("x-ai-model") ||
-            req.headers.get("x-ai-chat-model") ||
-            (typeof bodyAIConfig.chatModel === "string"
-                ? bodyAIConfig.chatModel
-                : typeof bodyAIConfig.modelId === "string"
-                  ? bodyAIConfig.modelId
-                  : textChannel.model || null),
+    // Settings arrive in the request body; headers stay supported so an
+    // embedding host can override them without rewriting the payload.
+    const header = (name: string) => req.headers.get(name) || ""
+    const textChannel = {
+        ...getTextChannel(normalizedClientConfig),
+        ...(header("x-ai-base-url") ? { baseUrl: header("x-ai-base-url") } : {}),
+        ...(header("x-ai-api-key") ? { apiKey: header("x-ai-api-key") } : {}),
     }
-    const imageModelId =
-        req.headers.get("x-ai-image-model") ||
-        (typeof bodyAIConfig.imageModel === "string"
-            ? bodyAIConfig.imageModel
-            : imageChannel.model || null)
+    const headerModel = header("x-ai-model") || header("x-ai-chat-model")
+    if (headerModel) textChannel.model = headerModel
 
-    // Get AI model with optional client overrides
-    const { model, providerOptions, headers, modelId } =
-        getAIModel(clientOverrides)
+    const imageChannel = getImageChannel(normalizedClientConfig)
+    const imageModelId = header("x-ai-image-model") || imageChannel.model || null
 
-
-    // Check if model supports prompt caching
-    const shouldCache = supportsPromptCaching(modelId)
-    console.log(
-        `[Prompt Caching] ${shouldCache ? "ENABLED" : "DISABLED"} for model: ${modelId}`,
-    )
+    const { model, modelId } = getChatModel(textChannel)
 
     let parsedFilesContext = ""
     if (uploadedFiles.length > 0) {
@@ -873,18 +804,8 @@ async function handleChatRequest(req: Request): Promise<Response> {
                     tokens >= RECURSIVE_THRESHOLD_TOKENS ? "recursive" : "chunk"
                 const summary =
                     method === "recursive"
-                        ? await summarizeRecursiveMethod({
-                              model,
-                              providerOptions,
-                              headers,
-                              text: extracted,
-                          })
-                        : await summarizeBlockMethod({
-                              model,
-                              providerOptions,
-                              headers,
-                              text: extracted,
-                          })
+                        ? await summarizeRecursiveMethod({ model, text: extracted })
+                        : await summarizeBlockMethod({ model, text: extracted })
                 return { name: file.name, tokens, method, summary }
             },
         )
@@ -1269,47 +1190,17 @@ ${parsedFilesContext ? `\n\nParsed file summaries:\n"""md\n${parsedFilesContext}
         }
     }
 
-    // Add cache point to the last assistant message in conversation history
-    // This caches the entire conversation prefix for subsequent requests
-    // Strategy: system (cached) + history with last assistant (cached) + new user message
-    if (shouldCache && enhancedMessages.length >= 2) {
-        // Find the last assistant message (should be second-to-last, before current user message)
-        for (let i = enhancedMessages.length - 2; i >= 0; i--) {
-            if (enhancedMessages[i].role === "assistant") {
-                enhancedMessages[i] = {
-                    ...enhancedMessages[i],
-                    providerOptions: {
-                        bedrock: { cachePoint: { type: "default" } },
-                    },
-                }
-                break // Only cache the last assistant message
-            }
-        }
-    }
-
-    // System messages with multiple cache breakpoints for optimal caching:
-    // - Breakpoint 1: Static instructions (~1500 tokens) - rarely changes
-    // - Breakpoint 2: Current XML context - changes per diagram, but constant within a conversation turn
-    // This allows: if only user message changes, both system caches are reused
-    //              if XML changes, instruction cache is still reused
+    // Two system messages rather than one: the instructions are stable across a
+    // conversation while the diagram XML changes every turn, so keeping them
+    // apart lets the provider reuse the cached instruction prefix.
     const systemMessages = [
         {
             role: "system" as const,
             content: systemMessage,
-            ...(shouldCache && {
-                providerOptions: {
-                    bedrock: { cachePoint: { type: "default" } },
-                },
-            }),
         },
         {
             role: "system" as const,
             content: `${previousXml ? `Previous diagram XML (before user's last message):\n"""xml\n${previousXml}\n"""\n\n` : ""}Current diagram XML (AUTHORITATIVE - the source of truth):\n"""xml\n${xml || ""}\n"""\n\nIMPORTANT: The "Current diagram XML" is the SINGLE SOURCE OF TRUTH for what's on the canvas right now. The user can manually add, delete, or modify shapes directly in draw.io. Always count and describe elements based on the CURRENT XML, not on what you previously generated. If both previous and current XML are shown, compare them to understand what the user changed. When using edit_diagram, COPY search patterns exactly from the CURRENT XML - attribute order matters!`,
-            ...(shouldCache && {
-                providerOptions: {
-                    bedrock: { cachePoint: { type: "default" } },
-                },
-            }),
         },
     ]
 
@@ -1352,8 +1243,6 @@ ${parsedFilesContext ? `\n\nParsed file summaries:\n"""md\n${parsedFilesContext}
                         stopWhen: stepCountIs(5),
                         messages: allMessages,
                         ...(safeMaxTokens && { maxTokens: safeMaxTokens }),
-                        ...(providerOptions && { providerOptions }),
-                    ...(headers && { headers }),
                     ...(getTelemetryConfig({ sessionId: validSessionId, userId }) && {
                         experimental_telemetry: getTelemetryConfig({
                             sessionId: validSessionId,

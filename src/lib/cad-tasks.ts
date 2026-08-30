@@ -1,4 +1,4 @@
-import type { ChatMessage } from "@/lib/ai-client";
+import type { ChatMessage } from "@/ai/client";
 
 import cadBomPromptTemplate from "../../agent/cad/bom-prompt.md?raw";
 import cadImagesMasterRenovationSchemeTemplate from "../../agent/cad/images-agents/master-renovation-scheme.md?raw";

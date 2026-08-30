@@ -13,7 +13,7 @@ import {
   PPT_SLIDES_EDIT_SYSTEM_PROMPT,
 } from "@/lib/system-prompts";
 import { clearPersistedPptWorkspaceState } from "@/lib/ppt-persistence";
-import type { ChatMessage } from "@/lib/ai-client";
+import type { ChatMessage } from "@/ai/client";
 import { PptWorkspace } from "@/workspaces/ppt/workspace/PptWorkspace";
 import { ChatPanel as PptChatPanel } from "@/workspaces/ppt/chat/ChatPanel";
 import type { HistoryItem } from "@/workspaces/ppt/chat/history-dialog";

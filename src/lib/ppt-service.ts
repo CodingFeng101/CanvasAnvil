@@ -1,6 +1,6 @@
 ﻿import PptxGenJS from "pptxgenjs"
 import { PDFDocument, rgb } from "pdf-lib"
-import { generateChatMessage, generateImage, generateVisionChatMessage } from "./ai-client"
+import { generateChatMessage, generateImage, generateVisionChatMessage } from "@/ai/client"
 import { buildRisenPrompt } from "./risen-prompt"
 import pptOutlineSystem from "../../agent/ppt/outline.md?raw"
 import pptSlidesGenerateSystem from "../../agent/ppt/slides-generate.md?raw"

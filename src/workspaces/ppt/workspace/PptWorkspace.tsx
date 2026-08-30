@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useLayoutEffect, useRef } from 'react';
 import { motion } from "framer-motion";
-import { generateImage, generateChatMessage } from '@/lib/ai-client';
+import { generateImage, generateChatMessage } from '@/ai/client';
 import { pptService, PptPage, type PptElement, type PptTextBlock, type SlideEditRoutingItem, resolveTextBlockFontSize, PPT_REFERENCE_SLIDE_HEIGHT, PPT_REFERENCE_SLIDE_WIDTH, textBlocksToPptElements } from '@/lib/ppt-service';
 import { getTemplateGenerationPrompt } from '@/lib/ppt-prompts';
 import {
