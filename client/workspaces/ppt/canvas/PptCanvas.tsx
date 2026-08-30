@@ -1,6 +1,12 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { motion } from "motion/react";
 import { useLatestRef } from "@/shared/lib/use-latest-ref";
+import { errorText, isRetryableBeautifyError } from "./lib/errors";
+import { runInParallel, sleep } from "./lib/concurrency";
+import { parseJsonLoose } from "./lib/parse-json";
+import { extractPdfPagesAsImages, isPdfFile } from "./lib/deck-source";
+import { getSlideshowDimensions } from "./lib/slideshow-size";
+import { buildBeautifyInstruction } from "./lib/beautify-instruction";
 import { generateImage, generateChatMessage } from '@/ai/client';
 import {
   pptService,
@@ -775,20 +781,6 @@ export function PptCanvas({
     return () => observer.disconnect();
   }, [currentSlideIndex, imageVersions, currentImageVersionId, generatedImages, creationStep]);
 
-  const getSlideshowDimensions = () => {
-      if (!windowDimensions.width) return { width: '90vw', height: '50.625vw' }; // Fallback
-      const maxWidth = windowDimensions.width * 0.9;
-      const maxHeight = windowDimensions.height * 0.85;
-      
-      let w = maxWidth;
-      let h = w * 9 / 16;
-      
-      if (h > maxHeight) {
-          h = maxHeight;
-          w = h * 16 / 9;
-      }
-      return { width: w, height: h };
-  };
 
   const setTemplateFromItem = useCallback(async (item: TemplateItem) => {
     setSelectedTemplateId(item.id);
@@ -2520,31 +2512,6 @@ export function PptCanvas({
     return uiLang === "zh" ? `第${index}张` : `Image ${index}`;
   };
 
-  const parseJsonLoose = (text: string) => {
-    const raw = String(text || "").trim();
-    if (!raw) return null;
-    try {
-      return JSON.parse(raw);
-    } catch {
-    }
-    const jsonBlock = raw.match(/```json\s*([\s\S]*?)\s*```/i);
-    if (jsonBlock?.[1]) {
-      try {
-        return JSON.parse(String(jsonBlock[1]).trim());
-      } catch {
-      }
-    }
-    const firstBracket = raw.indexOf("[");
-    const lastBracket = raw.lastIndexOf("]");
-    if (firstBracket >= 0 && lastBracket > firstBracket) {
-      const candidate = raw.slice(firstBracket, lastBracket + 1);
-      try {
-        return JSON.parse(candidate);
-      } catch {
-      }
-    }
-    return null;
-  };
 
   const buildReferenceVisualAssetsWithCaptions = async (): Promise<ReferenceVisualAsset[]> => {
     const raw = (referenceVisualAssetsRaw || []).filter((x: any) => x && typeof x.dataUrl === "string" && x.dataUrl.startsWith("data:image"));
@@ -3018,69 +2985,22 @@ export function PptCanvas({
       setCurrentSlideIndex(0);
   };
 
-  const runInParallel = async (tasks: (() => Promise<void>)[], limit: number) => {
-      const results: Promise<void>[] = [];
-      const executing: Promise<void>[] = [];
-      for (const task of tasks) {
-          const p = Promise.resolve().then(() => task());
-          results.push(p);
-          let e: Promise<void>;
-          e = p
-            .catch(() => {
-            })
-            .then(() => {
-              executing.splice(executing.indexOf(e), 1);
-            });
-          executing.push(e);
-          if (executing.length >= limit) {
-              await Promise.race(executing);
-          }
-      }
-      await Promise.all(results);
-  };
 
-  const isBeautifyPdfFile = (file: File) => {
-    const name = String(file?.name || "").toLowerCase();
-    return file?.type === "application/pdf" || name.endsWith(".pdf");
-  };
 
-  const isImageTransformSourceFile = (file: File) => {
-    const name = String(file?.name || "").toLowerCase();
-    return file?.type === "application/pdf" || name.endsWith(".pdf");
-  };
 
-  const extractPdfPagesAsImages = async (file: File) => {
-    const { getPdfDocumentFromUrl, renderPdfPageToCanvas } = await import("@/shared/files");
-    const objectUrl = URL.createObjectURL(file);
-    try {
-      const pdf = await getPdfDocumentFromUrl(objectUrl);
-      const pageCount = (pdf as any)?.numPages ?? 0;
-      const out: string[] = [];
-      for (let pageNumber = 1; pageNumber <= pageCount; pageNumber += 1) {
-        setProgress({
-          current: pageNumber - 1,
-          total: pageCount,
-          message: tr(`正在解析 PDF... (${pageNumber - 1}/${pageCount})`, `Parsing PDF... (${pageNumber - 1}/${pageCount})`),
-        });
-        const canvas = document.createElement("canvas");
-        await renderPdfPageToCanvas({ pdf, pageNumber, canvas, targetWidth: 1280 });
-        const dataUrl = canvas.toDataURL("image/png");
-        if (dataUrl && dataUrl.startsWith("data:image")) out.push(dataUrl);
-      }
-      setProgress({
-        current: pageCount,
-        total: pageCount,
-        message: tr(`正在解析 PDF... (${pageCount}/${pageCount})`, `Parsing PDF... (${pageCount}/${pageCount})`),
-      });
-      return out;
-    } finally {
-      URL.revokeObjectURL(objectUrl);
-    }
-  };
+
+  // extractPdfPagesAsImages counts pages; the wording stays here with tr.
+  const reportPdfParseProgress = useCallback((done: number, total: number) => {
+    setProgress({
+      current: done,
+      total,
+      message: tr(`正在解析 PDF... (${done}/${total})`, `Parsing PDF... (${done}/${total})`),
+    });
+  }, [tr]);
 
   const extractImageDeckPages = async (file: File) => {
-    if (isBeautifyPdfFile(file)) {
-      return await extractPdfPagesAsImages(file);
+    if (isPdfFile(file)) {
+      return await extractPdfPagesAsImages(file, reportPdfParseProgress);
     }
     throw new Error(tr("仅支持 PDF 文件。", "Only PDF files are supported."));
   };
@@ -3218,38 +3138,12 @@ export function PptCanvas({
     }
   };
 
-  const buildBeautifyInstruction = (req: string) => {
-    const r = String(req || "").trim();
-    const parts = [
-      "Beautify the slide while preserving all original text, numbers, and meaning.",
-      "Improve typography, spacing, alignment, color harmony, hierarchy, and visual balance.",
-      "Do not add watermarks. Keep 16:9 landscape.",
-      "Do not translate or rewrite text unless explicitly requested.",
-      r ? `User requirements: ${r}` : "",
-    ].filter(Boolean);
-    return parts.join("\n");
-  };
 
-  const getErrorMessage = (error: unknown) => {
-    if (error instanceof Error && error.message) return error.message;
-    if (typeof error === "string" && error.trim()) return error.trim();
-    return tr("未知错误", "Unknown error");
-  };
+  const getErrorMessage = useCallback(
+    (error: unknown) => errorText(error) || tr("未知错误", "Unknown error"),
+    [tr],
+  );
 
-  const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-
-  const isRetryableBeautifyError = (error: unknown) => {
-    const msg = getErrorMessage(error).toLowerCase();
-    return (
-      msg.includes("429") ||
-      msg.includes("524") ||
-      msg.includes("timeout") ||
-      msg.includes("timed out") ||
-      msg.includes("networkerror") ||
-      msg.includes("fetch") ||
-      msg.includes("rate limit")
-    );
-  };
 
   const editPageImageWithRetry = async (
     page: PptPage,
@@ -3287,8 +3181,8 @@ export function PptCanvas({
     setProgress({ current: 0, total: 0, message: tr("正在解析文件...", "Parsing file...") });
 
     try {
-      const pageImages = isBeautifyPdfFile(file)
-        ? await extractPdfPagesAsImages(file)
+      const pageImages = isPdfFile(file)
+        ? await extractPdfPagesAsImages(file, reportPdfParseProgress)
         : [];
 
       if (pageImages.length === 0) {
@@ -4316,7 +4210,7 @@ export function PptCanvas({
 
                     <Button 
                         onClick={creationMode === "beautify" ? handleStartBeautify : creationMode === "image_transform" ? handleStartImageTransform : creationMode === "idea" ? handleGenerateOutline : handleLoadOutline}
-                        disabled={Boolean(progress.message) || (creationMode === "beautify" ? !beautifyFile : creationMode === "image_transform" ? !imageTransformFile || !isImageTransformSourceFile(imageTransformFile) : isParsingReferenceFiles || (creationMode === "idea" ? !ideaInput.trim() : !outlineInput.trim()))}
+                        disabled={Boolean(progress.message) || (creationMode === "beautify" ? !beautifyFile : creationMode === "image_transform" ? !imageTransformFile || !isPdfFile(imageTransformFile) : isParsingReferenceFiles || (creationMode === "idea" ? !ideaInput.trim() : !outlineInput.trim()))}
                         className="w-full py-6 text-lg font-medium bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white shadow-lg shadow-blue-500/20 rounded-xl transition-all hover:scale-[1.01] active:scale-[0.99]"
                     >
                         {progress.message ? <Loader2 className="w-5 h-5 mr-2 animate-spin" /> : <Sparkles className="w-5 h-5 mr-2" />}
@@ -5172,7 +5066,7 @@ export function PptCanvas({
           <div className="flex-1 flex items-center justify-center p-8 overflow-hidden bg-black/90">
             {activeSlides[slideshowIndex] ? (
               (() => {
-                const slideDims = getSlideshowDimensions();
+                const slideDims = getSlideshowDimensions(windowDimensions);
                 const slideWidth = typeof slideDims.width === "number" ? slideDims.width : 1100;
                 const slideHeight = typeof slideDims.height === "number" ? slideDims.height : 619;
                 return (
