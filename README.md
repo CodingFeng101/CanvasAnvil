@@ -181,12 +181,16 @@ npm run build
 
 ## 📝 Development Notes
 
-- AI configuration is read from local app settings; image-generation workflows use the configured image provider
-- Local development depends on the API service for routes such as `/api/ppt-ai`
-- After changing local API route wiring in `vite.config.ts`, restart the dev server
+- Every model call uses the OpenAI HTTP protocol. To use another vendor, point the base URL in Settings at their OpenAI-compatible endpoint — there is no provider list to pick from.
+- AI configuration is read from local app settings; the text and image channels are configured separately.
+- Local development depends on the API service for `/api/chat` and `/api/ppt-ai`.
+- After changing local API route wiring in `vite.config.ts`, restart the dev server.
+- `src/server/**` and `src/ai/**` use relative imports: `vite.config.ts` imports the API routes and Node resolves that file without the `@/` path alias.
+- Set `PROMPT_LOG_DIR` to write assembled prompts to disk; it is off by default because the log contains the user's content.
 
 ## 📚 Docs
 
+- Architecture overview: [docs/architecture.md](docs/architecture.md)
 - Deployment guide: [deploy/README.md](deploy/README.md)
 
 ## ⚖️ License

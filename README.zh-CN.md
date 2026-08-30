@@ -181,12 +181,16 @@ npm run build
 
 ## 📝 开发说明
 
-- AI 配置读取本地应用设置；生图工作流使用已配置的图片生成供应商
-- 本地开发依赖 API 服务提供 `/api/ppt-ai` 等接口
-- 修改 `vite.config.ts` 中的本地 API 路由后，需要重启开发服务
+- 所有模型调用都走 OpenAI 的 HTTP 协议。想换厂商，只要在设置里把 Base URL 指向它的 OpenAI 兼容端点即可，没有厂商列表可选。
+- AI 配置读取本地应用设置；文本通道和生图通道分别配置。
+- 本地开发依赖 API 服务提供 `/api/chat` 和 `/api/ppt-ai`。
+- 修改 `vite.config.ts` 中的本地 API 路由后，需要重启开发服务。
+- `src/server/**` 和 `src/ai/**` 使用相对路径导入：`vite.config.ts` 会 import API 路由，而 Node 加载这个配置文件时不认 `@/` 别名。
+- 设置 `PROMPT_LOG_DIR` 可把拼装好的提示词写入磁盘；默认关闭，因为日志里含有用户内容。
 
 ## 📚 文档
 
+- 架构说明：[docs/architecture.md](docs/architecture.md)
 - 部署说明：[deploy/README.md](deploy/README.md)
 
 ## ⚖️ 许可证
