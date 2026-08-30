@@ -7,6 +7,7 @@ import { parseJsonLoose } from "./lib/parse-json";
 import { extractPdfPagesAsImages, isPdfFile } from "./lib/deck-source";
 import { getSlideshowDimensions } from "./lib/slideshow-size";
 import { useTemplateLibrary } from "./hooks/use-template-library";
+import { useSlideshow } from "./hooks/use-slideshow";
 import { buildBeautifyInstruction } from "./lib/beautify-instruction";
 import { generateChatMessage } from '@/ai/client';
 import {
@@ -353,11 +354,6 @@ export function PptCanvas({
     canvasHeight: number;
     handle?: ReviewResizeHandle;
   }>(null);
-  const [slideshowOpen, setSlideshowOpen] = useState(false);
-  const [slideshowIndex, setSlideshowIndex] = useState(0);
-  const [slideshowFullscreen, setSlideshowFullscreen] = useState(false);
-  const slideshowRootRef = useRef<HTMLDivElement | null>(null);
-  const slideshowStartIndexRef = useRef<number | null>(null);
   const [exportMenuOpen, setExportMenuOpen] = useState(false);
   const [exportReviewMode, setExportReviewMode] = useState(false);
   const [editableExtractionStatusBySlideId, setEditableExtractionStatusBySlideId] = useState<Record<string, EditableExtractionStatus>>({});
@@ -1860,7 +1856,9 @@ export function PptCanvas({
     );
   };
 
-  const activeSlides = localSlides.length > 0 ? localSlides : [];
+  const activeSlides = localSlides;
+
+  const slideshow = useSlideshow(activeSlides.length);
   const isAnyEditableExtractionRunning = activeSlides.some((slide) => getEditableExtractionStatus(slide.id) === "extracting");
   const allReviewLayersPrepared =
     activeSlides.length > 0 &&
@@ -1955,100 +1953,9 @@ export function PptCanvas({
     return tr(`第 ${index + 1} 版`, `Version ${index + 1}`);
   };
 
-  const enterSlideshowFullscreen = async () => {
-    if (typeof document === "undefined") return;
-    const root = slideshowRootRef.current;
-    if (!root) return;
-    try {
-      if (document.fullscreenElement === root) return;
-      if (root.requestFullscreen) {
-        await root.requestFullscreen();
-        return;
-      }
-      const anyRoot = root as any;
-      if (typeof anyRoot.webkitRequestFullscreen === "function") {
-        anyRoot.webkitRequestFullscreen();
-      }
-    } catch {
-    }
-  };
 
-  const exitSlideshowFullscreen = async () => {
-    if (typeof document === "undefined") return;
-    try {
-      if (document.fullscreenElement && document.exitFullscreen) {
-        await document.exitFullscreen();
-        return;
-      }
-      const anyDoc = document as any;
-      if (typeof anyDoc.webkitExitFullscreen === "function") {
-        anyDoc.webkitExitFullscreen();
-      }
-    } catch {
-    }
-  };
 
-  const closeSlideshow = () => {
-    setSlideshowOpen(false);
-    void exitSlideshowFullscreen();
-  };
 
-  useEffect(() => {
-      if (!slideshowOpen) return;
-      const startIndex = slideshowStartIndexRef.current ?? currentSlideIndex;
-      setSlideshowIndex(startIndex);
-      slideshowStartIndexRef.current = null;
-      const timer = window.setTimeout(() => {
-        void enterSlideshowFullscreen();
-      }, 0);
-      return () => window.clearTimeout(timer);
-  }, [slideshowOpen, currentSlideIndex]);
-
-  useEffect(() => {
-    if (typeof document === "undefined") return;
-    const onFullscreenChange = () => {
-      const root = slideshowRootRef.current;
-      const fullEl = document.fullscreenElement || (document as any).webkitFullscreenElement || null;
-      setSlideshowFullscreen(!!root && !!fullEl && (fullEl === root || root.contains(fullEl)));
-    };
-    document.addEventListener("fullscreenchange", onFullscreenChange);
-    document.addEventListener("webkitfullscreenchange", onFullscreenChange as EventListener);
-    onFullscreenChange();
-    return () => {
-      document.removeEventListener("fullscreenchange", onFullscreenChange);
-      document.removeEventListener("webkitfullscreenchange", onFullscreenChange as EventListener);
-    };
-  }, []);
-
-  useEffect(() => {
-    if (!slideshowOpen) return;
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (activeSlides.length === 0) return;
-      if (e.key === "ArrowRight" || e.key === "PageDown" || e.key === " ") {
-        e.preventDefault();
-        setSlideshowIndex((v) => (v + 1) % activeSlides.length);
-        return;
-      }
-      if (e.key === "ArrowLeft" || e.key === "PageUp") {
-        e.preventDefault();
-        setSlideshowIndex((v) => (v - 1 + activeSlides.length) % activeSlides.length);
-        return;
-      }
-      if (e.key === "Escape") {
-        e.preventDefault();
-        if (slideshowFullscreen) {
-          void exitSlideshowFullscreen();
-        } else {
-          closeSlideshow();
-        }
-      }
-    };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  // closeSlideshow only flips slideshowOpen and leaves fullscreen, so the
-  // captured copy behaves identically to a fresh one.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [slideshowOpen, activeSlides.length, slideshowFullscreen]);
 
   useEffect(() => {
     if (!exportMenuOpen || typeof document === "undefined") return;
@@ -4518,6 +4425,15 @@ export function PptCanvas({
             </button>
             <h2 className="font-semibold text-sm text-foreground">{tr("PPT 演示文稿", "PPT Deck")}</h2>
             <div className="h-4 w-px bg-border"></div>
+            <button
+                onClick={() => slideshow.open(currentSlideIndex)}
+                disabled={activeSlides.length === 0}
+                title={tr("从当前页开始放映", "Present from the current slide")}
+                className="flex items-center gap-2 px-3 py-1.5 bg-zinc-100 dark:bg-zinc-700 hover:bg-zinc-200 dark:hover:bg-zinc-600 text-foreground rounded-md text-xs font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+                <Presentation className="w-3.5 h-3.5" />
+                <span>{tr("放映", "Present")}</span>
+            </button>
             <div ref={exportMenuRef} className="relative z-[60]">
               <button
                 onClick={() => setExportMenuOpen((open) => !open)}
@@ -4847,35 +4763,35 @@ export function PptCanvas({
         {exportReviewMode ? renderReviewSidebarBridge() : null}
       </div>
 
-      <Dialog open={slideshowOpen} onOpenChange={(open) => (open ? setSlideshowOpen(true) : closeSlideshow())}>
+      <Dialog open={slideshow.isOpen} onOpenChange={(open) => { if (!open) slideshow.close(); }}>
         <DialogContent className="inset-0 left-0 top-0 translate-x-0 translate-y-0 w-screen h-screen max-w-none sm:max-w-none rounded-none p-0 bg-black/95 border-none">
-          <div ref={slideshowRootRef} className="w-full h-full flex flex-col">
+          <div ref={slideshow.rootRef} className="w-full h-full flex flex-col">
           <div className="h-16 px-6 flex items-center justify-between text-white/90 bg-black/50 backdrop-blur-sm z-50">
             <div className="text-sm font-medium">
-              {activeSlides.length > 0 ? `${uiLang === "zh" ? "第" : "Slide "}${slideshowIndex + 1} / ${activeSlides.length}${uiLang === "zh" ? " 页" : ""}` : ""}
+              {activeSlides.length > 0 ? `${uiLang === "zh" ? "第" : "Slide "}${slideshow.index + 1} / ${activeSlides.length}${uiLang === "zh" ? " 页" : ""}` : ""}
             </div>
             <div className="flex items-center gap-4">
               <Button
                 variant="ghost"
                 size="sm"
-                title={slideshowFullscreen ? tr("退出全屏", "Exit fullscreen") : tr("进入全屏", "Enter fullscreen")}
+                title={slideshow.isFullscreen ? tr("退出全屏", "Exit fullscreen") : tr("进入全屏", "Enter fullscreen")}
                 className="text-white hover:text-white hover:bg-white/10 gap-2"
                 onClick={() => {
-                  if (slideshowFullscreen) {
-                    void exitSlideshowFullscreen();
+                  if (slideshow.isFullscreen) {
+                    void slideshow.exitFullscreen();
                   } else {
-                    void enterSlideshowFullscreen();
+                    void slideshow.enterFullscreen();
                   }
                 }}
               >
-                {slideshowFullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
-                {slideshowFullscreen ? tr("退出全屏", "Exit fullscreen") : tr("全屏", "Fullscreen")}
+                {slideshow.isFullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
+                {slideshow.isFullscreen ? tr("退出全屏", "Exit fullscreen") : tr("全屏", "Fullscreen")}
               </Button>
               <Button
                 variant="ghost"
                 size="sm"
                 className="text-white hover:text-white hover:bg-white/10 gap-2"
-                onClick={closeSlideshow}
+                onClick={slideshow.close}
               >
                 <X className="w-4 h-4" />
                 {tr("退出", "Close")}
@@ -4884,7 +4800,7 @@ export function PptCanvas({
           </div>
           
           <div className="flex-1 flex items-center justify-center p-8 overflow-hidden bg-black/90">
-            {activeSlides[slideshowIndex] ? (
+            {activeSlides[slideshow.index] ? (
               (() => {
                 const slideDims = getSlideshowDimensions(windowDimensions);
                 const slideWidth = typeof slideDims.width === "number" ? slideDims.width : 1100;
@@ -4898,15 +4814,15 @@ export function PptCanvas({
                       height: slideDims.height
                     }}
                   >
-                  {getSlideBackgroundUrl(activeSlides[slideshowIndex].id) ? (
-                    renderScaledSlideScene(activeSlides[slideshowIndex], false, slideWidth, slideHeight)
+                  {getSlideBackgroundUrl(activeSlides[slideshow.index].id) ? (
+                    renderScaledSlideScene(activeSlides[slideshow.index], false, slideWidth, slideHeight)
                   ) : (
                     <div className="w-full h-full p-16 flex flex-col">
                       <h1 className="text-5xl font-bold mb-12 text-zinc-900 border-b-4 border-blue-600 pb-6 w-fit pr-16">
-                        {activeSlides[slideshowIndex].title}
+                        {activeSlides[slideshow.index].title}
                       </h1>
                       <div className="flex-1 space-y-8">
-                        {(activeSlides[slideshowIndex].content || []).map((point, i) => (
+                        {(activeSlides[slideshow.index].content || []).map((point, i) => (
                           <div key={i} className="flex gap-6 text-3xl text-zinc-700 leading-relaxed items-start">
                             <span className="text-blue-600 mt-2">•</span>
                             <span>{point}</span>
@@ -4915,7 +4831,7 @@ export function PptCanvas({
                       </div>
                       <div className="mt-auto pt-8 flex justify-between text-lg text-zinc-400 border-t border-zinc-100">
                         <span>Generated by Unified AI Workspace</span>
-                        <span>{slideshowIndex + 1}</span>
+                        <span>{slideshow.index + 1}</span>
                       </div>
                     </div>
                   )}
@@ -4931,19 +4847,19 @@ export function PptCanvas({
               variant="outline"
               size="lg"
               className="bg-white/10 border-white/20 text-white hover:bg-white/20 hover:text-white rounded-full w-12 h-12 p-0"
-              onClick={() => setSlideshowIndex((v) => (v - 1 + activeSlides.length) % activeSlides.length)}
+              onClick={slideshow.previous}
               disabled={activeSlides.length <= 1}
             >
               <ArrowLeft className="w-6 h-6" />
             </Button>
             <div className="text-white/50 text-sm font-medium">
-                {slideshowIndex + 1} / {activeSlides.length}
+                {slideshow.index + 1} / {activeSlides.length}
             </div>
             <Button
               variant="outline"
               size="lg"
               className="bg-white/10 border-white/20 text-white hover:bg-white/20 hover:text-white rounded-full w-12 h-12 p-0"
-              onClick={() => setSlideshowIndex((v) => (v + 1) % activeSlides.length)}
+              onClick={slideshow.next}
               disabled={activeSlides.length <= 1}
             >
               <ArrowRight className="w-6 h-6" />
