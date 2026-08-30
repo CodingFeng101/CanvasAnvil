@@ -140,6 +140,9 @@ export function ChatInput({
         if (focusKey === undefined) return;
         if (isRich) richRef.current?.focus();
         else textareaRef.current?.focus();
+    // Bumped by the parent to request focus. Depending on isRich as well
+    // would steal focus every time the input flips mode.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [focusKey]);
 
     useEffect(() => {
@@ -152,6 +155,10 @@ export function ChatInput({
         root.appendChild(document.createTextNode(""));
         richAppliedRef.current = "";
         onRichSegmentsChange?.([{ type: "text", text: "" }]);
+    // Bumped by the parent to request a clear. onRichSegmentsChange is an
+    // inline arrow from the parent, so depending on it would re-clear on
+    // every parent render and wipe what the user is typing.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [clearKey, isRich]);
 
     const serializeSegments = (segments: RichInputSegment[]) => {
@@ -263,6 +270,9 @@ export function ChatInput({
         richAppliedRef.current = key;
         if (richHasFocus) return;
         setRichContentFromSegments(segments);
+    // setRichContentFromSegments is redefined every render; the segment key
+    // above is what decides whether the DOM actually needs rewriting.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [isRich, richSegments, richHasFocus]);
 
     const insertPptTokenAtCursor = (slideId: string, label: string, tag: string, tokenKind: "outline" | "slide_image") => {
@@ -298,6 +308,9 @@ export function ChatInput({
         if (!insertPptToken) return;
         insertPptTokenAtCursor(insertPptToken.slideId, insertPptToken.label, insertPptToken.tag, insertPptToken.tokenKind);
         onInsertPptTokenHandled?.();
+    // Keyed on .key so the parent can request the same token twice; the
+    // token object itself is rebuilt each render and would re-insert.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [isRich, insertPptToken?.key]);
 
     const richPlainText = useMemo(() => {

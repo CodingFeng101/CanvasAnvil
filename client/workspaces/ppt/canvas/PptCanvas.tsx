@@ -1,5 +1,6 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { motion } from "motion/react";
+import { useLatestRef } from "@/shared/lib/use-latest-ref";
 import { generateImage, generateChatMessage } from '@/ai/client';
 import {
   pptService,
@@ -120,7 +121,7 @@ export function PptCanvas({
   onResetWorkspace
 }: PptCanvasProps) {
   const uiLang = useUiLanguage();
-  const tr = (zh: string, en: string) => (uiLang === "zh" ? zh : en);
+  const tr = useCallback((zh: string, en: string) => (uiLang === "zh" ? zh : en), [uiLang]);
   const initialPptStateRef = useRef<any>(undefined);
   if (typeof initialPptStateRef.current === "undefined") {
     initialPptStateRef.current = (() => {
@@ -555,12 +556,12 @@ export function PptCanvas({
     };
   }, []);
 
-  const templates: TemplateItem[] = [
+  const templates: TemplateItem[] = useMemo(() => [
     ...PRESET_TEMPLATES
       .filter((t) => !hiddenPresetTemplateIds.includes(t.id))
       .map((t) => ({ id: t.id, name: uiLang === "zh" ? t.zhName : t.enName, kind: "preset" as const, previewSrc: t.path, presetPath: t.path })),
     ...uploadedTemplates.map((t) => ({ id: t.id, name: t.name, kind: "upload" as const, previewSrc: t.dataUrl, dataUrl: t.dataUrl })),
-  ];
+  ], [hiddenPresetTemplateIds, uploadedTemplates, uiLang]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -743,9 +744,11 @@ export function PptCanvas({
     };
   }, [generatedImages, imageVersions, renderLayers]);
 
+  const onPptReadyChangeRef = useLatestRef(onPptReadyChange);
+  const isPptReady = localSlides.length > 0;
   useEffect(() => {
-    onPptReadyChange?.(localSlides.length > 0);
-  }, [localSlides.length]);
+    onPptReadyChangeRef.current?.(isPptReady);
+  }, [isPptReady, onPptReadyChangeRef]);
 
   useEffect(() => {
       if (typeof window === "undefined") return;
@@ -787,7 +790,7 @@ export function PptCanvas({
       return { width: w, height: h };
   };
 
-  const setTemplateFromItem = async (item: TemplateItem) => {
+  const setTemplateFromItem = useCallback(async (item: TemplateItem) => {
     setSelectedTemplateId(item.id);
     if (item.kind === "upload") {
       setTemplateImage(item.dataUrl);
@@ -804,7 +807,7 @@ export function PptCanvas({
     } catch (e) {
       console.error("Failed to load template", e);
     }
-  };
+  }, []);
 
   useEffect(() => {
     if (templates.length === 0) {
@@ -824,7 +827,7 @@ export function PptCanvas({
     if (selected.kind === "upload" && templateImage !== selected.dataUrl) {
       setTemplateImage(selected.dataUrl);
     }
-  }, [selectedTemplateId, templateImage, hiddenPresetTemplateIds.join("|"), uploadedTemplates.map((t) => t.id).join("|")]);
+  }, [selectedTemplateId, templateImage, templates, setTemplateFromItem]);
 
   const addUploadedTemplates = async (files: File[]) => {
     const imageFiles = Array.from(files || []).filter((f) => f && f.type.startsWith("image/"));
@@ -915,8 +918,11 @@ export function PptCanvas({
 
   const [isApplyingEdits, setIsApplyingEdits] = useState(false);
 
-  const setSlidesKeepingSelection = (nextSlides: SlideData[]) => {
-    const currentId = localSlides[currentSlideIndex]?.id;
+  const localSlidesRef = useLatestRef(localSlides);
+  const currentSlideIndexRef = useLatestRef(currentSlideIndex);
+
+  const setSlidesKeepingSelection = useCallback((nextSlides: SlideData[]) => {
+    const currentId = localSlidesRef.current[currentSlideIndexRef.current]?.id;
     setLocalSlides(nextSlides);
     if (!Array.isArray(nextSlides) || nextSlides.length === 0) {
       setCurrentSlideIndex(0);
@@ -933,15 +939,15 @@ export function PptCanvas({
       const safePrev = Number.isFinite(prev) ? Math.max(0, Math.floor(prev)) : 0;
       return Math.min(safePrev, nextSlides.length - 1);
     });
-  };
+  }, [localSlidesRef, currentSlideIndexRef]);
 
   useEffect(() => {
     if (data && data.slides && data.slides.length > 0) {
       setSlidesKeepingSelection(data.slides);
       setCreationStep('done');
-      onPptReadyChange?.(true);
+      onPptReadyChangeRef.current?.(true);
     }
-  }, [data]);
+  }, [data, onPptReadyChangeRef, setSlidesKeepingSelection]);
 
   const applyIncomingSlideEdits = async (payload: string) => {
     let parsed: any;
@@ -1390,9 +1396,28 @@ export function PptCanvas({
         .finally(() => {
           if (id) onIncomingEditHandled?.(id);
         });
+  // One-shot per edit request: the id identifies the request, and the effect
+  // reads that render's payload when it fires. Depending on the object would
+  // re-apply the same edits on every parent render.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [incomingEdit?.id]);
 
-  const getSlideVersionMeta = (slideId: string) => {
+  const getVisibleSlideVersions = useCallback((slideId: string) => {
+    const versions = imageVersions[slideId] || [];
+    const hasPrimaryVersion = versions.some((version) => version.type !== "derived_textless");
+    if (hasPrimaryVersion || !generatedImages[slideId]) return versions;
+    return [
+      {
+        id: `${SYNTHETIC_PRIMARY_VERSION_PREFIX}${slideId}`,
+        url: generatedImages[slideId],
+        timestamp: Date.now(),
+        type: "generated" as const,
+        instruction: tr("原始版本", "Original version"),
+      },
+      ...versions,
+    ];
+  }, [imageVersions, generatedImages, tr]);
+  const getSlideVersionMeta = useCallback((slideId: string) => {
       const visibleVersions = getVisibleSlideVersions(slideId);
       const versions = imageVersions[slideId] || [];
       const requestedVersionId = currentImageVersionId[slideId] || "";
@@ -1412,32 +1437,17 @@ export function PptCanvas({
         version,
         imageUrl: version?.url || generatedImages[slideId] || "",
       };
-  };
-  const getVisibleSlideVersions = (slideId: string) => {
-    const versions = imageVersions[slideId] || [];
-    const hasPrimaryVersion = versions.some((version) => version.type !== "derived_textless");
-    if (hasPrimaryVersion || !generatedImages[slideId]) return versions;
-    return [
-      {
-        id: `${SYNTHETIC_PRIMARY_VERSION_PREFIX}${slideId}`,
-        url: generatedImages[slideId],
-        timestamp: Date.now(),
-        type: "generated" as const,
-        instruction: tr("原始版本", "Original version"),
-      },
-      ...versions,
-    ];
-  };
+  }, [getVisibleSlideVersions, imageVersions, currentImageVersionId, generatedImages]);
   const getSlideImageUrl = (slideId: string) => getSlideVersionMeta(slideId).imageUrl;
   const getOriginalSlideVersion = (slideId: string) => {
     const versions = imageVersions[slideId] || [];
     return versions.find((version) => !version.sourceVersionId) || versions[0];
   };
-  const getSlideRenderLayer = (slideId: string) => {
+  const getSlideRenderLayer = useCallback((slideId: string) => {
     const { versionId } = getSlideVersionMeta(slideId);
     if (!versionId) return undefined;
     return renderLayers[slideId]?.[versionId];
-  };
+  }, [getSlideVersionMeta, renderLayers]);
   const getTextlessBackgroundVersion = (slideId: string) => {
     const versions = imageVersions[slideId] || [];
     return versions.find((version) => version.type === "derived_textless");
@@ -1783,6 +1793,11 @@ export function PptCanvas({
       window.removeEventListener("pointerup", stopDrag);
       window.removeEventListener("pointercancel", stopDrag);
     };
+  // Registered for the duration of one drag. The updaters it calls write
+  // through setRenderLayers's functional form, so they see current state
+  // despite being captured at drag start; depending on them would tear the
+  // listeners down and rebuild them on every pointermove.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [draggingTextBlockId, resizingTextBlockId]);
   useEffect(() => {
     const activeSlide = localSlides[currentSlideIndex];
@@ -1801,7 +1816,7 @@ export function PptCanvas({
     if (!selectedReviewTextBlockId || !blocks.some((block) => block.id === selectedReviewTextBlockId)) {
       setSelectedReviewTextBlockId(blocks[0].id);
     }
-  }, [exportReviewMode, localSlides, currentSlideIndex, renderLayers, selectedReviewTextBlockId]);
+  }, [exportReviewMode, localSlides, currentSlideIndex, renderLayers, selectedReviewTextBlockId, getSlideRenderLayer]);
   useEffect(() => {
     if (!reviewDrawRef.current) return;
     const handlePointerMove = (event: PointerEvent) => {
@@ -1842,6 +1857,8 @@ export function PptCanvas({
       window.removeEventListener("pointerup", stopPointer);
       window.removeEventListener("pointercancel", stopPointer);
     };
+  // Same as the text-block drag above: rebuilt per draw gesture, not per frame.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [reviewDraftRect]);
   useEffect(() => {
     const handlePointerMove = (event: PointerEvent) => {
@@ -2215,6 +2232,9 @@ export function PptCanvas({
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
+  // closeSlideshow only flips slideshowOpen and leaves fullscreen, so the
+  // captured copy behaves identically to a fresh one.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [slideshowOpen, activeSlides.length, slideshowFullscreen]);
 
   useEffect(() => {

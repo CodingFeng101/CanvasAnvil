@@ -386,7 +386,7 @@ export function ChatMessageDisplay({
                 })
             }
         })
-    }, [messages, handleDisplayChart])
+    }, [messages, handleDisplayChart, processedToolCalls])
 
     const renderToolPart = (part: ToolPartLike) => {
         const callId = part.toolCallId

@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { PanelRightClose, PanelRightOpen } from 'lucide-react';
 import { cn } from '@/shared/lib/utils';
 import { streamChatMessage, generatePptProxyChatMessage, ChatMessage, getAIConfig } from '@/ai/client';
@@ -114,37 +114,37 @@ export function ChatPanel({
   const [pptClearTick, setPptClearTick] = useState(0);
   const lastUploadedImagesRef = useRef<string[]>([]);
 
-  const getPptLabel = (slideId: string, title: string) => {
-    const m = String(slideId || "").match(/(\d+)/);
-    const n = m ? Number(m[1]) : NaN;
-    if (!Number.isNaN(n)) {
-      return title ? `Slide ${n}: ${title}` : `Slide ${n}`;
-    }
-    return title || slideId;
-  };
+const getPptLabel = (slideId: string, title: string) => {
+  const m = String(slideId || "").match(/(\d+)/);
+  const n = m ? Number(m[1]) : NaN;
+  if (!Number.isNaN(n)) {
+    return title ? `Slide ${n}: ${title}` : `Slide ${n}`;
+  }
+  return title || slideId;
+};
 
-  const getPptTag = (slideId: string, title: string, kind: "outline" | "slide_image") => {
-    const m = String(slideId || "").match(/(\d+)/);
-    const n = m ? Number(m[1]) : NaN;
-    if (Number.isNaN(n)) return "";
-    const safeTitle = String(title || "").split("|").join(",").split("]]").join("");
-    return `[[PPT_SLIDE|${n}|${safeTitle}|${kind}]]`;
-  };
+const getPptTag = (slideId: string, title: string, kind: "outline" | "slide_image") => {
+  const m = String(slideId || "").match(/(\d+)/);
+  const n = m ? Number(m[1]) : NaN;
+  if (Number.isNaN(n)) return "";
+  const safeTitle = String(title || "").split("|").join(",").split("]]").join("");
+  return `[[PPT_SLIDE|${n}|${safeTitle}|${kind}]]`;
+};
 
-  const pumpPptInsertQueue = () => {
+  const pumpPptInsertQueue = useCallback(() => {
     if (pptInsertBusyRef.current) return;
     const next = pptInsertQueueRef.current.shift();
     if (!next) return;
     pptInsertBusyRef.current = true;
     const tag = getPptTag(next.slideId, next.title, next.kind);
     setPptInsertToken({ key: Date.now() + Math.random(), slideId: next.slideId, label: next.label, tag, tokenKind: next.kind });
-  };
+  }, []);
 
-  const enqueuePptToken = (slideId: string, title: string, kind: "outline" | "slide_image") => {
+  const enqueuePptToken = useCallback((slideId: string, title: string, kind: "outline" | "slide_image") => {
     const label = getPptLabel(slideId, title);
     pptInsertQueueRef.current.push({ slideId, title, label, kind });
     pumpPptInsertQueue();
-  };
+  }, [pumpPptInsertQueue]);
 
   useEffect(() => {
     const prev = prevPptDraftCountRef.current;
@@ -162,7 +162,7 @@ export function ChatPanel({
     prevPptDraftIdsRef.current = nextIds;
     if (added.length === 0) return;
     for (const s of added) enqueuePptToken(s.slideId, s.title, s.kind);
-  }, [pptDraftSlides, setInput]);
+  }, [pptDraftSlides, enqueuePptToken]);
 
   // CAD strips its tool payloads out of the transcript; PPT has none to strip.
   const sanitizeAssistantContentForDisplay = (content: string) => content;

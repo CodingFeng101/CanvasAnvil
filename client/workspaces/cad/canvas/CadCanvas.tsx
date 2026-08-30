@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useLatestRef } from "@/shared/lib/use-latest-ref";
 import { Loader2, MessageSquarePlus, Box, Image as ImageIcon, Table2, Download } from 'lucide-react';
 import {
   ContextMenu,
@@ -166,33 +167,15 @@ export function CadCanvas({
   const externalSvgApplyAtRef = useRef(0);
   const EXTERNAL_APPLY_GUARD_MS = 2500;
 
-  useEffect(() => {
-    if (typeof svg2d === "string") {
-      const normalized = normalizeSvgMarkup(svg2d);
-      setSvgContent(normalized || null);
-      desiredSvgRef.current = normalized;
-      externalSvgApplyAtRef.current = Date.now();
-      if (normalized) {
-        loadSvgToEditorWithRetry(normalized);
-        latestLoadedSvgRef.current = normalized;
-      } else {
-        postToSvgEditor({ type: "cad_svg_editor_clear" });
-        latestLoadedSvgRef.current = EMPTY_SENTINEL;
-      }
-      return;
-    }
-    setSvgContent(null);
-    desiredSvgRef.current = "";
-    postToSvgEditor({ type: "cad_svg_editor_clear" });
-    latestLoadedSvgRef.current = EMPTY_SENTINEL;
-  }, [svg2d]);
+  const uiLangRef = useLatestRef(uiLang);
 
-  const postToSvgEditor = (payload: Record<string, unknown>) => {
+  // Reads only refs, so it never needs to change identity.
+  const postToSvgEditor = useCallback((payload: Record<string, unknown>) => {
     const win = svgEditorIframeRef.current?.contentWindow;
     if (!win) return false;
     win.postMessage(payload, window.location.origin);
     return true;
-  };
+  }, []);
 
   const handleSvgEditorIframeLoad = () => {
     setIsSvgEditorReady(false);
@@ -220,7 +203,11 @@ export function CadCanvas({
     }
   };
 
-  const loadSvgToEditorWithRetry = (svg: string) => {
+  /**
+   * The editor iframe drops loads sent before it is ready and gives no
+   * acknowledgement, so the same payload is re-sent on a fixed ladder.
+   */
+  const loadSvgToEditorWithRetry = useCallback((svg: string) => {
     const normalized = normalizeSvgMarkup(svg);
     if (!normalized) return false;
     const sent = postToSvgEditor({ type: "cad_svg_editor_load", svg: normalized });
@@ -232,7 +219,28 @@ export function CadCanvas({
       }, delay);
     }
     return true;
-  };
+  }, [postToSvgEditor]);
+
+  useEffect(() => {
+    if (typeof svg2d === "string") {
+      const normalized = normalizeSvgMarkup(svg2d);
+      setSvgContent(normalized || null);
+      desiredSvgRef.current = normalized;
+      externalSvgApplyAtRef.current = Date.now();
+      if (normalized) {
+        loadSvgToEditorWithRetry(normalized);
+        latestLoadedSvgRef.current = normalized;
+      } else {
+        postToSvgEditor({ type: "cad_svg_editor_clear" });
+        latestLoadedSvgRef.current = EMPTY_SENTINEL;
+      }
+      return;
+    }
+    setSvgContent(null);
+    desiredSvgRef.current = "";
+    postToSvgEditor({ type: "cad_svg_editor_clear" });
+    latestLoadedSvgRef.current = EMPTY_SENTINEL;
+  }, [svg2d, loadSvgToEditorWithRetry, postToSvgEditor]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -269,9 +277,9 @@ export function CadCanvas({
         if (ok) return;
         const reason = String((data as any).reason || "").trim();
         if (reason) {
-          toast.error(uiLang === "zh" ? `SVG加载失败：${reason}` : `SVG load failed: ${reason}`);
+          toast.error(uiLangRef.current === "zh" ? `SVG加载失败：${reason}` : `SVG load failed: ${reason}`);
         } else {
-          toast.error(uiLang === "zh" ? "SVG加载失败" : "SVG load failed");
+          toast.error(uiLangRef.current === "zh" ? "SVG加载失败" : "SVG load failed");
         }
         const next = String(desiredSvgRef.current || "").trim();
         if (!next) return;
@@ -282,11 +290,12 @@ export function CadCanvas({
     };
 
     window.addEventListener("message", onMessage);
+    const pending = svgEditorPendingRef.current;
     return () => {
       window.removeEventListener("message", onMessage);
-      svgEditorPendingRef.current.clear();
+      pending.clear();
     };
-  }, []);
+  }, [loadSvgToEditorWithRetry, postToSvgEditor, uiLangRef]);
 
   useEffect(() => {
     const next = normalizeSvgMarkup(typeof svgContent === "string" ? svgContent : "");
@@ -303,7 +312,7 @@ export function CadCanvas({
     if (postToSvgEditor({ type: "cad_svg_editor_clear" })) {
       latestLoadedSvgRef.current = EMPTY_SENTINEL;
     }
-  }, [svgContent]);
+  }, [svgContent, loadSvgToEditorWithRetry, postToSvgEditor]);
 
   useEffect(() => {
     if (!Array.isArray(images) || images.length === 0) {
@@ -370,7 +379,7 @@ export function CadCanvas({
     }
   }, [plan, svg2d, images, bom, focusPanel]);
 
-  const requestSvgFromEditor = async (opts?: { preferFallbackOnEmpty?: boolean }) => {
+  const requestSvgFromEditor = useCallback(async (opts?: { preferFallbackOnEmpty?: boolean }) => {
     const fallback = normalizeSvgMarkup(String(svgContent || svg2d || ""));
     if (!isSvgEditorReady) return fallback;
 
@@ -402,7 +411,7 @@ export function CadCanvas({
         resolve(fallback);
       }
     });
-  };
+  }, [isSvgEditorReady, svgContent, svg2d, postToSvgEditor]);
 
   useEffect(() => {
     if (!ENABLE_EDITOR_AUTOSYNC) return;
@@ -449,7 +458,7 @@ export function CadCanvas({
       })();
     }, 1800);
     return () => window.clearInterval(timer);
-  }, [isSvgEditorReady, viewMode, svgContent, svg2d, onSvgChange]);
+  }, [isSvgEditorReady, viewMode, svgContent, svg2d, onSvgChange, loadSvgToEditorWithRetry, postToSvgEditor, requestSvgFromEditor]);
 
   const downloadBlob = (blob: Blob, filename: string) => {
     const link = document.createElement("a");
