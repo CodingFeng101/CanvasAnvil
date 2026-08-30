@@ -1,4 +1,4 @@
-import type { PptElement, PptPage, PptTextBlock } from "@/lib/ppt-service";
+import type { PptElement, PptPage, PptTextBlock } from "@/workspaces/ppt/lib/ppt-service";
 import type { EditorShapeType } from "@/features/ppt-editor/shape-config";
 
 export type EditorElementType = "text" | "image" | "shape" | "table" | "chart" | "formula" | "video" | "audio";

@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { PanelRightClose, PanelRightOpen } from 'lucide-react';
 import { cn } from '@/shared/lib/utils';
 import { streamChatMessage, generateChatMessage, ChatMessage, getAIConfig } from '@/ai/client';
-import { DRAWIO_SYSTEM_PROMPT } from '@/lib/system-prompts';
+
 import { ButtonWithTooltip } from '@/shared/chat';
 import { ChatInput } from '@/shared/chat';
 import { ChatMessageDisplay, UIMessage } from '@/workspaces/cad/chat/ChatMessageDisplay';
@@ -15,14 +15,14 @@ import {
   buildCadImagesMasterMessages,
   buildCadImagesSheetMessages,
   buildCadTasksSystemContent,
-} from '@/lib/cad-tasks';
+} from '@/workspaces/cad/lib/tasks';
 import {
   CAD_PLAN_AGENT_PROMPT,
   CAD_SVG_AGENT_ROUTER_PROMPT,
   CAD_SVG_FLOW_PATCH_AGENT_PROMPT,
   CAD_SVG_FLOW_REPLACE_AGENT_PROMPT,
-} from '@/lib/cad-agents';
-import { getCadRenderFallbackTitle, getCadRenderSlotTitles } from "@/lib/cad-render-titles";
+} from '@/workspaces/cad/lib/agents';
+import { getCadRenderFallbackTitle, getCadRenderSlotTitles } from "@/workspaces/cad/lib/render-titles";
 import { t, useUiLanguage } from "@/shared/i18n";
 import { toast } from "sonner";
 import {
@@ -50,7 +50,7 @@ interface ChatPanelProps {
   attachments?: Attachment[];
   onRemoveAttachment?: (id: string) => void;
   onCodeAction?: (code: string, type: 'flow' | 'cad' | 'ppt') => MaybePromise<void | CodeActionResult>;
-  systemPrompt?: string;
+  systemPrompt: string;
   initialMessages?: ChatMessage[];
   onMessagesChange?: (messages: ChatMessage[]) => void;
   chatModel?: string;
@@ -86,7 +86,7 @@ export function ChatPanel({
     attachments = [],
     onRemoveAttachment,
     onCodeAction,
-    systemPrompt = DRAWIO_SYSTEM_PROMPT,
+    systemPrompt,
     initialMessages = [],
     onMessagesChange,
     chatModel,

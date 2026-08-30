@@ -9,7 +9,7 @@ import {
   type PptTableElement,
   type PptTextBlock,
   type PptVideoElement,
-} from "@/lib/ppt-service";
+} from "@/workspaces/ppt/lib/ppt-service";
 import type { CanvasAnvilRenderLayerLike, EditorExportPayload, EditorSlide, EditorTextElement } from "@/features/ppt-editor/types";
 
 export const editorTextElementsToTextBlocks = (elements: EditorTextElement[]): PptTextBlock[] =>

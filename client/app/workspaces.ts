@@ -29,7 +29,7 @@ export const WORKSPACES: WorkspaceDescriptor[] = [
     labelKey: "nav.flow",
     icon: Layers,
     Component: lazy(() =>
-      import("@/workspaces/flow/FlowWorkspaceShell").then((m) => ({ default: m.FlowWorkspaceShell })),
+      import("@/workspaces/flow/FlowWorkspace").then((m) => ({ default: m.FlowWorkspace })),
     ),
   },
   {
@@ -37,7 +37,7 @@ export const WORKSPACES: WorkspaceDescriptor[] = [
     labelKey: "nav.cad",
     icon: FileCode,
     Component: lazy(() =>
-      import("@/workspaces/cad/CadWorkspaceShell").then((m) => ({ default: m.CadWorkspaceShell })),
+      import("@/workspaces/cad/CadWorkspace").then((m) => ({ default: m.CadWorkspace })),
     ),
   },
   {
@@ -45,7 +45,7 @@ export const WORKSPACES: WorkspaceDescriptor[] = [
     labelKey: "nav.ppt",
     icon: Presentation,
     Component: lazy(() =>
-      import("@/workspaces/ppt/PptWorkspaceShell").then((m) => ({ default: m.PptWorkspaceShell })),
+      import("@/workspaces/ppt/PptWorkspace").then((m) => ({ default: m.PptWorkspace })),
     ),
   },
 ];

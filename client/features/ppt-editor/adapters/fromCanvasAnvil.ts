@@ -3,7 +3,7 @@ import {
   textBlocksToPptElements,
   type PptElement,
   type PptTextBlock,
-} from "@/lib/ppt-service";
+} from "@/workspaces/ppt/lib/ppt-service";
 import type {
   CanvasAnvilRenderLayerLike,
   CanvasAnvilSlideLike,

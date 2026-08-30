@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { PanelRightClose, PanelRightOpen } from 'lucide-react';
 import { cn } from '@/shared/lib/utils';
 import { streamChatMessage, generatePptProxyChatMessage, ChatMessage, getAIConfig } from '@/ai/client';
-import { DRAWIO_SYSTEM_PROMPT } from '@/lib/system-prompts';
+
 import { ButtonWithTooltip } from '@/shared/chat';
 import { ChatInput } from '@/shared/chat';
 import { chatStorageKey, loadChatHistory, saveChatHistory } from '@/shared/chat/chat-storage';
@@ -32,7 +32,7 @@ interface ChatPanelProps {
   pptDraftSlides?: Array<{ id: string; slideId: string; title: string; json: string; kind: "outline" | "slide_image"; imageUrl?: string }>;
   onClearPptDraftSlides?: () => void;
   onCodeAction?: (code: string, type: 'flow' | 'cad' | 'ppt') => MaybePromise<void | CodeActionResult>;
-  systemPrompt?: string;
+  systemPrompt: string;
   initialMessages?: ChatMessage[];
   onMessagesChange?: (messages: ChatMessage[]) => void;
   chatModel?: string;
@@ -68,7 +68,7 @@ export function ChatPanel({
     pptDraftSlides = [],
     onClearPptDraftSlides,
     onCodeAction,
-    systemPrompt = DRAWIO_SYSTEM_PROMPT,
+    systemPrompt,
     initialMessages = [],
     onMessagesChange,
     chatModel,

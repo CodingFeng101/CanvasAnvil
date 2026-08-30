@@ -4,7 +4,7 @@ import { Toaster } from "sonner";
 import { BrandIcon } from "@/app/BrandIcon";
 import { ErrorBoundary } from "@/app/ErrorBoundary";
 import { DEFAULT_WORKSPACE, WORKSPACES, isWorkspaceId, type WorkspaceId } from "@/app/workspaces";
-import { SettingsDialog } from "@/components/SettingsDialog";
+import { SettingsDialog } from "@/app/SettingsDialog";
 import { LandingPage } from "@/pages/LandingPage";
 import { cn } from "@/shared/lib/utils";
 import { t, useUiLanguage } from "@/shared/i18n";

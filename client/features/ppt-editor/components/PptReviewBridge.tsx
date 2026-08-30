@@ -2,7 +2,7 @@ import type React from "react";
 import { FileSearch, FileText, Loader2, Play, Trash2 } from "lucide-react";
 import { Button } from "@/shared/ui/button";
 import { Textarea } from "@/shared/ui/textarea";
-import type { PptTextBlock } from "@/lib/ppt-service";
+import type { PptTextBlock } from "@/workspaces/ppt/lib/ppt-service";
 
 export type ReviewDraftRect = {
   startX: number;
