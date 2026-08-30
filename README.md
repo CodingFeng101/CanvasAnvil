@@ -206,4 +206,4 @@ See [LICENSE](LICENSE) for the full license text.
 
 欢迎加入「智构开源社」群聊，一起交流 CanvasAnvil 及开源项目相关内容。
 
-![智构开源社微信群二维码](public/community/wechat-group.png)
+![智构开源社微信群二维码](docs/assets/wechat-group.png)
