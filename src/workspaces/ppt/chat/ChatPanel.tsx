@@ -1,23 +1,18 @@
 import { useState, useRef, useEffect } from 'react';
 import { PanelRightClose, PanelRightOpen } from 'lucide-react';
 import { cn } from '@/shared/lib/utils';
-import { streamChatMessage, generateChatMessage, generatePptProxyChatMessage, ChatMessage, getAIConfig } from '@/ai/client';
+import { streamChatMessage, generatePptProxyChatMessage, ChatMessage, getAIConfig } from '@/ai/client';
 import { DRAWIO_SYSTEM_PROMPT } from '@/lib/system-prompts';
 import { ButtonWithTooltip } from '@/shared/chat';
 import { ChatInput } from '@/shared/chat';
 import { chatStorageKey, loadChatHistory, saveChatHistory } from '@/shared/chat/chat-storage';
-import { createAssistantUpdater, writeLastAssistant } from '@/shared/chat/assistant-stream';
+import { createAssistantUpdater } from '@/shared/chat/assistant-stream';
 import { getChatErrorText } from '@/shared/chat/chat-errors';
-import { parseMarkdownBomTable } from '@/shared/chat/bom-table';
 import { PPT_WORKSPACE_STORAGE_KEY } from '@/workspaces/ppt/storage';
 import { ChatMessageDisplay, UIMessage } from '@/workspaces/ppt/chat/ChatMessageDisplay';
 import { STORAGE_GLOBAL_CONSTRAINTS_KEY } from '@/shared/chat';
 import { HistoryDialog, HistoryItem } from '@/shared/chat';
 import { ResetWarningModal } from '@/shared/chat';
-import { buildCadBomMessages, buildCadImagesMasterMessages, buildCadImagesSheetMessages, buildCadTasksSystemContent } from '@/lib/cad-tasks';
-import { CAD_PLAN_AGENT_PROMPT } from '@/lib/cad-agents';
-import flowPatchAgentPrompt from "../../../../agent/flow/patch.md?raw";
-import flowReplaceAgentPrompt from "../../../../agent/flow/replace.md?raw";
 import { t, useUiLanguage } from "@/shared/i18n";
 
 interface Attachment {
@@ -41,8 +36,8 @@ interface ChatPanelProps {
   initialMessages?: ChatMessage[];
   onMessagesChange?: (messages: ChatMessage[]) => void;
   chatModel?: string;
-  workspaceId?: string;
-  mode?: 'text' | 'ppt_image';
+  /** Only ever "ppt": the PPT shell is this panel's single caller. */
+  workspaceId?: "ppt";
   hideHistoryButton?: boolean;
   collapsed?: boolean;
   onToggleCollapse?: () => void;
@@ -77,8 +72,7 @@ export function ChatPanel({
     initialMessages = [],
     onMessagesChange,
     chatModel,
-    workspaceId = 'default',
-    mode = 'text',
+    workspaceId = 'ppt',
     hideHistoryButton = false,
     collapsed = false,
     onToggleCollapse,
@@ -89,8 +83,6 @@ export function ChatPanel({
     onRestore,
     onClearVersionHistory,
     onClearAttachments,
-    cadContext,
-    flowContext,
     onClearWorkspace
 }: ChatPanelProps) {
   const uiLang = useUiLanguage();
@@ -110,7 +102,6 @@ export function ChatPanel({
   const [showHistory, setShowHistory] = useState(false);
   const [showResetWarning, setShowResetWarning] = useState(false);
   const flowAutoRetryCountRef = useRef(0);
-  const MAX_FLOW_AUTO_RETRY = 3;
   
   const [files, setFiles] = useState<File[]>([]);
   const abortControllerRef = useRef<AbortController | null>(null);
@@ -156,74 +147,26 @@ export function ChatPanel({
   };
 
   useEffect(() => {
-    if (workspaceId !== "ppt") return;
     const prev = prevPptDraftCountRef.current;
     const next = pptDraftSlides.length;
     prevPptDraftCountRef.current = next;
     if (next > prev) {
       setPptInputFocusTick((x) => x + 1);
     }
-  }, [workspaceId, pptDraftSlides.length]);
+  }, [pptDraftSlides.length]);
 
   useEffect(() => {
-    if (workspaceId !== "ppt") return;
     const prevIds = prevPptDraftIdsRef.current;
     const nextIds = new Set(pptDraftSlides.map((s) => s.id));
     const added = pptDraftSlides.filter((s) => !prevIds.has(s.id));
     prevPptDraftIdsRef.current = nextIds;
     if (added.length === 0) return;
     for (const s of added) enqueuePptToken(s.slideId, s.title, s.kind);
-  }, [workspaceId, pptDraftSlides, setInput]);
+  }, [pptDraftSlides, setInput]);
 
-  const sanitizeAssistantContentForDisplay = (content: string) => {
-    if (workspaceId !== "cad") return content;
-    if (!content) return content;
-    let next = content.replace(
-      /```(?:python|py|python3)\s*[\s\S]*?```/g,
-      trText("（已在后台处理完成）", "(Processed in the background)")
-    );
-    next = next
-      .split("\n")
-      .filter((line) => !/freecad/i.test(line))
-      .join("\n");
-    next = next.replace(/(?:^|\n)1\.\s*FreeCAD[\s\S]*?(?=\n\d+\.\s|$)/gi, "\n");
-    return next.replace(/```json\s*([\s\S]*?)```/g, (full, inner) => {
-      const text = String(inner || "").trim();
-      if (!text) return full;
-      if (text.includes('"type"') && text.includes('"cad_images"')) {
-        return trText("（已提交装修图生成任务）", "(CAD drawing generation task submitted)");
-      }
-      if (text.includes('"type"') && text.includes('"cad_plan"')) {
-        try {
-          const parsed = JSON.parse(text);
-          if (parsed?.type !== "cad_plan") return full;
-          const plan = parsed?.plan || {};
-          const summary = typeof plan?.summary === "string" ? plan.summary : "";
-          const style = typeof plan?.style === "string" ? plan.style : "";
-          const assumptions = Array.isArray(plan?.assumptions) ? plan.assumptions.map((x: any) => String(x)).filter(Boolean) : [];
-          const constraints = Array.isArray(plan?.constraints) ? plan.constraints.map((x: any) => String(x)).filter(Boolean) : [];
-          const rooms = Array.isArray(plan?.rooms) ? plan.rooms : [];
-
-          const lines: string[] = [];
-          if (summary) lines.push(trText(`Summary: ${summary}`, `Summary: ${summary}`));
-          if (style) lines.push(trText(`Style: ${style}`, `Style: ${style}`));
-          if (rooms.length > 0) {
-            const roomNames = rooms.map((r: any) => String(r?.name || r?.type || "")).filter(Boolean);
-            lines.push(trText(`Spaces: ${roomNames.join(", ")}`, `Spaces: ${roomNames.join(", ")}`));
-          }
-          if (assumptions.length > 0) lines.push(trText(`Assumptions: ${assumptions.join("; ")}`, `Assumptions: ${assumptions.join("; ")}`));
-          if (constraints.length > 0) lines.push(trText(`Constraints: ${constraints.join("; ")}`, `Constraints: ${constraints.join("; ")}`));
-          return lines.length > 0 ? lines.join("\\n") : trText("(Plan generated)", "(Plan generated)");
-        } catch {
-          return trText("(Plan generated)", "(Plan generated)");
-        }
-      }
-      return full;
-    });
-  };
-
-  const updateLastAssistant = (content: string) =>
-    writeLastAssistant(setMessages, sanitizeAssistantContentForDisplay, content);
+  // CAD strips its tool payloads out of the transcript; PPT has none to strip.
+  const sanitizeAssistantContentForDisplay = (content: string) => content;
+;
 
   const createThrottledAssistantUpdater = () =>
     createAssistantUpdater(setMessages, sanitizeAssistantContentForDisplay);
@@ -251,7 +194,6 @@ export function ChatPanel({
     setShowResetWarning(false);
   };
 
-
   const runCodeAction = async (code: string, type: 'flow' | 'cad' | 'ppt') => {
     const result = await Promise.resolve(onCodeAction?.(code, type));
     if (!result || typeof result !== "object") return { ok: true } as CodeActionResult;
@@ -264,18 +206,6 @@ export function ChatPanel({
 
   const handleAssistantResponse = async (fullResponse: string) => {
     if (!fullResponse) return { flowPatchFound: false, flowRetryError: null as string | null };
-
-    const pyMatch = fullResponse.match(/```python\n([\s\S]*?)\n```/);
-    if (pyMatch && pyMatch[1] && workspaceId !== "cad") {
-      await runCodeAction(pyMatch[1], 'cad');
-    }
-
-    if (workspaceId === "cad") {
-      const jsMatch = fullResponse.match(/```(javascript|js)\n([\s\S]*?)\n```/);
-      if (jsMatch && jsMatch[2]) {
-        await runCodeAction(jsMatch[2], 'cad');
-      }
-    }
 
     const svgMatch = fullResponse.match(/```svg\n([\s\S]*?)\n```/);
     if (svgMatch && svgMatch[1]) {
@@ -291,94 +221,39 @@ export function ChatPanel({
       const jsonText = String(m[1] || "").trim();
       if (!jsonText) continue;
 
-      if (workspaceId === 'ppt') {
-        try {
-          const parsed = JSON.parse(jsonText);
-          if (lastUploadedImagesRef.current.length > 0) {
-            parsed.uploadedImages = lastUploadedImagesRef.current;
-            await runCodeAction(JSON.stringify(parsed), 'ppt');
-          } else {
-            await runCodeAction(jsonText, 'ppt');
-          }
-        } catch {
+      // Attach the images this turn uploaded so the workspace can resolve
+      // any {{image:...}} references the model emitted.
+      try {
+        const parsed = JSON.parse(jsonText);
+        if (lastUploadedImagesRef.current.length > 0) {
+          parsed.uploadedImages = lastUploadedImagesRef.current;
+          await runCodeAction(JSON.stringify(parsed), 'ppt');
+        } else {
           await runCodeAction(jsonText, 'ppt');
         }
-        continue;
-      }
-
-      if (workspaceId === 'flow') {
-        try {
-          const parsed = JSON.parse(jsonText);
-          if (parsed?.type === "flow_patch") flowPatchFound = true;
-        } catch {
-        }
-        const r = await runCodeAction(jsonText, 'flow');
-        if (!r.ok && r.retry) {
-          flowRetryError = r.error || "Unknown error";
-        }
-        continue;
-      }
-
-      await runCodeAction(jsonText, workspaceId === "cad" ? 'cad' : 'ppt');
-    }
-
-    if (workspaceId === "flow" && !flowPatchFound) {
-      const xmlMatch = fullResponse.match(/```xml\n([\s\S]*?)\n```/);
-      if (xmlMatch && xmlMatch[1]) {
-        const r = await runCodeAction(xmlMatch[1], 'flow');
-        if (!r.ok && r.retry) {
-          flowRetryError = r.error || "Unknown error";
-        }
+      } catch {
+        await runCodeAction(jsonText, 'ppt');
       }
     }
 
     return { flowPatchFound, flowRetryError };
   };
 
-  const buildFlowRetryPrompt = (errorText: string, forceReplace: boolean) => {
-    const err = String(errorText || "").slice(0, 600);
-    if (uiLang === "en") {
-      return [
-        `The previous flow_patch could not be applied to the current diagram. Reason: ${err}`,
-        "",
-        "Please retry and strictly follow:",
-        "- Output exactly one ```json``` code block with type=flow_patch",
-        forceReplace
-          ? "- This time you MUST use mode=replace and output the full <mxGraphModel>...</mxGraphModel> (do not output patch)"
-          : "- If the patch cannot precisely match the Current diagram XML, use mode=replace and output the full <mxGraphModel>...</mxGraphModel>",
-      ].join("\n");
-    }
-    return [
-      `Previous flow_patch could not be applied to current diagram: ${err}`,
-      "",
-      "Please retry and strictly follow:",
-      "- Output exactly one ```json``` code block with type=flow_patch",
-      forceReplace
-        ? "- This time you MUST use mode=replace and output the full <mxGraphModel>...</mxGraphModel> (do not output patch)"
-        : "- If the patch cannot precisely match the Current diagram XML, use mode=replace and output the full <mxGraphModel>...</mxGraphModel>",
-    ].join("\\n");
-  };
-
   const handleSend = async () => {
-    const isPpt = workspaceId === "ppt";
-    const rawInput = isPpt
-      ? pptInputSegments
+    const rawInput = pptInputSegments
           .map((s) => (s.type === "text" ? s.text : s.tag))
-          .join("")
-      : input;
+          .join("");
     if ((!rawInput.trim() && files.length === 0 && attachments.length === 0 && pptDraftSlides.length === 0) || isLoading) return;
     flowAutoRetryCountRef.current = 0;
 
     const normalizedInput = rawInput.trim();
-    const referencedPptSlideIds = isPpt
-      ? new Set(
+    const referencedPptSlideIds = new Set(
           pptInputSegments
             .filter((s): s is { type: "ppt"; slideId: string; label: string; tag: string; tokenKind: "outline" | "slide_image" } => s.type === "ppt")
             .map((s) => s.slideId)
-        )
-      : new Set<string>();
+        );
     const loadAllOutlineSlides = () => {
-      if (!isPpt || typeof window === "undefined") return [] as Array<{ slideId: string; title: string; json: string; kind: "outline" | "slide_image"; imageUrl?: string }>;
+      if (typeof window === "undefined") return [] as Array<{ slideId: string; title: string; json: string; kind: "outline" | "slide_image"; imageUrl?: string }>;
       try {
         const raw = localStorage.getItem(PPT_WORKSPACE_STORAGE_KEY);
         const parsed = raw ? JSON.parse(raw) : null;
@@ -403,23 +278,21 @@ export function ChatPanel({
         return [] as Array<{ slideId: string; title: string; json: string; kind: "outline" | "slide_image"; imageUrl?: string }>;
       }
     };
-    const pptDraftSlidesSnapshotAll = isPpt ? pptDraftSlides.slice(0, 24) : [];
+    const pptDraftSlidesSnapshotAll = pptDraftSlides.slice(0, 24);
     const pptAllOutlineSlides = loadAllOutlineSlides();
-    const mergedAllSlides = isPpt
-      ? (() => {
+    const mergedAllSlides = (() => {
           const byId = new Map<string, { slideId: string; title: string; json: string; kind: "outline" | "slide_image"; imageUrl?: string }>();
           for (const s of pptAllOutlineSlides) byId.set(s.slideId, s);
           for (const s of pptDraftSlidesSnapshotAll) byId.set(s.slideId, s);
           return Array.from(byId.values());
-        })()
-      : [];
+        })();
     const pptDraftSlidesSnapshot =
-      isPpt && referencedPptSlideIds.size > 0
+      referencedPptSlideIds.size > 0
         ? mergedAllSlides.filter((s) => referencedPptSlideIds.has(s.slideId))
         : mergedAllSlides;
     const hasPptTagInInput = /\[\[PPT_SLIDE\|/.test(rawInput);
     const autoPptTags =
-      isPpt && !hasPptTagInInput && pptDraftSlidesSnapshot.length > 0
+      !hasPptTagInInput && pptDraftSlidesSnapshot.length > 0
         ? pptDraftSlidesSnapshot
             .map((s) => getPptTag(s.slideId, s.title, s.kind))
             .filter(Boolean)
@@ -521,30 +394,11 @@ export function ChatPanel({
             .join("\n\n")
         : "";
 
-    const flowContextText =
-      workspaceId === "flow" && typeof flowContext?.xml === "string" && flowContext.xml.trim()
-        ? `Current diagram XML:\n\n\`\`\`xml\n${flowContext.xml}\n\`\`\``
-        : "";
-
-    const cadContextText =
-      workspaceId === "cad"
-        ? [
-            cadContext?.plan ? `Current CAD plan:\n\n\`\`\`json\n${JSON.stringify(cadContext.plan, null, 2)}\n\`\`\`` : "",
-            typeof cadContext?.svg2d === "string" && cadContext.svg2d.trim()
-              ? `Current 2D SVG:\n\n\`\`\`svg\n${cadContext.svg2d}\n\`\`\``
-              : "",
-          ]
-            .filter(Boolean)
-            .join("\n\n")
-        : "";
-
     const promptParts = [
       inputWithAutoTags,
       fileTexts.length > 0 ? fileTexts.join("\n\n") : "",
       pptDraftContextText,
-      contextAttachmentsText,
-      flowContextText,
-      cadContextText
+      contextAttachmentsText
     ].filter(Boolean);
     const promptContent = promptParts.join("\n\n");
     lastUploadedImagesRef.current = currentUploadedImages;
@@ -565,179 +419,11 @@ export function ChatPanel({
     const userMessageForDisplay: ChatMessage = { role: 'user', content: displayContent };
     const displayMessages = [...messages, userMessageForDisplay];
     setMessages(displayMessages);
-    if (isPpt) setPptInputSegments([{ type: "text", text: "" }]);
-    else setInput('');
-    if (isPpt) setPptClearTick((x) => x + 1);
+    setPptInputSegments([{ type: "text", text: "" }]);
+    setPptClearTick((x) => x + 1);
     setFiles([]); 
-    if (workspaceId === "ppt") onClearPptDraftSlides?.();
+    onClearPptDraftSlides?.();
 
-    if (workspaceId === "cad" && mode === "text" && /(cad_ready_for_export|一键\s*(出图|生成)|one[- ]?click)/i.test(normalizedInput)) {
-      const svg2d = cadContext?.svg2d || "";
-      const planJson = cadContext?.plan ? JSON.stringify(cadContext.plan) : "";
-
-      let bomEmitted = false;
-
-      const emitCadJson = (text: string) => {
-        const match = text.match(/```json\s*([\s\S]*?)```/);
-        const jsonText = match ? match[1].trim() : text.trim();
-        if (!jsonText.startsWith("{")) return;
-        try {
-          const parsed = JSON.parse(jsonText);
-          if (parsed?.type === "cad_bom") bomEmitted = true;
-        } catch {
-        }
-        onCodeAction?.(jsonText, 'cad');
-      };
-
-      const config = getAIConfig();
-      const constraintsKey = workspaceId ? `${STORAGE_GLOBAL_CONSTRAINTS_KEY}-${workspaceId}` : STORAGE_GLOBAL_CONSTRAINTS_KEY;
-      const globalConstraints = typeof window !== 'undefined' ? localStorage.getItem(constraintsKey) || '' : '';
-      const globalSystemPrompt = config.systemPrompt || '';
-      const systemContent = [buildCadTasksSystemContent({ globalSystemPrompt, globalConstraints }), `UI language: ${uiLang}`]
-        .filter(Boolean)
-        .join("\n\n");
-      const bomMessages: ChatMessage[] = buildCadBomMessages({ systemContent, planJson, svg2d });
-      const masterMessages: ChatMessage[] = buildCadImagesMasterMessages({ systemContent, planJson, svg2d });
-
-      setIsLoading(true);
-      abortControllerRef.current?.abort();
-      const controller = new AbortController();
-      abortControllerRef.current = controller;
-
-      setMessages(prev => [...prev, { role: 'assistant', content: '' }]);
-
-      const updater = createThrottledAssistantUpdater();
-      let bomFull = '';
-      let imagesFull = '';
-
-      const bomTask = (async () => {
-        await streamChatMessage(bomMessages, (chunk) => {
-          bomFull = chunk;
-          updater.push(chunk);
-        }, chatModel, controller.signal);
-        updater.flush();
-        if (bomFull) {
-          emitCadJson(bomFull);
-          if (!bomEmitted) {
-            const fallback = parseMarkdownBomTable(bomFull);
-            if (fallback) {
-              bomEmitted = true;
-              onCodeAction?.(JSON.stringify(fallback), "cad");
-            }
-          }
-        }
-      })();
-
-      const imagesTask = (async () => {
-        const extractJsonText = (text: string) => {
-          const match = String(text || "").match(/```json\s*([\s\S]*?)```/);
-          return match ? match[1].trim() : String(text || "").trim();
-        };
-
-        const tryParseJson = (text: string) => {
-          const normalized = extractJsonText(text);
-          try {
-            return JSON.parse(normalized);
-          } catch {
-            const start = normalized.indexOf("{");
-            const end = normalized.lastIndexOf("}");
-            if (start >= 0 && end > start) {
-              try {
-                return JSON.parse(normalized.slice(start, end + 1));
-              } catch {
-              }
-            }
-            return null;
-          }
-        };
-
-        const fallbackTitlesForOutput = [
-          trText("Renovation Plan Layout", "Renovation Plan Layout"),
-          trText("Floor Finish Plan", "Floor Finish Plan"),
-          trText("Reflected Ceiling Plan", "Reflected Ceiling Plan"),
-          trText("Wall Setting-Out Plan", "Wall Setting-Out Plan"),
-          trText("MEP Plan (Electrical + Low Voltage + Plumbing)", "MEP Plan (Electrical + Low Voltage + Plumbing)"),
-          trText("Elevation Index Plan + Interior Elevations", "Elevation Index Plan + Interior Elevations"),
-          trText("Detail Drawings", "Detail Drawings"),
-        ];
-        const fallbackTitlesForPromptEnglish = [
-          "Renovation Plan Layout",
-          "Floor Finish Plan",
-          "Reflected Ceiling Plan",
-          "Wall Setting-Out Plan",
-          "MEP Plan (Electrical + Low Voltage + Plumbing)",
-          "Elevation Index Plan + Interior Elevations",
-          "Detail Drawings",
-        ];
-
-        let masterSchemeJson = "";
-        try {
-          const masterText = await generateChatMessage(masterMessages, chatModel, { signal: controller.signal, timeoutMs: 120000 });
-          const parsedMaster = tryParseJson(masterText);
-          if (parsedMaster?.type === "renovation_scheme_master" && parsedMaster?.global_scheme) {
-            masterSchemeJson = JSON.stringify(parsedMaster, null, 2);
-          }
-        } catch {
-        }
-
-        const imagesSheetMessages = buildCadImagesSheetMessages({ systemContent, planJson, svg2d, masterSchemeJson });
-
-        const settled = await Promise.allSettled(
-          imagesSheetMessages.map((s) =>
-            generateChatMessage(s.messages, chatModel, { signal: controller.signal, timeoutMs: 120000 })
-          )
-        );
-
-        const prompts = settled.map((r, idx) => {
-          const fallbackTitleForOutput = fallbackTitlesForOutput[idx] || trText("Drawing", "Drawing");
-          const fallbackTitleForPrompt = fallbackTitlesForPromptEnglish[idx] || "Drawing";
-          const onSheetLanguageRule =
-            uiLang === "zh"
-              ? "All on-sheet labels/notes/title block text must be in Simplified Chinese."
-              : "All on-sheet labels/notes/title block text must be in English.";
-          const fallbackPrompt = `Generate an orthographic 2D technical construction drawing sheet: ${fallbackTitleForPrompt}. Include border, bottom-right title block, scale/units, legend/symbols, key annotations and dimensions, consistent with the provided plan JSON and 2D SVG. ${onSheetLanguageRule}`;
-
-          if (r.status !== "fulfilled") return { title: fallbackTitleForOutput, prompt: fallbackPrompt };
-          const text = String(r.value || "").trim();
-          const parsed = tryParseJson(text);
-
-          if (parsed?.type === "cad_images_sheet" && typeof parsed?.title === "string" && typeof parsed?.prompt === "string") {
-            const p = parsed.prompt.trim();
-            return { title: parsed.title, prompt: p || fallbackPrompt };
-          }
-
-          if (parsed?.type === "cad_images" && Array.isArray(parsed?.prompts) && parsed.prompts.length > 0) {
-            const first = parsed.prompts[0];
-            const title = typeof first?.title === "string" ? first.title : fallbackTitleForOutput;
-            const prompt = typeof first?.prompt === "string" ? first.prompt.trim() : "";
-            return { title, prompt: prompt || fallbackPrompt };
-          }
-
-          return { title: fallbackTitleForOutput, prompt: fallbackPrompt };
-        });
-
-        imagesFull = JSON.stringify({ type: "cad_images", prompts }, null, 2);
-        emitCadJson(imagesFull);
-      })();
-
-      try {
-        await Promise.allSettled([bomTask, imagesTask]);
-        if (controller.signal.aborted) {
-          setMessages(prev => {
-            const last = prev[prev.length - 1];
-            if (last?.role !== 'assistant') return prev;
-            const abortedText = trText("(Aborted)", "(Aborted)");
-            const next = last.content ? `${last.content}\n\n${abortedText}` : abortedText;
-            return [...prev.slice(0, -1), { role: 'assistant', content: next }];
-          });
-        }
-      } catch {
-      } finally {
-        setIsLoading(false);
-        abortControllerRef.current = null;
-      }
-      return;
-    }
     
     setIsLoading(true);
     abortControllerRef.current?.abort();
@@ -754,17 +440,10 @@ export function ChatPanel({
       
       const systemContent = [systemPrompt, globalSystemPrompt, globalConstraints].filter(Boolean).join('\n\n');
 
-      const apiMessages: ChatMessage[] =
-        workspaceId === "ppt"
-          ? [
-              { role: 'system', content: systemContent },
-              { role: 'user', content: promptContent }
-            ]
-          : [
-              { role: 'system', content: systemContent },
-              ...messages,
-              { role: 'user', content: promptContent }
-            ];
+      const apiMessages: ChatMessage[] = [
+      { role: 'system', content: systemContent },
+      { role: "user", content: promptContent },
+    ];
 
       setMessages(prev => [...prev, { role: 'assistant', content: '' }]);
 
@@ -781,426 +460,10 @@ export function ChatPanel({
       }
       updater.flush();
       
-      let flowRoutedBaseMessages: ChatMessage[] | null = null;
-      let flowSelectedAgent: "patch" | "replace" | null = null;
-
-      if (fullResponse && workspaceId === "flow") {
-        const resolveFlowAgentFromRouteText = (text: string): "patch" | "replace" | null => {
-          const trimmed = String(text || "").trim();
-          if (!trimmed) return null;
-
-          let content = trimmed;
-          const fenceMatch = content.match(/```[a-zA-Z]*\s*([\s\S]*?)```/);
-          if (fenceMatch && fenceMatch[1]) content = fenceMatch[1].trim();
-          content = content.replace(/\s+/g, "");
-
-          if (!/^[1-2]$/.test(content)) return null;
-          return content === "1" ? "patch" : "replace";
-        };
-
-        const agentFromText = resolveFlowAgentFromRouteText(fullResponse);
-        if (agentFromText) {
-          flowSelectedAgent = agentFromText;
-
-          setMessages((prev) => {
-            const last = prev[prev.length - 1];
-            if (last?.role === "assistant") return [...prev.slice(0, -1), { role: "assistant", content: "" }];
-            return prev;
-          });
-
-          const agentPrompt = flowSelectedAgent === "patch" ? flowPatchAgentPrompt : flowReplaceAgentPrompt;
-          const routedSystemContent = [agentPrompt, globalSystemPrompt, globalConstraints].filter(Boolean).join("\n\n");
-          const routedMessages: ChatMessage[] = [
-            { role: "system", content: routedSystemContent },
-            { role: "user", content: promptContent }
-          ];
-
-          let routedFull = "";
-          const routedUpdater = createThrottledAssistantUpdater();
-          await streamChatMessage(routedMessages, (chunk) => {
-            routedFull = chunk;
-            routedUpdater.push(chunk);
-          }, chatModel, controller.signal);
-          routedUpdater.flush();
-
-          flowRoutedBaseMessages = routedMessages;
-          fullResponse = routedFull;
-        }
-      }
-
-      if (fullResponse && workspaceId === "cad") {
-        let route: { agent?: string } | null = null;
-
-        const resolveCadAgentFromRouteText = (text: string): string | null => {
-          const trimmed = String(text || "").trim();
-          if (!trimmed) return null;
-
-          let content = trimmed;
-          const fenceMatch = content.match(/```[a-zA-Z]*\s*([\s\S]*?)```/);
-          if (fenceMatch && fenceMatch[1]) content = fenceMatch[1].trim();
-          content = content.replace(/\s+/g, "");
-
-          if (!/^[1-5]$/.test(content)) return null;
-
-          return content === "1"
-            ? "cad_plan_agent"
-            : content === "2"
-              ? "cad_svg_generate_agent"
-              : content === "3"
-                ? "cad_svg_patch_agent"
-                : content === "4"
-                  ? "cad_bom_agent"
-                  : "cad_images_agent";
-        };
-
-        const routeJsonRegex = /```json\s*([\s\S]*?)```/g;
-        let rm: RegExpExecArray | null;
-        while ((rm = routeJsonRegex.exec(fullResponse))) {
-          const jsonText = String(rm[1] || "").trim();
-          if (!jsonText) continue;
-          try {
-            const parsed = JSON.parse(jsonText);
-            if (parsed?.type === "cad_route" && typeof parsed?.agent === "string") {
-              route = { agent: parsed.agent };
-              break;
-            }
-          } catch {
-          }
-        }
-
-        if (!route?.agent) {
-          const agentFromText = resolveCadAgentFromRouteText(fullResponse);
-          if (agentFromText) route = { agent: agentFromText };
-        }
-
-        if (route?.agent) {
-          setMessages((prev) => {
-            const last = prev[prev.length - 1];
-            if (last?.role === "assistant") return [...prev.slice(0, -1), { role: "assistant", content: "" }];
-            return prev;
-          });
-
-          const buildCadNextStepGuide = (args: {
-            agent: string;
-            beforeHasPlan: boolean;
-            beforeHasSvg2d: boolean;
-            producedHasPlan: boolean;
-            producedHasSvg2d: boolean;
-            producedHasImages: boolean;
-            producedHasBom: boolean;
-          }) => {
-            if (args.producedHasPlan && !args.beforeHasPlan) {
-              return trText(
-                "The plan is ready. If it looks good, reply \"Generate 2D floorplan\". If not, tell me what to change.",
-                "The plan is ready. If it looks good, reply \"Generate 2D floorplan\". If not, tell me what to change."
-              );
-            }
-            if (args.producedHasSvg2d && !args.beforeHasSvg2d) {
-              return trText(
-                "The 2D floorplan is generated. Tell me edits if needed; otherwise reply \"Generate renders\".",
-                "The 2D floorplan is generated. Tell me edits if needed; otherwise reply \"Generate renders\"."
-              );
-            }
-            if (args.producedHasImages) {
-              return trText(
-                "Renders are being generated or updated. Next, reply \"Generate BOM\".",
-                "Renders are being generated or updated. Next, reply \"Generate BOM\"."
-              );
-            }
-            if (args.producedHasBom) {
-              return trText(
-                "BOM is generated. You can refine the plan, 2D, or style, or export files.",
-                "BOM is generated. You can refine the plan, 2D, or style, or export files."
-              );
-            }
-            if (args.agent === "cad_svg_patch_agent") {
-              return trText(
-                "2D has been patched. If OK, reply \"Generate renders\"; otherwise describe more edits.",
-                "2D has been patched. If OK, reply \"Generate renders\"; otherwise describe more edits."
-              );
-            }
-            return "";
-          };
-
-          const runCadTaskMessages = async (taskMessages: ChatMessage[]) => {
-            let taskFull = "";
-            const taskUpdater = createThrottledAssistantUpdater();
-            await streamChatMessage(taskMessages, (chunk) => {
-              taskFull = chunk;
-              taskUpdater.push(chunk);
-            }, chatModel, controller.signal);
-            taskUpdater.flush();
-            return taskFull;
-          };
-
-          const emitCadJson = (text: string) => {
-            const match = text.match(/```json\s*([\s\S]*?)```/);
-            const jsonText = match ? match[1].trim() : text.trim();
-            if (!jsonText.startsWith("{")) return;
-            onCodeAction?.(jsonText, "cad");
-          };
-
-          const agent = String(route.agent || "").trim();
-          const beforeHasPlan = !!cadContext?.plan;
-          const beforeHasSvg2d = !!(typeof cadContext?.svg2d === "string" && cadContext.svg2d.trim());
-          const planJson = cadContext?.plan ? JSON.stringify(cadContext.plan) : "";
-          const svg2d = cadContext?.svg2d || "";
-
-          if (agent === "cad_bom_agent") {
-            const systemContentTasks = [buildCadTasksSystemContent({ globalSystemPrompt, globalConstraints }), `UI language: ${uiLang}`]
-              .filter(Boolean)
-              .join("\n\n");
-            const taskMessages = buildCadBomMessages({ systemContent: systemContentTasks, planJson, svg2d });
-
-            const taskFull = await runCadTaskMessages(taskMessages);
-            if (taskFull) {
-              emitCadJson(taskFull);
-              const fallback = parseMarkdownBomTable(taskFull);
-              if (fallback) onCodeAction?.(JSON.stringify(fallback), "cad");
-
-              const producedHasPlan = /"type"\s*:\s*"cad_plan"/.test(taskFull);
-              const producedHasSvg2d = /```svg[\s\S]*?```/.test(taskFull);
-              const producedHasImages = /"type"\s*:\s*"cad_images"/.test(taskFull);
-              const producedHasBom = /"type"\s*:\s*"cad_bom"/.test(taskFull);
-              const guide = buildCadNextStepGuide({
-                agent,
-                beforeHasPlan,
-                beforeHasSvg2d,
-                producedHasPlan,
-                producedHasSvg2d,
-                producedHasImages,
-                producedHasBom,
-              });
-              if (guide) updateLastAssistant(`${taskFull}\n\n${guide}`);
-            }
-            return;
-          }
-
-          if (agent === "cad_images_agent") {
-            const systemContentTasks = [buildCadTasksSystemContent({ globalSystemPrompt, globalConstraints }), `UI language: ${uiLang}`]
-              .filter(Boolean)
-              .join("\n\n");
-            const masterMessages: ChatMessage[] = buildCadImagesMasterMessages({ systemContent: systemContentTasks, planJson, svg2d });
-
-            updateLastAssistant(trText("Generating drawing prompts...", "Generating drawing prompts..."));
-
-            const extractJsonText = (text: string) => {
-              const match = String(text || "").match(/```json\s*([\s\S]*?)```/);
-              return match ? match[1].trim() : String(text || "").trim();
-            };
-
-            const tryParseJson = (text: string) => {
-              const normalized = extractJsonText(text);
-              try {
-                return JSON.parse(normalized);
-              } catch {
-                const start = normalized.indexOf("{");
-                const end = normalized.lastIndexOf("}");
-                if (start >= 0 && end > start) {
-                  try {
-                    return JSON.parse(normalized.slice(start, end + 1));
-                  } catch {
-                  }
-                }
-                return null;
-              }
-            };
-
-            const fallbackTitlesForOutput = [
-              trText("Renovation Plan Layout", "Renovation Plan Layout"),
-              trText("Floor Finish Plan", "Floor Finish Plan"),
-              trText("Reflected Ceiling Plan", "Reflected Ceiling Plan"),
-              trText("Wall Setting-Out Plan", "Wall Setting-Out Plan"),
-              trText("MEP Plan (Electrical + Low Voltage + Plumbing)", "MEP Plan (Electrical + Low Voltage + Plumbing)"),
-              trText("Elevation Index Plan + Interior Elevations", "Elevation Index Plan + Interior Elevations"),
-              trText("Detail Drawings", "Detail Drawings"),
-            ];
-            const fallbackTitlesForPromptEnglish = [
-              "Renovation Plan Layout",
-              "Floor Finish Plan",
-              "Reflected Ceiling Plan",
-              "Wall Setting-Out Plan",
-              "MEP Plan (Electrical + Low Voltage + Plumbing)",
-              "Elevation Index Plan + Interior Elevations",
-              "Detail Drawings",
-            ];
-
-            let masterSchemeJson = "";
-            try {
-              const masterText = await generateChatMessage(masterMessages, chatModel, { signal: controller.signal, timeoutMs: 120000 });
-              const parsedMaster = tryParseJson(masterText);
-              if (parsedMaster?.type === "renovation_scheme_master" && parsedMaster?.global_scheme) {
-                masterSchemeJson = JSON.stringify(parsedMaster, null, 2);
-              }
-            } catch {
-            }
-
-            const imagesSheetMessages = buildCadImagesSheetMessages({
-              systemContent: systemContentTasks,
-              planJson,
-              svg2d,
-              masterSchemeJson,
-            });
-
-            const settled = await Promise.allSettled(
-              imagesSheetMessages.map((s) =>
-                generateChatMessage(s.messages, chatModel, { signal: controller.signal, timeoutMs: 120000 })
-              )
-            );
-
-            const prompts = settled.map((r, idx) => {
-              const fallbackTitleForOutput = fallbackTitlesForOutput[idx] || trText("Drawing", "Drawing");
-              const fallbackTitleForPrompt = fallbackTitlesForPromptEnglish[idx] || "Drawing";
-              const onSheetLanguageRule =
-                uiLang === "zh"
-                  ? "All on-sheet labels/notes/title block text must be in Simplified Chinese."
-                  : "All on-sheet labels/notes/title block text must be in English.";
-              const fallbackPrompt = `Generate an orthographic 2D technical construction drawing sheet: ${fallbackTitleForPrompt}. Include border, bottom-right title block, scale/units, legend/symbols, key annotations and dimensions, consistent with the provided plan JSON and 2D SVG. ${onSheetLanguageRule}`;
-
-              if (r.status !== "fulfilled") return { title: fallbackTitleForOutput, prompt: fallbackPrompt };
-              const text = String(r.value || "").trim();
-              const parsed = tryParseJson(text);
-
-              if (parsed?.type === "cad_images_sheet" && typeof parsed?.title === "string" && typeof parsed?.prompt === "string") {
-                const p = parsed.prompt.trim();
-                return { title: parsed.title, prompt: p || fallbackPrompt };
-              }
-
-              if (parsed?.type === "cad_images" && Array.isArray(parsed?.prompts) && parsed.prompts.length > 0) {
-                const first = parsed.prompts[0];
-                const title = typeof first?.title === "string" ? first.title : fallbackTitleForOutput;
-                const prompt = typeof first?.prompt === "string" ? first.prompt.trim() : "";
-                return { title, prompt: prompt || fallbackPrompt };
-              }
-
-              return { title: fallbackTitleForOutput, prompt: fallbackPrompt };
-            });
-
-            const payload = JSON.stringify({ type: "cad_images", prompts }, null, 2);
-            onCodeAction?.(payload, "cad");
-
-            const guide = buildCadNextStepGuide({
-              agent,
-              beforeHasPlan,
-              beforeHasSvg2d,
-              producedHasPlan: false,
-              producedHasSvg2d: false,
-              producedHasImages: true,
-              producedHasBom: false,
-            });
-            updateLastAssistant(guide || trText("Drawing tasks generated.", "Drawing tasks generated."));
-            return;
-          }
-
-          const agentPrompt =
-            agent === "cad_plan_agent"
-              ? CAD_PLAN_AGENT_PROMPT
-              : "";
-
-          if (!agentPrompt) {
-            updateLastAssistant(trText(`未识别的 CAD 子智能体：${agent}`, `Unrecognized CAD sub-agent: ${agent}`));
-            return;
-          }
-
-          const routedSystemContent = [agentPrompt, globalSystemPrompt, globalConstraints].filter(Boolean).join("\n\n");
-          const routedMessages: ChatMessage[] = [
-            { role: "system", content: routedSystemContent },
-            { role: "user", content: promptContent }
-          ];
-
-          let routedFull = "";
-          const routedUpdater = createThrottledAssistantUpdater();
-          await streamChatMessage(routedMessages, (chunk) => {
-            routedFull = chunk;
-            routedUpdater.push(chunk);
-          }, chatModel, controller.signal);
-          routedUpdater.flush();
-
-          if (routedFull) {
-            const svgMatch = routedFull.match(/```svg\n([\s\S]*?)\n```/);
-            if (svgMatch && svgMatch[1]) onCodeAction?.(svgMatch[1], "cad");
-
-            const jsonRegex = /```json\s*([\s\S]*?)```/g;
-            let jm: RegExpExecArray | null;
-            while ((jm = jsonRegex.exec(routedFull))) {
-              const jsonText = String(jm[1] || "").trim();
-              if (!jsonText) continue;
-              onCodeAction?.(jsonText, "cad");
-            }
-
-            const producedHasPlan = /"type"\s*:\s*"cad_plan"/.test(routedFull);
-            const producedHasSvg2d = /```svg[\s\S]*?```/.test(routedFull);
-            const producedHasImages = /"type"\s*:\s*"cad_images"/.test(routedFull);
-            const producedHasBom = /"type"\s*:\s*"cad_bom"/.test(routedFull);
-            const guide = buildCadNextStepGuide({
-              agent,
-              beforeHasPlan,
-              beforeHasSvg2d,
-              producedHasPlan,
-              producedHasSvg2d,
-              producedHasImages,
-              producedHasBom,
-            });
-            if (guide) updateLastAssistant(`${routedFull}\n\n${guide}`);
-          }
-          return;
-        }
-      }
 
       if (fullResponse) {
-        let { flowPatchFound, flowRetryError } =
-          await handleAssistantResponse(fullResponse);
+        await handleAssistantResponse(fullResponse);
 
-        let flowRetryMessagesBase: ChatMessage[] = flowRoutedBaseMessages ? [...flowRoutedBaseMessages] : apiMessages;
-        let flowRetryAgent: "patch" | "replace" | null = flowSelectedAgent;
-
-        while (
-          workspaceId === "flow" &&
-          flowPatchFound &&
-          flowRetryError &&
-          !controller.signal.aborted &&
-          flowAutoRetryCountRef.current < MAX_FLOW_AUTO_RETRY
-        ) {
-          flowAutoRetryCountRef.current += 1;
-          const forceReplace = flowAutoRetryCountRef.current >= MAX_FLOW_AUTO_RETRY;
-
-          if (forceReplace && flowRetryAgent === "patch") {
-            flowRetryAgent = "replace";
-            const routedSystemContent = [flowReplaceAgentPrompt, globalSystemPrompt, globalConstraints].filter(Boolean).join("\n\n");
-            flowRetryMessagesBase = [
-              { role: "system", content: routedSystemContent },
-              { role: "user", content: promptContent }
-            ];
-          }
-
-          const retryPrompt = buildFlowRetryPrompt(flowRetryError, forceReplace);
-          const retryMessages: ChatMessage[] = [
-            ...flowRetryMessagesBase,
-            { role: "assistant", content: fullResponse },
-            { role: "user", content: retryPrompt },
-          ];
-
-          setMessages((prev) => [...prev, { role: "assistant", content: "" }]);
-
-          let retryFull = "";
-          const retryUpdater = createThrottledAssistantUpdater();
-          await streamChatMessage(
-            retryMessages,
-            (chunk) => {
-              retryFull = chunk;
-              retryUpdater.push(chunk);
-            },
-            chatModel,
-            controller.signal,
-          );
-          retryUpdater.flush();
-
-          fullResponse = retryFull;
-          flowRetryMessagesBase = retryMessages;
-          const processed = await handleAssistantResponse(fullResponse);
-          flowPatchFound = processed.flowPatchFound;
-          flowRetryError = processed.flowRetryError;
-        }
       }
 
     } catch (error) {
@@ -1242,11 +505,7 @@ export function ChatPanel({
     const globalSystemPrompt = config.systemPrompt || '';
     const systemContent = [systemPrompt, globalSystemPrompt, globalConstraints].filter(Boolean).join('\n\n');
     const lastUserText = String(baseMessages[baseMessages.length - 1]?.content || "");
-    const flowContextText =
-      workspaceId === "flow" && typeof flowContext?.xml === "string" && flowContext.xml.trim()
-        ? `Current diagram XML:\n\n\`\`\`xml\n${flowContext.xml}\n\`\`\``
-        : "";
-    const promptContent = [lastUserText, flowContextText].filter(Boolean).join("\n\n");
+    const promptContent = lastUserText;
 
     const apiMessages: ChatMessage[] =
       workspaceId === "ppt"
@@ -1282,106 +541,9 @@ export function ChatPanel({
       updater.flush();
 
       if (fullResponse) {
-        let flowRoutedBaseMessages: ChatMessage[] | null = null;
-        let flowSelectedAgent: "patch" | "replace" | null = null;
 
-        if (workspaceId === "flow") {
-          const resolveFlowAgentFromRouteText = (text: string): "patch" | "replace" | null => {
-            const trimmed = String(text || "").trim();
-            if (!trimmed) return null;
+        await handleAssistantResponse(fullResponse);
 
-            let content = trimmed;
-            const fenceMatch = content.match(/```[a-zA-Z]*\s*([\s\S]*?)```/);
-            if (fenceMatch && fenceMatch[1]) content = fenceMatch[1].trim();
-            content = content.replace(/\s+/g, "");
-
-            if (!/^[1-2]$/.test(content)) return null;
-            return content === "1" ? "patch" : "replace";
-          };
-
-          const agentFromText = resolveFlowAgentFromRouteText(fullResponse);
-          if (agentFromText) {
-            flowSelectedAgent = agentFromText;
-
-            setMessages((prev) => {
-              const last = prev[prev.length - 1];
-              if (last?.role === "assistant") return [...prev.slice(0, -1), { role: "assistant", content: "" }];
-              return prev;
-            });
-
-            const agentPrompt = flowSelectedAgent === "patch" ? flowPatchAgentPrompt : flowReplaceAgentPrompt;
-            const routedSystemContent = [agentPrompt, globalSystemPrompt, globalConstraints].filter(Boolean).join("\n\n");
-            const routedMessages: ChatMessage[] = [
-              { role: "system", content: routedSystemContent },
-              { role: "user", content: promptContent }
-            ];
-
-            let routedFull = "";
-            const routedUpdater = createThrottledAssistantUpdater();
-            await streamChatMessage(routedMessages, (chunk) => {
-              routedFull = chunk;
-              routedUpdater.push(chunk);
-            }, chatModel, controller.signal);
-            routedUpdater.flush();
-
-            flowRoutedBaseMessages = routedMessages;
-            fullResponse = routedFull;
-          }
-        }
-
-        let { flowPatchFound, flowRetryError } =
-          await handleAssistantResponse(fullResponse);
-
-        let flowRetryMessagesBase: ChatMessage[] = flowRoutedBaseMessages ? [...flowRoutedBaseMessages] : apiMessages;
-        let flowRetryAgent: "patch" | "replace" | null = flowSelectedAgent;
-
-        while (
-          workspaceId === "flow" &&
-          flowPatchFound &&
-          flowRetryError &&
-          !controller.signal.aborted &&
-          flowAutoRetryCountRef.current < MAX_FLOW_AUTO_RETRY
-        ) {
-          flowAutoRetryCountRef.current += 1;
-          const forceReplace = flowAutoRetryCountRef.current >= MAX_FLOW_AUTO_RETRY;
-
-          if (forceReplace && flowRetryAgent === "patch") {
-            flowRetryAgent = "replace";
-            const routedSystemContent = [flowReplaceAgentPrompt, globalSystemPrompt, globalConstraints].filter(Boolean).join("\n\n");
-            flowRetryMessagesBase = [
-              { role: "system", content: routedSystemContent },
-              { role: "user", content: promptContent }
-            ];
-          }
-
-          const retryPrompt = buildFlowRetryPrompt(flowRetryError, forceReplace);
-          const retryMessages: ChatMessage[] = [
-            ...flowRetryMessagesBase,
-            { role: "assistant", content: fullResponse },
-            { role: "user", content: retryPrompt },
-          ];
-
-          setMessages((prev) => [...prev, { role: "assistant", content: "" }]);
-
-          let retryFull = "";
-          const retryUpdater = createThrottledAssistantUpdater();
-          await streamChatMessage(
-            retryMessages,
-            (chunk) => {
-              retryFull = chunk;
-              retryUpdater.push(chunk);
-            },
-            chatModel,
-            controller.signal,
-          );
-          retryUpdater.flush();
-
-          fullResponse = retryFull;
-          flowRetryMessagesBase = retryMessages;
-          const processed = await handleAssistantResponse(fullResponse);
-          flowPatchFound = processed.flowPatchFound;
-          flowRetryError = processed.flowRetryError;
-        }
       }
     } catch (error) {
       if ((error as any)?.name === "AbortError" || (error as any)?.name === "APIUserAbortError") {
@@ -1512,7 +674,7 @@ export function ChatPanel({
       {/* Input */}
       <div className="p-4 border-t border-border/50 bg-card/50">
         <ChatInput 
-            workspaceId={workspaceId === "cad" || workspaceId === "ppt" ? workspaceId : "unknown"}
+            workspaceId="ppt"
             input={input}
             setInput={setInput}
             onSubmit={handleSend}
@@ -1523,18 +685,18 @@ export function ChatPanel({
             historyDisabled={history.length === 0}
             onFilesChange={setFiles}
             files={files}
-                uploadMode={workspaceId === "ppt" ? "imagesOnly" : workspaceId === "cad" ? "filesOnly" : "all"}
+            uploadMode="imagesOnly"
             placeholder={inputPlaceholder}
-            focusKey={workspaceId === "ppt" ? pptInputFocusTick : undefined}
-            clearKey={workspaceId === "ppt" ? pptClearTick : undefined}
-            richSegments={workspaceId === "ppt" ? pptInputSegments : undefined}
-            onRichSegmentsChange={workspaceId === "ppt" ? setPptInputSegments : undefined}
-            insertPptToken={workspaceId === "ppt" ? pptInsertToken : null}
-            onInsertPptTokenHandled={workspaceId === "ppt" ? () => {
+            focusKey={pptInputFocusTick}
+            clearKey={pptClearTick}
+            richSegments={pptInputSegments}
+            onRichSegmentsChange={setPptInputSegments}
+            insertPptToken={pptInsertToken}
+            onInsertPptTokenHandled={() => {
               pptInsertBusyRef.current = false;
               setPptInsertToken(null);
               pumpPptInsertQueue();
-            } : undefined}
+            }}
             bottomChips={
               attachments.length > 0
                 ? (

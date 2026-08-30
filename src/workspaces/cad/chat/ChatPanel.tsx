@@ -23,8 +23,6 @@ import {
   CAD_SVG_FLOW_REPLACE_AGENT_PROMPT,
 } from '@/lib/cad-agents';
 import { getCadRenderFallbackTitle, getCadRenderSlotTitles } from "@/lib/cad-render-titles";
-import flowPatchAgentPrompt from "../../../../agent/flow/patch.md?raw";
-import flowReplaceAgentPrompt from "../../../../agent/flow/replace.md?raw";
 import { t, useUiLanguage } from "@/shared/i18n";
 import { toast } from "sonner";
 import {
@@ -51,14 +49,13 @@ interface ChatPanelProps {
   className?: string;
   attachments?: Attachment[];
   onRemoveAttachment?: (id: string) => void;
-  pptDraftSlides?: Array<{ id: string; slideId: string; title: string; json: string; kind: "outline" | "slide_image"; imageUrl?: string }>;
-  onClearPptDraftSlides?: () => void;
   onCodeAction?: (code: string, type: 'flow' | 'cad' | 'ppt') => MaybePromise<void | CodeActionResult>;
   systemPrompt?: string;
   initialMessages?: ChatMessage[];
   onMessagesChange?: (messages: ChatMessage[]) => void;
   chatModel?: string;
-  workspaceId?: string;
+  /** Only ever "cad": the CAD shell is this panel's single caller. */
+  workspaceId?: "cad";
   mode?: 'text' | 'ppt_image';
   hideHistoryButton?: boolean;
   collapsed?: boolean;
@@ -88,14 +85,12 @@ export function ChatPanel({
     className, 
     attachments = [],
     onRemoveAttachment,
-    pptDraftSlides = [],
-    onClearPptDraftSlides,
     onCodeAction,
     systemPrompt = DRAWIO_SYSTEM_PROMPT,
     initialMessages = [],
     onMessagesChange,
     chatModel,
-    workspaceId = 'default',
+    workspaceId = 'cad',
     mode = 'text',
     hideHistoryButton = false,
     collapsed = false,
@@ -122,7 +117,6 @@ export function ChatPanel({
   const cadRenderFallbackTitles = getCadRenderSlotTitles(uiLang);
   const cadRenderPromptTitlesEn = getCadRenderSlotTitles("en");
   const getCadAnalysisImageRefs = () => {
-    if (workspaceId !== "cad") return [] as Array<{ title: string; url: string }>;
     const items = Array.isArray(cadContext?.analysisImages) ? cadContext.analysisImages : [];
     return items
       .map((item, idx) => ({
@@ -162,85 +156,19 @@ export function ChatPanel({
   );
 
   const [input, setInput] = useState('');
-  const [pptInputSegments, setPptInputSegments] = useState<Array<{ type: "text"; text: string } | { type: "ppt"; slideId: string; label: string; tag: string; tokenKind: "outline" | "slide_image" }>>([
-    { type: "text", text: "" }
-  ]);
   const [isLoading, setIsLoading] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
   const [showResetWarning, setShowResetWarning] = useState(false);
   const flowAutoRetryCountRef = useRef(0);
-  const MAX_FLOW_AUTO_RETRY = 3;
   const cadSvgAutoRetryCountRef = useRef(0);
   const MAX_CAD_SVG_AUTO_RETRY = 3;
   const cadApprovedPlanRef = useRef<any | null>(null);
   
   const [files, setFiles] = useState<File[]>([]);
   const abortControllerRef = useRef<AbortController | null>(null);
-  const [pptInputFocusTick, setPptInputFocusTick] = useState(0);
-  const prevPptDraftCountRef = useRef(0);
-  const prevPptDraftIdsRef = useRef<Set<string>>(new Set());
-  const [pptInsertToken, setPptInsertToken] = useState<{ key: number; slideId: string; label: string; tag: string; tokenKind: "outline" | "slide_image" } | null>(null);
-  const pptInsertQueueRef = useRef<Array<{ slideId: string; title: string; label: string }>>([]);
-  const pptInsertBusyRef = useRef(false);
-  const [pptClearTick, setPptClearTick] = useState(0);
   const lastUploadedImagesRef = useRef<string[]>([]);
 
-  const getPptLabel = (slideId: string, title: string) => {
-    const m = String(slideId || "").match(/(\\d+)/);
-    const n = m ? Number(m[1]) : NaN;
-    if (!Number.isNaN(n)) {
-      return title ? trText(`第 ${n} 页：${title}`, `Slide ${n}: ${title}`) : trText(`第 ${n} 页`, `Slide ${n}`);
-    }
-    return title || slideId;
-  };
-
-  const getPptTag = (slideId: string, title: string) => {
-    const m = String(slideId || "").match(/(\\d+)/);
-    const n = m ? Number(m[1]) : NaN;
-    if (Number.isNaN(n)) return "";
-    const safeTitle = String(title || "").split("|").join(",").split("]]").join("");
-    return `[[PPT_SLIDE|${n}|${safeTitle}]]`;
-  };
-
-  const pumpPptInsertQueue = () => {
-    if (pptInsertBusyRef.current) return;
-    const next = pptInsertQueueRef.current.shift();
-    if (!next) return;
-    pptInsertBusyRef.current = true;
-    const tag = getPptTag(next.slideId, next.title);
-    // This queue only runs when workspaceId === "ppt"; CAD never reaches it.
-    // The PPT fork of this panel is the one that actually drives it.
-    setPptInsertToken({ key: Date.now() + Math.random(), slideId: next.slideId, label: next.label, tag, tokenKind: "slide_image" });
-  };
-
-  const enqueuePptToken = (slideId: string, title: string) => {
-    const label = getPptLabel(slideId, title);
-    pptInsertQueueRef.current.push({ slideId, title, label });
-    pumpPptInsertQueue();
-  };
-
-  useEffect(() => {
-    if (workspaceId !== "ppt") return;
-    const prev = prevPptDraftCountRef.current;
-    const next = pptDraftSlides.length;
-    prevPptDraftCountRef.current = next;
-    if (next > prev) {
-      setPptInputFocusTick((x) => x + 1);
-    }
-  }, [workspaceId, pptDraftSlides.length]);
-
-  useEffect(() => {
-    if (workspaceId !== "ppt") return;
-    const prevIds = prevPptDraftIdsRef.current;
-    const nextIds = new Set(pptDraftSlides.map((s) => s.id));
-    const added = pptDraftSlides.filter((s) => !prevIds.has(s.id));
-    prevPptDraftIdsRef.current = nextIds;
-    if (added.length === 0) return;
-    for (const s of added) enqueuePptToken(s.slideId, s.title);
-  }, [workspaceId, pptDraftSlides, setInput]);
-
   const sanitizeAssistantContentForDisplay = (content: string) => {
-    if (workspaceId !== "cad") return content;
     if (!content) return content;
     const bomUpdatedText = trText("（已更新物料清单）", "(BOM updated)");
     const formatCadPlanForDisplay = (parsed: any) => {
@@ -393,10 +321,8 @@ export function ChatPanel({
     cadApprovedPlanRef.current = null;
     setIsLoading(false);
     setInput('');
-    setPptInputSegments([{ type: "text", text: "" }]);
     setFiles([]);
     onClearAttachments?.();
-    onClearPptDraftSlides?.();
     onClearWorkspace?.();
     try {
       localStorage.removeItem(storageKey);
@@ -405,7 +331,6 @@ export function ChatPanel({
     setMessages([]);
     setShowResetWarning(false);
   };
-
 
   const runCodeAction = async (code: string, type: 'flow' | 'cad' | 'ppt') => {
     const result = await Promise.resolve(onCodeAction?.(code, type));
@@ -575,10 +500,6 @@ export function ChatPanel({
       toast.error(uiLang === "zh" ? "未检测到可应用内容" : "No applicable CAD payload detected");
       return false;
     }
-    if (workspaceId === "flow") {
-      const r = await runCodeAction(text, "flow");
-      return !!r.ok;
-    }
     const r = await runCodeAction(text, "ppt");
     return !!r.ok;
   };
@@ -706,11 +627,6 @@ export function ChatPanel({
   const handleAssistantResponse = async (fullResponse: string) => {
     if (!fullResponse) return { flowPatchFound: false, flowRetryError: null as string | null };
 
-    const pyMatch = fullResponse.match(/```python\n([\s\S]*?)\n```/);
-    if (pyMatch && pyMatch[1] && workspaceId !== "cad") {
-      await runCodeAction(pyMatch[1], 'cad');
-    }
-
     if (workspaceId === "cad") {
       const jsMatch = fullResponse.match(/```(javascript|js)\n([\s\S]*?)\n```/);
       if (jsMatch && jsMatch[2]) {
@@ -743,72 +659,10 @@ export function ChatPanel({
       const jsonText = String(m[1] || "").trim();
       if (!jsonText) continue;
 
-      if (workspaceId === 'ppt') {
-        try {
-          const parsed = JSON.parse(jsonText);
-          if (lastUploadedImagesRef.current.length > 0) {
-            parsed.uploadedImages = lastUploadedImagesRef.current;
-            await runCodeAction(JSON.stringify(parsed), 'ppt');
-          } else {
-            await runCodeAction(jsonText, 'ppt');
-          }
-        } catch {
-          await runCodeAction(jsonText, 'ppt');
-        }
-        continue;
-      }
-
-      if (workspaceId === 'flow') {
-        try {
-          const parsed = JSON.parse(jsonText);
-          if (parsed?.type === "flow_patch") flowPatchFound = true;
-        } catch {
-        }
-        const r = await runCodeAction(jsonText, 'flow');
-        if (!r.ok && r.retry) {
-          flowRetryError = r.error || "Unknown error";
-        }
-        continue;
-      }
-
-      await runCodeAction(jsonText, workspaceId === "cad" ? 'cad' : 'ppt');
-    }
-
-    if (workspaceId === "flow" && !flowPatchFound) {
-      const xmlMatch = fullResponse.match(/```xml\n([\s\S]*?)\n```/);
-      if (xmlMatch && xmlMatch[1]) {
-        const r = await runCodeAction(xmlMatch[1], 'flow');
-        if (!r.ok && r.retry) {
-          flowRetryError = r.error || "Unknown error";
-        }
-      }
+      await runCodeAction(jsonText, 'cad');
     }
 
     return { flowPatchFound, flowRetryError };
-  };
-
-  const buildFlowRetryPrompt = (errorText: string, forceReplace: boolean) => {
-    const err = String(errorText || "").slice(0, 600);
-    if (uiLang === "en") {
-      return [
-        `The previous flow_patch could not be applied to the current diagram. Reason: ${err}`,
-        "",
-        "Please retry and strictly follow:",
-        "- Output exactly one ```json``` code block with type=flow_patch",
-        forceReplace
-          ? "- This time you MUST use mode=replace and output the full <mxGraphModel>...</mxGraphModel> (do not output patch)"
-          : "- If the patch cannot precisely match the Current diagram XML, use mode=replace and output the full <mxGraphModel>...</mxGraphModel>",
-      ].join("\n");
-    }
-    return [
-      `Previous flow_patch could not be applied to current diagram: ${err}`,
-      "",
-      "Please retry and strictly follow:",
-      "- Output exactly one ```json``` code block with type=flow_patch",
-      forceReplace
-        ? "- This time you MUST use mode=replace and output the full <mxGraphModel>...</mxGraphModel> (do not output patch)"
-        : "- If the patch cannot precisely match the Current diagram XML, use mode=replace and output the full <mxGraphModel>...</mxGraphModel>",
-    ].join("\\n");
   };
 
   const buildCadSvgRetryPrompt = (errorText: string, forceReplace: boolean) => {
@@ -836,30 +690,12 @@ export function ChatPanel({
   };
 
   const handleSend = async () => {
-    const isPpt = workspaceId === "ppt";
-    const rawInput = isPpt
-      ? pptInputSegments
-          .map((s) => (s.type === "text" ? s.text : s.tag))
-          .join("")
-      : input;
-    if ((!rawInput.trim() && files.length === 0 && attachments.length === 0 && pptDraftSlides.length === 0) || isLoading) return;
+    const rawInput = input;
+    if ((!rawInput.trim() && files.length === 0 && attachments.length === 0) || isLoading) return;
     flowAutoRetryCountRef.current = 0;
     cadSvgAutoRetryCountRef.current = 0;
 
     const normalizedInput = rawInput.trim();
-    const referencedPptSlideIds = isPpt
-      ? new Set(
-          pptInputSegments
-            .filter((s): s is { type: "ppt"; slideId: string; label: string; tag: string; tokenKind: "outline" | "slide_image" } => s.type === "ppt")
-            .map((s) => s.slideId)
-        )
-      : new Set<string>();
-    const pptDraftSlidesSnapshotAll = isPpt ? pptDraftSlides.slice(0, 12) : [];
-    const pptDraftSlidesSnapshot =
-      isPpt && referencedPptSlideIds.size > 0
-        ? pptDraftSlidesSnapshotAll.filter((s) => referencedPptSlideIds.has(s.slideId))
-        : [];
-    
     // Process files for prompt
     const fileTexts: string[] = [];
     const currentUploadedImages: string[] = [];
@@ -942,22 +778,6 @@ export function ChatPanel({
             .join("\n\n")
         : "";
 
-    const pptDraftContextText =
-      workspaceId === "ppt" && pptDraftSlidesSnapshot.length > 0
-        ? pptDraftSlidesSnapshot
-            .map((s, idx) => {
-              const header = `[Context ${idx + 1}: ${s.slideId}.json | json]`;
-              const body = String(s.json || "").slice(0, 12000);
-              return `${header}\n\`\`\`json\n${body}\n\`\`\``;
-            })
-            .join("\n\n")
-        : "";
-
-    const flowContextText =
-      workspaceId === "flow" && typeof flowContext?.xml === "string" && flowContext.xml.trim()
-        ? `Current diagram XML:\n\n\`\`\`xml\n${flowContext.xml}\n\`\`\``
-        : "";
-
     const effectiveCadPlan = cadApprovedPlanRef.current ?? cadContext?.plan;
     const cadContextText =
       workspaceId === "cad"
@@ -983,9 +803,7 @@ export function ChatPanel({
     const promptParts = [
       rawInput,
       fileTexts.length > 0 ? fileTexts.join("\n\n") : "",
-      pptDraftContextText,
       contextAttachmentsText,
-      flowContextText,
       cadContextText,
       cadHistoryContextText,
     ].filter(Boolean);
@@ -1007,11 +825,8 @@ export function ChatPanel({
     const userMessageForDisplay: ChatMessage = { role: 'user', content: displayContent };
     const displayMessages = [...messages, userMessageForDisplay];
     setMessages(displayMessages);
-    if (isPpt) setPptInputSegments([{ type: "text", text: "" }]);
-    else setInput('');
-    if (isPpt) setPptClearTick((x) => x + 1);
-    setFiles([]); 
-    if (workspaceId === "ppt") onClearPptDraftSlides?.();
+    setInput('');
+    setFiles([]);
 
     if (workspaceId === "cad" && mode === "text" && /(cad_ready_for_export|一键\s*(出图|生成)|one[- ]?click)/i.test(normalizedInput)) {
       const svg2d = cadContext?.svg2d || "";
@@ -1193,52 +1008,6 @@ export function ChatPanel({
       }, chatModel, controller.signal);
       updater.flush();
       
-      let flowRoutedBaseMessages: ChatMessage[] | null = null;
-      let flowSelectedAgent: "patch" | "replace" | null = null;
-
-      if (fullResponse && workspaceId === "flow") {
-        const resolveFlowAgentFromRouteText = (text: string): "patch" | "replace" | null => {
-          const trimmed = String(text || "").trim();
-          if (!trimmed) return null;
-
-          let content = trimmed;
-          const fenceMatch = content.match(/```[a-zA-Z]*\s*([\s\S]*?)```/);
-          if (fenceMatch && fenceMatch[1]) content = fenceMatch[1].trim();
-          content = content.replace(/\s+/g, "");
-
-          if (!/^[1-2]$/.test(content)) return null;
-          return content === "1" ? "patch" : "replace";
-        };
-
-        const agentFromText = resolveFlowAgentFromRouteText(fullResponse);
-        if (agentFromText) {
-          flowSelectedAgent = agentFromText;
-
-          setMessages((prev) => {
-            const last = prev[prev.length - 1];
-            if (last?.role === "assistant") return [...prev.slice(0, -1), { role: "assistant", content: "" }];
-            return prev;
-          });
-
-          const agentPrompt = flowSelectedAgent === "patch" ? flowPatchAgentPrompt : flowReplaceAgentPrompt;
-          const routedSystemContent = [agentPrompt, globalSystemPrompt, globalConstraints].filter(Boolean).join("\n\n");
-          const routedMessages: ChatMessage[] = [
-            { role: "system", content: routedSystemContent },
-            { role: "user", content: promptContent }
-          ];
-
-          let routedFull = "";
-          const routedUpdater = createThrottledAssistantUpdater();
-          await streamChatMessage(routedMessages, (chunk) => {
-            routedFull = chunk;
-            routedUpdater.push(chunk);
-          }, chatModel, controller.signal);
-          routedUpdater.flush();
-
-          flowRoutedBaseMessages = routedMessages;
-          fullResponse = routedFull;
-        }
-      }
 
       if (fullResponse && workspaceId === "cad") {
         let route: { agent?: string } | null = null;
@@ -1805,59 +1574,8 @@ export function ChatPanel({
       }
 
       if (fullResponse) {
-        let { flowPatchFound, flowRetryError } =
-          await handleAssistantResponse(fullResponse);
+        await handleAssistantResponse(fullResponse);
 
-        let flowRetryMessagesBase: ChatMessage[] = flowRoutedBaseMessages ? [...flowRoutedBaseMessages] : apiMessages;
-        let flowRetryAgent: "patch" | "replace" | null = flowSelectedAgent;
-
-        while (
-          workspaceId === "flow" &&
-          flowPatchFound &&
-          flowRetryError &&
-          !controller.signal.aborted &&
-          flowAutoRetryCountRef.current < MAX_FLOW_AUTO_RETRY
-        ) {
-          flowAutoRetryCountRef.current += 1;
-          const forceReplace = flowAutoRetryCountRef.current >= MAX_FLOW_AUTO_RETRY;
-
-          if (forceReplace && flowRetryAgent === "patch") {
-            flowRetryAgent = "replace";
-            const routedSystemContent = [flowReplaceAgentPrompt, globalSystemPrompt, globalConstraints].filter(Boolean).join("\n\n");
-            flowRetryMessagesBase = [
-              { role: "system", content: routedSystemContent },
-              { role: "user", content: promptContent }
-            ];
-          }
-
-          const retryPrompt = buildFlowRetryPrompt(flowRetryError, forceReplace);
-          const retryMessages: ChatMessage[] = [
-            ...flowRetryMessagesBase,
-            { role: "assistant", content: fullResponse },
-            { role: "user", content: retryPrompt },
-          ];
-
-          setMessages((prev) => [...prev, { role: "assistant", content: "" }]);
-
-          let retryFull = "";
-          const retryUpdater = createThrottledAssistantUpdater();
-          await streamChatMessage(
-            retryMessages,
-            (chunk) => {
-              retryFull = chunk;
-              retryUpdater.push(chunk);
-            },
-            chatModel,
-            controller.signal,
-          );
-          retryUpdater.flush();
-
-          fullResponse = retryFull;
-          flowRetryMessagesBase = retryMessages;
-          const processed = await handleAssistantResponse(fullResponse);
-          flowPatchFound = processed.flowPatchFound;
-          flowRetryError = processed.flowRetryError;
-        }
       }
 
     } catch (error) {
@@ -1899,10 +1617,6 @@ export function ChatPanel({
     const globalSystemPrompt = config.systemPrompt || '';
     const systemContent = [systemPrompt, globalSystemPrompt, globalConstraints, cadOutputLanguageInstruction].filter(Boolean).join('\n\n');
     const lastUserText = String(baseMessages[baseMessages.length - 1]?.content || "");
-    const flowContextText =
-      workspaceId === "flow" && typeof flowContext?.xml === "string" && flowContext.xml.trim()
-        ? `Current diagram XML:\n\n\`\`\`xml\n${flowContext.xml}\n\`\`\``
-        : "";
     const effectiveCadPlan = cadApprovedPlanRef.current ?? cadContext?.plan;
     const cadContextText =
       workspaceId === "cad"
@@ -1924,7 +1638,7 @@ export function ChatPanel({
       workspaceId === "cad"
         ? buildRecentHistoryContext(baseMessages.slice(0, -1))
         : "";
-    const promptContent = [lastUserText, flowContextText, cadContextText, cadHistoryContextText].filter(Boolean).join("\n\n");
+    const promptContent = [lastUserText, cadContextText, cadHistoryContextText].filter(Boolean).join("\n\n");
 
     const apiMessages: ChatMessage[] = [
       { role: 'system', content: systemContent },
@@ -1949,52 +1663,6 @@ export function ChatPanel({
       updater.flush();
 
       if (fullResponse) {
-        let flowRoutedBaseMessages: ChatMessage[] | null = null;
-        let flowSelectedAgent: "patch" | "replace" | null = null;
-
-        if (workspaceId === "flow") {
-          const resolveFlowAgentFromRouteText = (text: string): "patch" | "replace" | null => {
-            const trimmed = String(text || "").trim();
-            if (!trimmed) return null;
-
-            let content = trimmed;
-            const fenceMatch = content.match(/```[a-zA-Z]*\s*([\s\S]*?)```/);
-            if (fenceMatch && fenceMatch[1]) content = fenceMatch[1].trim();
-            content = content.replace(/\s+/g, "");
-
-            if (!/^[1-2]$/.test(content)) return null;
-            return content === "1" ? "patch" : "replace";
-          };
-
-          const agentFromText = resolveFlowAgentFromRouteText(fullResponse);
-          if (agentFromText) {
-            flowSelectedAgent = agentFromText;
-
-            setMessages((prev) => {
-              const last = prev[prev.length - 1];
-              if (last?.role === "assistant") return [...prev.slice(0, -1), { role: "assistant", content: "" }];
-              return prev;
-            });
-
-            const agentPrompt = flowSelectedAgent === "patch" ? flowPatchAgentPrompt : flowReplaceAgentPrompt;
-            const routedSystemContent = [agentPrompt, globalSystemPrompt, globalConstraints, cadOutputLanguageInstruction].filter(Boolean).join("\n\n");
-            const routedMessages: ChatMessage[] = [
-              { role: "system", content: routedSystemContent },
-              { role: "user", content: promptContent }
-            ];
-
-            let routedFull = "";
-            const routedUpdater = createThrottledAssistantUpdater();
-            await streamChatMessage(routedMessages, (chunk) => {
-              routedFull = chunk;
-              routedUpdater.push(chunk);
-            }, chatModel, controller.signal);
-            routedUpdater.flush();
-
-            flowRoutedBaseMessages = routedMessages;
-            fullResponse = routedFull;
-          }
-        }
 
         if (fullResponse && workspaceId === "cad") {
           let route: { agent?: string } | null = null;
@@ -2560,59 +2228,8 @@ export function ChatPanel({
           }
         }
 
-        let { flowPatchFound, flowRetryError } =
-          await handleAssistantResponse(fullResponse);
+        await handleAssistantResponse(fullResponse);
 
-        let flowRetryMessagesBase: ChatMessage[] = flowRoutedBaseMessages ? [...flowRoutedBaseMessages] : apiMessages;
-        let flowRetryAgent: "patch" | "replace" | null = flowSelectedAgent;
-
-        while (
-          workspaceId === "flow" &&
-          flowPatchFound &&
-          flowRetryError &&
-          !controller.signal.aborted &&
-          flowAutoRetryCountRef.current < MAX_FLOW_AUTO_RETRY
-        ) {
-          flowAutoRetryCountRef.current += 1;
-          const forceReplace = flowAutoRetryCountRef.current >= MAX_FLOW_AUTO_RETRY;
-
-          if (forceReplace && flowRetryAgent === "patch") {
-            flowRetryAgent = "replace";
-            const routedSystemContent = [flowReplaceAgentPrompt, globalSystemPrompt, globalConstraints].filter(Boolean).join("\n\n");
-            flowRetryMessagesBase = [
-              { role: "system", content: routedSystemContent },
-              { role: "user", content: promptContent }
-            ];
-          }
-
-          const retryPrompt = buildFlowRetryPrompt(flowRetryError, forceReplace);
-          const retryMessages: ChatMessage[] = [
-            ...flowRetryMessagesBase,
-            { role: "assistant", content: fullResponse },
-            { role: "user", content: retryPrompt },
-          ];
-
-          setMessages((prev) => [...prev, { role: "assistant", content: "" }]);
-
-          let retryFull = "";
-          const retryUpdater = createThrottledAssistantUpdater();
-          await streamChatMessage(
-            retryMessages,
-            (chunk) => {
-              retryFull = chunk;
-              retryUpdater.push(chunk);
-            },
-            chatModel,
-            controller.signal,
-          );
-          retryUpdater.flush();
-
-          fullResponse = retryFull;
-          flowRetryMessagesBase = retryMessages;
-          const processed = await handleAssistantResponse(fullResponse);
-          flowPatchFound = processed.flowPatchFound;
-          flowRetryError = processed.flowRetryError;
-        }
       }
     } catch (error) {
       if ((error as any)?.name === "AbortError" || (error as any)?.name === "APIUserAbortError") {
@@ -2748,7 +2365,7 @@ export function ChatPanel({
       {/* Input */}
       <div className="p-4 border-t border-border/50 bg-card/50">
         <ChatInput 
-            workspaceId={workspaceId === "cad" || workspaceId === "ppt" ? workspaceId : "unknown"}
+            workspaceId="cad"
             input={input}
             setInput={setInput}
             onSubmit={handleSend}
@@ -2759,18 +2376,8 @@ export function ChatPanel({
             historyDisabled={history.length === 0}
             onFilesChange={setFiles}
             files={files}
-            uploadMode={workspaceId === "ppt" ? "imagesOnly" : workspaceId === "cad" ? "filesOnly" : "all"}
+            uploadMode="filesOnly"
             placeholder={inputPlaceholder}
-            focusKey={workspaceId === "ppt" ? pptInputFocusTick : undefined}
-            clearKey={workspaceId === "ppt" ? pptClearTick : undefined}
-            richSegments={workspaceId === "ppt" ? pptInputSegments : undefined}
-            onRichSegmentsChange={workspaceId === "ppt" ? setPptInputSegments : undefined}
-            insertPptToken={workspaceId === "ppt" ? pptInsertToken : null}
-            onInsertPptTokenHandled={workspaceId === "ppt" ? () => {
-              pptInsertBusyRef.current = false;
-              setPptInsertToken(null);
-              pumpPptInsertQueue();
-            } : undefined}
             bottomChips={
               attachments.length > 0
                 ? (

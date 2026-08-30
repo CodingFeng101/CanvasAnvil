@@ -307,7 +307,6 @@ export function PptWorkspaceShell() {
               onMessagesChange={setChatHistory}
               attachments={attachments}
               workspaceId="ppt"
-              mode="ppt_image"
               hideHistoryButton
               collapsed={isChatCollapsed}
               collapseLocked={pptChatLocked}
