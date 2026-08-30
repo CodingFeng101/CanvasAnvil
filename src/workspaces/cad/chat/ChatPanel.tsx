@@ -3,12 +3,12 @@ import { PanelRightClose, PanelRightOpen } from 'lucide-react';
 import { cn } from '@/shared/lib/utils';
 import { streamChatMessage, generateChatMessage, ChatMessage, getAIConfig } from '@/ai/client';
 import { DRAWIO_SYSTEM_PROMPT } from '@/lib/system-prompts';
-import { ButtonWithTooltip } from '@/workspaces/cad/chat/components/button-with-tooltip';
-import { ChatInput } from '@/workspaces/cad/chat/ChatInput';
+import { ButtonWithTooltip } from '@/shared/chat';
+import { ChatInput } from '@/shared/chat';
 import { ChatMessageDisplay, UIMessage } from '@/workspaces/cad/chat/ChatMessageDisplay';
-import { STORAGE_GLOBAL_CONSTRAINTS_KEY } from '@/workspaces/cad/chat/global-constraints-dialog';
-import { HistoryDialog, HistoryItem } from '@/workspaces/cad/chat/history-dialog';
-import { ResetWarningModal } from '@/workspaces/cad/chat/reset-warning-modal';
+import { STORAGE_GLOBAL_CONSTRAINTS_KEY } from '@/shared/chat';
+import { HistoryDialog, HistoryItem } from '@/shared/chat';
+import { ResetWarningModal } from '@/shared/chat';
 import { useFileProcessor } from '@/shared/files/use-file-processor';
 import {
   buildCadAnalysisMessages,
@@ -290,7 +290,7 @@ export function ChatPanel({
   });
 
   const [input, setInput] = useState('');
-  const [pptInputSegments, setPptInputSegments] = useState<Array<{ type: "text"; text: string } | { type: "ppt"; slideId: string; label: string; tag: string }>>([
+  const [pptInputSegments, setPptInputSegments] = useState<Array<{ type: "text"; text: string } | { type: "ppt"; slideId: string; label: string; tag: string; tokenKind: "outline" | "slide_image" }>>([
     { type: "text", text: "" }
   ]);
   const [isLoading, setIsLoading] = useState(false);
@@ -307,7 +307,7 @@ export function ChatPanel({
   const [pptInputFocusTick, setPptInputFocusTick] = useState(0);
   const prevPptDraftCountRef = useRef(0);
   const prevPptDraftIdsRef = useRef<Set<string>>(new Set());
-  const [pptInsertToken, setPptInsertToken] = useState<{ key: number; slideId: string; label: string; tag: string } | null>(null);
+  const [pptInsertToken, setPptInsertToken] = useState<{ key: number; slideId: string; label: string; tag: string; tokenKind: "outline" | "slide_image" } | null>(null);
   const pptInsertQueueRef = useRef<Array<{ slideId: string; title: string; label: string }>>([]);
   const pptInsertBusyRef = useRef(false);
   const [pptClearTick, setPptClearTick] = useState(0);
@@ -336,7 +336,9 @@ export function ChatPanel({
     if (!next) return;
     pptInsertBusyRef.current = true;
     const tag = getPptTag(next.slideId, next.title);
-    setPptInsertToken({ key: Date.now() + Math.random(), slideId: next.slideId, label: next.label, tag });
+    // This queue only runs when workspaceId === "ppt"; CAD never reaches it.
+    // The PPT fork of this panel is the one that actually drives it.
+    setPptInsertToken({ key: Date.now() + Math.random(), slideId: next.slideId, label: next.label, tag, tokenKind: "slide_image" });
   };
 
   const enqueuePptToken = (slideId: string, title: string) => {
@@ -1082,7 +1084,7 @@ export function ChatPanel({
     const referencedPptSlideIds = isPpt
       ? new Set(
           pptInputSegments
-            .filter((s): s is { type: "ppt"; slideId: string; label: string; tag: string } => s.type === "ppt")
+            .filter((s): s is { type: "ppt"; slideId: string; label: string; tag: string; tokenKind: "outline" | "slide_image" } => s.type === "ppt")
             .map((s) => s.slideId)
         )
       : new Set<string>();
@@ -2979,6 +2981,7 @@ export function ChatPanel({
       {/* Input */}
       <div className="p-4 border-t border-border/50 bg-card/50">
         <ChatInput 
+            workspaceId={workspaceId === "cad" || workspaceId === "ppt" ? workspaceId : "unknown"}
             input={input}
             setInput={setInput}
             onSubmit={handleSend}

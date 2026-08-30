@@ -24,7 +24,7 @@ import {
     Reasoning,
     ReasoningContent,
     ReasoningTrigger,
-} from "@/workspaces/flow/next/components/ai-elements/reasoning"
+} from "@/shared/chat"
 import { ScrollArea } from "@/shared/ui/scroll-area"
 import { useFlowT } from "@/workspaces/flow/next/lib/translations"
 import {

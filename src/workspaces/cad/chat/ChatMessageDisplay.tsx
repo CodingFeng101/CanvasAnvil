@@ -19,7 +19,7 @@ import {
 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from 'remark-gfm';
-import { Reasoning, ReasoningContent, ReasoningTrigger } from "@/workspaces/cad/chat/components/reasoning";
+import { Reasoning, ReasoningContent, ReasoningTrigger } from "@/shared/chat";
 import { ScrollArea } from "@/shared/ui/scroll-area";
 import { CodeBlock } from "@/workspaces/cad/chat/code-block";
 import { useUiLanguage } from "@/shared/i18n";

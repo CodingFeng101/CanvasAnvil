@@ -8,9 +8,9 @@ import {
 import type React from "react"
 import { useCallback, useEffect, useRef, useState } from "react"
 import { Toaster, toast } from "sonner"
-import { ButtonWithTooltip } from "@/workspaces/flow/next/components/button-with-tooltip"
+import { ButtonWithTooltip } from "@/shared/chat"
 import { ChatInput } from "@/workspaces/flow/next/components/chat-input"
-import { STORAGE_GLOBAL_CONSTRAINTS_KEY } from "@/workspaces/flow/next/components/global-constraints-dialog"
+import { FLOW_GLOBAL_CONSTRAINTS_KEY } from "@/workspaces/flow/next/lib/flow-storage-keys"
 import { useDiagram } from "@/workspaces/flow/next/contexts/diagram-context"
 import { useFlowT } from "@/workspaces/flow/next/lib/translations"
 import { getAIConfig } from "@/workspaces/flow/next/lib/ai-config"
@@ -975,7 +975,7 @@ Please fix the XML issues. Ensure cell_id values exist in the current XML and th
         const { accessCode, ai } = getAIConfig()
         const modelToUse = String(ai.textModel || defaultModel || "").trim()
         const imageModelToUse = String(ai.imageModel || "").trim()
-        const globalConstraints = localStorage.getItem(STORAGE_GLOBAL_CONSTRAINTS_KEY) || ""
+        const globalConstraints = localStorage.getItem(FLOW_GLOBAL_CONSTRAINTS_KEY) || ""
 
         // Safe parts access
         const safeParts = Array.isArray(parts) ? parts : []

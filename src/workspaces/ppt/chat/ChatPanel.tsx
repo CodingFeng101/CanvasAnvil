@@ -3,12 +3,12 @@ import { PanelRightClose, PanelRightOpen } from 'lucide-react';
 import { cn } from '@/shared/lib/utils';
 import { streamChatMessage, generateChatMessage, generatePptProxyChatMessage, ChatMessage, getAIConfig } from '@/ai/client';
 import { DRAWIO_SYSTEM_PROMPT } from '@/lib/system-prompts';
-import { ButtonWithTooltip } from '@/workspaces/ppt/chat/components/button-with-tooltip';
-import { ChatInput } from '@/workspaces/ppt/chat/ChatInput';
+import { ButtonWithTooltip } from '@/shared/chat';
+import { ChatInput } from '@/shared/chat';
 import { ChatMessageDisplay, UIMessage } from '@/workspaces/ppt/chat/ChatMessageDisplay';
-import { STORAGE_GLOBAL_CONSTRAINTS_KEY } from '@/workspaces/ppt/chat/global-constraints-dialog';
-import { HistoryDialog, HistoryItem } from '@/workspaces/ppt/chat/history-dialog';
-import { ResetWarningModal } from '@/workspaces/ppt/chat/reset-warning-modal';
+import { STORAGE_GLOBAL_CONSTRAINTS_KEY } from '@/shared/chat';
+import { HistoryDialog, HistoryItem } from '@/shared/chat';
+import { ResetWarningModal } from '@/shared/chat';
 import { useFileProcessor } from '@/shared/files/use-file-processor';
 import { buildCadBomMessages, buildCadImagesMasterMessages, buildCadImagesSheetMessages, buildCadTasksSystemContent } from '@/lib/cad-tasks';
 import { CAD_PLAN_AGENT_PROMPT } from '@/lib/cad-agents';
@@ -1683,6 +1683,7 @@ export function ChatPanel({
       {/* Input */}
       <div className="p-4 border-t border-border/50 bg-card/50">
         <ChatInput 
+            workspaceId={workspaceId === "cad" || workspaceId === "ppt" ? workspaceId : "unknown"}
             input={input}
             setInput={setInput}
             onSubmit={handleSend}

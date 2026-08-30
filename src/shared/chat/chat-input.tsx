@@ -1,14 +1,14 @@
-﻿import React, { useRef, useEffect, useMemo, useState, useCallback } from 'react';
+import React, { useRef, useEffect, useMemo, useState, useCallback } from 'react';
 import { Send, FileText, ImageIcon, History, Square, Trash2 } from 'lucide-react';
 import { cn } from '@/shared/lib/utils';
-import { ButtonWithTooltip } from '@/workspaces/cad/chat/components/button-with-tooltip';
-import { FilePreviewList } from '@/workspaces/cad/chat/file-preview-list';
-import { useFileProcessor } from '@/shared/files/use-file-processor';
+import { ButtonWithTooltip } from '@/shared/chat';
+import { FilePreviewList } from '@/shared/chat';
+import { type FileWorkspace, useFileProcessor } from '@/shared/files/use-file-processor';
 import { t, useUiLanguage } from "@/shared/i18n";
 
 type RichInputSegment =
     | { type: "text"; text: string }
-    | { type: "ppt"; slideId: string; label: string; tag: string };
+    | { type: "ppt"; slideId: string; label: string; tag: string; tokenKind: "outline" | "slide_image" };
 
 interface ChatInputProps {
     input: string;
@@ -27,10 +27,12 @@ interface ChatInputProps {
     focusKey?: string | number;
     richSegments?: RichInputSegment[];
     onRichSegmentsChange?: (segments: RichInputSegment[]) => void;
-    insertPptToken?: { key: number; slideId: string; label: string; tag: string } | null;
+    insertPptToken?: { key: number; slideId: string; label: string; tag: string; tokenKind: "outline" | "slide_image" } | null;
     onInsertPptTokenHandled?: () => void;
     clearKey?: string | number;
     uploadMode?: "all" | "imagesOnly" | "filesOnly" | "none";
+    /** Tags extraction telemetry with the workspace the upload came from. */
+    workspaceId?: FileWorkspace;
 }
 
 export function ChatInput({
@@ -53,7 +55,8 @@ export function ChatInput({
     insertPptToken,
     onInsertPptTokenHandled,
     clearKey,
-    uploadMode = "all"
+    uploadMode = "all",
+    workspaceId = "unknown",
 }: ChatInputProps) {
     const uiLang = useUiLanguage();
     const trText = (zhText: string, enText: string) => (uiLang === "zh" ? zhText : enText);
@@ -65,7 +68,7 @@ export function ChatInput({
     const richAppliedRef = useRef<string>("");
     const [richHasFocus, setRichHasFocus] = useState(false);
     
-    const { files, handleFileChange, setFiles, pdfData } = useFileProcessor("cad");
+    const { files, handleFileChange, setFiles, pdfData } = useFileProcessor(workspaceId);
     const isRich = !!(richSegments && onRichSegmentsChange);
     
     // Sync controlled files if provided
@@ -153,38 +156,30 @@ export function ChatInput({
 
     const serializeSegments = (segments: RichInputSegment[]) => {
         return segments
-            .map((s) => (s.type === "text" ? `t:${s.text}` : `p:${s.slideId}:${s.tag}`))
+            .map((s) => (s.type === "text" ? `t:${s.text}` : `p:${s.tokenKind}:${s.slideId}:${s.tag}`))
             .join("|");
     };
 
     const buildLabelSpan = (segment: Extract<RichInputSegment, { type: "ppt" }>) => {
+        const isOutline = segment.tokenKind === "outline";
         const el = document.createElement("span");
         el.setAttribute("data-token", "ppt");
         el.setAttribute("data-slide-id", segment.slideId);
         el.setAttribute("data-label", segment.label);
         el.setAttribute("data-tag", segment.tag);
+        el.setAttribute("data-token-kind", segment.tokenKind);
         el.setAttribute("contenteditable", "false");
-        el.className = "inline-flex items-center gap-1.5 rounded-full border border-red-200 bg-red-50 px-2 py-0.5 text-xs font-medium text-red-700 dark:border-red-400/30 dark:bg-red-950/40 dark:text-red-200 align-middle";
-        const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-        svg.setAttribute("viewBox", "0 0 24 24");
-        svg.setAttribute("fill", "none");
-        svg.setAttribute("stroke", "currentColor");
-        svg.setAttribute("stroke-width", "2");
-        svg.setAttribute("stroke-linecap", "round");
-        svg.setAttribute("stroke-linejoin", "round");
-        svg.setAttribute("aria-hidden", "true");
-        svg.setAttribute("class", "h-3.5 w-3.5 text-red-600 dark:text-red-200");
-        const path1 = document.createElementNS("http://www.w3.org/2000/svg", "path");
-        // Draw a "P" icon
-        path1.setAttribute("d", "M19 7a5 5 0 0 0-5-5H7a1 1 0 0 0-1 1v18a1 1 0 0 0 1 1h1a1 1 0 0 0 1-1v-8h5a5 5 0 0 0 5-5z"); 
-        // Actually a simpler P stroke might be better for 24x24
-        // P shape: M8 20V4h6a4 4 0 0 1 0 8H8
-        path1.setAttribute("d", "M8 20V4h6a4 4 0 0 1 0 8H8");
-        
-        svg.appendChild(path1);
+        el.className = isOutline
+            ? "inline-flex items-center gap-1.5 rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-xs font-medium text-blue-700 dark:border-blue-400/30 dark:bg-blue-950/40 dark:text-blue-200 align-middle"
+            : "inline-flex items-center gap-1.5 rounded-full border border-red-200 bg-red-50 px-2 py-0.5 text-xs font-medium text-red-700 dark:border-red-400/30 dark:bg-red-950/40 dark:text-red-200 align-middle";
+        const icon = document.createElement("span");
+        icon.className = isOutline
+            ? "inline-flex h-4 w-4 items-center justify-center rounded-full bg-blue-600 text-[10px] font-semibold text-white"
+            : "inline-flex h-4 w-4 items-center justify-center rounded-full bg-red-600 text-[10px] font-semibold text-white";
+        icon.textContent = isOutline ? "T" : "P";
         const text = document.createElement("span");
         text.textContent = segment.label;
-        el.appendChild(svg);
+        el.appendChild(icon);
         el.appendChild(text);
         return el;
     };
@@ -236,7 +231,12 @@ export function ChatInput({
                 const slideId = el.getAttribute("data-slide-id") || "";
                 const label = el.getAttribute("data-label") || el.textContent || "";
                 const tag = el.getAttribute("data-tag") || "";
-                if (slideId && tag) out.push({ type: "ppt", slideId, label, tag });
+                const tokenKindAttr = el.getAttribute("data-token-kind");
+                const tokenKind: "outline" | "slide_image" =
+                    tokenKindAttr === "outline" || tokenKindAttr === "slide_image"
+                        ? tokenKindAttr
+                        : "slide_image";
+                if (slideId && tag) out.push({ type: "ppt", slideId, label, tag, tokenKind });
                 continue;
             }
             pushText(el.textContent || "");
@@ -265,7 +265,7 @@ export function ChatInput({
         setRichContentFromSegments(segments);
     }, [isRich, richSegments, richHasFocus]);
 
-    const insertPptTokenAtCursor = (slideId: string, label: string, tag: string) => {
+    const insertPptTokenAtCursor = (slideId: string, label: string, tag: string, tokenKind: "outline" | "slide_image") => {
         const root = richRef.current;
         if (!root) return;
         root.focus();
@@ -279,7 +279,7 @@ export function ChatInput({
             range.selectNodeContents(root);
             range.collapse(false);
         }
-        const span = buildLabelSpan({ type: "ppt", slideId, label, tag });
+        const span = buildLabelSpan({ type: "ppt", slideId, label, tag, tokenKind });
         const space = document.createTextNode(" ");
         range.insertNode(space);
         range.insertNode(span);
@@ -296,7 +296,7 @@ export function ChatInput({
     useEffect(() => {
         if (!isRich) return;
         if (!insertPptToken) return;
-        insertPptTokenAtCursor(insertPptToken.slideId, insertPptToken.label, insertPptToken.tag);
+        insertPptTokenAtCursor(insertPptToken.slideId, insertPptToken.label, insertPptToken.tag, insertPptToken.tokenKind);
         onInsertPptTokenHandled?.();
     }, [isRich, insertPptToken?.key]);
 

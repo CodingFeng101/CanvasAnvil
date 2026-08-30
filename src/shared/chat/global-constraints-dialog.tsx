@@ -9,42 +9,51 @@ import {
     DialogTitle,
 } from "@/shared/ui/dialog"
 import { Textarea } from "@/shared/ui/textarea"
-import { t, useUiLanguage } from "@/shared/i18n";
+import { t, useUiLanguage } from "@/shared/i18n"
 
+/**
+ * Standing instructions the workspace prepends to every request.
+ *
+ * Constraints are scoped per workspace: a CAD drawing convention has no place
+ * in a slide deck. Flow passes an explicit storageKey to keep reading the key
+ * it shipped with, so nobody's saved constraints disappear.
+ */
 export const STORAGE_GLOBAL_CONSTRAINTS_KEY = "CanvasAnvil-global-constraints"
+
+const WORKSPACE_LABELS: Record<string, string> = {
+    flow: "Flow",
+    cad: "CAD",
+    ppt: "PPT",
+}
 
 interface GlobalConstraintsDialogProps {
     open: boolean
     onOpenChange: (open: boolean) => void
-    workspaceId?: string // Optional workspace ID to scope constraints
+    /** Scopes the constraints; also names the workspace in the title. */
+    workspaceId?: string
+    /** Overrides the derived key. Only needed for a pre-existing key. */
+    storageKey?: string
 }
 
 export function GlobalConstraintsDialog({
     open,
     onOpenChange,
-    workspaceId
+    workspaceId,
+    storageKey: storageKeyOverride,
 }: GlobalConstraintsDialogProps) {
     const [constraints, setConstraints] = useState("")
-    const uiLang = useUiLanguage();
-    const workspaceLabel =
-        workspaceId === "flow"
-            ? "Flow"
-            : workspaceId === "cad"
-              ? "CAD"
-              : workspaceId === "ppt"
-                ? "PPT"
-                : "General"
-    
-    // Determine the actual storage key
-    const storageKey = workspaceId 
-        ? `${STORAGE_GLOBAL_CONSTRAINTS_KEY}-${workspaceId}` 
-        : STORAGE_GLOBAL_CONSTRAINTS_KEY;
+    const uiLang = useUiLanguage()
+
+    const workspaceLabel = (workspaceId && WORKSPACE_LABELS[workspaceId]) || "General"
+    const storageKey =
+        storageKeyOverride ??
+        (workspaceId
+            ? `${STORAGE_GLOBAL_CONSTRAINTS_KEY}-${workspaceId}`
+            : STORAGE_GLOBAL_CONSTRAINTS_KEY)
 
     useEffect(() => {
-        if (open) {
-            const saved = localStorage.getItem(storageKey) || ""
-            setConstraints(saved)
-        }
+        if (!open) return
+        setConstraints(localStorage.getItem(storageKey) || "")
     }, [open, storageKey])
 
     const handleSave = () => {
@@ -59,9 +68,7 @@ export function GlobalConstraintsDialog({
                     <DialogTitle>
                         {t(uiLang, "constraints.title")} ({workspaceLabel})
                     </DialogTitle>
-                    <DialogDescription>
-                        {t(uiLang, "constraints.desc")}
-                    </DialogDescription>
+                    <DialogDescription>{t(uiLang, "constraints.desc")}</DialogDescription>
                 </DialogHeader>
                 <div className="grid gap-4 py-4">
                     <Textarea
@@ -72,7 +79,7 @@ export function GlobalConstraintsDialog({
                     />
                 </div>
                 <DialogFooter>
-                    <Button onClick={handleSave}>
+                    <Button onClick={handleSave} title={t(uiLang, "common.save")}>
                         {t(uiLang, "common.save")}
                     </Button>
                 </DialogFooter>
@@ -80,4 +87,3 @@ export function GlobalConstraintsDialog({
         </Dialog>
     )
 }
-

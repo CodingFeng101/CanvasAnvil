@@ -1,5 +1,3 @@
-﻿"use client"
-
 import { motion } from "motion/react"
 import {
     type CSSProperties,
@@ -62,4 +60,3 @@ const ShimmerComponent = ({
 }
 
 export const Shimmer = memo(ShimmerComponent)
-

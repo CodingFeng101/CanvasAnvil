@@ -15,7 +15,7 @@ import { PPT_STATE_KEY, pptStore } from "@/workspaces/ppt/storage";
 import type { ChatMessage } from "@/ai/client";
 import { PptWorkspace } from "@/workspaces/ppt/workspace/PptWorkspace";
 import { ChatPanel as PptChatPanel } from "@/workspaces/ppt/chat/ChatPanel";
-import type { HistoryItem } from "@/workspaces/ppt/chat/history-dialog";
+import type { HistoryItem } from "@/shared/chat";
 
 type Attachment = {
   id: string;

@@ -17,7 +17,7 @@ import {
 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from 'remark-gfm';
-import { Reasoning, ReasoningContent, ReasoningTrigger } from "@/workspaces/ppt/chat/components/reasoning";
+import { Reasoning, ReasoningContent, ReasoningTrigger } from "@/shared/chat";
 import { ScrollArea } from "@/shared/ui/scroll-area";
 import { CodeBlock } from "@/workspaces/ppt/chat/code-block";
 import { useUiLanguage } from "@/shared/i18n";

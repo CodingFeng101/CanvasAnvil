@@ -13,16 +13,17 @@ import {
 import type React from "react"
 import { useCallback, useEffect, useRef, useState } from "react"
 import { toast } from "sonner"
-import { ButtonWithTooltip } from "@/workspaces/flow/next/components/button-with-tooltip"
+import { ButtonWithTooltip } from "@/shared/chat"
 import { ErrorToast } from "@/workspaces/flow/next/components/error-toast"
-import { GlobalConstraintsDialog } from "@/workspaces/flow/next/components/global-constraints-dialog"
+import { GlobalConstraintsDialog } from "@/shared/chat"
+import { FLOW_GLOBAL_CONSTRAINTS_KEY } from "@/workspaces/flow/next/lib/flow-storage-keys"
 import { HistoryDialog } from "@/workspaces/flow/next/components/history-dialog"
-import { ResetWarningModal } from "@/workspaces/flow/next/components/reset-warning-modal"
+import { ResetWarningModal } from "@/shared/chat"
 import { Textarea } from "@/shared/ui/textarea"
 import { useDiagram } from "@/workspaces/flow/next/contexts/diagram-context"
 import { useFlowT } from "@/workspaces/flow/next/lib/translations"
 import { isPdfFile, isTextFile } from "@/shared/files"
-import { FilePreviewList } from "./file-preview-list"
+import { FilePreviewList } from "@/shared/chat"
 
 const MAX_IMAGE_SIZE = 2 * 1024 * 1024 // 2MB
 const MAX_FILES = 5
@@ -396,11 +397,19 @@ export function ChatInput({
                             open={showClearDialog}
                             onOpenChange={setShowClearDialog}
                             onClear={handleClear}
+                            labels={{
+                                title: t("reset.title"),
+                                description: t("reset.desc"),
+                                cancel: t("reset.cancel"),
+                                confirm: t("reset.confirm"),
+                            }}
                         />
 
                         <GlobalConstraintsDialog
                             open={showConstraintsDialog}
                             onOpenChange={setShowConstraintsDialog}
+                            workspaceId="flow"
+                            storageKey={FLOW_GLOBAL_CONSTRAINTS_KEY}
                         />
 
                         <HistoryDialog
