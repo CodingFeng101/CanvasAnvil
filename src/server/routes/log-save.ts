@@ -1,6 +1,6 @@
 ﻿import { randomUUID } from "crypto"
 import { z } from "zod"
-import { getLangfuseClient } from "../../workspaces/flow/next/lib/langfuse"
+import { getLangfuseClient } from "../telemetry/langfuse"
 
 const saveSchema = z.object({
     filename: z.string().min(1).max(255),

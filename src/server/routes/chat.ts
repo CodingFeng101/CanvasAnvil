@@ -1,9 +1,8 @@
-﻿import {
+import {
     APICallError,
     convertToModelMessages,
     createUIMessageStream,
     createUIMessageStreamResponse,
-    generateText,
     LoadAPIKeyError,
     stepCountIs,
     streamText,
@@ -11,698 +10,48 @@
 import { appendFile, mkdir, readFile, writeFile } from "fs/promises"
 import path from "path"
 import { z } from "zod"
-import { extractText, getDocumentProxy } from "unpdf"
-import mammoth from "mammoth"
-import { generateImage } from "../../ai/image"
 import { getImageChannel, getTextChannel, normalizeAIConfig } from "../../ai/config"
-import type { AIChannel } from "../../ai/types"
 import { getChatModel } from "../../ai/server-model"
-import { formatAvailableShapeLibraries } from "../../workspaces/flow/next/lib/shape-library"
+import { formatAvailableShapeLibraries } from "../chat/shape-library"
+import { getSystemPrompt } from "../chat/system-prompt"
+import {
+    RECURSIVE_THRESHOLD_TOKENS,
+    SUMMARY_CONCURRENCY,
+    type UploadedFilePayload,
+    estimateTokens,
+    extractUploadedFileText,
+    runWithConcurrency,
+    validateFileParts,
+    validateUploadedFiles,
+} from "../chat/files"
+import { summarizeBlockMethod, summarizeRecursiveMethod } from "../chat/summarize"
+import { classifyFlowRequest, shouldRunDeepThinking } from "../chat/intent"
+import { fixToolCallInputs, replaceHistoricalToolInputs } from "../chat/messages"
+import {
+    type ImageAttachment,
+    cleanImageReferenceUrl,
+    generateDeepThinkingDiagramImage,
+    saveDeepThinkingImageDebugArtifact,
+} from "../chat/deep-thinking"
 import {
     getTelemetryConfig,
     setTraceInput,
     setTraceOutput,
     wrapWithObserve,
-} from "../../workspaces/flow/next/lib/langfuse"
-import { getSystemPrompt } from "../../workspaces/flow/next/lib/system-prompts"
+} from "../telemetry/langfuse"
 
 export const maxDuration = 300
 
-// File upload limits (must match client-side)
-const MAX_FILE_SIZE = 2 * 1024 * 1024 // 2MB
-const MAX_FILES = 5
+/**
+ * Streaming chat endpoint for the Flow workspace.
+ *
+ * The turn runs as a pipeline: validate the payload, resolve the model
+ * channel from the request, summarise any uploads, optionally draft a
+ * reference image, assemble the system prompt and history, then stream the
+ * model's tool calls back to the browser. Each stage lives in ../chat/.
+ */
 
-const SUMMARY_CONCURRENCY = 50
-const CHUNK_TOKEN_TARGET = 2500
-const RECURSIVE_THRESHOLD_TOKENS = 50000
-
-type UploadedFilePayload = {
-    name: string
-    mediaType?: string
-    dataUrl: string
-    extractedText?: string
-}
-
-function estimateTokens(text: string): number {
-    return Math.ceil(String(text || "").length / 4)
-}
-
-function cleanExtractedText(input: string): string {
-    const text = String(input || "")
-        .replace(/\r/g, "\n")
-        .replace(/[ \t]+\n/g, "\n")
-        .replace(/\n{3,}/g, "\n\n")
-        .replace(/[ \t]{2,}/g, " ")
-        .trim()
-    return text
-        .split("\n")
-        .filter((line) => {
-            const l = line.trim()
-            if (!l) return false
-            if (/^arXiv:\d{4}\.\d{4,5}/i.test(l)) return false
-            if (/^\[\d+\]\s*$/.test(l)) return false
-            if (/^Page\s+\d+(\s+of\s+\d+)?$/i.test(l)) return false
-            return true
-        })
-        .join("\n")
-        .trim()
-}
-
-function splitByApproxTokens(text: string, chunkTokens: number): string[] {
-    const chunkChars = Math.max(2000, chunkTokens * 4)
-    const overlapChars = Math.floor(chunkChars * 0.1)
-    const normalized = String(text || "").trim()
-    if (!normalized) return []
-    const chunks: string[] = []
-    let start = 0
-    while (start < normalized.length) {
-        const end = Math.min(start + chunkChars, normalized.length)
-        chunks.push(normalized.slice(start, end))
-        if (end >= normalized.length) break
-        start = Math.max(0, end - overlapChars)
-    }
-    return chunks
-}
-
-async function runWithConcurrency<T, R>(
-    items: T[],
-    limit: number,
-    worker: (item: T, index: number) => Promise<R>,
-): Promise<R[]> {
-    if (items.length === 0) return []
-    const results = new Array<R>(items.length)
-    let cursor = 0
-    const runners = Array.from({ length: Math.min(limit, items.length) }).map(
-        async () => {
-            while (true) {
-                const idx = cursor
-                cursor += 1
-                if (idx >= items.length) return
-                results[idx] = await worker(items[idx], idx)
-            }
-        },
-    )
-    await Promise.all(runners)
-    return results
-}
-
-function getFileExtension(name: string): string {
-    const n = String(name || "")
-    const i = n.lastIndexOf(".")
-    return i >= 0 ? n.slice(i).toLowerCase() : ""
-}
-
-function parseDataUrl(dataUrl: string): { mediaType: string; base64: string } {
-    const raw = String(dataUrl || "")
-    const m = raw.match(/^data:([^;]+);base64,(.*)$/)
-    if (!m) throw new Error("Invalid data URL")
-    return { mediaType: m[1], base64: m[2] }
-}
-
-async function extractUploadedFileText(file: UploadedFilePayload): Promise<string> {
-    const providedText =
-        typeof file.extractedText === "string"
-            ? cleanExtractedText(file.extractedText)
-            : ""
-
-    const { mediaType, base64 } = parseDataUrl(file.dataUrl)
-    const buffer = Buffer.from(base64, "base64")
-    const ext = getFileExtension(file.name)
-    const mt = String(file.mediaType || mediaType || "").toLowerCase()
-
-    if (mt.includes("pdf") || ext === ".pdf") {
-        // If client already extracted enough text, trust it.
-        if (providedText.length >= 200) return providedText
-
-        const pdf = await getDocumentProxy(new Uint8Array(buffer))
-        const { text } = await extractText(pdf, { mergePages: true })
-        const parsed = cleanExtractedText(String(text || ""))
-        return parsed.length >= providedText.length ? parsed : providedText
-    }
-
-    if (mt.includes("wordprocessingml.document") || ext === ".docx") {
-        if (providedText) return providedText
-        const result = await mammoth.extractRawText({ buffer })
-        return cleanExtractedText(String(result.value || ""))
-    }
-
-    if (
-        mt.startsWith("text/") ||
-        [".txt", ".md", ".markdown", ".json", ".csv", ".xml", ".yaml", ".yml", ".toml", ".py", ".js", ".ts"].includes(ext)
-    ) {
-        if (providedText) return providedText
-        return cleanExtractedText(buffer.toString("utf8"))
-    }
-
-    return providedText || cleanExtractedText(buffer.toString("utf8"))
-}
-
-async function summarizeChunk(model: any, chunk: string): Promise<string> {
-    return generateSummaryWithRetry({
-        model,
-        system:
-            "R - Role\nYou are a strict summarizer.\n\nI - Instructions\nOutput only direct summary text.\n\nE - End Goal\nProduce a concise faithful summary.\n\nN - Narrowing\nNo questions. No instructions. No extra framing.",
-        user: `任务：仅根据下述文本输出摘要（<=300字）。禁止提问、禁止让用户补充内容、禁止输出模板化客套。\n\n文本：\n${chunk}`,
-        maxOutputTokens: 600,
-        maxChars: 300,
-        fallbackSource: chunk,
-    })
-}
-
-function extractiveFallbackSummary(source: string, maxChars: number): string {
-    const cleaned = cleanExtractedText(String(source || ""))
-        .replace(/\s+/g, " ")
-        .trim()
-    if (!cleaned) return ""
-    const sentences = cleaned
-        .split(/(?<=[。！？.!?])\s+/)
-        .map((s) => s.trim())
-        .filter(Boolean)
-    const out: string[] = []
-    let total = 0
-    for (const s of sentences) {
-        if (s.length < 10) continue
-        if (total + s.length > maxChars) break
-        out.push(s)
-        total += s.length + 1
-        if (out.length >= 6) break
-    }
-    if (out.length > 0) return out.join(" ")
-    return cleaned.slice(0, maxChars)
-}
-
-function sanitizeSummaryText(summary: string, fallbackSource: string, maxChars: number): string {
-    const text = String(summary || "").trim()
-    if (!text) return extractiveFallbackSummary(fallbackSource, maxChars)
-    const bannedPatterns = [
-        /请提供/i,
-        /请粘贴/i,
-        /需要合并/i,
-        /如有偏好/i,
-        /目标读者/i,
-        /是否保留术语/i,
-        /是否需要强调/i,
-        /I can|please provide|paste|preference/i,
-    ]
-    if (bannedPatterns.some((p) => p.test(text))) {
-        return extractiveFallbackSummary(fallbackSource, maxChars)
-    }
-    return text.slice(0, Math.max(120, maxChars))
-}
-
-function isBadSummaryText(text: string): boolean {
-    const t = String(text || "").trim()
-    if (!t) return true
-    return [
-        /请提供/i,
-        /请粘贴/i,
-        /需要合并/i,
-        /如有偏好/i,
-        /是否保留术语/i,
-        /please provide|paste/i,
-    ].some((p) => p.test(t))
-}
-
-async function generateSummaryWithRetry(args: {
-    model: any
-    system: string
-    user: string
-    maxOutputTokens: number
-    maxChars: number
-    fallbackSource: string
-}): Promise<string> {
-    for (let i = 0; i < 2; i++) {
-        const r = await generateText({
-            model: args.model,
-            messages: [
-                { role: "system" as const, content: args.system },
-                { role: "user" as const, content: args.user },
-            ],
-            maxOutputTokens: args.maxOutputTokens,
-        })
-        const text = sanitizeSummaryText(
-            String(r.text || "").trim(),
-            args.fallbackSource,
-            args.maxChars,
-        )
-        if (!isBadSummaryText(text)) return text
-    }
-    return extractiveFallbackSummary(args.fallbackSource, args.maxChars)
-}
-
-async function summarizeBlockMethod(args: { model: any; text: string }): Promise<string> {
-    const chunks = splitByApproxTokens(args.text, CHUNK_TOKEN_TARGET)
-    const partial = await runWithConcurrency(
-        chunks,
-        SUMMARY_CONCURRENCY,
-        (chunk) => summarizeChunk(args.model, chunk),
-    )
-    const merged = partial.filter(Boolean).join("\n")
-    return generateSummaryWithRetry({
-        model: args.model,
-        system:
-            "R - Role\nYou merge chunk summaries.\n\nI - Instructions\nOutput only concise faithful summary text.\n\nE - End Goal\nProduce one merged summary.\n\nN - Narrowing\nNo questions. No instructions. No extra framing.",
-        user: `任务：将以下分块摘要合并为完整摘要（<=1000字）。禁止提问、禁止请求补充材料，仅输出摘要正文。\n\n${merged}`,
-        maxOutputTokens: 1800,
-        maxChars: 1000,
-        fallbackSource: merged,
-    })
-}
-
-async function summarizeRecursiveMethod(args: { model: any; text: string }): Promise<string> {
-    const baseChunks = splitByApproxTokens(args.text, 3000)
-    let level = await runWithConcurrency(
-        baseChunks,
-        SUMMARY_CONCURRENCY,
-        (chunk) => summarizeChunk(args.model, chunk),
-    )
-    level = level.filter(Boolean)
-
-    while (level.length > 2) {
-        const groups: string[] = []
-        for (let i = 0; i < level.length; i += 5) {
-            groups.push(level.slice(i, i + 5).join("\n"))
-        }
-        level = await runWithConcurrency(
-            groups,
-            SUMMARY_CONCURRENCY,
-            async (group) =>
-                generateSummaryWithRetry({
-                    model: args.model,
-                    system:
-                        "R - Role\nYou merge summaries into a higher-level summary.\n\nI - Instructions\nOutput only summary text.\n\nE - End Goal\nProduce one higher-level merged summary.\n\nN - Narrowing\nNo questions. No instructions. No extra framing.",
-                    user: `任务：把这组摘要提炼成更高层摘要（<=350字）。禁止提问、禁止让用户补充，只输出摘要。\n\n${group}`,
-                    maxOutputTokens: 800,
-                    maxChars: 350,
-                    fallbackSource: group,
-                }),
-        )
-        level = level.filter(Boolean)
-    }
-
-    return generateSummaryWithRetry({
-        model: args.model,
-        system:
-            "R - Role\nYou produce final executive summaries.\n\nI - Instructions\nKeep hierarchical fidelity and avoid hallucination. Output only summary text.\n\nE - End Goal\nProduce one final executive summary.\n\nN - Narrowing\nNo questions. No requests for more info. No extra framing.",
-        user: `任务：输出最终摘要（<=1000字）。禁止提问、禁止请求更多信息，仅输出摘要正文。\n\n${level.join("\n")}`,
-        maxOutputTokens: 1800,
-        maxChars: 1000,
-        fallbackSource: level.join("\n"),
-    })
-}
-
-type ImageAttachment = {
-    url: string
-    mediaType: string
-}
-
-type FlowRequestRoute = "local_edit" | "full_generation"
-
-let flowDeepThinkingImagePromptTemplateCache: string | null = null
-
-function cleanImageReferenceUrl(url: string): string | null {
-    const value = String(url || "").trim()
-    if (!value) return null
-    if (value.startsWith("http://") || value.startsWith("https://")) return value
-    if (value.startsWith("data:image/")) return value
-    return null
-}
-
-function extractImageUrlFromModelContent(messageContent: any): string | null {
-    if (Array.isArray(messageContent)) {
-        const imagePart = messageContent.find(
-            (part: any) => part?.type === "image_url" && part?.image_url?.url,
-        )
-        if (imagePart?.image_url?.url) {
-            return cleanImageReferenceUrl(imagePart.image_url.url)
-        }
-
-        const textPart = messageContent.find((part: any) => part?.type === "text")
-        const text = String(textPart?.text || "").trim()
-        if (!text) return null
-
-        const markdownMatch = text.match(/!\[.*?\]\((.*?)\)/)
-        if (markdownMatch?.[1]) {
-            return cleanImageReferenceUrl(markdownMatch[1])
-        }
-        return cleanImageReferenceUrl(text)
-    }
-
-    if (typeof messageContent === "string") {
-        const text = messageContent.trim()
-        const markdownMatch = text.match(/!\[.*?\]\((.*?)\)/)
-        if (markdownMatch?.[1]) {
-            return cleanImageReferenceUrl(markdownMatch[1])
-        }
-        return cleanImageReferenceUrl(text)
-    }
-
-    return null
-}
-
-function parseImageGenerationResponse(result: any): string | null {
-    if (result?.error) {
-        throw new Error(result.error.message || "Image model request failed")
-    }
-
-    if (Array.isArray(result?.choices) && result.choices.length > 0) {
-        return extractImageUrlFromModelContent(result.choices[0]?.message?.content)
-    }
-
-    return null
-}
-
-async function convertRemoteImageToDataUrl(url: string): Promise<string | null> {
-    const safeUrl = cleanImageReferenceUrl(url)
-    if (!safeUrl) return null
-    if (safeUrl.startsWith("data:image/")) return safeUrl
-
-    const response = await fetch(safeUrl)
-    if (!response.ok) {
-        throw new Error(`Failed to fetch generated image: ${response.status}`)
-    }
-
-    const contentType = response.headers.get("content-type") || "image/png"
-    const arrayBuffer = await response.arrayBuffer()
-    const base64 = Buffer.from(arrayBuffer).toString("base64")
-    return `data:${contentType};base64,${base64}`
-}
-
-async function getFlowDeepThinkingImagePromptTemplate(): Promise<string> {
-    if (flowDeepThinkingImagePromptTemplateCache) {
-        return flowDeepThinkingImagePromptTemplateCache
-    }
-
-    const promptPath = path.join(
-        process.cwd(),
-        "agent",
-        "flow",
-        "deep-thinking-image.md",
-    )
-    const raw = await readFile(promptPath, "utf8")
-    flowDeepThinkingImagePromptTemplateCache = String(raw || "").trim()
-    return flowDeepThinkingImagePromptTemplateCache
-}
-
-function buildFlowDeepThinkingImagePrompt(params: {
-    userText: string
-    globalConstraints: string
-    processedFilesContext: string
-    template: string
-}): string {
-    const safeUserText = String(params.userText || "").trim() || "(empty)"
-    const safeGlobalConstraints =
-        String(params.globalConstraints || "").trim() || "(none)"
-    const safeProcessedFiles =
-        String(params.processedFilesContext || "").trim() || "(none)"
-
-    return params.template
-        .replace("{{USER_REQUEST}}", safeUserText)
-        .replace("{{GLOBAL_CONSTRAINTS}}", safeGlobalConstraints)
-        .replace("{{PROCESSED_FILE_CONTENT}}", safeProcessedFiles)
-}
-
-function getImageExtensionFromMediaType(mediaType: string): string {
-    const normalized = String(mediaType || "").toLowerCase()
-    if (normalized.includes("png")) return "png"
-    if (normalized.includes("jpeg") || normalized.includes("jpg")) return "jpg"
-    if (normalized.includes("webp")) return "webp"
-    if (normalized.includes("gif")) return "gif"
-    if (normalized.includes("svg")) return "svg"
-    return "png"
-}
-
-async function saveDeepThinkingImageDebugArtifact(args: {
-    dataUrl: string
-    sessionId?: string
-    userText: string
-}): Promise<string | null> {
-    const raw = String(args.dataUrl || "")
-    if (!raw.startsWith("data:image/")) return null
-
-    const { mediaType, base64 } = parseDataUrl(raw)
-    const ext = getImageExtensionFromMediaType(mediaType)
-    const safeSession =
-        String(args.sessionId || "anonymous").replace(/[^a-zA-Z0-9_-]/g, "_") ||
-        "anonymous"
-    const stamp = new Date().toISOString().replace(/[:.]/g, "-")
-    const outDir = path.join(process.cwd(), ".tmp-flow-deep-thinking")
-    const imagePath = path.join(outDir, `${stamp}-${safeSession}.${ext}`)
-    const metaPath = path.join(outDir, `${stamp}-${safeSession}.txt`)
-
-    await mkdir(outDir, { recursive: true })
-    await writeFile(imagePath, Buffer.from(base64, "base64"))
-    await writeFile(
-        metaPath,
-        [
-            `saved_at=${new Date().toISOString()}`,
-            `session_id=${args.sessionId || ""}`,
-            `media_type=${mediaType}`,
-            "",
-            "user_request:",
-            String(args.userText || "").trim(),
-        ].join("\n"),
-        "utf8",
-    )
-    return imagePath
-}
-
-function normalizeIntentText(text: string): string {
-    return String(text || "")
-        .toLowerCase()
-        .replace(/\s+/g, " ")
-        .trim()
-}
-
-function isLikelyLocalEditRequest(text: string): boolean {
-    const normalized = normalizeIntentText(text)
-    if (!normalized) return false
-
-    const patterns = [
-        /修改|改成|调整|优化|补充|添加|增加|删除|移除|替换|重命名|改颜色|移动|对齐|局部|节点|连线|箭头|文案/,
-        /\b(edit|update|modify|adjust|tweak|refine|add|remove|delete|rename|move|reposition|change|fix|patch)\b/,
-    ]
-
-    return patterns.some((pattern) => pattern.test(normalized))
-}
-
-function isExplicitFullRegenerationRequest(text: string): boolean {
-    const normalized = normalizeIntentText(text)
-    if (!normalized) return false
-
-    const patterns = [
-        /重新生成|重画|从头|全新|重做|整体重构|替换整个|重建|重新画|新建一个/,
-        /\b(regenerate|from scratch|redraw|rebuild|replace the entire|new diagram|create a new)\b/,
-    ]
-
-    return patterns.some((pattern) => pattern.test(normalized))
-}
-
-function classifyFlowRequest(params: {
-    xml: string
-    userText: string
-}): FlowRequestRoute {
-    if (isMinimalDiagram(params.xml || "")) return "full_generation"
-    if (isExplicitFullRegenerationRequest(params.userText)) {
-        return "full_generation"
-    }
-    if (isLikelyLocalEditRequest(params.userText)) return "local_edit"
-    return "local_edit"
-}
-
-function shouldRunDeepThinking(params: {
-    deepThinkingEnabled: boolean
-    route: FlowRequestRoute
-}): boolean {
-    if (!params.deepThinkingEnabled) return false
-    return params.route === "full_generation"
-}
-
-async function generateDeepThinkingDiagramImage(args: {
-    userText: string
-    globalConstraints: string
-    processedFilesContext: string
-    imageAttachments: ImageAttachment[]
-    channel: AIChannel
-}): Promise<string | null> {
-    let promptText = ""
-    try {
-        const template = await getFlowDeepThinkingImagePromptTemplate()
-        promptText = buildFlowDeepThinkingImagePrompt({
-            userText: args.userText,
-            globalConstraints: args.globalConstraints,
-            processedFilesContext: args.processedFilesContext,
-            template,
-        })
-    } catch (error) {
-        console.warn(
-            "[DeepThinking] Failed to load prompt file, using fallback prompt:",
-            error,
-        )
-        promptText = [
-            "R - Role",
-            "You are a final-quality flowchart image generation agent.",
-            "I - Instructions",
-            "Generate one polished, production-ready, directly usable final diagram image.",
-            "Input",
-            `User request:\n${String(args.userText || "").trim() || "(empty)"}`,
-            `Global constraints:\n${String(args.globalConstraints || "").trim() || "(none)"}`,
-            `Processed file content:\n${String(args.processedFilesContext || "").trim() || "(none)"}`,
-            "S - Steps",
-            "1. Understand the requested diagram and any constraints.",
-            "2. Build a coherent, readable final composition.",
-            "3. Generate one polished final diagram image.",
-            "E - End Goal",
-            "Produce one refined diagram image suitable for downstream XML generation.",
-            "N - Narrowing",
-            "Do not generate a sketch, wireframe, draft, poster, or UI mockup. Prioritize clear structure, readable labels, complete coverage, balanced spacing, and unambiguous connectors.",
-        ].join("\n\n")
-    }
-
-    return await generateImage({
-        channel: args.channel,
-        prompt: promptText,
-        referenceImageUrl: args.imageAttachments[0]?.url,
-        additionalReferenceImageUrls: args.imageAttachments
-            .slice(1)
-            .map((item) => item.url)
-            .filter(Boolean),
-    })
-}
-
-function validateUploadedFiles(uploadedFiles: UploadedFilePayload[]): {
-    valid: boolean
-    error?: string
-} {
-    if (uploadedFiles.length > MAX_FILES) {
-        return {
-            valid: false,
-            error: `Too many files. Maximum ${MAX_FILES} allowed.`,
-        }
-    }
-    for (const f of uploadedFiles) {
-        try {
-            const { base64 } = parseDataUrl(f.dataUrl)
-            const sizeInBytes = Math.ceil((base64.length * 3) / 4)
-            if (sizeInBytes > MAX_FILE_SIZE) {
-                return {
-                    valid: false,
-                    error: `File exceeds ${MAX_FILE_SIZE / 1024 / 1024}MB limit.`,
-                }
-            }
-        } catch {
-            return {
-                valid: false,
-                error: `Invalid uploaded file payload: ${f.name || "unknown"}`,
-            }
-        }
-    }
-    return { valid: true }
-}
-
-// Helper function to validate file parts in messages
-function validateFileParts(messages: any[]): {
-    valid: boolean
-    error?: string
-} {
-    const lastMessage = messages[messages.length - 1]
-    const fileParts =
-        lastMessage?.parts?.filter((p: any) => p.type === "file") || []
-
-    if (fileParts.length > MAX_FILES) {
-        return {
-            valid: false,
-            error: `Too many files. Maximum ${MAX_FILES} allowed.`,
-        }
-    }
-
-    for (const filePart of fileParts) {
-        // Data URLs format: data:image/png;base64,<data>
-        // Base64 increases size by ~33%, so we check the decoded size
-        if (filePart.url?.startsWith("data:")) {
-            const base64Data = filePart.url.split(",")[1]
-            if (base64Data) {
-                const sizeInBytes = Math.ceil((base64Data.length * 3) / 4)
-                if (sizeInBytes > MAX_FILE_SIZE) {
-                    return {
-                        valid: false,
-                        error: `File exceeds ${MAX_FILE_SIZE / 1024 / 1024}MB limit.`,
-                    }
-                }
-            }
-        }
-    }
-
-    return { valid: true }
-}
-
-// Helper function to check if diagram is minimal/empty
-function isMinimalDiagram(xml: string): boolean {
-    const stripped = xml.replace(/\s/g, "")
-    return !stripped.includes('id="2"')
-}
-
-// Helper function to replace historical tool call XML with placeholders
-// This reduces token usage and forces LLM to rely on the current diagram XML (source of truth)
-function replaceHistoricalToolInputs(messages: any[]): any[] {
-    return messages.map((msg) => {
-        if (msg.role !== "assistant" || !Array.isArray(msg.content)) {
-            return msg
-        }
-        const replacedContent = msg.content.map((part: any) => {
-            if (part.type === "tool-call") {
-                const toolName = part.toolName
-                if (
-                    toolName === "display_diagram" ||
-                    toolName === "edit_diagram"
-                ) {
-                    return {
-                        ...part,
-                        input: {
-                            placeholder:
-                                "[XML content replaced - see current diagram XML in system context]",
-                        },
-                    }
-                }
-            }
-            return part
-        })
-        return { ...msg, content: replacedContent }
-    })
-}
-
-// Helper function to fix tool call inputs for Bedrock API
-// Bedrock requires toolUse.input to be a JSON object, not a string
-function fixToolCallInputs(messages: any[]): any[] {
-    return messages.map((msg) => {
-        if (msg.role !== "assistant" || !Array.isArray(msg.content)) {
-            return msg
-        }
-        const fixedContent = msg.content.map((part: any) => {
-            if (part.type === "tool-call") {
-                if (typeof part.input === "string") {
-                    try {
-                        const parsed = JSON.parse(part.input)
-                        return { ...part, input: parsed }
-                    } catch {
-                        // If parsing fails, wrap the string in an object
-                        return { ...part, input: { rawInput: part.input } }
-                    }
-                }
-                // Input is already an object, but verify it's not null/undefined
-                if (part.input === null || part.input === undefined) {
-                    return { ...part, input: {} }
-                }
-            }
-            return part
-        })
-        return { ...msg, content: fixedContent }
-    })
-}
-
-// Inner handler function
 async function handleChatRequest(req: Request): Promise<Response> {
-    console.log('[EARLY DEBUG] handleChatRequest executed')
     // Check for access code
     const accessCodes =
         process.env.ACCESS_CODE_LIST?.split(",")
@@ -727,10 +76,6 @@ async function handleChatRequest(req: Request): Promise<Response> {
         : []
     const bodyAIConfig = payload?.aiConfig || {}
     const deepThinkingEnabled = Boolean(payload?.deepThinkingEnabled)
-
-    // Debug: log the actual message structure received
-    console.log("[DEBUG] Received messages:", JSON.stringify(messages, null, 2))
-    console.log("[DEBUG] First message structure:", messages?.[0] ? JSON.stringify(messages[0], null, 2) : "No messages")
 
     // Validate messages array
     if (!messages || !Array.isArray(messages)) {
@@ -979,7 +324,6 @@ ${parsedFilesContext ? `\n\nParsed file summaries:\n"""md\n${parsedFilesContext}
     // Validate each message has required structure
     for (let i = 0; i < messages.length; i++) {
         const message = messages[i]
-        console.log(`[DEBUG] Validating message ${i}:`, JSON.stringify(message, null, 2))
         
         if (!message || typeof message !== 'object') {
             return Response.json(
@@ -1021,7 +365,6 @@ ${parsedFilesContext ? `\n\nParsed file summaries:\n"""md\n${parsedFilesContext}
     const normalizedMessages = messages.map((message: any, index: number) => {
         // Handle completely malformed messages
         if (!message) {
-            console.log(`[DEBUG] Message ${index} is null/undefined, creating default structure`)
             return { role: 'user', parts: [{ type: 'text', text: '' }] }
         }
         
@@ -1068,24 +411,18 @@ ${parsedFilesContext ? `\n\nParsed file summaries:\n"""md\n${parsedFilesContext}
         
         // Handle messages with no content and no parts but have role
         if (message.role) {
-            console.log(`[DEBUG] Message ${index} has role but no content/parts, adding empty parts`)
             return { ...message, parts: [] }
         }
         
         // Fallback: create default message structure
-        console.log(`[DEBUG] Message ${index} is malformed, creating default structure:`, JSON.stringify(message))
         return { role: 'user', parts: [{ type: 'text', text: '' }] }
     })
 
     // Convert UIMessages to ModelMessages and add system message
-    console.log('[DEBUG] Before convertToModelMessages - normalizedMessages:', JSON.stringify(normalizedMessages, null, 2))
     const modelMessages = convertToModelMessages(normalizedMessages)
-    console.log('[DEBUG] After convertToModelMessages - modelMessages:', JSON.stringify(modelMessages, null, 2))
 
     // Fix tool call inputs for Bedrock API (requires JSON objects, not strings)
-    console.log('[DEBUG] Before fixToolCallInputs - modelMessages:', JSON.stringify(modelMessages, null, 2))
     const fixedMessages = fixToolCallInputs(modelMessages)
-    console.log('[DEBUG] After fixToolCallInputs - fixedMessages:', JSON.stringify(fixedMessages, null, 2))
 
     // Replace historical tool call XML with placeholders to reduce tokens
     // Disabled by default - some models (e.g. minimax) copy placeholders instead of generating XML
@@ -1097,7 +434,6 @@ ${parsedFilesContext ? `\n\nParsed file summaries:\n"""md\n${parsedFilesContext}
 
     // Filter out messages with empty content arrays (Bedrock API rejects these)
     // This is a safety measure - ideally convertToModelMessages should handle all cases
-    console.log('[DEBUG] Before filtering - placeholderMessages:', JSON.stringify(placeholderMessages, null, 2))
     let enhancedMessages = placeholderMessages.filter(
         (msg: any) => {
             // Check for both content and parts arrays since messages can have either format
@@ -1105,7 +441,6 @@ ${parsedFilesContext ? `\n\nParsed file summaries:\n"""md\n${parsedFilesContext}
                                    (msg.parts && Array.isArray(msg.parts) && msg.parts.length > 0)
             
             if (!hasValidContent) {
-                console.log(`[DEBUG] Message filtered (empty content/parts): role=${msg.role}`)
                 return false
             }
 
@@ -1132,7 +467,6 @@ ${parsedFilesContext ? `\n\nParsed file summaries:\n"""md\n${parsedFilesContext}
                 
                 // If it has only text parts and all are empty, filter it out
                 if (!hasNonEmptyText && !hasOtherParts) {
-                    console.log(`[DEBUG] Message filtered (empty user text): role=${msg.role}`)
                     return false
                 }
             }
@@ -1140,7 +474,6 @@ ${parsedFilesContext ? `\n\nParsed file summaries:\n"""md\n${parsedFilesContext}
             return true
         }
     )
-    console.log('[DEBUG] After filtering - enhancedMessages:', JSON.stringify(enhancedMessages, null, 2))
 
     // Update the last message with user input only (XML moved to separate cached system message)
     if (enhancedMessages.length >= 1) {
@@ -1152,7 +485,6 @@ ${parsedFilesContext ? `\n\nParsed file summaries:\n"""md\n${parsedFilesContext}
             const hasFiles = fileParts.length > 0
             
             if (isTextEmpty && !hasFiles) {
-                 console.log('[DEBUG] Dropping empty user message from final payload (safety net)')
                  enhancedMessages = enhancedMessages.slice(0, -1)
             } else {
                 // Build content array with user input text and file parts
@@ -1214,16 +546,15 @@ ${parsedFilesContext ? `\n\nParsed file summaries:\n"""md\n${parsedFilesContext}
         messages: allMessages,
     }
 
-    const promptLog = JSON.stringify(promptPayload, null, 2)
-
-    console.log("[PROMPT]", promptLog)
-
-    try {
-        const logDir = process.env.PROMPT_LOG_DIR || process.cwd()
-        const logPath = path.join(logDir, "llm-prompts.log")
-        await appendFile(logPath, `${promptLog}\n`)
-    } catch (error) {
-        console.error("[PROMPT] Failed to write prompt log:", error)
+    // Off unless PROMPT_LOG_DIR is set: this is the entire prompt, inline
+    // images and all, and it is the user's content.
+    if (process.env.PROMPT_LOG_DIR) {
+        try {
+            const logPath = path.join(process.env.PROMPT_LOG_DIR, "llm-prompts.log")
+            await appendFile(logPath, JSON.stringify(promptPayload, null, 2) + "\n")
+        } catch (error) {
+            console.error("[PROMPT] Failed to write prompt log:", error)
+        }
     }
 
     const stream = createUIMessageStream({
@@ -1534,11 +865,3 @@ const observedHandler = wrapWithObserve(safeHandler)
 export async function POST(req: Request) {
     return observedHandler(req)
 }
-
-
-
-
-
-
-
-

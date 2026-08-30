@@ -1,6 +1,6 @@
 ﻿import { randomUUID } from "crypto"
 import { z } from "zod"
-import { getLangfuseClient } from "../../workspaces/flow/next/lib/langfuse"
+import { getLangfuseClient } from "../telemetry/langfuse"
 
 const feedbackSchema = z.object({
     messageId: z.string().min(1).max(200),
