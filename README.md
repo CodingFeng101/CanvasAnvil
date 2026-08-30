@@ -185,7 +185,7 @@ npm run build
 - AI configuration is read from local app settings; the text and image channels are configured separately.
 - Local development depends on the API service for `/api/chat` and `/api/ppt-ai`.
 - After changing local API route wiring in `vite.config.ts`, restart the dev server.
-- `src/server/**` and `src/ai/**` use relative imports: `vite.config.ts` imports the API routes and Node resolves that file without the `@/` path alias.
+- `server/**` uses relative imports: `vite.config.ts` imports the dev middleware so `npm run dev` serves the API in-process, and Vite loads its own config through plain Node, which does not know the `@/` alias.
 - Set `PROMPT_LOG_DIR` to write assembled prompts to disk; it is off by default because the log contains the user's content.
 
 ## 📚 Docs

@@ -1,5 +1,3 @@
-import path from "node:path"
-
 /**
  * The draw.io shape libraries the Flow agent can pull in on demand.
  *
@@ -44,9 +42,4 @@ export type ShapeLibraryName = (typeof AVAILABLE_SHAPE_LIBRARIES)[number];
 
 export function formatAvailableShapeLibraries(): string {
   return AVAILABLE_SHAPE_LIBRARIES.join(", ");
-}
-
-/** Absolute path to the directory holding one markdown file per library. */
-export function shapeLibraryDir(): string {
-  return path.join(process.cwd(), "resources", "shape-libraries");
 }

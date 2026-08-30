@@ -185,7 +185,7 @@ npm run build
 - AI 配置读取本地应用设置；文本通道和生图通道分别配置。
 - 本地开发依赖 API 服务提供 `/api/chat` 和 `/api/ppt-ai`。
 - 修改 `vite.config.ts` 中的本地 API 路由后，需要重启开发服务。
-- `src/server/**` 和 `src/ai/**` 使用相对路径导入：`vite.config.ts` 会 import API 路由，而 Node 加载这个配置文件时不认 `@/` 别名。
+- `server/**` 使用相对路径导入：`vite.config.ts` 会 import 开发中间件（这样 `npm run dev` 一条命令就带 API），而 Vite 用纯 Node 加载自己的配置文件，不认 `@/` 别名。
 - 设置 `PROMPT_LOG_DIR` 可把拼装好的提示词写入磁盘；默认关闭，因为日志里含有用户内容。
 
 ## 📚 文档

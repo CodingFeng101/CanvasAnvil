@@ -1,47 +1,69 @@
 # Architecture
 
-CanvasAnvil is a Vite + React single-page app with a small Node API beside it.
-Three canvases — Flow, Interior Design (CAD), and PPT — share one shell, one UI
-kit, and one model client.
+CanvasAnvil is three programs in one repository: a Vite + React browser app, a
+small Node API, and the contract between them. Three canvases — Flow, Interior
+Design (CAD), and PPT — share one shell, one UI kit, and one model client.
 
 ## Layout
 
 ```
-src/
-  app/          the shell: App, the workspace registry, error boundary
-  ai/           the model client — one OpenAI-compatible transport
-  shared/       everything more than one workspace uses
-    ui/           the shadcn component kit (one copy)
-    chat/         the chat components and plumbing the panels share
-    files/        upload extraction: PDF, Word, LaTeX archives, figures
-    storage/      the IndexedDB key/value store factory
-    i18n/         language setting and the app-shell dictionary
-    lib/          cn()
-  workspaces/   flow / cad / ppt — each canvas's own logic
-  features/     ppt-editor: the editable-slide bridge
-  pages/        the portal / landing page
-  server/       the API: routes, chat pipeline, telemetry
-  components/   the settings dialog
-api/            thin route shims plus the Express entry point
-agent/          system prompts, as markdown, loaded with ?raw
-skill/          the per-canvas skill bundles
+client/                 the browser app
+  app/                  the shell: App, the workspace registry, settings, error boundary
+  ai/                   the browser's model facade and where it stores settings
+  workspaces/<id>/      one directory per canvas, all the same shape:
+      <Id>Workspace.tsx   the entry the registry lazy-loads
+      canvas/             the canvas half
+      chat/               the chat half
+      lib/                logic only that workspace uses
+      storage.ts          its persisted keys
+  features/ppt-editor/  the editable-slide bridge
+  pages/portal/         the landing page
+  shared/               anything more than one workspace uses
+      ui/                 the shadcn component kit
+      chat/               the chat components and plumbing the panels share
+      files/              upload extraction: PDF, Word, LaTeX archives, figures
+      storage/            the IndexedDB key/value store factory
+      i18n/               language setting and the app-shell dictionary
+      lib/                cn()
+
+server/                 the API
+  routes/               one file per endpoint
+  chat/                 the /api/chat pipeline, a module per stage
+  ai/                   the OpenAI transport
+  telemetry/            Langfuse
+  http/                 the route table, the Node<->Web adapter, the Vite middleware
+  index.ts              the Express entry point
+
+contracts/              what the client and server agree on (AIConfig and its
+                        normalisation); no browser or Node APIs
+resources/              data read at runtime
+  prompts/              agent prompts, as markdown
+  shape-libraries/      draw.io shape references the Flow agent can pull in
+
+public/  docs/  deploy/  skill/  tests/
 ```
 
 ## Rules the structure depends on
 
-**Nothing in `src/server/` imports from `src/workspaces/`.** The server is a
-separate program that happens to share a repository; a backend reaching into a
-frontend folder is what put the draw.io system prompt and the Langfuse client
-inside the Flow workspace for a while.
+**Nothing in `server/` imports from `client/`.** They are separate programs;
+the only thing they share is `contracts/`. A backend reaching into a frontend
+folder is what once put the draw.io system prompt and the Langfuse client
+inside the Flow workspace.
 
-**`src/ai/**` and `src/server/**` use relative imports, not the `@/` alias.**
-Vite loads `vite.config.ts` through plain Node, and that config imports the API
-route handlers — Node does not know about the tsconfig path alias.
+**`server/**` uses relative imports, not the `@/` alias.** `vite.config.ts`
+imports the dev middleware so `npm run dev` serves the API in-process, and Vite
+loads its own config through plain Node, which knows nothing about the tsconfig
+paths.
 
 **Storage keys are load-bearing.** IndexedDB database names and localStorage
-keys carry users' saved work across releases. `src/workspaces/*/storage.ts` and
-`flow/next/lib/flow-storage-keys.ts` name them in one place each; renaming one
-orphans whatever was stored under the old name.
+keys carry users' saved work across releases. Each workspace names its own in
+`workspaces/<id>/storage.ts`; Flow's are in `workspaces/flow/lib/storage.ts`
+and keep their original `next-ai-draw-io-` prefix from before that workspace
+was folded in. Renaming one orphans whatever was stored under it.
+
+**`resources/` is data, not documentation or source.** The server reads it with
+`readFile` at request time, so a deployment has to ship it — see the Dockerfile.
+`server/chat/resources.ts` is the only place those paths are written down.
 
 ## The model client
 
@@ -64,19 +86,25 @@ fallback order is pinned by `tests/ai-request-shape.test.ts`.
 Two paths reach the model:
 
 - **`/api/ppt-ai`** — non-streaming, used by the CAD and PPT workspaces through
-  `src/ai/client.ts`. The browser never talks to the provider directly, so the
-  key stays out of cross-origin requests and the server can inline remote
+  `client/ai/client.ts`. The browser never talks to the provider directly, so
+  the key stays out of cross-origin requests and the server can inline remote
   images the browser could not fetch.
 - **`/api/chat`** — streaming with tool calls, used by Flow. Runs as a pipeline
-  whose stages live in `src/server/chat/`: validate, extract attachments,
+  whose stages live in `server/chat/`: validate, extract attachments,
   summarise, classify intent, optionally draft a reference image, assemble the
   prompt, stream.
 
 ## Adding a canvas
 
-Add an entry to `WORKSPACES` in `src/app/workspaces.ts`. The header tabs, the
+Add an entry to `WORKSPACES` in `client/app/workspaces.ts`. The header tabs, the
 persisted selection, and the rendered workspace all read from that array. Give
-the shell its own lazy import so it does not land in the initial bundle.
+the entry its own lazy import so it stays out of the initial bundle.
+
+## Adding an API route
+
+Add the handler under `server/routes/`, then one entry to `API_ROUTES` in
+`server/http/routes.ts`. Express and the Vite dev middleware both read that
+table, so nothing else needs touching.
 
 ## Bundle
 

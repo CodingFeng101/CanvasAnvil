@@ -12,7 +12,8 @@ import path from "path"
 import { z } from "zod"
 import { getImageChannel, getTextChannel, normalizeAIConfig } from "../../contracts/ai"
 import { getChatModel } from "../ai/model"
-import { formatAvailableShapeLibraries, shapeLibraryDir } from "../chat/shape-library"
+import { formatAvailableShapeLibraries } from "../chat/shape-library"
+import { shapeLibraryDir } from "../chat/resources"
 import { getSystemPrompt } from "../chat/system-prompt"
 import {
     RECURSIVE_THRESHOLD_TOKENS,

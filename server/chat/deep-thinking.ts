@@ -1,6 +1,7 @@
 import { mkdir, readFile, writeFile } from "fs/promises"
 import path from "path"
 import { generateImage } from "../ai/image"
+import { promptsDir } from "./resources"
 import type { AIChannel } from "../../contracts/ai"
 import { parseDataUrl } from "./files"
 
@@ -94,12 +95,7 @@ export async function getFlowDeepThinkingImagePromptTemplate(): Promise<string> 
         return flowDeepThinkingImagePromptTemplateCache
     }
 
-    const promptPath = path.join(
-        process.cwd(),
-        "agent",
-        "flow",
-        "deep-thinking-image.md",
-    )
+    const promptPath = path.join(promptsDir(), "flow", "deep-thinking-image.md")
     const raw = await readFile(promptPath, "utf8")
     flowDeepThinkingImagePromptTemplateCache = String(raw || "").trim()
     return flowDeepThinkingImagePromptTemplateCache
