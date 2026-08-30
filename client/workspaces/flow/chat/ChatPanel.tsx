@@ -4,12 +4,14 @@ import { useChat } from "@ai-sdk/react"
 import {
     PanelRightClose,
     PanelRightOpen,
+    Settings,
 } from "lucide-react"
 import type React from "react"
 import { useCallback, useEffect, useRef, useState } from "react"
 import { Toaster, toast } from "sonner"
 import { ButtonWithTooltip } from "@/shared/chat"
 import { ChatInput } from "@/workspaces/flow/chat/ChatInput"
+import { SettingsDialog } from "@/workspaces/flow/chat/settings-dialog"
 import { STORAGE_KEYS } from "@/workspaces/flow/lib/storage";
 import { useDiagram } from "@/workspaces/flow/state/diagram-context"
 import { useFlowT } from "@/workspaces/flow/lib/translations"
@@ -153,6 +155,7 @@ export default function ChatPanel({
     const { files, pdfData, handleFileChange, setFiles } = useFileProcessor("flow")
 
     const [showHistory, setShowHistory] = useState(false)
+    const [showSettings, setShowSettings] = useState(false)
     const [, setAccessCodeRequired] = useState(false)
     const [input, setInput] = useState("")
     const [dailyRequestLimit, setDailyRequestLimit] = useState(0)
@@ -1312,6 +1315,15 @@ Please fix the XML issues. Ensure cell_id values exist in the current XML and th
                         </span>
                     </div>
                     <div className="flex items-center gap-1">
+                        <ButtonWithTooltip
+                            tooltipContent={t("chat.settings")}
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => setShowSettings(true)}
+                            className="hover:bg-accent"
+                        >
+                            <Settings className="h-5 w-5 text-muted-foreground" />
+                        </ButtonWithTooltip>
                         {!isMobile && (
                             <ButtonWithTooltip
                                 tooltipContent={t("chat.panel.hide")}
@@ -1326,6 +1338,16 @@ Please fix the XML issues. Ensure cell_id values exist in the current XML and th
                     </div>
                 </div>
             </header>
+
+            <SettingsDialog
+                open={showSettings}
+                onOpenChange={setShowSettings}
+                drawioUi={drawioUi}
+                onToggleDrawioUi={onToggleDrawioUi}
+                darkMode={darkMode}
+                onToggleDarkMode={onToggleDarkMode}
+                onCloseProtectionChange={onCloseProtectionChange}
+            />
 
             {/* Messages */}
             <main className="flex-1 w-full overflow-hidden min-h-0">

@@ -64,7 +64,7 @@ export function SettingsDialog({
 }: SettingsDialogProps) {
     const t = useFlowT()
     const [accessCode, setAccessCode] = useState("")
-    const [closeProtection, setCloseProtection] = useState(true)
+    const [closeProtection, setCloseProtection] = useState(false)
     const [isVerifying, setIsVerifying] = useState(false)
     const [error, setError] = useState("")
     const [accessCodeRequired, setAccessCodeRequired] = useState(
@@ -108,7 +108,7 @@ export function SettingsDialog({
             const storedCloseProtection = localStorage.getItem(
                 STORAGE_CLOSE_PROTECTION_KEY,
             )
-            setCloseProtection(storedCloseProtection !== "false")
+            setCloseProtection(storedCloseProtection === "true")
 
             const { textApiKey, textBaseUrl, textModel, imageApiKey, imageBaseUrl, imageModel } =
                 getWorkspaceAIConfig()
