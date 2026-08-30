@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { afterEach, beforeEach, test } from "node:test";
-import { generateImage } from "../src/ai/image";
-import { generateText } from "../src/ai/text";
-import type { AIChannel } from "../src/ai/types";
+import { generateImage } from "../server/ai/image";
+import { generateText } from "../server/ai/text";
+import type { AIChannel } from "../contracts/ai";
 
 /**
  * These lock in the wire format: every model call must be one of the three

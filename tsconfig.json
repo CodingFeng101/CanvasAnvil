@@ -25,16 +25,24 @@
     "baseUrl": "./",
     "paths": {
       "@/*": [
-        "./src/*"
+        "./client/*"
+      ],
+      "@contracts/*": [
+        "./contracts/*"
+      ],
+      "@prompts/*": [
+        "./resources/prompts/*"
       ]
     }
   },
   "include": [
-    "src",
-    "api"
+    "client",
+    "server",
+    "contracts",
+    "tests"
   ],
   "exclude": [
-    "src/features/ppt-editor/mate/**/*.reference.tsx",
-    "src/features/ppt-editor/mate-src/**/*"
+    "dist",
+    "node_modules"
   ]
 }

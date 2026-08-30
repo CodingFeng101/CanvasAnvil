@@ -5,7 +5,7 @@ import {
   getImageChannel,
   getTextChannel,
   normalizeAIConfig,
-} from "../src/ai/config";
+} from "../contracts/ai";
 
 test("fills both channels from an empty config", () => {
   const config = normalizeAIConfig({});
