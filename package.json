@@ -10,7 +10,7 @@
     "start": "tsx server/index.ts",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
-    "test": "tsx --test tests/*.test.ts",
+    "test": "tsx --import ./tests/support/register.mjs --test tests/*.test.ts",
     "preview": "vite preview --host 0.0.0.0 --port 8001",
     "check": "tsc -b --noEmit"
   },
