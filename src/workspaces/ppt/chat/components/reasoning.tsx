@@ -6,8 +6,8 @@ import {
     Collapsible,
     CollapsibleContent,
     CollapsibleTrigger,
-} from "@/workspaces/ppt/ui/collapsible"
-import { cn } from "@/lib/utils"
+} from "@/shared/ui/collapsible"
+import { cn } from "@/shared/lib/utils"
 import { Shimmer } from "./shimmer"
 
 type ReasoningContextValue = {

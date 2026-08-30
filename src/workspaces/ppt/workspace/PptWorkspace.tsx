@@ -3,25 +3,19 @@ import { motion } from "framer-motion";
 import { generateImage, generateChatMessage } from '@/ai/client';
 import { pptService, PptPage, type PptElement, type PptTextBlock, type SlideEditRoutingItem, resolveTextBlockFontSize, PPT_REFERENCE_SLIDE_HEIGHT, PPT_REFERENCE_SLIDE_WIDTH, textBlocksToPptElements } from '@/lib/ppt-service';
 import { getTemplateGenerationPrompt } from '@/lib/ppt-prompts';
-import {
-  clearPersistedPptWorkspaceState,
-  readPersistedPptTemplateLibraryState,
-  readPersistedPptWorkspaceState,
-  savePersistedPptTemplateLibraryState,
-  savePersistedPptWorkspaceState,
-} from '@/lib/ppt-persistence';
+import { PPT_STATE_KEY, PPT_TEMPLATE_LIBRARY_KEY, pptStore } from "@/workspaces/ppt/storage";
 import { Loader2, Plus, Image as ImageIcon, MessageSquarePlus, Upload, Presentation, Sparkles, Check, Play, FileText, Download, Lightbulb, X, ArrowLeft, ArrowRight, Eye, Trash2, Maximize2, Minimize2, RefreshCcw } from 'lucide-react';
 import {
   ContextMenu,
   ContextMenuContent,
   ContextMenuItem,
   ContextMenuTrigger,
-} from "@/workspaces/ppt/ui/context-menu";
-import { Button } from "@/workspaces/ppt/ui/button";
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/workspaces/ppt/ui/dialog";
-import { Textarea } from "@/workspaces/ppt/ui/textarea";
-import { useUiLanguage } from "@/lib/use-ui-language";
-import { useFileProcessor as useFlowFileProcessor } from "@/workspaces/flow/next/lib/use-file-processor";
+} from "@/shared/ui/context-menu";
+import { Button } from "@/shared/ui/button";
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/shared/ui/dialog";
+import { Textarea } from "@/shared/ui/textarea";
+import { useUiLanguage } from "@/shared/i18n";
+import { useFileProcessor as useFlowFileProcessor } from "@/shared/files/use-file-processor";
 import {
   canvasAnvilToEditorSlide,
   editorSlideToExportPayload,
@@ -1038,7 +1032,7 @@ export function PptWorkspace({
 
     void (async () => {
       try {
-        const raw = await readPersistedPptWorkspaceState<any>();
+        const raw = await pptStore.read<any>(PPT_STATE_KEY);
         if (cancelled || !raw || typeof raw !== "object") return;
         const persistedState = migrateLegacyTextlessVersions(raw);
         const snapshotState =
@@ -1167,7 +1161,7 @@ export function PptWorkspace({
 
     void (async () => {
       try {
-        const persistedTemplateLibrary = await readPersistedPptTemplateLibraryState<any>();
+        const persistedTemplateLibrary = await pptStore.read<any>(PPT_TEMPLATE_LIBRARY_KEY);
         if (cancelled || !persistedTemplateLibrary || typeof persistedTemplateLibrary !== "object") return;
         setUploadedTemplates(normalizePersistedUploadedTemplates(persistedTemplateLibrary.uploadedTemplates));
         setHiddenPresetTemplateIds(normalizePersistedStringArray(persistedTemplateLibrary.hiddenPresetTemplateIds));
@@ -1193,7 +1187,7 @@ export function PptWorkspace({
   useEffect(() => {
     if (typeof window === "undefined") return;
     if (!isTemplateLibraryHydrated) return;
-    void savePersistedPptTemplateLibraryState({
+    void pptStore.save(PPT_TEMPLATE_LIBRARY_KEY, {
       uploadedTemplates,
       hiddenPresetTemplateIds,
       updatedAt: Date.now(),
@@ -1260,7 +1254,7 @@ export function PptWorkspace({
     } catch (e) {
       console.error("Failed to persist PPT workspace snapshot to localStorage", e);
     }
-    void savePersistedPptWorkspaceState(workspaceState).catch((e) => {
+    void pptStore.save(PPT_STATE_KEY, workspaceState).catch((e) => {
       console.error("Failed to persist PPT workspace to IndexedDB", e);
     });
   }, [
@@ -4413,7 +4407,7 @@ export function PptWorkspace({
   };
 
   const extractPdfPagesAsImages = async (file: File) => {
-    const { getPdfDocumentFromUrl, renderPdfPageToCanvas } = await import("@/lib/pdf-utils");
+    const { getPdfDocumentFromUrl, renderPdfPageToCanvas } = await import("@/shared/files");
     const objectUrl = URL.createObjectURL(file);
     try {
       const pdf = await getPdfDocumentFromUrl(objectUrl);
@@ -5287,7 +5281,7 @@ export function PptWorkspace({
       localStorage.removeItem(PPT_WORKSPACE_STORAGE_KEY);
     } catch {
     }
-    void clearPersistedPptWorkspaceState().catch((e) => {
+    void pptStore.clear(PPT_STATE_KEY).catch((e) => {
       console.error("Failed to clear persisted PPT workspace", e);
     });
     setLocalSlides([]);

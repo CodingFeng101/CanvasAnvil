@@ -6,9 +6,9 @@ import {
     Collapsible,
     CollapsibleContent,
     CollapsibleTrigger,
-} from "@/workspaces/cad/ui/collapsible"
-import { useUiLanguage } from "@/lib/use-ui-language"
-import { cn } from "@/lib/utils"
+} from "@/shared/ui/collapsible"
+import { useUiLanguage } from "@/shared/i18n"
+import { cn } from "@/shared/lib/utils"
 import { Shimmer } from "./shimmer"
 
 type ReasoningContextValue = {

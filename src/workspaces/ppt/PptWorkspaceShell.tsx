@@ -1,18 +1,17 @@
 import React, { useEffect, useRef, useState } from "react";
-import { cn } from "@/lib/utils";
-import { t } from "@/lib/i18n";
-import { useUiLanguage } from "@/lib/use-ui-language";
+import { cn } from "@/shared/lib/utils";
+import { t, useUiLanguage } from "@/shared/i18n";
 import {
   ResizableHandle,
   ResizablePanel,
   ResizablePanelGroup,
   type PanelImperativeHandle,
-} from "@/workspaces/ppt/ui/resizable";
+} from "@/shared/ui/resizable";
 import {
   PPT_OUTLINE_EDIT_SYSTEM_PROMPT,
   PPT_SLIDES_EDIT_SYSTEM_PROMPT,
 } from "@/lib/system-prompts";
-import { clearPersistedPptWorkspaceState } from "@/lib/ppt-persistence";
+import { PPT_STATE_KEY, pptStore } from "@/workspaces/ppt/storage";
 import type { ChatMessage } from "@/ai/client";
 import { PptWorkspace } from "@/workspaces/ppt/workspace/PptWorkspace";
 import { ChatPanel as PptChatPanel } from "@/workspaces/ppt/chat/ChatPanel";
@@ -248,7 +247,7 @@ export function PptWorkspaceShell() {
       localStorage.removeItem(PPT_WORKSPACE_STORAGE_KEY);
     } catch {
     }
-    void clearPersistedPptWorkspaceState().catch((e) => {
+    void pptStore.clear(PPT_STATE_KEY).catch((e) => {
       console.error("Failed to clear persisted PPT workspace", e);
     });
     try {

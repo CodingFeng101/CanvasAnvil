@@ -12,7 +12,7 @@ import { ButtonWithTooltip } from "@/workspaces/flow/next/components/button-with
 import { ChatInput } from "@/workspaces/flow/next/components/chat-input"
 import { STORAGE_GLOBAL_CONSTRAINTS_KEY } from "@/workspaces/flow/next/components/global-constraints-dialog"
 import { useDiagram } from "@/workspaces/flow/next/contexts/diagram-context"
-import { useLanguage } from "@/workspaces/flow/next/contexts/language-context"
+import { useFlowT } from "@/workspaces/flow/next/lib/translations"
 import { getAIConfig } from "@/workspaces/flow/next/lib/ai-config"
 import {
     extractPdfText,
@@ -21,11 +21,11 @@ import {
     isPdfFile,
     isWordFile,
     isTextFile,
-} from "@/workspaces/flow/next/lib/pdf-utils"
-import { type FileData, useFileProcessor } from "@/workspaces/flow/next/lib/use-file-processor"
+} from "@/shared/files"
+import { type FileData, useFileProcessor } from "@/shared/files/use-file-processor"
 import { useQuotaManager } from "@/workspaces/flow/next/lib/use-quota-manager"
 import { applyDiagramOperations, isMxCellXmlComplete, type DiagramOperation } from "@/workspaces/flow/next/lib/diagram-operations"
-import { formatXML, validateAndFixXml, wrapWithMxFile } from "@/workspaces/flow/next/lib/utils"
+import { formatXML, validateAndFixXml, wrapWithMxFile } from "@/workspaces/flow/next/lib/drawio-xml"
 import { ChatMessageDisplay } from "./chat-message-display"
 
 // localStorage keys for persistence
@@ -111,7 +111,7 @@ export default function ChatPanel({
         isDrawioReady,
     } = useDiagram()
     
-    const { t } = useLanguage()
+    const t = useFlowT()
 
     const onFetchChart = (saveToHistory = true) => {
         if (!isDrawioReady) {

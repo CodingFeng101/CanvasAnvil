@@ -1,7 +1,7 @@
 ﻿"use client"
 
 import { FaCoffee } from "react-icons/fa"
-import { useLanguage } from "@/workspaces/flow/next/contexts/language-context"
+import { useFlowT } from "@/workspaces/flow/next/lib/translations"
 
 interface QuotaLimitToastProps {
     limit: number
@@ -12,7 +12,7 @@ export function QuotaLimitToast({
     limit,
     used,
 }: QuotaLimitToastProps) {
-    const { t } = useLanguage()
+    const t = useFlowT()
     const percentage = Math.min((used / limit) * 100, 100)
 
     return (

@@ -5,11 +5,11 @@ import {
   ContextMenuContent,
   ContextMenuItem,
   ContextMenuTrigger,
-} from "@/workspaces/cad/ui/context-menu";
-import { Button } from "@/workspaces/cad/ui/button";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/workspaces/cad/ui/dialog";
+} from "@/shared/ui/context-menu";
+import { Button } from "@/shared/ui/button";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/shared/ui/dialog";
 import { PDFDocument } from "pdf-lib";
-import { useUiLanguage } from "@/lib/use-ui-language";
+import { useUiLanguage } from "@/shared/i18n";
 import { toast } from "sonner";
 import { getCadRenderSlotTitles } from "@/lib/cad-render-titles";
 

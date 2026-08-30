@@ -8,7 +8,7 @@ import {
     memo,
     useMemo,
 } from "react"
-import { cn } from "@/workspaces/flow/next/lib/utils"
+import { cn } from "@/shared/lib/utils"
 
 export type TextShimmerProps = {
     children: string

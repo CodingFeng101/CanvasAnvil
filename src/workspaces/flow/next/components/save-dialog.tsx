@@ -1,23 +1,23 @@
 ﻿"use client"
 
 import { useEffect, useState } from "react"
-import { Button } from "@/workspaces/flow/next/components/ui/button"
+import { Button } from "@/shared/ui/button"
 import {
     Dialog,
     DialogContent,
     DialogFooter,
     DialogHeader,
     DialogTitle,
-} from "@/workspaces/flow/next/components/ui/dialog"
-import { Input } from "@/workspaces/flow/next/components/ui/input"
+} from "@/shared/ui/dialog"
+import { Input } from "@/shared/ui/input"
 import {
     Select,
     SelectContent,
     SelectItem,
     SelectTrigger,
     SelectValue,
-} from "@/workspaces/flow/next/components/ui/select"
-import { useLanguage } from "@/workspaces/flow/next/contexts/language-context"
+} from "@/shared/ui/select"
+import { useFlowT } from "@/workspaces/flow/next/lib/translations"
 
 export type ExportFormat = "drawio" | "png" | "svg"
 
@@ -44,7 +44,7 @@ export function SaveDialog({
     onSave,
     defaultFilename,
 }: SaveDialogProps) {
-    const { t } = useLanguage()
+    const t = useFlowT()
     const [filename, setFilename] = useState(defaultFilename)
     const [format, setFormat] = useState<ExportFormat>("drawio")
 

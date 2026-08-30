@@ -2,8 +2,8 @@
 
 import { FileCode, FileText, Loader2, X } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
-import { isPdfFile, isTextFile } from "@/lib/pdf-utils"
-import { type FileData } from "@/lib/use-file-processor"
+import { isPdfFile, isTextFile } from "@/shared/files"
+import { type FileData } from "@/shared/files/use-file-processor"
 
 function formatCharCount(count: number): string {
     if (count >= 1000) {

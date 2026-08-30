@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react"
 import { toast } from "sonner"
-import { Button } from "@/workspaces/flow/next/components/ui/button"
+import { Button } from "@/shared/ui/button"
 import {
     Dialog,
     DialogContent,
@@ -10,9 +10,9 @@ import {
     DialogFooter,
     DialogHeader,
     DialogTitle,
-} from "@/workspaces/flow/next/components/ui/dialog"
-import { Textarea } from "@/workspaces/flow/next/components/ui/textarea"
-import { useLanguage } from "@/workspaces/flow/next/contexts/language-context"
+} from "@/shared/ui/dialog"
+import { Textarea } from "@/shared/ui/textarea"
+import { useFlowT } from "@/workspaces/flow/next/lib/translations"
 
 export const STORAGE_GLOBAL_CONSTRAINTS_KEY = "next-ai-draw-io-global-constraints"
 
@@ -25,7 +25,7 @@ export function GlobalConstraintsDialog({
     open,
     onOpenChange,
 }: GlobalConstraintsDialogProps) {
-    const { t } = useLanguage()
+    const t = useFlowT()
     const [constraints, setConstraints] = useState("")
 
     useEffect(() => {

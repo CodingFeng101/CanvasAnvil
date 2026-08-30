@@ -1,20 +1,15 @@
 import React, { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
-import { cn } from "@/lib/utils";
-import { t } from "@/lib/i18n";
-import { useUiLanguage } from "@/lib/use-ui-language";
+import { cn } from "@/shared/lib/utils";
+import { t, useUiLanguage } from "@/shared/i18n";
 import { getCadRenderFallbackTitle } from "@/lib/cad-render-titles";
-import {
-  clearPersistedCadWorkspaceItem,
-  readPersistedCadWorkspaceItem,
-  savePersistedCadWorkspaceItem,
-} from "@/lib/cad-persistence";
+import { CAD_ANALYSIS_IMAGES_KEY, CAD_RENDERS_KEY, cadStore } from "@/workspaces/cad/storage";
 import {
   ResizableHandle,
   ResizablePanel,
   ResizablePanelGroup,
   type PanelImperativeHandle,
-} from "@/workspaces/cad/ui/resizable";
+} from "@/shared/ui/resizable";
 import { CAD_SYSTEM_PROMPT } from "@/lib/system-prompts";
 import type { ChatMessage } from "@/ai/client";
 import { generateImage } from "@/ai/client";
@@ -34,8 +29,6 @@ const CAD_WORKSPACE_STORAGE_KEY = "CanvasAnvil-cad-state-v1";
 const CAD_RENDERS_STORAGE_KEY = "CanvasAnvil-cad-renders-v1";
 const CAD_ANALYSIS_IMAGES_STORAGE_KEY = "CanvasAnvil-cad-analysis-images-v1";
 const CAD_CHAT_STORAGE_KEY = "chat_history_v2_cad";
-const CAD_PERSISTED_RENDERS_KEY = "renders";
-const CAD_PERSISTED_ANALYSIS_IMAGES_KEY = "analysis-images";
 
 const tryParseJson = (text: string) => {
   try {
@@ -315,8 +308,8 @@ export function CadWorkspaceShell() {
     void (async () => {
       try {
         const [persistedRenders, persistedAnalysisImages] = await Promise.all([
-          readPersistedCadWorkspaceItem<CadRenderItem[]>(CAD_PERSISTED_RENDERS_KEY),
-          readPersistedCadWorkspaceItem<CadRenderItem[]>(CAD_PERSISTED_ANALYSIS_IMAGES_KEY),
+          cadStore.read<CadRenderItem[]>(CAD_RENDERS_KEY),
+          cadStore.read<CadRenderItem[]>(CAD_ANALYSIS_IMAGES_KEY),
         ]);
         if (cancelled) return;
 
@@ -371,7 +364,7 @@ export function CadWorkspaceShell() {
     const stable = normalizeCadRenderItems(cadImages, { allowBlob: false, max: 30 });
     if (stable.length > 0) {
       cadStableImagesRef.current = stable;
-      void savePersistedCadWorkspaceItem(CAD_PERSISTED_RENDERS_KEY, stable).catch((e) => {
+      void cadStore.save(CAD_RENDERS_KEY, stable).catch((e) => {
         console.error("Failed to persist CAD render images", e);
       });
       try {
@@ -388,7 +381,7 @@ export function CadWorkspaceShell() {
     const stable = normalizeCadRenderItems(cadAnalysisImages, { allowBlob: false, max: 2 });
     if (stable.length > 0) {
       cadStableAnalysisImagesRef.current = stable;
-      void savePersistedCadWorkspaceItem(CAD_PERSISTED_ANALYSIS_IMAGES_KEY, stable).catch((e) => {
+      void cadStore.save(CAD_ANALYSIS_IMAGES_KEY, stable).catch((e) => {
         console.error("Failed to persist CAD analysis images", e);
       });
       try {
@@ -1004,8 +997,8 @@ export function CadWorkspaceShell() {
     } catch {
     }
     void Promise.all([
-      clearPersistedCadWorkspaceItem(CAD_PERSISTED_RENDERS_KEY),
-      clearPersistedCadWorkspaceItem(CAD_PERSISTED_ANALYSIS_IMAGES_KEY),
+      cadStore.clear(CAD_RENDERS_KEY),
+      cadStore.clear(CAD_ANALYSIS_IMAGES_KEY),
     ]).catch((e) => {
       console.error("Failed to clear persisted CAD images", e);
     });

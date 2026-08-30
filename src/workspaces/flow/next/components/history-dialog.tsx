@@ -2,16 +2,16 @@
 
 import Image from "@/workspaces/flow/next/shims/next-image"
 import { useState } from "react"
-import { Button } from "@/workspaces/flow/next/components/ui/button"
+import { Button } from "@/shared/ui/button"
 import {
     Dialog,
     DialogContent,
     DialogFooter,
     DialogHeader,
     DialogTitle,
-} from "@/workspaces/flow/next/components/ui/dialog"
+} from "@/shared/ui/dialog"
 import { useDiagram } from "@/workspaces/flow/next/contexts/diagram-context"
-import { useLanguage } from "@/workspaces/flow/next/contexts/language-context"
+import { useFlowT } from "@/workspaces/flow/next/lib/translations"
 
 interface HistoryDialogProps {
     showHistory: boolean
@@ -23,7 +23,7 @@ export function HistoryDialog({
     onToggleHistory,
 }: HistoryDialogProps) {
     const { diagramHistory, loadDiagram: onDisplayChart } = useDiagram()
-    const { t } = useLanguage()
+    const t = useFlowT()
     const [selectedIndex, setSelectedIndex] = useState<number | null>(null)
 
     const handleClose = () => {

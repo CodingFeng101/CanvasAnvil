@@ -1,5 +1,5 @@
 import React from 'react';
-import { Button } from "@/workspaces/cad/ui/button"
+import { Button } from "@/shared/ui/button"
 import {
     Dialog,
     DialogContent,
@@ -7,9 +7,8 @@ import {
     DialogFooter,
     DialogHeader,
     DialogTitle,
-} from "@/workspaces/cad/ui/dialog"
-import { t } from "@/lib/i18n";
-import { useUiLanguage } from "@/lib/use-ui-language";
+} from "@/shared/ui/dialog"
+import { t, useUiLanguage } from "@/shared/i18n";
 
 interface ResetWarningModalProps {
     open: boolean

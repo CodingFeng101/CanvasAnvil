@@ -1,11 +1,11 @@
 ﻿import type { VariantProps } from "class-variance-authority"
 import type React from "react"
-import { Button, type buttonVariants } from "@/workspaces/flow/next/components/ui/button"
+import { Button, type buttonVariants } from "@/shared/ui/button"
 import {
     Tooltip,
     TooltipContent,
     TooltipTrigger,
-} from "@/workspaces/flow/next/components/ui/tooltip"
+} from "@/shared/ui/tooltip"
 
 interface ButtonWithTooltipProps
     extends React.ComponentProps<"button">,

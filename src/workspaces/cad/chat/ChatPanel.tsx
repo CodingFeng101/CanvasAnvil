@@ -1,6 +1,6 @@
 ﻿import React, { useState, useRef, useEffect } from 'react';
 import { PanelRightClose, PanelRightOpen } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { cn } from '@/shared/lib/utils';
 import { streamChatMessage, generateChatMessage, ChatMessage, getAIConfig } from '@/ai/client';
 import { DRAWIO_SYSTEM_PROMPT } from '@/lib/system-prompts';
 import { ButtonWithTooltip } from '@/workspaces/cad/chat/components/button-with-tooltip';
@@ -9,7 +9,7 @@ import { ChatMessageDisplay, UIMessage } from '@/workspaces/cad/chat/ChatMessage
 import { STORAGE_GLOBAL_CONSTRAINTS_KEY } from '@/workspaces/cad/chat/global-constraints-dialog';
 import { HistoryDialog, HistoryItem } from '@/workspaces/cad/chat/history-dialog';
 import { ResetWarningModal } from '@/workspaces/cad/chat/reset-warning-modal';
-import { useFileProcessor } from '@/lib/use-file-processor';
+import { useFileProcessor } from '@/shared/files/use-file-processor';
 import {
   buildCadAnalysisMessages,
   buildCadBomMessages,
@@ -26,8 +26,7 @@ import {
 import { getCadRenderFallbackTitle, getCadRenderSlotTitles } from "@/lib/cad-render-titles";
 import flowPatchAgentPrompt from "../../../../agent/flow/patch.md?raw";
 import flowReplaceAgentPrompt from "../../../../agent/flow/replace.md?raw";
-import { t } from "@/lib/i18n";
-import { useUiLanguage } from "@/lib/use-ui-language";
+import { t, useUiLanguage } from "@/shared/i18n";
 import { toast } from "sonner";
 
 interface Attachment {
@@ -1127,12 +1126,12 @@ export function ChatPanel({
              }
         } else {
              // Text/PDF
-             const { extractPdfText, extractTextFileContent, isPdfFile } = await import('@/lib/pdf-utils');
+             const { extractPdfText, extractTextFileContent, isPdfFile } = await import('@/shared/files');
              try {
                  let content = "";
                  if (isPdfFile(file)) {
                      try {
-                         const { getPdfDocumentFromUrl, renderPdfPageToCanvas } = await import("@/lib/pdf-utils");
+                         const { getPdfDocumentFromUrl, renderPdfPageToCanvas } = await import("@/shared/files");
                          const objectUrl = URL.createObjectURL(file);
                          try {
                              const pdf = await getPdfDocumentFromUrl(objectUrl);

@@ -8,7 +8,7 @@ import {
     ResizablePanel,
     ResizablePanelGroup,
     type PanelImperativeHandle,
-} from "@/workspaces/flow/next/components/ui/resizable"
+} from "@/shared/ui/resizable"
 import { useDiagram } from "@/workspaces/flow/next/contexts/diagram-context"
 
 const drawioBaseUrl =

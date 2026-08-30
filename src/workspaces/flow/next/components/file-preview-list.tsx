@@ -3,7 +3,7 @@
 import { FileCode, FileText, Loader2, X } from "lucide-react"
 import Image from "@/workspaces/flow/next/shims/next-image"
 import { useEffect, useRef, useState } from "react"
-import { isPdfFile, isTextFile } from "@/workspaces/flow/next/lib/pdf-utils"
+import { isPdfFile, isTextFile } from "@/shared/files"
 
 function formatCharCount(count: number): string {
     if (count >= 1000) {

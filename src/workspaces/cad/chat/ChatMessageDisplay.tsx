@@ -20,10 +20,10 @@ import {
 import ReactMarkdown from "react-markdown";
 import remarkGfm from 'remark-gfm';
 import { Reasoning, ReasoningContent, ReasoningTrigger } from "@/workspaces/cad/chat/components/reasoning";
-import { ScrollArea } from "@/workspaces/cad/ui/scroll-area";
-import { CodeBlock } from "@/workspaces/cad/ui/code-block";
-import { useUiLanguage } from "@/lib/use-ui-language";
-import { cn } from "@/lib/utils";
+import { ScrollArea } from "@/shared/ui/scroll-area";
+import { CodeBlock } from "@/workspaces/cad/chat/code-block";
+import { useUiLanguage } from "@/shared/i18n";
+import { cn } from "@/shared/lib/utils";
 
 // Types
 export interface MessagePart {

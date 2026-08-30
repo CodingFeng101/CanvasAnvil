@@ -1,6 +1,6 @@
 ﻿"use client"
 
-import { Button } from "@/workspaces/flow/next/components/ui/button"
+import { Button } from "@/shared/ui/button"
 import {
     Dialog,
     DialogContent,
@@ -8,8 +8,8 @@ import {
     DialogFooter,
     DialogHeader,
     DialogTitle,
-} from "@/workspaces/flow/next/components/ui/dialog"
-import { useLanguage } from "@/workspaces/flow/next/contexts/language-context"
+} from "@/shared/ui/dialog"
+import { useFlowT } from "@/workspaces/flow/next/lib/translations"
 
 interface ResetWarningModalProps {
     open: boolean
@@ -22,7 +22,7 @@ export function ResetWarningModal({
     onOpenChange,
     onClear,
 }: ResetWarningModalProps) {
-    const { t } = useLanguage()
+    const t = useFlowT()
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>

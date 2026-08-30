@@ -5,7 +5,7 @@ import { createContext, useContext, useRef, useState } from "react"
 import type { DrawIoEmbedRef } from "react-drawio"
 import { STORAGE_DIAGRAM_XML_KEY } from "@/workspaces/flow/next/components/chat-panel"
 import type { ExportFormat } from "@/workspaces/flow/next/components/save-dialog"
-import { extractDiagramXML, validateMxCellStructure } from "../lib/utils"
+import { extractDiagramXML, validateMxCellStructure } from "@/workspaces/flow/next/lib/drawio-xml"
 
 interface DiagramContextType {
     chartXML: string

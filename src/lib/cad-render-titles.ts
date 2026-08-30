@@ -1,4 +1,4 @@
-import type { UiLanguage } from "@/lib/ui-language";
+import type { UiLanguage } from "@/shared/i18n";
 
 export const CAD_RENDER_SLOT_TITLES = [
   { zh: "装修平面布置图", en: "Renovation Plan Layout" },

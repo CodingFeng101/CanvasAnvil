@@ -1,11 +1,10 @@
 ﻿import React, { useRef, useEffect, useMemo, useState, useCallback } from 'react';
 import { Send, FileText, ImageIcon, History, Square, Trash2 } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { cn } from '@/shared/lib/utils';
 import { ButtonWithTooltip } from '@/workspaces/ppt/chat/components/button-with-tooltip';
 import { FilePreviewList } from '@/workspaces/ppt/chat/file-preview-list';
-import { useFileProcessor } from '@/lib/use-file-processor';
-import { t } from "@/lib/i18n";
-import { useUiLanguage } from "@/lib/use-ui-language";
+import { useFileProcessor } from '@/shared/files/use-file-processor';
+import { t, useUiLanguage } from "@/shared/i18n";
 
 type RichInputSegment =
     | { type: "text"; text: string }
@@ -65,7 +64,7 @@ export function ChatInput({
     const richAppliedRef = useRef<string>("");
     const [richHasFocus, setRichHasFocus] = useState(false);
     
-    const { files, handleFileChange, setFiles, pdfData } = useFileProcessor();
+    const { files, handleFileChange, setFiles, pdfData } = useFileProcessor("ppt");
     const isRich = !!(richSegments && onRichSegmentsChange);
     
     // Sync controlled files if provided

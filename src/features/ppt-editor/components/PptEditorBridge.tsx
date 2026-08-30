@@ -1,7 +1,7 @@
 import type React from "react";
 import { AudioLines, PlayCircle, Sigma } from "lucide-react";
 import { PPT_REFERENCE_SLIDE_HEIGHT, PPT_REFERENCE_SLIDE_WIDTH } from "@/lib/ppt-service";
-import { cn } from "@/lib/utils";
+import { cn } from "@/shared/lib/utils";
 import { buildEditorShapePath } from "@/features/ppt-editor/shape-config";
 import type {
   EditorAudioElement,

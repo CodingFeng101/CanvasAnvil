@@ -4,12 +4,11 @@ import {
     DialogContent,
     DialogHeader,
     DialogTitle,
-} from "@/workspaces/ppt/ui/dialog"
-import { Button } from '@/workspaces/ppt/ui/button';
+} from "@/shared/ui/dialog"
+import { Button } from '@/shared/ui/button';
 import { Clock, RotateCcw, FileCode, Trash2 } from 'lucide-react';
-import { ScrollArea } from '@/workspaces/ppt/ui/scroll-area';
-import { useUiLanguage } from "@/lib/use-ui-language";
-import { t } from "@/lib/i18n";
+import { ScrollArea } from '@/shared/ui/scroll-area';
+import { t, useUiLanguage } from "@/shared/i18n";
 
 export interface HistoryItem {
     id: string;

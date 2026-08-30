@@ -3,18 +3,18 @@
 import { Moon, Sun } from "lucide-react"
 import { useEffect, useState } from "react"
 import { getAIConfig as getWorkspaceAIConfig } from "@/ai/client"
-import { Button } from "@/workspaces/flow/next/components/ui/button"
+import { Button } from "@/shared/ui/button"
 import {
     Dialog,
     DialogContent,
     DialogFooter,
     DialogHeader,
     DialogTitle,
-} from "@/workspaces/flow/next/components/ui/dialog"
-import { Input } from "@/workspaces/flow/next/components/ui/input"
-import { Label } from "@/workspaces/flow/next/components/ui/label"
-import { Switch } from "@/workspaces/flow/next/components/ui/switch"
-import { useLanguage } from "@/workspaces/flow/next/contexts/language-context"
+} from "@/shared/ui/dialog"
+import { Input } from "@/shared/ui/input"
+import { Label } from "@/shared/ui/label"
+import { Switch } from "@/shared/ui/switch"
+import { useFlowT } from "@/workspaces/flow/next/lib/translations"
 
 interface SettingsDialogProps {
     open: boolean
@@ -62,7 +62,7 @@ export function SettingsDialog({
     darkMode,
     onToggleDarkMode,
 }: SettingsDialogProps) {
-    const { t } = useLanguage()
+    const t = useFlowT()
     const [accessCode, setAccessCode] = useState("")
     const [closeProtection, setCloseProtection] = useState(true)
     const [isVerifying, setIsVerifying] = useState(false)

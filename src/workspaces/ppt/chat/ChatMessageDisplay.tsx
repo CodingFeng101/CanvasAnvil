@@ -18,10 +18,10 @@ import {
 import ReactMarkdown from "react-markdown";
 import remarkGfm from 'remark-gfm';
 import { Reasoning, ReasoningContent, ReasoningTrigger } from "@/workspaces/ppt/chat/components/reasoning";
-import { ScrollArea } from "@/workspaces/ppt/ui/scroll-area";
-import { CodeBlock } from "@/workspaces/ppt/ui/code-block";
-import { useUiLanguage } from "@/lib/use-ui-language";
-import { cn } from "@/lib/utils";
+import { ScrollArea } from "@/shared/ui/scroll-area";
+import { CodeBlock } from "@/workspaces/ppt/chat/code-block";
+import { useUiLanguage } from "@/shared/i18n";
+import { cn } from "@/shared/lib/utils";
 
 // Types
 export interface MessagePart {

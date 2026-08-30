@@ -8,8 +8,8 @@ import {
     Collapsible,
     CollapsibleContent,
     CollapsibleTrigger,
-} from "@/workspaces/flow/next/components/ui/collapsible"
-import { cn } from "@/workspaces/flow/next/lib/utils"
+} from "@/shared/ui/collapsible"
+import { cn } from "@/shared/lib/utils"
 import { Shimmer } from "./shimmer"
 
 type ReasoningContextValue = {

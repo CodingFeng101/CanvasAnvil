@@ -18,10 +18,10 @@ import { ErrorToast } from "@/workspaces/flow/next/components/error-toast"
 import { GlobalConstraintsDialog } from "@/workspaces/flow/next/components/global-constraints-dialog"
 import { HistoryDialog } from "@/workspaces/flow/next/components/history-dialog"
 import { ResetWarningModal } from "@/workspaces/flow/next/components/reset-warning-modal"
-import { Textarea } from "@/workspaces/flow/next/components/ui/textarea"
+import { Textarea } from "@/shared/ui/textarea"
 import { useDiagram } from "@/workspaces/flow/next/contexts/diagram-context"
-import { useLanguage } from "@/workspaces/flow/next/contexts/language-context"
-import { isPdfFile, isTextFile } from "@/workspaces/flow/next/lib/pdf-utils"
+import { useFlowT } from "@/workspaces/flow/next/lib/translations"
+import { isPdfFile, isTextFile } from "@/shared/files"
 import { FilePreviewList } from "./file-preview-list"
 
 const MAX_IMAGE_SIZE = 2 * 1024 * 1024 // 2MB
@@ -165,7 +165,7 @@ export function ChatInput({
     deepThinkingEnabled = false,
     onToggleDeepThinking = () => {},
 }: ChatInputProps) {
-    const { t } = useLanguage()
+    const t = useFlowT()
     const { diagramHistory } = useDiagram()
     const textareaRef = useRef<HTMLTextAreaElement>(null)
     const imageInputRef = useRef<HTMLInputElement>(null)

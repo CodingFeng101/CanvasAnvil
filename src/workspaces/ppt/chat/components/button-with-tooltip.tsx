@@ -1,12 +1,12 @@
 import type { VariantProps } from "class-variance-authority"
 import type React from "react"
-import { Button, type buttonVariants } from "@/workspaces/ppt/ui/button"
+import { Button, type buttonVariants } from "@/shared/ui/button"
 import {
     Tooltip,
     TooltipContent,
     TooltipProvider,
     TooltipTrigger,
-} from "@/workspaces/ppt/ui/tooltip"
+} from "@/shared/ui/tooltip"
 
 interface ButtonWithTooltipProps
     extends React.ComponentProps<"button">,

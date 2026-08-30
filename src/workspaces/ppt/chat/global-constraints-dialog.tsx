@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react"
-import { Button } from "@/workspaces/ppt/ui/button"
+import { Button } from "@/shared/ui/button"
 import {
     Dialog,
     DialogContent,
@@ -7,10 +7,9 @@ import {
     DialogFooter,
     DialogHeader,
     DialogTitle,
-} from "@/workspaces/ppt/ui/dialog"
-import { Textarea } from "@/workspaces/ppt/ui/textarea"
-import { useUiLanguage } from "@/lib/use-ui-language";
-import { t } from "@/lib/i18n";
+} from "@/shared/ui/dialog"
+import { Textarea } from "@/shared/ui/textarea"
+import { t, useUiLanguage } from "@/shared/i18n";
 
 export const STORAGE_GLOBAL_CONSTRAINTS_KEY = "CanvasAnvil-global-constraints"
 

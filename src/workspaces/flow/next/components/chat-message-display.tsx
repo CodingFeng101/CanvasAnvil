@@ -25,14 +25,14 @@ import {
     ReasoningContent,
     ReasoningTrigger,
 } from "@/workspaces/flow/next/components/ai-elements/reasoning"
-import { ScrollArea } from "@/workspaces/flow/next/components/ui/scroll-area"
-import { useLanguage } from "@/workspaces/flow/next/contexts/language-context"
+import { ScrollArea } from "@/shared/ui/scroll-area"
+import { useFlowT } from "@/workspaces/flow/next/lib/translations"
 import {
     applyDiagramOperations,
     isMxCellXmlComplete,
     type DiagramOperation,
 } from "@/workspaces/flow/next/lib/diagram-operations"
-import { convertToLegalXml, replaceNodes, validateMxCellStructure } from "@/workspaces/flow/next/lib/utils"
+import { convertToLegalXml, replaceNodes, validateMxCellStructure } from "@/workspaces/flow/next/lib/drawio-xml"
 import { CodeBlock } from "./code-block"
 
 // Tool part interface for type safety
@@ -188,7 +188,7 @@ export function ChatMessageDisplay({
     status = "idle",
     isParsingFiles = false,
 }: ChatMessageDisplayProps) {
-    const { t } = useLanguage()
+    const t = useFlowT()
     const { chartXML, loadDiagram: onDisplayChart } = useDiagram()
     const messagesEndRef = useRef<HTMLDivElement>(null)
     const previousXML = useRef<string>("")

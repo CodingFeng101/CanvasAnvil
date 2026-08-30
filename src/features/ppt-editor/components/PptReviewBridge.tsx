@@ -1,7 +1,7 @@
 ﻿import type React from "react";
 import { FileSearch, FileText, Loader2, Play, Trash2 } from "lucide-react";
-import { Button } from "@/workspaces/ppt/ui/button";
-import { Textarea } from "@/workspaces/ppt/ui/textarea";
+import { Button } from "@/shared/ui/button";
+import { Textarea } from "@/shared/ui/textarea";
 import type { PptTextBlock } from "@/lib/ppt-service";
 
 export type ReviewDraftRect = {

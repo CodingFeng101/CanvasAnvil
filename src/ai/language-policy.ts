@@ -1,4 +1,4 @@
-import { getUiLanguage } from "@/lib/ui-language";
+import { getUiLanguage } from "@/shared/i18n";
 import type { ChatMessage } from "@/ai/types";
 
 /**

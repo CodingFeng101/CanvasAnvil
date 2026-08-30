@@ -4,9 +4,8 @@ import { ExternalLink, Eye, EyeOff, Loader2, Save, Settings, X } from "lucide-re
 import { toast } from "sonner";
 import { getAIConfig, normalizeAIConfig, saveAIConfig } from "@/ai/config";
 import type { AIConfig } from "@/ai/types";
-import { Button } from "@/components/ui/button";
-import { getUiLanguage, setUiLanguage, type UiLanguage } from "@/lib/ui-language";
-import { t } from "@/lib/i18n";
+import { Button } from "@/shared/ui/button";
+import { getUiLanguage, setUiLanguage, t, type UiLanguage } from "@/shared/i18n";
 
 /**
  * Model settings.

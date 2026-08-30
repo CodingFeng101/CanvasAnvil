@@ -20,10 +20,9 @@ import {
   Wand2,
   X,
 } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
-import { getUiLanguage, setUiLanguage, type UiLanguage } from "@/lib/ui-language";
-import { useUiLanguage } from "@/lib/use-ui-language";
+import { Button } from "@/shared/ui/button";
+import { cn } from "@/shared/lib/utils";
+import { getUiLanguage, setUiLanguage, useUiLanguage, type UiLanguage } from "@/shared/i18n";
 import { portalCanvasItems, type PortalCanvasItem, type PortalWorkspace } from "./data";
 
 type PortalPageProps = {

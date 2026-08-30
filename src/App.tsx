@@ -1,13 +1,11 @@
 import React, { useState } from "react";
 import { Toaster } from "sonner";
 import { FileCode, Layers, Presentation } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Button } from "@/shared/ui/button";
 import { SettingsDialog } from "@/components/SettingsDialog";
 import { LandingPage } from "@/pages/LandingPage";
-import { cn } from "@/lib/utils";
-import { t } from "@/lib/i18n";
-import { getUiLanguage, type UiLanguage } from "@/lib/ui-language";
-import { useUiLanguage } from "@/lib/use-ui-language";
+import { cn } from "@/shared/lib/utils";
+import { getUiLanguage, t, useUiLanguage, type UiLanguage } from "@/shared/i18n";
 import { FlowWorkspaceShell } from "@/workspaces/flow/FlowWorkspaceShell";
 import { CadWorkspaceShell } from "@/workspaces/cad/CadWorkspaceShell";
 import { PptWorkspaceShell } from "@/workspaces/ppt/PptWorkspaceShell";

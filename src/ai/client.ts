@@ -1,5 +1,4 @@
-import { t } from "@/lib/i18n";
-import { getUiLanguage } from "@/lib/ui-language";
+import { getUiLanguage, t } from "@/shared/i18n";
 import { getAIConfig, getImageChannel, getTextChannel } from "@/ai/config";
 import { applyUiLanguagePolicy } from "@/ai/language-policy";
 import { createLimiter } from "@/ai/limiter";
