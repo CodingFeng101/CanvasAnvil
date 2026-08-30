@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useReducer } from 'react';
 import { motion } from "motion/react";
 import { useLatestRef } from "@/shared/lib/use-latest-ref";
 import { errorText, isRetryableBeautifyError } from "./lib/errors";
@@ -6,6 +6,12 @@ import { runInParallel, sleep } from "./lib/concurrency";
 import { parseJsonLoose } from "./lib/parse-json";
 import { extractPdfPagesAsImages, isPdfFile } from "./lib/deck-source";
 import { getSlideshowDimensions } from "./lib/slideshow-size";
+import {
+  creationReducer,
+  initialCreationState,
+  isGenerating,
+  type CreationState,
+} from "./lib/creation-machine";
 import { useTemplateLibrary } from "./hooks/use-template-library";
 import { useSlideshow } from "./hooks/use-slideshow";
 import { buildBeautifyInstruction } from "./lib/beautify-instruction";
@@ -81,7 +87,6 @@ import {
 } from "@/workspaces/ppt/canvas/persisted-state";
 import type {
   CreationMode,
-  CreationStep,
   EditableExtractionStatus,
   PptData,
   ReferenceFile,
@@ -232,11 +237,15 @@ export function PptCanvas({
   const [isExporting, setIsExporting] = useState<null | "pptx" | "pptx_editable" | "pdf">(null);
   
   // Creation Wizard State
-  const [creationStep, setCreationStep] = useState<CreationStep>(() => {
-    const v = initialPptState?.creationStep;
-    if (v === "idle" || v === "input" || v === "outline" || v === "done") return v;
-    return localSlides.length > 0 ? "done" : "idle";
-  });
+  const [creation, dispatchCreation] = useReducer(
+    creationReducer,
+    ((): CreationState => {
+      const v = initialPptState?.creationStep;
+      if (v === "idle" || v === "input" || v === "outline" || v === "done") return initialCreationState(v);
+      return initialCreationState(localSlides.length > 0 ? "done" : "idle");
+    })(),
+  );
+  const { step: creationStep, progress } = creation;
   useEffect(() => {
     if (creationStep === "done") {
       onPptStageChange?.("slides");
@@ -310,7 +319,6 @@ export function PptCanvas({
   const [materialPickerActiveIndex, setMaterialPickerActiveIndex] = useState(0);
   const materialPickerReplaceRangeRef = useRef<Range | null>(null);
   const materialPickerRef = useRef<HTMLDivElement | null>(null);
-  const [progress, setProgress] = useState({ current: 0, total: 0, message: "" });
   const referenceFileInputRef = useRef<HTMLInputElement | null>(null);
   const beautifyFileInputRef = useRef<HTMLInputElement | null>(null);
   const imageTransformFileInputRef = useRef<HTMLInputElement | null>(null);
@@ -475,16 +483,18 @@ export function PptCanvas({
           ),
         );
         setRenderLayers(nextRenderLayers);
-        setCreationStep(
-          coreState?.creationStep === "idle" ||
+        dispatchCreation({
+          type: "restored",
+          step:
+            coreState?.creationStep === "idle" ||
             coreState?.creationStep === "input" ||
             coreState?.creationStep === "outline" ||
             coreState?.creationStep === "done"
-            ? coreState.creationStep
-            : nextSlides.length > 0
-              ? "done"
-              : "idle",
-        );
+              ? coreState.creationStep
+              : nextSlides.length > 0
+                ? "done"
+                : "idle",
+        });
         setCreationMode(
           coreState?.creationMode === "idea" ||
             coreState?.creationMode === "outline" ||
@@ -753,7 +763,7 @@ export function PptCanvas({
   useEffect(() => {
     if (data && data.slides && data.slides.length > 0) {
       setSlidesKeepingSelection(data.slides);
-      setCreationStep('done');
+      dispatchCreation({ type: "finished" });
       onPptReadyChangeRef.current?.(true);
     }
   }, [data, onPptReadyChangeRef, setSlidesKeepingSelection]);
@@ -2202,7 +2212,8 @@ export function PptCanvas({
       return zhLabel;
     };
     const setStage = (current: number, zhLabel: string, enLabel: string) => {
-      setProgress({
+      dispatchCreation({
+        type: "progress",
         current,
         total: safeTotal,
         message: localizeProgress(zhLabel, enLabel),
@@ -2705,7 +2716,6 @@ export function PptCanvas({
   };
 
   const resetGenerationState = () => {
-      console.log("Resetting generation state...");
       setGeneratedImages({});
       setImageVersions({});
       setCurrentImageVersionId({});
@@ -2719,7 +2729,8 @@ export function PptCanvas({
 
   // extractPdfPagesAsImages counts pages; the wording stays here with tr.
   const reportPdfParseProgress = useCallback((done: number, total: number) => {
-    setProgress({
+    dispatchCreation({
+      type: "progress",
       current: done,
       total,
       message: tr(`正在解析 PDF... (${done}/${total})`, `Parsing PDF... (${done}/${total})`),
@@ -2807,15 +2818,13 @@ export function PptCanvas({
     resetGenerationState();
     setBeautifyFailures({});
     setImageTransformFailures({});
-    setCreationStep("generating_content");
-    setProgress({ current: 0, total: 0, message: tr("正在解析文件...", "Parsing file...") });
+    dispatchCreation({ type: "writing", message: tr("正在解析文件...", "Parsing file...") });
 
     try {
       const pageImages = await extractImageDeckPages(file);
       if (pageImages.length === 0) {
         alert(tr("无法解析页面图片，请确认文件格式。", "Failed to extract slide images. Please check the file format."));
-        setCreationStep("idle");
-        setProgress({ current: 0, total: 0, message: "" });
+        dispatchCreation({ type: "failed" });
         return;
       }
 
@@ -2827,7 +2836,7 @@ export function PptCanvas({
       }));
 
       setLocalSlides(slides);
-      setCreationStep("generating_images");
+      dispatchCreation({ type: "rendering" });
 
       const progressTracker = createTwoStageSlideProgressTracker(
         slides.length,
@@ -2855,14 +2864,12 @@ export function PptCanvas({
       });
 
       await runInParallel(tasks, MODEL_CONCURRENCY);
-      setCreationStep("done");
+      dispatchCreation({ type: "finished" });
       onPptReadyChange?.(true);
     } catch (error) {
       console.error("Image PPT transform failed", error);
       alert(getErrorMessage(error));
-      setCreationStep("idle");
-    } finally {
-      setProgress({ current: 0, total: 0, message: "" });
+      dispatchCreation({ type: "failed" });
     }
   };
 
@@ -2905,8 +2912,7 @@ export function PptCanvas({
 
     resetGenerationState();
     setBeautifyFailures({});
-    setCreationStep("generating_content");
-    setProgress({ current: 0, total: 0, message: tr("正在解析文件...", "Parsing file...") });
+    dispatchCreation({ type: "writing", message: tr("正在解析文件...", "Parsing file...") });
 
     try {
       const pageImages = isPdfFile(file)
@@ -2915,8 +2921,7 @@ export function PptCanvas({
 
       if (pageImages.length === 0) {
         alert(tr("无法解析页面图片，请确认文件格式（仅支持 .pdf）。", "Failed to extract pages. Please upload a .pdf file."));
-        setCreationStep("idle");
-        setProgress({ current: 0, total: 0, message: "" });
+        dispatchCreation({ type: "failed" });
         return;
       }
 
@@ -2948,7 +2953,7 @@ export function PptCanvas({
       setCurrentImageVersionId(initialCurrent);
       setImageVersions(initialVersions);
 
-      setCreationStep("generating_images");
+      dispatchCreation({ type: "rendering" });
       const progressTracker = createTwoStageSlideProgressTracker(
         slides.length,
         "正在生成美化页图...",
@@ -2992,14 +2997,12 @@ export function PptCanvas({
       });
 
       await runInParallel(tasks, BEAUTIFY_CONCURRENCY);
-      setCreationStep("done");
+      dispatchCreation({ type: "finished" });
       onPptReadyChange?.(true);
     } catch (e) {
       console.error("Beautify failed", e);
       alert(tr("美化失败，请重试", "Beautify failed. Please retry."));
-      setCreationStep("idle");
-    } finally {
-      setProgress({ current: 0, total: 0, message: "" });
+      dispatchCreation({ type: "failed" });
     }
   };
 
@@ -3010,7 +3013,7 @@ export function PptCanvas({
       .filter((id) => !!beautifyFailures[id]);
     if (failedSlideIds.length === 0) return;
 
-    setCreationStep("generating_images");
+    dispatchCreation({ type: "rendering" });
     const progressTracker = createTwoStageSlideProgressTracker(
       failedSlideIds.length,
       "正在重试生成页图...",
@@ -3058,25 +3061,22 @@ export function PptCanvas({
       });
 
       await runInParallel(tasks, BEAUTIFY_CONCURRENCY);
-      setCreationStep("done");
+      dispatchCreation({ type: "finished" });
       onPptReadyChange?.(true);
     } catch (e) {
       console.error("Retry failed slides error", e);
       alert(tr("重试失败页时出错，请重试。", "Retrying failed slides failed. Please try again."));
-      setCreationStep("done");
-    } finally {
-      setProgress({ current: 0, total: 0, message: "" });
+      dispatchCreation({ type: "finished" });
     }
   };
 
   const handleLoadOutline = async () => {
       if (!outlineInput.trim()) return;
       resetGenerationState();
-      setCreationStep("input");
-      setProgress({ current: 0, total: 0, message: tr("正在解析参考素材...", "Preparing reference assets...") });
+      dispatchCreation({ type: "preparing", message: tr("正在解析参考素材...", "Preparing reference assets...") });
       try {
         const referenceVisualAssets = await buildReferenceVisualAssetsWithCaptions();
-        setProgress({ current: 0, total: 0, message: tr("正在生成计划...", "Generating plan...") });
+        dispatchCreation({ type: "progress", current: 0, total: 0, message: tr("正在生成计划...", "Generating plan...") });
         const pages = await pptService.generatePlanFromOutline(
           outlineInput,
           uiLang as "zh" | "en",
@@ -3099,26 +3099,24 @@ export function PptCanvas({
         const autoMaterial = buildSlideMaterialsFromAutoLabels(pages, slides, referenceVisualAssets);
         setSlideMaterials(autoMaterial.nextMaterials);
         setLocalSlides(autoMaterial.nextSlides);
-        setCreationStep("outline");
+        dispatchCreation({ type: "outlined" });
         onPptReadyChange?.(true);
       } catch (e) {
         console.error("Failed to build plan from outline", e);
         alert(e instanceof Error ? e.message : tr("大纲转计划失败，请重试。", "Failed to build plan from outline. Please retry."));
-        setCreationStep("idle");
-      } finally {
-        setProgress({ current: 0, total: 0, message: "" });
+        dispatchCreation({ type: "failed" });
       }
   };
   const handleGenerateOutline = async () => {
     if (!ideaInput.trim()) return;
     
     resetGenerationState();
-    setCreationStep('input'); // Keep input visible but loading
-    setProgress({ current: 0, total: 0, message: tr("正在解析参考素材...", "Preparing reference assets...") });
+    // The input form stays up while the plan is being built.
+    dispatchCreation({ type: "preparing", message: tr("正在解析参考素材...", "Preparing reference assets...") });
     
     try {
         const referenceVisualAssets = await buildReferenceVisualAssetsWithCaptions();
-        setProgress({ current: 0, total: 0, message: tr("正在生成大纲...", "Generating outline...") });
+        dispatchCreation({ type: "progress", current: 0, total: 0, message: tr("正在生成大纲...", "Generating outline...") });
         const pages = await pptService.generateOutline(
           ideaInput,
           uiLang as "zh" | "en",
@@ -3144,7 +3142,7 @@ export function PptCanvas({
         const autoMaterial = buildSlideMaterialsFromAutoLabels(pages, slides, referenceVisualAssets);
         setSlideMaterials(autoMaterial.nextMaterials);
         setLocalSlides(autoMaterial.nextSlides);
-        setCreationStep('outline');
+        dispatchCreation({ type: "outlined" });
         onPptReadyChange?.(true);
     } catch (e) {
         console.error("Failed to generate outline", e);
@@ -3156,14 +3154,12 @@ export function PptCanvas({
             ? e.message
             : tr("生成大纲失败，请重试", "Failed to generate outline. Please retry.");
         alert(msg);
-        setCreationStep("idle");
-    } finally {
-        setProgress({ current: 0, total: 0, message: "" });
+        dispatchCreation({ type: "failed" });
     }
   };
 
   const handleGenerateFullPpt = async () => {
-    setCreationStep('generating_images');
+    dispatchCreation({ type: "rendering" });
     
     // Convert SlideData back to PptPage for service
     const pages: PptPage[] = localSlides.map(s => ({
@@ -3211,13 +3207,13 @@ export function PptCanvas({
 
         await runInParallel(imageTasks, MODEL_CONCURRENCY);
 
-        setCreationStep('done');
+        dispatchCreation({ type: "finished" });
         onPptReadyChange?.(true);
 
     } catch (e) {
         console.error("Full generation failed", e);
         alert(tr("生成过程中出错。", "An error occurred during generation."));
-        setCreationStep('done'); // Allow viewing what's done
+        dispatchCreation({ type: "finished" }); // Show whatever did render
         onPptReadyChange?.(true);
     }
   };
@@ -3496,7 +3492,7 @@ export function PptCanvas({
     });
     setLocalSlides([]);
     resetGenerationState();
-    setCreationStep("idle");
+    dispatchCreation({ type: "cleared" });
     setIdeaInput("");
     setOutlineInput("");
     setBeautifyRequirement("");
@@ -3519,7 +3515,7 @@ export function PptCanvas({
     setCurrentImageVersionId({});
     setGeneratedImages({});
     restoreTemplateSelection(null);
-    setProgress({ current: 0, total: 0, message: "" });
+    dispatchCreation({ type: "progress", current: 0, total: 0, message: "" });
   };
 
   const handleBackToStart = () => {
@@ -3530,7 +3526,7 @@ export function PptCanvas({
     setLocalSlides([]);
     setSlideMaterials({});
     resetGenerationState();
-    setCreationStep("idle");
+    dispatchCreation({ type: "cleared" });
   };
   const createOutlineSlide = (displayIndex: number): SlideData => ({
     id: `slide-${Date.now()}-${Math.random().toString(16).slice(2)}`,
@@ -4369,7 +4365,7 @@ export function PptCanvas({
   }
 
   // Render Progress
-  if (creationStep === 'generating_content' || creationStep === 'generating_images') {
+  if (isGenerating(creationStep)) {
       const progressRatio = progress.total > 0 ? progress.current / progress.total : 0;
       const clampedRatio = Math.max(0, Math.min(1, progressRatio));
       const dash = clampedRatio * 251.2;
