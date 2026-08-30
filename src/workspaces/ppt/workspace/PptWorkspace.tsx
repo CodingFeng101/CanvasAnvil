@@ -1,206 +1,100 @@
-import React, { useState, useEffect, useLayoutEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { motion } from "motion/react";
 import { generateImage, generateChatMessage } from '@/ai/client';
-import { pptService, PptPage, type PptElement, type PptTextBlock, type SlideEditRoutingItem, resolveTextBlockFontSize, PPT_REFERENCE_SLIDE_HEIGHT, PPT_REFERENCE_SLIDE_WIDTH, textBlocksToPptElements } from '@/lib/ppt-service';
+import {
+  pptService,
+  PptPage,
+  type PptTextBlock,
+  type SlideEditRoutingItem,
+  PPT_REFERENCE_SLIDE_HEIGHT,
+  PPT_REFERENCE_SLIDE_WIDTH,
+} from '@/lib/ppt-service';
 import { getTemplateGenerationPrompt } from '@/lib/ppt-prompts';
 import { PPT_STATE_KEY, PPT_TEMPLATE_LIBRARY_KEY, PPT_WORKSPACE_STORAGE_KEY, pptStore } from "@/workspaces/ppt/storage";
-import { Loader2, Plus, Image as ImageIcon, MessageSquarePlus, Upload, Presentation, Sparkles, Check, Play, FileText, Download, Lightbulb, X, ArrowLeft, ArrowRight, Eye, Trash2, Maximize2, Minimize2, RefreshCcw } from 'lucide-react';
 import {
-  ContextMenu,
-  ContextMenuContent,
-  ContextMenuItem,
-  ContextMenuTrigger,
-} from "@/shared/ui/context-menu";
+  Loader2,
+  Plus,
+  Image as ImageIcon,
+  MessageSquarePlus,
+  Upload,
+  Presentation,
+  Sparkles,
+  Check,
+  FileText,
+  Download,
+  Lightbulb,
+  X,
+  ArrowLeft,
+  ArrowRight,
+  Eye,
+  Trash2,
+  Maximize2,
+  Minimize2,
+  RefreshCcw,
+} from 'lucide-react';
+import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuTrigger } from "@/shared/ui/context-menu";
 import { Button } from "@/shared/ui/button";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/shared/ui/dialog";
 import { Textarea } from "@/shared/ui/textarea";
 import { useUiLanguage } from "@/shared/i18n";
 import { useFileProcessor as useFlowFileProcessor } from "@/shared/files/use-file-processor";
+import { canvasAnvilToEditorSlide, editorSlideToExportPayload, PptEditorBridge, PptReviewSidebar } from "@/features/ppt-editor";
 import {
-  canvasAnvilToEditorSlide,
-  editorSlideToExportPayload,
-  PptEditorBridge,
-  PptReviewOverlay,
-  PptReviewSidebar,
-  type EditableResizeHandle,
-  type ReviewResizeHandle as BridgeReviewResizeHandle,
-} from "@/features/ppt-editor";
-
-interface SlideData {
-  id: string;
-  title: string;
-  content: string[];
-  note?: string;
-  layout?: string;
-  description?: string; // Add description support
-}
-
-type SlideRenderLayer = {
-  backgroundImageUrl: string;
-  textBlocks: PptTextBlock[];
-  elements: PptElement[];
-  status: "pending" | "ready" | "failed";
-  error?: string;
-};
-
-type SlideImageVersionType = "generated" | "edited" | "derived_textless";
-
-type EditableExtractionStatus = "idle" | "extracting" | "done" | "failed";
-
-type SlideImageVersion = {
-  id: string;
-  url: string;
-  timestamp: number;
-  type: SlideImageVersionType;
-  instruction?: string;
-  sourceVersionId?: string;
-};
-
-const SYNTHETIC_PRIMARY_VERSION_PREFIX = "synthetic-primary:";
-
-const hasRenderableTextBlocks = (layer?: SlideRenderLayer) =>
-  Array.isArray(layer?.textBlocks) && layer.textBlocks.length > 0;
-
-const cloneSerializable = <T,>(value: T): T => JSON.parse(JSON.stringify(value));
-
-const migrateLegacyTextlessVersions = (rawState: any) => {
-  if (!rawState || typeof rawState !== "object") return rawState;
-
-  const imageVersions =
-    rawState.imageVersions && typeof rawState.imageVersions === "object" && !Array.isArray(rawState.imageVersions)
-      ? { ...rawState.imageVersions }
-      : {};
-  const renderLayers =
-    rawState.renderLayers && typeof rawState.renderLayers === "object" && !Array.isArray(rawState.renderLayers)
-      ? { ...rawState.renderLayers }
-      : {};
-  const currentImageVersionId =
-    rawState.currentImageVersionId &&
-    typeof rawState.currentImageVersionId === "object" &&
-    !Array.isArray(rawState.currentImageVersionId)
-      ? { ...rawState.currentImageVersionId }
-      : {};
-
-  for (const [slideId, rawVersions] of Object.entries(imageVersions)) {
-    if (!Array.isArray(rawVersions)) continue;
-    const versions = rawVersions as SlideImageVersion[];
-    const layerMap =
-      renderLayers[slideId] && typeof renderLayers[slideId] === "object" && !Array.isArray(renderLayers[slideId])
-        ? { ...renderLayers[slideId] }
-        : {};
-    let changed = false;
-
-    for (const version of versions) {
-      if (version?.type !== "derived_textless" || !version.sourceVersionId) continue;
-      const sourceLayer = layerMap[version.sourceVersionId];
-      const derivedLayer = layerMap[version.id];
-      if (!hasRenderableTextBlocks(sourceLayer) && hasRenderableTextBlocks(derivedLayer)) {
-        layerMap[version.sourceVersionId] = derivedLayer;
-        changed = true;
-      }
-      if (currentImageVersionId[slideId] === version.id) {
-        currentImageVersionId[slideId] = version.sourceVersionId;
-      }
-    }
-
-    const filtered = versions.filter((version) => version?.type !== "derived_textless");
-    if (filtered.length !== versions.length) {
-      imageVersions[slideId] = filtered;
-      changed = true;
-    }
-
-    if (changed) {
-      renderLayers[slideId] = layerMap;
-    }
-  }
-
-  return {
-    ...rawState,
-    imageVersions,
-    renderLayers,
-    currentImageVersionId,
-  };
-};
-
-const stripLeadingBullet = (value: string) =>
-  value.replace(/^[•●▪◦·]\s*/, "").trim();
-
-const textToLines = (value: string) =>
-  value
-    .replace(/\r\n/g, "\n")
-    .split("\n")
-    .map((item) => item.trim())
-    .filter(Boolean);
-
-const deriveTextElementsFromBlocks = (textBlocks: PptTextBlock[] = []): PptElement[] =>
-  textBlocksToPptElements(textBlocks);
-
-const mergeTextBlocksIntoElements = (textBlocks: PptTextBlock[] = [], elements: PptElement[] = []): PptElement[] => {
-  const nonTextElements = elements.filter((element) => element?.type !== "text");
-  return [...nonTextElements, ...deriveTextElementsFromBlocks(textBlocks)];
-};
-
-interface PptData {
-  theme?: string;
-  slides: SlideData[];
-}
-
-const localizeLayoutHint = (layout: string, lang: "zh" | "en") => {
-  const raw = String(layout || "").trim();
-  if (!raw) return raw;
-  const key = raw
-    .toLowerCase()
-    .replace(/\s+/g, "")
-    .replace(/[+_/-]/g, "");
-  const map: Record<string, { zh: string; en: string }> = {
-    cover: { zh: "封面页", en: "Cover" },
-    titlebullets: { zh: "标题+要点", en: "Title + Bullets" },
-    titlebullet: { zh: "标题+要点", en: "Title + Bullets" },
-    twocolumn: { zh: "双栏布局", en: "Two-column" },
-    lefttextrightimage: { zh: "左文右图", en: "Left text, right image" },
-    titleandcontent: { zh: "标题+内容", en: "Title + Content" },
-    封面页: { zh: "封面页", en: "Cover" },
-    标题要点: { zh: "标题+要点", en: "Title + Bullets" },
-    双栏布局: { zh: "双栏布局", en: "Two-column" },
-    左文右图: { zh: "左文右图", en: "Left text, right image" },
-    标题内容: { zh: "标题+内容", en: "Title + Content" },
-  };
-  const hit = map[key];
-  if (!hit) return raw;
-  return lang === "zh" ? hit.zh : hit.en;
-};
-
-const parseSlideNo = (value: string): number | null => {
-  const raw = String(value || "").trim();
-  if (!raw) return null;
-  const m1 = raw.match(/^(?:slide|page)[\s_-]*(\d+)$/i);
-  if (m1) return Number(m1[1]);
-  const m2 = raw.match(/^第\s*(\d+)\s*页$/i);
-  if (m2) return Number(m2[1]);
-  const m3 = raw.match(/^(\d+)$/);
-  if (m3) return Number(m3[1]);
-  return null;
-};
-
-const normalizeLocalizedSlideTitle = (
-  title: string,
-  uiLang: "zh" | "en",
-  fallbackNo?: number | null
-) => {
-  const raw = String(title || "").trim();
-  const fromTitle = parseSlideNo(raw);
-  const no = fromTitle || (typeof fallbackNo === "number" ? fallbackNo : null);
-  if (uiLang === "zh") {
-    if (/^(?:slide|page)(?:\s|_|-)*\d*$/i.test(raw) || /^slide$/i.test(raw) || /^page$/i.test(raw)) {
-      return no ? `第 ${no} 页` : "幻灯片";
-    }
-    return raw;
-  }
-  if (/^第\s*\d+\s*页$/i.test(raw)) {
-    return no ? `Slide ${no}` : "Slide";
-  }
-  return raw;
-};
+  BEAUTIFY_CONCURRENCY,
+  BEAUTIFY_RETRY_BASE_DELAY_MS,
+  BEAUTIFY_RETRY_MAX_ATTEMPTS,
+  EDITABLE_EXPORT_CONCURRENCY,
+  EDITABLE_REVIEW_CONCURRENCY,
+  MODEL_CONCURRENCY,
+  PPT_TEMPLATE_HIDDEN_PRESETS_KEY,
+  PPT_TEMPLATE_UPLOADS_KEY,
+  PRESET_TEMPLATES,
+  REVIEW_BOX_COLOR,
+  REVIEW_BOX_SELECTED_COLOR,
+  SYNTHETIC_PRIMARY_VERSION_PREFIX,
+} from "@/workspaces/ppt/workspace/constants";
+import {
+  deriveTextElementsFromBlocks,
+  hasRenderableTextBlocks,
+  localizeLayoutHint,
+  mergeTextBlocksIntoElements,
+  normalizeLocalizedSlideTitle,
+  parseSlideNo,
+  stripLeadingBullet,
+} from "@/workspaces/ppt/workspace/slide-content";
+import {
+  filterRecordByAllowedKeys,
+  migrateLegacyTextlessVersions,
+  normalizePersistedImageMap,
+  normalizePersistedImageVersions,
+  normalizePersistedRenderLayers,
+  normalizePersistedSlideMaterials,
+  normalizePersistedSlides,
+  normalizePersistedStringArray,
+  normalizePersistedStringMap,
+  normalizePersistedUploadedTemplates,
+  persistImageUrlIfNeeded,
+  readLegacyHiddenPresetTemplateIds,
+  readLegacyUploadedTemplates,
+  shouldInlinePersistImageUrl,
+} from "@/workspaces/ppt/workspace/persisted-state";
+import type {
+  CreationMode,
+  CreationStep,
+  EditableExtractionStatus,
+  PptData,
+  ReferenceFile,
+  ReferenceVisualAsset,
+  ReviewDraftRect,
+  ReviewResizeHandle,
+  SlideData,
+  SlideImageVersion,
+  SlideImageVersionType,
+  SlideMaterialImage,
+  SlideRenderLayer,
+  TemplateItem,
+  UploadTemplate,
+} from "@/workspaces/ppt/workspace/types";
 
 interface PptWorkspaceProps {
   data?: PptData;
@@ -213,484 +107,6 @@ interface PptWorkspaceProps {
   onIncomingEditHandled?: (id: string) => void;
   onResetWorkspace?: () => void;
 }
-
-type TextBlockOverlayProps = {
-  block: PptTextBlock;
-  slideId: string;
-  editable: boolean;
-  uiLang: "zh" | "en";
-  canvasWidth: number;
-  canvasHeight: number;
-  isDragging: boolean;
-  isEditing: boolean;
-  onFocusBlock: (blockId: string) => void;
-  onBlurBlock: (blockId: string, nextText: string) => void;
-  onDragStart: (event: React.PointerEvent<HTMLButtonElement>, block: PptTextBlock, slideId: string) => void;
-  tr: (zh: string, en: string) => string;
-};
-
-const PPT_POINT_TO_CSS_PX = 96 / 72;
-
-function TextBlockOverlay({
-  block,
-  slideId,
-  editable,
-  uiLang,
-  canvasWidth,
-  canvasHeight,
-  isDragging,
-  isEditing,
-  onFocusBlock,
-  onBlurBlock,
-  onDragStart,
-  tr,
-}: TextBlockOverlayProps) {
-  const style = block.style || {};
-  const rawFontSize = Number(style.fontSize || 0);
-  const isSingleLine = !String(block.text || "").includes("\n");
-  const isTitle = block.role === "title";
-  const isTag =
-    block.role === "tag" ||
-    (block.role === "summary" && block.text.trim().length <= 12 && block.w <= 0.2 && block.h <= 0.09);
-  const isPanelHeading =
-    !isTitle &&
-    !isTag &&
-    isSingleLine &&
-    block.text.trim().length <= 22 &&
-    block.h <= 0.13 &&
-    (rawFontSize >= 16 || Number(style.fontWeight || 0) >= 620 || block.role === "bullet");
-  const scale = Math.max(0.45, Math.min(1.8, Math.min(canvasWidth / 1100, canvasHeight / 619)));
-  const basePaddingX = Math.max(2, Math.round((isTitle ? 12 : isTag ? 9 : 10) * scale));
-  const basePaddingY = Math.max(1, Math.round((isTitle ? 8 : isTag ? 4 : 6) * scale));
-  const dragHandleSize = Math.max(14, Math.round(20 * scale));
-  const dragHandleOffset = Math.max(2, Math.round(4 * scale));
-  const paddingLeft = basePaddingX;
-  const paddingRight = basePaddingX;
-  const paddingTop = basePaddingY;
-  const paddingBottom = basePaddingY;
-  const lineHeightRatio = Number(style.lineHeight || (isTitle ? 1.12 : isTag ? 1.04 : 1.35));
-  const slideScale = Math.min(canvasWidth / PPT_REFERENCE_SLIDE_WIDTH, canvasHeight / PPT_REFERENCE_SLIDE_HEIGHT);
-  const referenceFontSize = Math.max(
-    10,
-    resolveTextBlockFontSize(block, PPT_REFERENCE_SLIDE_WIDTH, PPT_REFERENCE_SLIDE_HEIGHT)
-  );
-  const estimatedFontSize = Math.max(10, referenceFontSize * slideScale);
-  const [resolvedFontSize, setResolvedFontSize] = useState(estimatedFontSize);
-  const outerRef = useRef<HTMLDivElement | null>(null);
-  const textRef = useRef<HTMLDivElement | null>(null);
-  const baseColor = style.color || (isTitle ? "#ffffff" : isTag || isPanelHeading ? "#ffd66b" : "#ffffff");
-  const gradientFrom = style.gradientFrom || (isTitle ? "#ffffff" : undefined);
-  const gradientTo = style.gradientTo || (isTitle ? "#22d3ee" : undefined);
-  const hasGradient = Boolean(gradientFrom && gradientTo && isTitle);
-  const relaxedVerticalFit = isTitle || isPanelHeading || isTag;
-  const outerBackground = isTag
-    ? "linear-gradient(180deg, rgba(26,89,160,0.55) 0%, rgba(32,159,230,0.24) 100%)"
-    : "transparent";
-  const outerBorder = isTag ? "1px solid rgba(116,217,255,0.55)" : "none";
-  const outerRadius = isTag ? `${Math.max(12, Math.round(18 * scale))}px` : "0px";
-  const outerShadow = isTag ? "0 0 0 1px rgba(255,255,255,0.08) inset, 0 8px 18px rgba(15,23,42,0.18)" : "none";
-  const effectiveFontWeight = Number(
-    style.fontWeight || (isTitle ? 900 : isTag || isPanelHeading ? 800 : 500)
-  );
-  const effectiveFontFamily = style.fontFamily || (uiLang === "zh" ? "Microsoft YaHei" : "Aptos");
-  const effectiveTextShadow = isTitle
-    ? "0 2px 10px rgba(15,23,42,0.55), 0 0 16px rgba(34,211,238,0.22)"
-    : isTag || isPanelHeading
-      ? "0 1px 6px rgba(15,23,42,0.45), 0 0 10px rgba(250,204,21,0.18)"
-      : "0 1px 4px rgba(15,23,42,0.18)";
-  const effectiveStroke = style.strokeColor
-    ? `${Number(style.strokeWidth || Math.max(0.6, 1.1 * scale))}px ${style.strokeColor}`
-    : isTitle
-      ? `${Math.max(0.7, 1.25 * scale)}px rgba(8,15,36,0.42)`
-      : isPanelHeading
-        ? `${Math.max(0.45, 0.8 * scale)}px rgba(8,15,36,0.28)`
-      : "0px transparent";
-
-  useEffect(() => {
-    setResolvedFontSize(estimatedFontSize);
-  }, [estimatedFontSize, block.id, block.text]);
-
-  useEffect(() => {
-    if (!editable || !isEditing) return;
-    const el = textRef.current;
-    if (!el) return;
-    el.focus();
-    const selection = window.getSelection();
-    if (!selection) return;
-    const range = document.createRange();
-    range.selectNodeContents(el);
-    range.collapse(false);
-    selection.removeAllRanges();
-    selection.addRange(range);
-  }, [editable, isEditing]);
-
-  useLayoutEffect(() => {
-    const outer = outerRef.current;
-    const text = textRef.current;
-    if (!outer || !text) return;
-
-    const minSize = Math.max(5, Math.round(estimatedFontSize * 0.72), Math.round(6 * scale));
-    const availableWidth = Math.max(8, outer.clientWidth - paddingLeft - paddingRight);
-    const targetWidth = availableWidth * (isTitle ? 0.99 : isTag ? 0.97 : 0.985);
-
-    const apply = (fontSize: number) => {
-      text.style.fontSize = `${fontSize}px`;
-      text.style.lineHeight = String(lineHeightRatio);
-      text.style.wordBreak = "break-word";
-      text.style.overflowWrap = "anywhere";
-    };
-
-    let size = estimatedFontSize;
-    apply(size);
-    for (let i = 0; i < 24 && text.scrollWidth > targetWidth + 1 && size > minSize; i += 1) {
-      size = Math.max(minSize, size - 0.5);
-      apply(size);
-    }
-    apply(size);
-
-    if (Math.abs(size - resolvedFontSize) > 0.25) {
-      setResolvedFontSize(size);
-    }
-  }, [
-    block.id,
-    block.text,
-    block.x,
-    block.y,
-    block.w,
-    block.h,
-    canvasWidth,
-    canvasHeight,
-    estimatedFontSize,
-    paddingLeft,
-    paddingRight,
-    paddingTop,
-    paddingBottom,
-    lineHeightRatio,
-    resolvedFontSize,
-    scale,
-    block.text,
-    isTitle,
-    isTag,
-    isPanelHeading,
-    relaxedVerticalFit,
-  ]);
-
-  return (
-    <div
-      ref={outerRef}
-      className={relaxedVerticalFit ? "absolute overflow-visible" : "absolute overflow-hidden"}
-      style={{
-        left: `${block.x * 100}%`,
-        top: `${block.y * 100}%`,
-        width: `${block.w * 100}%`,
-        height: `${block.h * 100}%`,
-        padding: `${paddingTop}px ${paddingRight}px ${paddingBottom}px ${paddingLeft}px`,
-        boxSizing: "border-box",
-        pointerEvents: editable ? "auto" : "none",
-        color: baseColor,
-        fontFamily: effectiveFontFamily,
-        fontWeight: effectiveFontWeight,
-        fontStyle: style.fontStyle || "normal",
-        letterSpacing: `${style.letterSpacing || 0}px`,
-        textAlign: style.align || "left",
-        textShadow: effectiveTextShadow,
-        background: outerBackground,
-        border: outerBorder,
-        borderRadius: outerRadius,
-        boxShadow: outerShadow,
-        cursor: editable ? "text" : "default",
-        outline: editable && isDragging ? "2px solid rgba(59,130,246,0.45)" : "none",
-      }}
-    >
-      {editable ? (
-        <button
-          type="button"
-          className="absolute z-20 rounded bg-black/55 text-white leading-none shadow-sm cursor-grab active:cursor-grabbing"
-          title={tr("拖动文本框", "Drag text block")}
-          style={{
-            right: `${-Math.round(dragHandleSize * 0.45)}px`,
-            top: `${-Math.round(dragHandleSize * 0.3)}px`,
-            width: `${dragHandleSize}px`,
-            height: `${dragHandleSize}px`,
-            fontSize: `${Math.max(8, Math.round(10 * scale))}px`,
-          }}
-          onPointerDown={(event) => onDragStart(event, block, slideId)}
-        >
-          +
-        </button>
-      ) : null}
-      <div
-        ref={textRef}
-        contentEditable={editable && isEditing}
-        suppressContentEditableWarning
-        spellCheck={false}
-        className={relaxedVerticalFit
-          ? "h-full w-full whitespace-pre-wrap break-words bg-transparent outline-none overflow-visible"
-          : "h-full w-full whitespace-pre-wrap break-words bg-transparent outline-none overflow-hidden"}
-        onClick={() => {
-          if (editable && !isEditing) onFocusBlock(block.id);
-        }}
-        onFocus={() => {
-          if (editable && isEditing) onFocusBlock(block.id);
-        }}
-        onBlur={(event) => {
-          if (!editable || !isEditing) return;
-          const nextText = textToLines(event.currentTarget.textContent || "").join("\n");
-          onBlurBlock(block.id, nextText);
-        }}
-        style={{
-          fontSize: `${resolvedFontSize}px`,
-          lineHeight: String(lineHeightRatio),
-          wordBreak: "break-word",
-          overflowWrap: "anywhere",
-          color: hasGradient ? "transparent" : baseColor,
-          fontWeight: effectiveFontWeight,
-          textShadow: effectiveTextShadow,
-          backgroundImage: hasGradient ? `linear-gradient(90deg, ${gradientFrom}, ${gradientTo})` : undefined,
-          backgroundClip: hasGradient ? "text" : undefined,
-          WebkitBackgroundClip: hasGradient ? "text" : undefined,
-          WebkitTextFillColor: hasGradient ? "transparent" : undefined,
-          WebkitTextStroke: effectiveStroke,
-          outline: editable && isEditing ? "2px solid rgba(59,130,246,0.35)" : "none",
-        }}
-      >
-        {block.text}
-      </div>
-    </div>
-  );
-}
-
-type CreationStep = 'idle' | 'input' | 'outline' | 'generating_content' | 'generating_images' | 'done';
-type CreationMode = 'idea' | 'outline' | 'beautify' | 'image_transform';
-type ReferenceFile = { id: string; filename: string; content: string; charCount: number };
-type SlideMaterialImage = {
-  id: string;
-  name: string;
-  fileName: string;
-  dataUrl: string;
-  refLabel?: string;
-  caption?: string;
-  sourceFileName?: string;
-  sourcePage?: number;
-};
-type ReferenceVisualAsset = {
-  id: string;
-  label: string;
-  caption: string;
-  sourceFileName: string;
-  sourcePage?: number;
-  dataUrl: string;
-  textHint: string;
-};
-
-type PresetTemplate = { id: string; zhName: string; enName: string; path: string };
-type UploadTemplate = { id: string; name: string; dataUrl: string };
-type TemplateItem =
-  | { id: string; name: string; kind: "preset"; previewSrc: string; presetPath: string }
-  | { id: string; name: string; kind: "upload"; previewSrc: string; dataUrl: string };
-
-const PPT_TEMPLATE_UPLOADS_KEY = "ppt_template_uploads_v1";
-const PPT_TEMPLATE_HIDDEN_PRESETS_KEY = "ppt_template_hidden_presets_v1";
-
-const readLegacyUploadedTemplates = (): UploadTemplate[] => {
-  if (typeof window === "undefined") return [];
-  try {
-    const raw = localStorage.getItem(PPT_TEMPLATE_UPLOADS_KEY);
-    const parsed = raw ? JSON.parse(raw) : [];
-    if (!Array.isArray(parsed)) return [];
-    return parsed
-      .filter((x: any) => x && typeof x.id === "string" && typeof x.name === "string" && typeof x.dataUrl === "string")
-      .map((x: any) => ({ id: x.id, name: x.name, dataUrl: x.dataUrl }));
-  } catch {
-    return [];
-  }
-};
-
-type ReviewDraftRect = {
-  startX: number;
-  startY: number;
-  currentX: number;
-  currentY: number;
-};
-
-type ReviewResizeHandle = "n" | "s" | "e" | "w" | "ne" | "nw" | "se" | "sw";
-
-const REVIEW_BOX_COLOR = "#22d3ee";
-const REVIEW_BOX_SELECTED_COLOR = "#f59e0b";
-
-const readLegacyHiddenPresetTemplateIds = (): string[] => {
-  if (typeof window === "undefined") return [];
-  try {
-    const raw = localStorage.getItem(PPT_TEMPLATE_HIDDEN_PRESETS_KEY);
-    const parsed = raw ? JSON.parse(raw) : [];
-    return Array.isArray(parsed) ? parsed.map((x: any) => String(x)) : [];
-  } catch {
-    return [];
-  }
-};
-
-const PRESET_TEMPLATES: PresetTemplate[] = [
-  { id: "preset-tech-business", zhName: "科技商务", enName: "Tech Business", path: "/templates/template_b.png" },
-  { id: "preset-academic", zhName: "学术汇报", enName: "Academic", path: "/templates/template_academic.jpg" },
-  { id: "preset-minimal", zhName: "极简主义", enName: "Minimal", path: "/templates/template_s.png" },
-  { id: "preset-vector", zhName: "矢量插画", enName: "Vector Illustration", path: "/templates/template_vector_illustration.png" },
-  { id: "preset-yellow", zhName: "活力黄", enName: "Vibrant Yellow", path: "/templates/template_y.png" },
-  { id: "preset-glass", zhName: "磨砂玻璃", enName: "Frosted Glass", path: "/templates/template_glass.png" },
-];
-
-const MODEL_CONCURRENCY = 5;
-const BEAUTIFY_CONCURRENCY = 5;
-const EDITABLE_EXPORT_CONCURRENCY = 3;
-const EDITABLE_REVIEW_CONCURRENCY = 4;
-const BEAUTIFY_RETRY_MAX_ATTEMPTS = 3;
-const BEAUTIFY_RETRY_BASE_DELAY_MS = 1200;
-
-const readBlobAsDataUrl = async (blob: Blob) =>
-  await new Promise<string>((resolve) => {
-    const reader = new FileReader();
-    reader.onerror = () => resolve("");
-    reader.onloadend = () => resolve(typeof reader.result === "string" ? reader.result : "");
-    reader.readAsDataURL(blob);
-  });
-
-const persistImageUrlIfNeeded = async (url: string) => {
-  const raw = String(url || "").trim();
-  if (!raw || raw.startsWith("data:image")) return raw;
-  try {
-    const resp = await fetch(raw);
-    if (!resp.ok) return raw;
-    const blob = await resp.blob();
-    const dataUrl = await readBlobAsDataUrl(blob);
-    return dataUrl || raw;
-  } catch (e) {
-    console.error("Failed to persist image url", e);
-    return raw;
-  }
-};
-
-const shouldInlinePersistImageUrl = (url: string) => {
-  const raw = String(url || "").trim();
-  return raw.startsWith("blob:") || raw.startsWith("http://") || raw.startsWith("https://");
-};
-
-const normalizePersistedSlides = (value: any): SlideData[] => {
-  if (!Array.isArray(value)) return [];
-  return value
-    .filter((s: any) => s && typeof s.id === "string")
-    .map((s: any) => ({
-      id: String(s.id),
-      title: typeof s.title === "string" ? s.title : "",
-      content: Array.isArray(s.content) ? s.content.filter((x: any) => typeof x === "string") : [],
-      note: typeof s.note === "string" ? s.note : undefined,
-      layout: typeof s.layout === "string" ? s.layout : undefined,
-      description: typeof s.description === "string" ? s.description : undefined,
-    }));
-};
-
-const normalizePersistedImageMap = (value: any): Record<string, string> => {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
-  const out: Record<string, string> = {};
-  for (const [k, val] of Object.entries(value)) {
-    if (typeof k === "string" && typeof val === "string") out[k] = val;
-  }
-  return out;
-};
-
-const normalizePersistedImageVersions = (value: any): Record<string, SlideImageVersion[]> => {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
-  const out: Record<string, SlideImageVersion[]> = {};
-  for (const [k, val] of Object.entries(value)) {
-    if (typeof k !== "string" || !Array.isArray(val)) continue;
-    out[k] = val
-      .filter((x: any) => x && typeof x.id === "string" && typeof x.url === "string" && typeof x.timestamp === "number" && (x.type === "generated" || x.type === "edited" || x.type === "derived_textless"))
-      .map((x: any) => ({
-        id: x.id,
-        url: x.url,
-        timestamp: x.timestamp,
-        type: x.type,
-        instruction: typeof x.instruction === "string" ? x.instruction : undefined,
-        sourceVersionId: typeof x.sourceVersionId === "string" ? x.sourceVersionId : undefined,
-      }));
-  }
-  return out;
-};
-
-const normalizePersistedRenderLayers = (value: any): Record<string, Record<string, SlideRenderLayer>> => {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
-  const out: Record<string, Record<string, SlideRenderLayer>> = {};
-  for (const [slideId, versions] of Object.entries(value)) {
-    if (typeof slideId !== "string" || !versions || typeof versions !== "object" || Array.isArray(versions)) continue;
-    const nextVersions: Record<string, SlideRenderLayer> = {};
-    for (const [versionId, layer] of Object.entries(versions)) {
-      if (typeof versionId !== "string" || !layer || typeof layer !== "object" || Array.isArray(layer)) continue;
-      const backgroundImageUrl = typeof (layer as any).backgroundImageUrl === "string" ? (layer as any).backgroundImageUrl : "";
-      const textBlocks = Array.isArray((layer as any).textBlocks) ? (layer as any).textBlocks : [];
-      const elements = Array.isArray((layer as any).elements) ? (layer as any).elements : deriveTextElementsFromBlocks(textBlocks);
-      const status = (layer as any).status === "pending" || (layer as any).status === "failed" ? (layer as any).status : "ready";
-      nextVersions[versionId] = {
-        backgroundImageUrl,
-        textBlocks,
-        elements,
-        status,
-        error: typeof (layer as any).error === "string" ? (layer as any).error : undefined,
-      };
-    }
-    out[slideId] = nextVersions;
-  }
-  return out;
-};
-
-const normalizePersistedStringMap = (value: any, trim = false): Record<string, string> => {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
-  const out: Record<string, string> = {};
-  for (const [k, val] of Object.entries(value)) {
-    if (typeof k !== "string" || typeof val !== "string") continue;
-    if (trim && !val.trim()) continue;
-    out[k] = val;
-  }
-  return out;
-};
-
-const filterRecordByAllowedKeys = <T,>(value: Record<string, T>, allowedKeys: Set<string>) => {
-  const out: Record<string, T> = {};
-  for (const [k, val] of Object.entries(value)) {
-    if (allowedKeys.has(k)) out[k] = val;
-  }
-  return out;
-};
-
-const normalizePersistedSlideMaterials = (value: any): Record<string, SlideMaterialImage[]> => {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
-  const out: Record<string, SlideMaterialImage[]> = {};
-  for (const [k, val] of Object.entries(value)) {
-    if (typeof k !== "string" || !Array.isArray(val)) continue;
-    out[k] = val
-      .filter((x: any) => x && typeof x.id === "string" && typeof x.name === "string" && typeof x.dataUrl === "string")
-      .map((x: any) => ({
-        id: x.id,
-        name: x.name,
-        fileName: typeof x.fileName === "string" ? x.fileName : x.name,
-        dataUrl: x.dataUrl,
-        refLabel: typeof x.refLabel === "string" ? x.refLabel : undefined,
-        caption: typeof x.caption === "string" ? x.caption : undefined,
-        sourceFileName: typeof x.sourceFileName === "string" ? x.sourceFileName : undefined,
-        sourcePage: typeof x.sourcePage === "number" ? x.sourcePage : undefined,
-      }));
-  }
-  return out;
-};
-
-const normalizePersistedUploadedTemplates = (value: any): UploadTemplate[] => {
-  if (!Array.isArray(value)) return [];
-  return value
-    .filter((x: any) => x && typeof x.id === "string" && typeof x.name === "string" && typeof x.dataUrl === "string")
-    .map((x: any) => ({ id: x.id, name: x.name, dataUrl: x.dataUrl }));
-};
-
-const normalizePersistedStringArray = (value: any): string[] => {
-  if (!Array.isArray(value)) return [];
-  return value.map((item: any) => String(item));
-};
 
 export function PptWorkspace({
   data,
@@ -813,7 +229,6 @@ export function PptWorkspace({
     }
     return out;
   });
-  const [editingTextBlockId, setEditingTextBlockId] = useState<string | null>(null);
   const [draggingTextBlockId, setDraggingTextBlockId] = useState<string | null>(null);
   const [resizingTextBlockId, setResizingTextBlockId] = useState<string | null>(null);
   const [isGeneratingImage, setIsGeneratingImage] = useState(false);
@@ -965,41 +380,6 @@ export function PptWorkspace({
   }>(null);
   const reviewPanelResizeRef = useRef<null | { startClientX: number; startWidth: number }>(null);
   const reviewLayerPromiseRef = useRef<Record<string, Promise<{ versionId: string; imageUrl: string; layer: SlideRenderLayer } | null>>>({});
-  const editableElementDragRef = useRef<null | {
-    slideId: string;
-    startClientX: number;
-    startClientY: number;
-    canvasWidth: number;
-    canvasHeight: number;
-    items: Array<{
-      elementId: string;
-      startX: number;
-      startY: number;
-      w: number;
-      h: number;
-      type: PptElement["type"];
-    }>;
-  }>(null);
-  const editableElementResizeRef = useRef<null | {
-    slideId: string;
-    elementId: string;
-    startClientX: number;
-    startClientY: number;
-    startX: number;
-    startY: number;
-    startW: number;
-    startH: number;
-    canvasWidth: number;
-    canvasHeight: number;
-    handle: EditableResizeHandle;
-  }>(null);
-  const editableSelectionRef = useRef<null | {
-    slideId: string;
-    rect: DOMRect;
-    startX: number;
-    startY: number;
-    baseSelectionIds: string[];
-  }>(null);
   const [materialPreview, setMaterialPreview] = useState<{ open: boolean; slideTitle: string; item: SlideMaterialImage | null }>({
     open: false,
     slideTitle: "",
@@ -1007,7 +387,6 @@ export function PptWorkspace({
   });
   const [windowDimensions, setWindowDimensions] = useState({ width: 0, height: 0 });
   const [previewCanvasSize, setPreviewCanvasSize] = useState({ width: 1100, height: 619 });
-  const [editableCanvasScale, setEditableCanvasScale] = useState(0.64);
   useEffect(() => {
     onExportReviewModeChange?.(exportReviewMode);
   }, [exportReviewMode, onExportReviewModeChange]);
@@ -2197,80 +1576,6 @@ export function PptWorkspace({
     return "text_only";
   };
 
-  const updateSlideRenderLayerBlocks = (slideId: string, versionId: string, textBlocks: PptTextBlock[]) => {
-    setRenderLayers((prev) => {
-      const layer = prev[slideId]?.[versionId];
-      if (!layer) return prev;
-      return {
-        ...prev,
-        [slideId]: {
-          ...(prev[slideId] || {}),
-          [versionId]: {
-            ...layer,
-            textBlocks,
-            elements: mergeTextBlocksIntoElements(textBlocks, layer.elements),
-          },
-        },
-      };
-    });
-  };
-
-  const createRenderLayerSnapshotVersion = (
-    slideId: string,
-    sourceVersionId: string,
-    nextLayer: SlideRenderLayer,
-    instruction: string,
-  ) => {
-    const versions = imageVersions[slideId] || [];
-    const sourceVersion = versions.find((item) => item.id === sourceVersionId);
-    if (!sourceVersion) return sourceVersionId;
-    const nextVersionType: SlideImageVersionType = "edited";
-    const nextVersionId = pushImageVersion(
-      slideId,
-      sourceVersion.url,
-      nextVersionType,
-      instruction,
-      {
-        sourceVersionId: sourceVersion.sourceVersionId || sourceVersionId,
-      }
-    );
-    setRenderLayerState(slideId, nextVersionId, nextLayer);
-    return nextVersionId;
-  };
-
-  const applySlideTextLayerEdit = async (
-    slide: SlideData,
-    versionId: string,
-    editType: "text_only" | "text_relayout",
-  ) => {
-    const layer = renderLayers[slide.id]?.[versionId];
-    if (!layer || !Array.isArray(layer.textBlocks) || layer.textBlocks.length === 0) return;
-    const nextBlocks = await pptService.rewriteSlideTextBlocks(
-      {
-        id: slide.id,
-        title: slide.title,
-        content: slide.content || [],
-        description: slide.description,
-        note: slide.note,
-        layout: slide.layout,
-      },
-      layer.textBlocks,
-      editType,
-      uiLang as "zh" | "en",
-    );
-    if (!Array.isArray(nextBlocks) || nextBlocks.length === 0) return;
-    createRenderLayerSnapshotVersion(
-      slide.id,
-      versionId,
-      {
-        ...layer,
-        textBlocks: nextBlocks,
-        elements: mergeTextBlocksIntoElements(nextBlocks, layer.elements),
-      },
-      tr("文字层调整", "Text layer update"),
-    );
-  };
-
   const updateSlideTextBlock = (slideId: string, blockId: string, nextText: string) => {
     const { versionId } = getSlideVersionMeta(slideId);
     if (!versionId) return;
@@ -2347,74 +1652,6 @@ export function PptWorkspace({
       };
     });
   };
-  const updateSlideTextBlockRole = (slideId: string, blockId: string, nextRole: PptTextBlock["role"]) => {
-    const { versionId } = getSlideVersionMeta(slideId);
-    if (!versionId) return;
-    setRenderLayers((prev) => {
-      const layer = prev[slideId]?.[versionId];
-      if (!layer) return prev;
-      const nextBlocks = layer.textBlocks.map((block) =>
-        block.id === blockId
-          ? {
-              ...block,
-              role: nextRole,
-              style: {
-                ...block.style,
-                fontWeight:
-                  typeof block.style?.fontWeight === "number"
-                    ? block.style.fontWeight
-                    : nextRole === "title"
-                      ? 700
-                      : nextRole === "tag"
-                        ? 800
-                        : 500,
-              },
-            }
-          : block
-      );
-      return {
-        ...prev,
-        [slideId]: {
-          ...(prev[slideId] || {}),
-          [versionId]: {
-            ...layer,
-            textBlocks: nextBlocks,
-            elements: mergeTextBlocksIntoElements(nextBlocks, layer.elements),
-          },
-        },
-      };
-    });
-  };
-  const updateSlideTextBlockStyle = (slideId: string, blockId: string, stylePatch: Partial<NonNullable<PptTextBlock["style"]>>) => {
-    const { versionId } = getSlideVersionMeta(slideId);
-    if (!versionId) return;
-    setRenderLayers((prev) => {
-      const layer = prev[slideId]?.[versionId];
-      if (!layer) return prev;
-      const nextBlocks = layer.textBlocks.map((block) =>
-        block.id === blockId
-          ? {
-              ...block,
-              style: {
-                ...(block.style || {}),
-                ...stylePatch,
-              },
-            }
-          : block
-      );
-      return {
-        ...prev,
-        [slideId]: {
-          ...(prev[slideId] || {}),
-          [versionId]: {
-            ...layer,
-            textBlocks: nextBlocks,
-            elements: mergeTextBlocksIntoElements(nextBlocks, layer.elements),
-          },
-        },
-      };
-    });
-  };
   const appendSlideTextBlock = (slideId: string, block: PptTextBlock) => {
     const { versionId } = getSlideVersionMeta(slideId);
     if (!versionId) return;
@@ -2430,64 +1667,6 @@ export function PptWorkspace({
             ...layer,
             textBlocks: nextBlocks,
             elements: mergeTextBlocksIntoElements(nextBlocks, layer.elements),
-          },
-        },
-      };
-    });
-  };
-  const appendSlideElement = (slideId: string, element: PptElement) => {
-    const { versionId } = getSlideVersionMeta(slideId);
-    if (!versionId) return;
-    setRenderLayers((prev) => {
-      const layer = prev[slideId]?.[versionId];
-      if (!layer) return prev;
-      return {
-        ...prev,
-        [slideId]: {
-          ...(prev[slideId] || {}),
-          [versionId]: {
-            ...layer,
-            elements: [...(layer.elements || []), element],
-          },
-        },
-      };
-    });
-  };
-  const updateSlideElement = (slideId: string, elementId: string, patch: Partial<PptElement>) => {
-    const { versionId } = getSlideVersionMeta(slideId);
-    if (!versionId) return;
-    setRenderLayers((prev) => {
-      const layer = prev[slideId]?.[versionId];
-      if (!layer) return prev;
-      const nextElements = (layer.elements || []).map((element) => (element.id === elementId ? { ...element, ...patch } as PptElement : element));
-      return {
-        ...prev,
-        [slideId]: {
-          ...(prev[slideId] || {}),
-          [versionId]: {
-            ...layer,
-            elements: nextElements,
-          },
-        },
-      };
-    });
-  };
-  const deleteSlideElement = (slideId: string, elementId: string) => {
-    const { versionId } = getSlideVersionMeta(slideId);
-    if (!versionId) return;
-    setRenderLayers((prev) => {
-      const layer = prev[slideId]?.[versionId];
-      if (!layer) return prev;
-      const nextElements = (layer.elements || []).filter((element) => element.id !== elementId);
-      const nextTextBlocks = layer.textBlocks.filter((block) => block.id !== elementId);
-      return {
-        ...prev,
-        [slideId]: {
-          ...(prev[slideId] || {}),
-          [versionId]: {
-            ...layer,
-            textBlocks: nextTextBlocks,
-            elements: nextElements,
           },
         },
       };
@@ -2527,14 +1706,6 @@ export function PptWorkspace({
     targetVersionId?: string,
   ) => {
     updateSlideTextBlockRect(slideId, blockId, { w: nextW, h: nextH }, targetVersionId);
-  };
-
-  const beginTextBlockDrag = (slideId: string, sourceVersionId: string) => {
-    return sourceVersionId;
-  };
-
-  const beginTextBlockResize = (slideId: string, sourceVersionId: string) => {
-    return sourceVersionId;
   };
 
   useEffect(() => {
@@ -2711,395 +1882,6 @@ export function PptWorkspace({
     });
   };
 
-  const renderSlideTextBlocks = (
-    slide: SlideData,
-    editable = false,
-    canvasWidth = 1100,
-    canvasHeight = 619
-  ) => {
-    const layer = getSlideRenderLayer(slide.id);
-    if (!layer || layer.textBlocks.length === 0) return null;
-    const scale = Math.max(0.45, Math.min(1.8, Math.min(canvasWidth / 1100, canvasHeight / 619)));
-    return layer.textBlocks.map((block) => {
-      const style = block.style || {};
-      const fontSize = Math.max(10, resolveTextBlockFontSize(block, canvasWidth, canvasHeight));
-      const isDragging = draggingTextBlockId === block.id;
-      const paddingX = Math.max(6, Math.round((block.role === "title" ? 14 : 12) * scale));
-      const paddingY = Math.max(4, Math.round((block.role === "title" ? 10 : 8) * scale));
-      const dragHandleSize = Math.max(14, Math.round(20 * scale));
-      const dragHandleOffset = Math.max(2, Math.round(4 * scale));
-      return (
-        <div
-          key={block.id}
-          className="absolute overflow-hidden"
-          style={{
-            left: `${block.x * 100}%`,
-            top: `${block.y * 100}%`,
-            width: `${block.w * 100}%`,
-            height: `${block.h * 100}%`,
-            padding: `${paddingY}px ${paddingX}px`,
-            pointerEvents: editable ? "auto" : "none",
-            color: style.color || "#111827",
-            fontFamily: style.fontFamily || (uiLang === "zh" ? "Microsoft YaHei" : "Aptos"),
-            fontSize: `${fontSize}px`,
-            fontWeight: style.fontWeight || (block.role === "title" ? 700 : 500),
-            fontStyle: style.fontStyle || "normal",
-            lineHeight: String(style.lineHeight || (block.role === "title" ? 1.18 : 1.35)),
-            letterSpacing: `${style.letterSpacing || 0}px`,
-            textAlign: style.align || "left",
-            textShadow: "0 1px 4px rgba(15,23,42,0.18)",
-            cursor: editable ? "text" : "default",
-            outline: editable && isDragging ? "2px solid rgba(59,130,246,0.45)" : "none",
-          }}
-        >
-          {editable ? (
-            <button
-              type="button"
-              className="absolute z-20 rounded bg-black/55 text-white leading-none shadow-sm cursor-grab active:cursor-grabbing"
-              title={tr("拖动文本框", "Drag text block")}
-              style={{
-                right: `${dragHandleOffset}px`,
-                top: `${dragHandleOffset}px`,
-                width: `${dragHandleSize}px`,
-                height: `${dragHandleSize}px`,
-                fontSize: `${Math.max(8, Math.round(10 * scale))}px`,
-              }}
-              onPointerDown={(event) => {
-                event.preventDefault();
-                event.stopPropagation();
-                const rect = previewCanvasRef.current?.getBoundingClientRect();
-                if (!rect) return;
-                const { versionId: sourceVersionId } = getSlideVersionMeta(slide.id);
-                if (!sourceVersionId) return;
-                const editableVersionId = beginTextBlockDrag(slide.id, sourceVersionId);
-                textBlockDragRef.current = {
-                  slideId: slide.id,
-                  versionId: editableVersionId,
-                  blockId: block.id,
-                  startClientX: event.clientX,
-                  startClientY: event.clientY,
-                  startX: block.x,
-                  startY: block.y,
-                  blockW: block.w,
-                  blockH: block.h,
-                  canvasWidth: rect.width,
-                  canvasHeight: rect.height,
-                };
-                setDraggingTextBlockId(block.id);
-              }}
-            >
-              +
-            </button>
-          ) : null}
-          <div
-            contentEditable={editable}
-            suppressContentEditableWarning
-            spellCheck={false}
-            className="h-full w-full whitespace-pre-wrap break-words bg-transparent outline-none"
-            onFocus={() => {
-              if (editable) setEditingTextBlockId(block.id);
-            }}
-            onBlur={(event) => {
-              if (!editable) return;
-              setEditingTextBlockId((current) => (current === block.id ? null : current));
-              const nextText = textToLines(event.currentTarget.textContent || "").join("\n");
-              if (!nextText || nextText === block.text) return;
-              updateSlideTextBlock(slide.id, block.id, nextText);
-            }}
-            style={{
-              outline: editable && editingTextBlockId === block.id ? "2px solid rgba(59,130,246,0.35)" : "none",
-            }}
-          >
-            {block.text}
-          </div>
-        </div>
-      );
-    });
-  };
-
-  const renderResponsiveSlideTextBlocks = (
-    slide: SlideData,
-    editable = false,
-    canvasWidth = 1100,
-    canvasHeight = 619
-  ) => {
-    const layer = getSlideRenderLayer(slide.id);
-    if (!layer || layer.textBlocks.length === 0) return null;
-    return layer.textBlocks.map((block) => (
-      <TextBlockOverlay
-        key={block.id}
-        block={block}
-        slideId={slide.id}
-        editable={editable}
-        uiLang={uiLang as "zh" | "en"}
-        canvasWidth={canvasWidth}
-        canvasHeight={canvasHeight}
-        isDragging={draggingTextBlockId === block.id}
-        isEditing={editingTextBlockId === block.id}
-        onFocusBlock={(blockId) => {
-          if (editable) setEditingTextBlockId(blockId);
-        }}
-        onBlurBlock={(blockId, nextText) => {
-          if (!editable) return;
-          setEditingTextBlockId((current) => (current === blockId ? null : current));
-          if (!nextText || nextText === block.text) return;
-          updateSlideTextBlock(slide.id, blockId, nextText);
-        }}
-        onDragStart={(event, activeBlock, activeSlideId) => {
-          event.preventDefault();
-          event.stopPropagation();
-          const rect = previewCanvasRef.current?.getBoundingClientRect();
-          if (!rect) return;
-          const { versionId: sourceVersionId } = getSlideVersionMeta(activeSlideId);
-          if (!sourceVersionId) return;
-          const editableVersionId = beginTextBlockDrag(activeSlideId, sourceVersionId);
-          textBlockDragRef.current = {
-            slideId: activeSlideId,
-            versionId: editableVersionId,
-            blockId: activeBlock.id,
-            startClientX: event.clientX,
-            startClientY: event.clientY,
-            startX: activeBlock.x,
-            startY: activeBlock.y,
-            blockW: activeBlock.w,
-            blockH: activeBlock.h,
-            canvasWidth: rect.width,
-            canvasHeight: rect.height,
-          };
-          setDraggingTextBlockId(activeBlock.id);
-        }}
-        tr={tr}
-      />
-    ));
-  };
-
-  const renderFixedSlideTextSvg = (slide: SlideData) => {
-    const layer = getSlideRenderLayer(slide.id);
-    if (!layer || layer.textBlocks.length === 0) return null;
-
-    return (
-      <div className="absolute inset-0 z-10 pointer-events-none">
-        {layer.textBlocks.map((block) => {
-          if (editingTextBlockId === block.id) return null;
-          const style = block.style || {};
-          const refFontSize = Math.max(
-            10,
-            resolveTextBlockFontSize(block, PPT_REFERENCE_SLIDE_WIDTH, PPT_REFERENCE_SLIDE_HEIGHT)
-          );
-          const previewFontSize = refFontSize * PPT_POINT_TO_CSS_PX;
-          const lineHeightRatio = Number(style.lineHeight || (block.role === "title" ? 1.12 : block.role === "tag" ? 1.05 : 1.35));
-          const x = block.x * PPT_REFERENCE_SLIDE_WIDTH;
-          const y = block.y * PPT_REFERENCE_SLIDE_HEIGHT;
-          const w = block.w * PPT_REFERENCE_SLIDE_WIDTH;
-          const h = block.h * PPT_REFERENCE_SLIDE_HEIGHT;
-          const isTag = block.role === "tag";
-          const justifyContent = style.align === "center" ? "center" : style.align === "right" ? "flex-end" : "flex-start";
-          const textColor = style.color || (block.role === "title" ? "#ffffff" : isTag ? "#ffd66b" : "#ffffff");
-          const fontFamily = style.fontFamily || "Aptos";
-
-          return (
-            <div
-              key={block.id}
-              className="absolute overflow-visible"
-              style={{
-                left: `${x}px`,
-                top: `${y}px`,
-                width: `${w}px`,
-                height: `${h}px`,
-                display: "flex",
-                alignItems: "center",
-                justifyContent,
-                background: "transparent",
-                border: "none",
-                boxShadow: "none",
-              }}
-            >
-              <div
-                style={{
-                  width: "100%",
-                  whiteSpace: "pre-wrap",
-                  wordBreak: "break-word",
-                  overflowWrap: "anywhere",
-                  textAlign: style.align || "left",
-                  fontFamily,
-                  fontSize: `${previewFontSize}px`,
-                  fontWeight: Number(style.fontWeight || (block.role === "title" ? 900 : isTag ? 800 : 500)),
-                  fontStyle: style.fontStyle || "normal",
-                  lineHeight: String(lineHeightRatio),
-                  letterSpacing: `${Number(style.letterSpacing || 0)}px`,
-                  color: textColor,
-                }}
-              >
-                {block.text}
-              </div>
-            </div>
-          );
-        })}
-      </div>
-    );
-  };
-
-  const renderSlideInteractionLayer = (slide: SlideData) => {
-    const layer = getSlideRenderLayer(slide.id);
-    if (!layer || layer.textBlocks.length === 0) return null;
-
-    return layer.textBlocks.map((block) => {
-      const style = block.style || {};
-      const refFontSize = Math.max(
-        10,
-        resolveTextBlockFontSize(block, PPT_REFERENCE_SLIDE_WIDTH, PPT_REFERENCE_SLIDE_HEIGHT)
-      );
-      const previewFontSize = refFontSize * PPT_POINT_TO_CSS_PX;
-      const isEditing = editingTextBlockId === block.id;
-      const dragHandleSize = 20;
-      const resizeHandleSize = 18;
-      return (
-        <div
-          key={`interactive-${block.id}`}
-          className="absolute"
-          style={{
-            left: `${block.x * 100}%`,
-            top: `${block.y * 100}%`,
-            width: `${block.w * 100}%`,
-            height: `${block.h * 100}%`,
-            pointerEvents: "auto",
-            outline:
-              draggingTextBlockId === block.id || resizingTextBlockId === block.id
-                ? "2px solid rgba(59,130,246,0.45)"
-                : "none",
-          }}
-        >
-          <button
-            type="button"
-            className="absolute z-20 rounded bg-black/55 text-white leading-none shadow-sm cursor-grab active:cursor-grabbing"
-            title={tr("拖动文本框", "Drag text block")}
-            style={{
-              right: "-8px",
-              top: "-6px",
-              width: `${dragHandleSize}px`,
-              height: `${dragHandleSize}px`,
-              fontSize: "10px",
-            }}
-            onPointerDown={(event) => {
-              event.preventDefault();
-              event.stopPropagation();
-              const rect = previewCanvasRef.current?.getBoundingClientRect();
-              if (!rect) return;
-              const { versionId: sourceVersionId } = getSlideVersionMeta(slide.id);
-              if (!sourceVersionId) return;
-              const editableVersionId = beginTextBlockDrag(slide.id, sourceVersionId);
-              textBlockDragRef.current = {
-                slideId: slide.id,
-                versionId: editableVersionId,
-                blockId: block.id,
-                startClientX: event.clientX,
-                startClientY: event.clientY,
-                startX: block.x,
-                startY: block.y,
-                blockW: block.w,
-                blockH: block.h,
-                canvasWidth: rect.width,
-                canvasHeight: rect.height,
-              };
-              setDraggingTextBlockId(block.id);
-            }}
-          >
-            +
-          </button>
-          <button
-            type="button"
-            className="absolute z-20 rounded bg-blue-600/75 text-white leading-none shadow-sm cursor-nwse-resize active:cursor-nwse-resize"
-            title={tr("缩放文本框", "Resize text box")}
-            style={{
-              right: "-7px",
-              bottom: "-7px",
-              width: `${resizeHandleSize}px`,
-              height: `${resizeHandleSize}px`,
-              fontSize: "10px",
-            }}
-            onPointerDown={(event) => {
-              event.preventDefault();
-              event.stopPropagation();
-              const rect = previewCanvasRef.current?.getBoundingClientRect();
-              if (!rect) return;
-              const { versionId: sourceVersionId } = getSlideVersionMeta(slide.id);
-              if (!sourceVersionId) return;
-              const editableVersionId = beginTextBlockResize(slide.id, sourceVersionId);
-              textBlockResizeRef.current = {
-                slideId: slide.id,
-                versionId: editableVersionId,
-                blockId: block.id,
-                startClientX: event.clientX,
-                startClientY: event.clientY,
-                startW: block.w,
-                startH: block.h,
-                startX: block.x,
-                startY: block.y,
-                canvasWidth: rect.width,
-                canvasHeight: rect.height,
-              };
-              setResizingTextBlockId(block.id);
-            }}
-          >
-            {uiLang === "zh" ? "缩" : "↘"}
-          </button>
-          {isEditing ? (
-            <div
-              className="absolute inset-0 flex"
-              style={{
-                alignItems: "center",
-                justifyContent: style.align === "center" ? "center" : style.align === "right" ? "flex-end" : "flex-start",
-              }}
-            >
-              <div
-                contentEditable
-                suppressContentEditableWarning
-                spellCheck={false}
-                className="w-full whitespace-pre-wrap break-words bg-transparent outline-none"
-                onBlur={(event) => {
-                  const nextText = textToLines(event.currentTarget.textContent || "").join("\n");
-                  setEditingTextBlockId((current) => (current === block.id ? null : current));
-                  if (!nextText || nextText === block.text) return;
-                  updateSlideTextBlock(slide.id, block.id, nextText);
-                }}
-                ref={(node) => {
-                  if (!node || editingTextBlockId !== block.id) return;
-                  node.focus();
-                  const selection = window.getSelection();
-                  if (!selection) return;
-                  const range = document.createRange();
-                  range.selectNodeContents(node);
-                  range.collapse(false);
-                  selection.removeAllRanges();
-                  selection.addRange(range);
-                }}
-                style={{
-                  textAlign: style.align || "left",
-                  fontFamily: style.fontFamily || "Aptos",
-                  fontSize: `${previewFontSize}px`,
-                  fontWeight: Number(style.fontWeight || (block.role === "title" ? 900 : block.role === "tag" ? 800 : 500)),
-                  fontStyle: style.fontStyle || "normal",
-                  lineHeight: String(style.lineHeight || (block.role === "title" ? 1.12 : block.role === "tag" ? 1.05 : 1.35)),
-                  color: style.color || (block.role === "title" ? "#ffffff" : block.role === "tag" ? "#ffd66b" : "#ffffff"),
-                  outline: "2px solid rgba(59,130,246,0.35)",
-                }}
-              >
-                {block.text}
-              </div>
-            </div>
-          ) : (
-            <button
-              type="button"
-              className="absolute inset-0 bg-transparent"
-              onClick={() => setEditingTextBlockId(block.id)}
-              aria-label={`Edit ${block.id}`}
-            />
-          )}
-        </div>
-      );
-    });
-  };
-
   const renderScaledSlideScene = (
     slide: SlideData,
     _editable = false,
@@ -3261,8 +2043,6 @@ export function PptWorkspace({
   const currentSlide = activeSlides[currentSlideIndex];
   const currentSlideImage = currentSlide ? getSlideBackgroundUrl(currentSlide.id) : "";
   const currentReviewLayer = currentSlide ? getSlideRenderLayer(currentSlide.id) : undefined;
-  const selectedReviewBlock =
-    currentReviewLayer?.textBlocks.find((block) => block.id === selectedReviewTextBlockId) || null;
   const extractionDoneCount = activeSlides.filter((slide) => getEditableExtractionStatus(slide.id) === "done").length;
   const extractionFailedCount = activeSlides.filter((slide) => getEditableExtractionStatus(slide.id) === "failed").length;
   const preparedReviewLayerCount = activeSlides.filter((slide) => {
@@ -3329,28 +2109,6 @@ export function PptWorkspace({
       }}
     />
   );
-  const handleEditableAssetChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file || !currentSlide) return;
-    const dataUrl = await new Promise<string>((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(String(reader.result || ""));
-      reader.onerror = () => reject(reader.error || new Error("Failed to read image"));
-      reader.readAsDataURL(file);
-    });
-    const id = `image-${Date.now()}-${Math.random().toString(16).slice(2)}`;
-    appendSlideElement(currentSlide.id, {
-      id,
-      type: "image",
-      src: dataUrl,
-      fit: "cover",
-      x: 0.62,
-      y: 0.1,
-      w: 0.22,
-      h: 0.22,
-    });
-    event.target.value = "";
-  };
   const failedBeautifyCount = activeSlides.reduce((n, s) => n + (beautifyFailures[s.id] ? 1 : 0), 0);
   const failedImageTransformCount = activeSlides.reduce((n, s) => n + (imageTransformFailures[s.id] ? 1 : 0), 0);
   const currentSlideFailure = currentSlide
@@ -3403,12 +2161,6 @@ export function PptWorkspace({
   const closeSlideshow = () => {
     setSlideshowOpen(false);
     void exitSlideshowFullscreen();
-  };
-
-  const openSlideshow = () => {
-    if (activeSlides.length === 0) return;
-    slideshowStartIndexRef.current = currentSlideIndex;
-    setSlideshowOpen(true);
   };
 
   useEffect(() => {
@@ -4018,47 +2770,6 @@ export function PptWorkspace({
       .map((x) => ({ url: x.dataUrl, label: x.name }))
       .filter((x) => !!x.url);
 
-  const getTextAreaCaretPosition = (textarea: HTMLTextAreaElement) => {
-    const div = document.createElement("div");
-    const style = window.getComputedStyle(textarea);
-    const props = [
-      "boxSizing", "width", "height", "overflowX", "overflowY", "borderTopWidth", "borderRightWidth",
-      "borderBottomWidth", "borderLeftWidth", "paddingTop", "paddingRight", "paddingBottom", "paddingLeft",
-      "fontStyle", "fontVariant", "fontWeight", "fontStretch", "fontSize", "fontSizeAdjust", "lineHeight",
-      "fontFamily", "textAlign", "textTransform", "textIndent", "textDecoration", "letterSpacing", "wordSpacing",
-      "tabSize", "MozTabSize",
-    ] as const;
-    div.style.position = "absolute";
-    div.style.visibility = "hidden";
-    div.style.whiteSpace = "pre-wrap";
-    div.style.wordWrap = "break-word";
-    for (const prop of props) {
-      (div.style as any)[prop] = (style as any)[prop];
-    }
-    div.textContent = textarea.value.substring(0, textarea.selectionStart || 0);
-    const span = document.createElement("span");
-    span.textContent = textarea.value.substring(textarea.selectionStart || 0) || ".";
-    div.appendChild(span);
-    document.body.appendChild(div);
-    const rect = textarea.getBoundingClientRect();
-    const caretRect = span.getBoundingClientRect();
-    const left = caretRect.left - rect.left + textarea.scrollLeft;
-    const top = caretRect.top - rect.top + textarea.scrollTop + 2;
-    document.body.removeChild(div);
-    return { left, top };
-  };
-
-  const extractMaterialTokenNames = (text: string) => {
-    const out: string[] = [];
-    const re = /\{\{image:([^}]+)\}\}/g;
-    let m: RegExpExecArray | null;
-    while ((m = re.exec(String(text || "")))) {
-      const name = String(m[1] || "").trim();
-      if (name) out.push(name);
-    }
-    return out;
-  };
-
   const insertMaterialTokenToSlideDescription = (slideIndex: number, slideId: string, materialName: string) => {
     const token = `{{image:${materialName}}}`;
     const editor = descriptionEditorRefs.current[slideId];
@@ -4285,93 +2996,6 @@ export function PptWorkspace({
       setCurrentImageVersionId({});
       setRenderLayers({});
       setCurrentSlideIndex(0);
-  };
-
-  const extractJsonArray = (text: string) => {
-      const match = text.match(/\[[\s\S]*\]/);
-      return match ? match[0] : null;
-  };
-
-  const parseSlides = (raw: string): SlideData[] | null => {
-    const trimmed = raw.trim();
-    if (!trimmed) return null;
-
-    const jsonArrayText = extractJsonArray(trimmed);
-    if (jsonArrayText) {
-      try {
-        const parsed = JSON.parse(jsonArrayText);
-        if (Array.isArray(parsed)) {
-          return parsed.map((it: any, i: number) => ({
-            id: String(it.id || `slide-${i + 1}`),
-            title: String(it.title || tr(`第 ${i + 1} 页`, `Slide ${i + 1}`)),
-            content: Array.isArray(it.content) ? it.content.map((x: any) => String(x)) : [],
-            description: typeof it.description === "string" ? it.description : undefined,
-            note: typeof it.note === "string" ? it.note : undefined,
-            layout: typeof it.layout === "string" ? localizeLayoutHint(it.layout, uiLang as "zh" | "en") : undefined,
-          }));
-        }
-      } catch {
-      }
-    }
-
-    const lines = trimmed.split(/\r?\n/);
-    const slides: SlideData[] = [];
-    let current: SlideData | null = null;
-    const ensureCurrent = () => {
-      if (!current) {
-        current = {
-          id: `slide-${slides.length + 1}`,
-          title: tr(`第 ${slides.length + 1} 页`, `Slide ${slides.length + 1}`),
-          content: [],
-        };
-      }
-      return current;
-    };
-    const pushCurrent = () => {
-      if (current) slides.push(current);
-      current = null;
-    };
-
-    for (const line of lines) {
-      const l = line.trim();
-      if (!l) continue;
-
-      const heading = l.match(/^(#{1,3})\s+(.*)$/);
-      if (heading) {
-        pushCurrent();
-        current = {
-          id: `slide-${slides.length + 1}`,
-          title: heading[2].trim() || tr(`第 ${slides.length + 1} 页`, `Slide ${slides.length + 1}`),
-          content: [],
-        };
-        continue;
-      }
-
-      const bullet = l.match(/^[-*•]\s+(.*)$/);
-      if (bullet) {
-        ensureCurrent().content.push(bullet[1].trim());
-        continue;
-      }
-
-      const desc = l.match(/^description[:：]\s*(.*)$/i);
-      if (desc) {
-        ensureCurrent().description = desc[1].trim();
-        continue;
-      }
-
-      const note = l.match(/^note[:：]\s*(.*)$/i);
-      if (note) {
-        ensureCurrent().note = note[1].trim();
-        continue;
-      }
-
-      const layout = l.match(/^layout[:：]\s*(.*)$/i);
-      if (layout) {
-        ensureCurrent().layout = layout[1].trim();
-      }
-    }
-    pushCurrent();
-    return slides.length > 0 ? slides : null;
   };
 
   const runInParallel = async (tasks: (() => Promise<void>)[], limit: number) => {
@@ -4956,61 +3580,6 @@ export function PptWorkspace({
     }
   };
 
-  const handleGenerateImagesOnly = async () => {
-      if (localSlides.length === 0) return;
-      setCreationStep('generating_images');
-
-      const pages: PptPage[] = localSlides.map((s) => ({
-          id: s.id,
-          title: s.title,
-          content: s.content || [],
-          description: s.description,
-          status: "description_generated"
-      }));
-
-      const progressTracker = createTwoStageSlideProgressTracker(
-        pages.length,
-        "正在生成页图...",
-        "Generating slide images...",
-        "正在处理页文字层...",
-        "Finishing slide generation...",
-      );
-      progressTracker.start();
-      const imageTasks = pages.map((_, i) => async () => {
-          let baseReady = false;
-          try {
-              const imageUrl = await pptService.generatePageImage(
-                pages[i],
-                uiLang as "zh" | "en",
-                templateImage || undefined,
-                getSlideMaterialImageRefs(pages[i].id || `slide-${i + 1}`)
-              );
-              progressTracker.markBaseReady();
-              baseReady = true;
-              if (imageUrl) {
-                  const slide = localSlides[i];
-                  if (slide) {
-                    await pushImageVersionAndProcess(slide, imageUrl, 'generated');
-                  }
-              }
-          } catch (e) {
-              console.error(`Failed to generate image for slide ${i}`, e);
-          } finally {
-              progressTracker.markSlideFinished(baseReady);
-          }
-      });
-
-      try {
-          await runInParallel(imageTasks, MODEL_CONCURRENCY);
-          setCreationStep('done');
-          onPptReadyChange?.(true);
-      } catch (e) {
-          console.error("Image-only generation failed", e);
-          setCreationStep('done');
-          onPptReadyChange?.(true);
-      }
-  };
-
   const handleGenerateAiImage = async () => {
     if (!currentSlide) return;
     
@@ -5343,104 +3912,6 @@ export function PptWorkspace({
       return next;
     });
     setCurrentSlideIndex(nextIndex);
-  };
-
-  const handleDuplicateOutlineSlide = (slideId?: string) => {
-    const sourceId = slideId || localSlides[currentSlideIndex]?.id;
-    if (!sourceId) return;
-    const sourceIndex = localSlides.findIndex((slide) => slide.id === sourceId);
-    if (sourceIndex < 0) return;
-    const sourceSlide = localSlides[sourceIndex];
-    const duplicatedId = `slide-${Date.now()}-${Math.random().toString(16).slice(2)}`;
-    const duplicatedSlide: SlideData = {
-      ...cloneSerializable(sourceSlide),
-      id: duplicatedId,
-      title: `${sourceSlide.title || tr("未命名幻灯片", "Untitled slide")} ${tr("副本", "Copy")}`,
-    };
-    const insertAt = sourceIndex + 1;
-
-    setLocalSlides((prev) => {
-      const next = [...prev];
-      next.splice(insertAt, 0, duplicatedSlide);
-      return next;
-    });
-
-    const sourceRenderLayerMap = renderLayers[sourceId];
-    if (sourceRenderLayerMap) {
-      const duplicatedLayerMap = Object.fromEntries(
-        Object.entries(cloneSerializable(sourceRenderLayerMap)).map(([versionId, layer]) => {
-          const duplicatedTextBlocks = Array.isArray(layer.textBlocks) ? layer.textBlocks : [];
-          const duplicatedElements = Array.isArray(layer.elements) ? layer.elements : [];
-          return [
-            versionId,
-            {
-              ...layer,
-              textBlocks: duplicatedTextBlocks.map((block, index) => ({
-                ...block,
-                id: `${duplicatedId}-${versionId}-text-${index + 1}`,
-              })),
-              elements: duplicatedElements.map((element, index) => ({
-                ...element,
-                id: `${duplicatedId}-${versionId}-element-${index + 1}`,
-              })),
-            } satisfies SlideRenderLayer,
-          ];
-        }),
-      );
-      setRenderLayers((prev) => ({
-        ...prev,
-        [duplicatedId]: duplicatedLayerMap,
-      }));
-    }
-
-    if (generatedImages[sourceId]) {
-      setGeneratedImages((prev) => ({
-        ...prev,
-        [duplicatedId]: prev[sourceId],
-      }));
-    }
-
-    const sourceVersions = imageVersions[sourceId];
-    if (Array.isArray(sourceVersions) && sourceVersions.length > 0) {
-      const clonedVersions = sourceVersions.map((version, index) => ({
-        ...cloneSerializable(version),
-        id: `${duplicatedId}-version-${index + 1}-${Math.random().toString(16).slice(2, 8)}`,
-        timestamp: Date.now() + index,
-      }));
-      setImageVersions((prev) => ({
-        ...prev,
-        [duplicatedId]: clonedVersions,
-      }));
-      const sourceCurrentVersionId = currentImageVersionId[sourceId];
-      const sourceCurrentIndex = sourceVersions.findIndex((version) => version.id === sourceCurrentVersionId);
-      setCurrentImageVersionId((prev) => ({
-        ...prev,
-        [duplicatedId]: clonedVersions[Math.max(0, sourceCurrentIndex)]?.id || clonedVersions[clonedVersions.length - 1]?.id,
-      }));
-    }
-
-    if (slideMaterials[sourceId]) {
-      setSlideMaterials((prev) => ({
-        ...prev,
-        [duplicatedId]: cloneSerializable(prev[sourceId]),
-      }));
-    }
-
-    if (beautifyFailures[sourceId]) {
-      setBeautifyFailures((prev) => ({
-        ...prev,
-        [duplicatedId]: prev[sourceId],
-      }));
-    }
-
-    if (imageTransformFailures[sourceId]) {
-      setImageTransformFailures((prev) => ({
-        ...prev,
-        [duplicatedId]: prev[sourceId],
-      }));
-    }
-
-    setCurrentSlideIndex(insertAt);
   };
 
   const handleDeleteOutlineSlide = (slideId: string) => {
@@ -6815,5 +5286,3 @@ export function PptWorkspace({
     </div>
   );
 }
-
-

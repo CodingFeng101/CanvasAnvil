@@ -1,5 +1,5 @@
 ﻿import PptxGenJS from "pptxgenjs"
-import { PDFDocument, rgb } from "pdf-lib"
+import { PDFDocument } from "pdf-lib"
 import { generateChatMessage, generateImage, generateVisionChatMessage } from "@/ai/client"
 import { buildRisenPrompt } from "./risen-prompt"
 import pptOutlineSystem from "../../agent/ppt/outline.md?raw"
@@ -382,27 +382,6 @@ const normalizeTextBlocks = (value: any): PptTextBlock[] => {
         .filter(Boolean) as PptTextBlock[];
 };
 
-const parseColorToRgb = (value?: string) => {
-    const raw = String(value || "").trim();
-    if (!raw) return rgb(0.07, 0.09, 0.13);
-    const hex = raw.replace(/^#/, "");
-    if (/^[0-9a-fA-F]{6}$/.test(hex)) {
-        const r = parseInt(hex.slice(0, 2), 16) / 255;
-        const g = parseInt(hex.slice(2, 4), 16) / 255;
-        const b = parseInt(hex.slice(4, 6), 16) / 255;
-        return rgb(r, g, b);
-    }
-    const rgbMatch = raw.match(/rgb\s*\(\s*([\d.]+)\s*,\s*([\d.]+)\s*,\s*([\d.]+)\s*\)/i);
-    if (rgbMatch) {
-        return rgb(
-            Math.max(0, Math.min(255, Number(rgbMatch[1]))) / 255,
-            Math.max(0, Math.min(255, Number(rgbMatch[2]))) / 255,
-            Math.max(0, Math.min(255, Number(rgbMatch[3]))) / 255,
-        );
-    }
-    return rgb(0.07, 0.09, 0.13);
-};
-
 const toHexColor = (value?: string, fallback = "111827") => {
     const raw = String(value || "").trim();
     if (!raw) return fallback;
@@ -666,133 +645,6 @@ const drawGenericShapePath = (
             break;
     }
     ctx.closePath();
-};
-
-const normalizeImageToPngDataUri = async (imageUrl: string) => {
-    const dataUri = await urlToDataUri(imageUrl);
-    const img = await loadImageElement(dataUri);
-    const width = Number(img.naturalWidth || img.width || PPT_REFERENCE_SLIDE_WIDTH);
-    const height = Number(img.naturalHeight || img.height || PPT_REFERENCE_SLIDE_HEIGHT);
-    const canvas = document.createElement("canvas");
-    canvas.width = width;
-    canvas.height = height;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) throw new Error("Canvas context unavailable for image normalization");
-    ctx.drawImage(img, 0, 0, width, height);
-    return {
-        dataUrl: canvas.toDataURL("image/png"),
-        width,
-        height,
-    };
-};
-
-const clampCanvasRect = (x: number, y: number, w: number, h: number, canvasWidth: number, canvasHeight: number) => {
-    const clampedX = Math.max(0, Math.min(canvasWidth, x));
-    const clampedY = Math.max(0, Math.min(canvasHeight, y));
-    const maxW = Math.max(0, canvasWidth - clampedX);
-    const maxH = Math.max(0, canvasHeight - clampedY);
-    return {
-        x: clampedX,
-        y: clampedY,
-        w: Math.max(1, Math.min(maxW, w)),
-        h: Math.max(1, Math.min(maxH, h)),
-    };
-};
-
-const sampleAverageColor = (
-    ctx: CanvasRenderingContext2D,
-    x: number,
-    y: number,
-    w: number,
-    h: number,
-) => {
-    const rect = clampCanvasRect(x, y, w, h, ctx.canvas.width, ctx.canvas.height);
-    const imageData = ctx.getImageData(rect.x, rect.y, rect.w, rect.h).data;
-    let r = 0;
-    let g = 0;
-    let b = 0;
-    let count = 0;
-    for (let index = 0; index < imageData.length; index += 4) {
-        const alpha = imageData[index + 3];
-        if (alpha <= 8) continue;
-        r += imageData[index];
-        g += imageData[index + 1];
-        b += imageData[index + 2];
-        count += 1;
-    }
-    if (count === 0) return { r: 255, g: 255, b: 255 };
-    return {
-        r: Math.round(r / count),
-        g: Math.round(g / count),
-        b: Math.round(b / count),
-    };
-};
-
-const rgbToCss = (color: { r: number; g: number; b: number }) => `rgb(${color.r}, ${color.g}, ${color.b})`;
-const rgbToHex = (color: { r: number; g: number; b: number }) =>
-    `#${[color.r, color.g, color.b].map((value) => value.toString(16).padStart(2, "0")).join("")}`;
-const rgbDistance = (a: { r: number; g: number; b: number }, b: { r: number; g: number; b: number }) =>
-    Math.abs(a.r - b.r) + Math.abs(a.g - b.g) + Math.abs(a.b - b.b);
-
-const buildTextReferenceDataUri = async (
-    imageUrl: string,
-    textBlocks: PptTextBlock[],
-) => {
-    const normalized = await normalizeImageToPngDataUri(imageUrl);
-    const seededCanvas = document.createElement("canvas");
-    seededCanvas.width = normalized.width;
-    seededCanvas.height = normalized.height;
-    const seededCtx = seededCanvas.getContext("2d");
-    if (!seededCtx) throw new Error("Canvas context unavailable for seeded background generation");
-    const sourceImage = await loadImageElement(normalized.dataUrl);
-    seededCtx.drawImage(sourceImage, 0, 0, seededCanvas.width, seededCanvas.height);
-
-    const backgroundHints: string[] = [];
-
-    for (const block of textBlocks) {
-        const x = block.x * seededCanvas.width;
-        const y = block.y * seededCanvas.height;
-        const w = block.w * seededCanvas.width;
-        const h = block.h * seededCanvas.height;
-        const inferredFontSize = estimateTextBlockFontSize(block, seededCanvas.width, seededCanvas.height);
-        const padding = Math.max(10, Math.round(inferredFontSize * 0.42));
-        const radius = Math.max(10, Math.round(Math.min(w, h) * 0.12));
-        const maskX = Math.max(0, x - padding);
-        const maskY = Math.max(0, y - padding);
-        const maskW = Math.min(seededCanvas.width - maskX, w + padding * 2);
-        const maskH = Math.min(seededCanvas.height - maskY, h + padding * 2);
-        const samplePadding = Math.max(16, Math.round(padding * 1.2));
-        const topColor = sampleAverageColor(seededCtx, maskX, Math.max(0, maskY - samplePadding), maskW, samplePadding);
-        const bottomColor = sampleAverageColor(seededCtx, maskX, Math.min(seededCanvas.height - samplePadding, maskY + maskH), maskW, samplePadding);
-        const leftColor = sampleAverageColor(seededCtx, Math.max(0, maskX - samplePadding), maskY, samplePadding, maskH);
-        const rightColor = sampleAverageColor(seededCtx, Math.min(seededCanvas.width - samplePadding, maskX + maskW), maskY, samplePadding, maskH);
-        const useVerticalGradient = rgbDistance(topColor, bottomColor) >= rgbDistance(leftColor, rightColor);
-
-        const fillGradient = useVerticalGradient
-            ? seededCtx.createLinearGradient(maskX, maskY, maskX, maskY + maskH)
-            : seededCtx.createLinearGradient(maskX, maskY, maskX + maskW, maskY);
-        if (useVerticalGradient) {
-            fillGradient.addColorStop(0, rgbToCss(topColor));
-            fillGradient.addColorStop(1, rgbToCss(bottomColor));
-        } else {
-            fillGradient.addColorStop(0, rgbToCss(leftColor));
-            fillGradient.addColorStop(1, rgbToCss(rightColor));
-        }
-        seededCtx.save();
-        seededCtx.fillStyle = fillGradient;
-        drawRoundedRect(seededCtx, maskX, maskY, maskW, maskH, radius);
-        seededCtx.fill();
-        seededCtx.restore();
-
-        backgroundHints.push(
-            `${backgroundHints.length + 1}. role=${block.role}; text=${block.text}; box=(x=${block.x.toFixed(3)}, y=${block.y.toFixed(3)}, w=${block.w.toFixed(3)}, h=${block.h.toFixed(3)}); top=${rgbToHex(topColor)}; bottom=${rgbToHex(bottomColor)}; left=${rgbToHex(leftColor)}; right=${rgbToHex(rightColor)}`
-        );
-    }
-
-    return {
-        referenceImageUrl: seededCanvas.toDataURL("image/png"),
-        backgroundHints,
-    };
 };
 
 const renderPageToDataUri = async (

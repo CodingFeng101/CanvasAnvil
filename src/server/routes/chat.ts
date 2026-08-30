@@ -7,7 +7,7 @@ import {
     stepCountIs,
     streamText,
 } from "ai"
-import { appendFile, mkdir, readFile, writeFile } from "fs/promises"
+import { appendFile, readFile } from "fs/promises"
 import path from "path"
 import { z } from "zod"
 import { getImageChannel, getTextChannel, normalizeAIConfig } from "../../ai/config"

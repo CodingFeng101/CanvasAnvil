@@ -1,22 +1,5 @@
 import React, { useRef, useEffect, useState, useCallback } from 'react';
-import {
-    Check,
-    ChevronDown,
-    ChevronUp,
-    Copy,
-    Cpu,
-    FileCode,
-    FileText,
-    Loader2,
-    Minus,
-    Pencil,
-    Plus,
-    Play,
-    RotateCcw,
-    ThumbsDown,
-    ThumbsUp,
-    X,
-} from "lucide-react";
+import { Check, ChevronDown, ChevronUp, Copy, Cpu, FileCode, FileText, Loader2, Minus, Pencil, Plus, Play, RotateCcw } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from 'remark-gfm';
 import { Reasoning, ReasoningContent, ReasoningTrigger } from "@/shared/chat";

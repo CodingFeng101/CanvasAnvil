@@ -11,8 +11,6 @@ import { isMinimalDiagram } from "./messages"
 
 export type FlowRequestRoute = "local_edit" | "full_generation"
 
-let flowDeepThinkingImagePromptTemplateCache: string | null = null
-
 export function normalizeIntentText(text: string): string {
     return String(text || "")
         .toLowerCase()

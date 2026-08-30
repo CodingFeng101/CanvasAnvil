@@ -1,4 +1,4 @@
-import { extractText, getDocumentProxy } from "unpdf"
+import { getDocumentProxy } from "unpdf"
 import JSZip from "jszip"
 import { bytesToBase64, decodeXmlText, getMimeByExt } from "@/shared/files/binary"
 import type { ExtractedVisualAsset, VisualCategory } from "@/shared/files/types"

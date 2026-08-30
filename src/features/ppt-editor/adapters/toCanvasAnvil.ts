@@ -5,26 +5,12 @@ import {
   type PptElement,
   type PptFormulaElement,
   type PptImageElement,
-  type PptPage,
   type PptShapeElement,
   type PptTableElement,
   type PptTextBlock,
   type PptVideoElement,
 } from "@/lib/ppt-service";
-import type {
-  EditorAudioElement,
-  EditorChartElement,
-  CanvasAnvilRenderLayerLike,
-  EditorElement,
-  EditorExportPayload,
-  EditorFormulaElement,
-  EditorImageElement,
-  EditorShapeElement,
-  EditorSlide,
-  EditorTableElement,
-  EditorTextElement,
-  EditorVideoElement,
-} from "@/features/ppt-editor/types";
+import type { CanvasAnvilRenderLayerLike, EditorExportPayload, EditorSlide, EditorTextElement } from "@/features/ppt-editor/types";
 
 export const editorTextElementsToTextBlocks = (elements: EditorTextElement[]): PptTextBlock[] =>
   elements.map((element) => ({

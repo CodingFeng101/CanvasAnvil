@@ -17,7 +17,6 @@ import {
   Scale,
   Share2,
   Upload,
-  Wand2,
   X,
 } from "lucide-react";
 import { Button } from "@/shared/ui/button";
@@ -408,113 +407,6 @@ function Footer({ copy }: { copy: { footerLicense: string; footerContact: string
         </a>
       </div>
     </footer>
-  );
-}
-
-function CanvasDetailPage({
-  canvas,
-  onEnterWorkspace,
-}: {
-  canvas: PortalWorkspace;
-  onEnterWorkspace: (workspace: PortalWorkspace) => void;
-}) {
-  const uiLang = useUiLanguage();
-  const config = getDetailConfig(canvas, uiLang);
-  const Icon = canvasIcons[canvas];
-
-  return (
-    <section id={`portal-${canvas}`} className="flex h-full flex-col justify-center overflow-hidden py-2">
-      <div className="grid gap-4 rounded-[22px] border border-[#D6E7FF]/70 bg-white/28 p-4 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.60)] xl:grid-cols-[0.78fr_1.22fr]">
-        <div className="self-center">
-          <h1 className="text-[clamp(30px,3.2vw,40px)] font-black leading-tight text-slate-950">{config.title}</h1>
-          <h2 className="mt-1.5 text-[clamp(17px,1.8vw,20px)] font-black leading-tight text-[#236CFF]">{config.subtitle}</h2>
-          <p className="mt-3 max-w-[560px] text-[15px] leading-7 text-slate-600">{config.intro}</p>
-
-          <div className="mt-3 flex flex-wrap gap-3">
-            {config.tags.map((tag) => (
-              <span
-                key={tag}
-                className="inline-flex max-w-full items-center gap-2 rounded-full border border-[#E6EEFC] bg-white px-4 py-2 text-[14px] font-bold leading-tight text-slate-700 shadow-[0_12px_28px_rgba(34,76,150,0.08)] transition duration-300 ease-out hover:-translate-y-1 hover:scale-[1.03] hover:border-[#BFD6FF] hover:shadow-[0_16px_34px_rgba(35,108,255,0.14)]"
-              >
-                <Icon className="h-4 w-4 text-[#236CFF]" />
-                <span className="whitespace-normal">{tag}</span>
-              </span>
-            ))}
-          </div>
-
-          <div className="mt-3 space-y-2">
-            {config.bullets.map((bullet) => (
-              <div key={bullet} className="flex items-start gap-3 text-[15px] leading-7 text-slate-600">
-                <CheckCircle2 className="mt-1 h-5 w-5 shrink-0 text-[#236CFF]" />
-                <span>{bullet}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        <div className="grid gap-3 md:grid-cols-2">
-          {config.previews.map((preview, index) => (
-            <div key={preview.title}>
-              <div className="mb-1.5 pl-2 text-[16px] font-black text-slate-900">{preview.title}</div>
-              <div className="relative rounded-[16px] border border-[#DDE8FA] bg-white/94 p-3 shadow-[0_16px_40px_rgba(34,76,150,0.12)]">
-                <span className="absolute -left-2 -top-2 h-5 w-5 rounded-full bg-[#236CFF] shadow-[0_6px_16px_rgba(35,108,255,0.35)]" />
-                <span className={cn("absolute -top-4 h-8 w-20 rotate-6 bg-[#C9E0F8]/70 shadow-sm", index % 2 === 0 ? "right-14" : "right-24")} />
-                <span className="absolute right-3 top-3 h-8 w-8 rounded-bl-2xl border-b border-l border-[#DDE8FA] bg-gradient-to-br from-white/20 to-[#EEF4FF]" />
-                <a href={preview.image} target="_blank" rel="noreferrer" className="block overflow-hidden rounded-xl border border-[#EEF3FE] bg-[#F7FAFF]">
-                  <img src={preview.image} alt={preview.title} className="h-[112px] w-full object-contain" />
-                </a>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      <div className="mt-2 rounded-[22px] border border-white/80 bg-white/66 p-3 shadow-[0_16px_44px_rgba(34,76,150,0.08)]">
-        <div className="mb-2 text-[20px] font-black text-slate-950">
-          <span className="border-b-4 border-[#236CFF] pb-1">{uiLang === "zh" ? "实现流程" : "Workflow"}</span>
-        </div>
-
-        <div className="grid gap-3 xl:grid-cols-6">
-          {config.steps.map((step, index) => {
-            const StepIcon = step.icon;
-            return (
-              <div key={step.title} className="relative min-h-[118px] rounded-xl border border-[#E3ECFA] bg-white p-3 shadow-[0_12px_28px_rgba(34,76,150,0.08)]">
-                {index < config.steps.length - 1 && (
-                  <div className="pointer-events-none absolute -right-5 top-1/2 hidden h-px w-5 bg-[#236CFF] xl:block">
-                    <span className="absolute right-0 top-1/2 h-3 w-3 -translate-y-1/2 rotate-45 border-r-2 border-t-2 border-[#236CFF]" />
-                  </div>
-                )}
-                <div className="flex items-center gap-3">
-                  <span className="flex h-8 w-8 items-center justify-center rounded-full bg-[#236CFF] text-sm font-black text-white">{index + 1}</span>
-                  <div className="text-[14px] font-black leading-tight text-slate-900">{step.title}</div>
-                </div>
-                <div className="mt-1.5 flex h-8 items-center justify-center text-[#236CFF]">
-                  <StepIcon className="h-7 w-7 stroke-[1.8]" />
-                </div>
-                <p className="mt-1 text-[12px] leading-5 text-slate-600">{step.text}</p>
-              </div>
-            );
-          })}
-        </div>
-
-        <div className="mt-2 flex flex-col items-center">
-          <div className="max-w-full text-center text-[15px] font-semibold leading-6 tracking-[0.04em] text-[#236CFF]">{config.slogan}</div>
-          <button
-            className="group relative mt-2 h-[58px] min-w-[300px] max-w-full overflow-visible px-12 text-[clamp(18px,2vw,22px)] font-black tracking-[0.08em] text-white transition duration-300 hover:-translate-y-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#236CFF]/40"
-            onClick={() => onEnterWorkspace(canvas)}
-          >
-            <svg viewBox="0 0 320 72" preserveAspectRatio="none" className="absolute inset-0 h-full w-full overflow-visible drop-shadow-[0_18px_28px_rgba(35,108,255,0.28)] transition duration-300 group-hover:scale-[1.035]" aria-hidden="true">
-              <path d="M10 38 C34 16 82 17 126 23 C170 29 204 16 253 20 C289 23 310 34 314 41 C291 55 248 53 203 55 C154 58 108 62 62 55 C32 51 16 46 10 38Z" fill="#0758D8" />
-              <path d="M25 40 C69 26 116 32 158 31 C207 29 253 27 296 39 C255 50 207 48 160 52 C108 56 59 51 25 40Z" fill="#236CFF" />
-              <path d="M39 27 C86 18 132 24 175 22 C216 20 250 18 285 27" fill="none" stroke="#A9D0FF" strokeWidth="4" strokeLinecap="round" opacity="0.7" />
-              <path d="M6 40 C22 45 33 50 45 60" fill="none" stroke="#0B77F4" strokeWidth="3" strokeLinecap="round" opacity="0.65" />
-              <path d="M279 54 C296 51 309 48 319 42" fill="none" stroke="#8EC1FF" strokeWidth="3" strokeLinecap="round" opacity="0.75" />
-            </svg>
-            <span className="relative z-10 drop-shadow-[0_2px_4px_rgba(5,62,168,0.45)]">{config.cta}</span>
-          </button>
-        </div>
-      </div>
-    </section>
   );
 }
 

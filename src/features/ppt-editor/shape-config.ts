@@ -52,7 +52,6 @@ export const buildEditorShapePath = (shape: EditorShapeType, width: number, heig
       return `M 0 0 L ${w - inset} 0 L ${w} ${h / 2} L ${w - inset} ${h} L 0 ${h} L ${inset} ${h / 2} Z`;
     }
     case "message": {
-      const tailW = w * 0.18;
       const tailH = h * 0.18;
       return `M ${r} 0 L ${w - r} 0 Q ${w} 0 ${w} ${r} L ${w} ${h - tailH - r} Q ${w} ${h - tailH} ${w - r} ${h - tailH} L ${w * 0.52} ${h - tailH} L ${w * 0.38} ${h} L ${w * 0.36} ${h - tailH} L ${r} ${h - tailH} Q 0 ${h - tailH} 0 ${h - tailH - r} L 0 ${r} Q 0 0 ${r} 0 Z`;
     }
