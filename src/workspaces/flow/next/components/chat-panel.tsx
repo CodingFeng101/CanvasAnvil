@@ -1,4 +1,4 @@
-﻿"use client"
+"use client"
 
 import { useChat } from "@ai-sdk/react"
 import {
@@ -229,7 +229,7 @@ export default function ChatPanel({
 
     const chat: any = (useChat as any)({
         api: "/api/chat",
-        onError: (error) => {
+        onError: (error: unknown) => {
             setIsParsingFiles(false)
             console.error('[ChatPanel] useChat error:', error)
             const rawDetail =
@@ -250,7 +250,7 @@ export default function ChatPanel({
 
             toast.error(`发送失败：${detail}`)
         },
-        async onToolCall({ toolCall }) {
+        async onToolCall({ toolCall }: { toolCall: any }) {
             if (DEBUG) {
                 console.log(
                     `[onToolCall] Tool: ${toolCall.toolName}, CallId: ${toolCall.toolCallId}`,
@@ -528,7 +528,7 @@ Please fix the XML issues. Ensure cell_id values exist in the current XML and th
                 }
             }
         },
-        sendAutomaticallyWhen: ({ messages }) => {
+        sendAutomaticallyWhen: ({ messages }: { messages: any[] }) => {
             const shouldRetry = hasToolErrors(
                 messages as unknown as ChatMessage[],
             )
@@ -998,7 +998,10 @@ Please fix the XML issues. Ensure cell_id values exist in the current XML and th
                 }
                 return null
             })
-            .filter((x: any) => x?.url && String(x.url).startsWith("data:image/"))
+            .filter(
+                (x): x is { url: string; contentType: string } =>
+                    !!x?.url && String(x.url).startsWith("data:image/"),
+            )
 
         const messageContent: any[] = []
         for (const attachment of imageAttachments) {

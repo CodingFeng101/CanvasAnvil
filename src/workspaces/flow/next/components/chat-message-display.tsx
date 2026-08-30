@@ -1,6 +1,22 @@
-﻿"use client"
+"use client"
 
-type UIMessage = any
+/**
+ * A message as the chat hook hands it over. `parts` is deliberately loose:
+ * the AI SDK streams tool calls, files and reasoning blocks whose shapes vary
+ * by provider, and this component narrows each part where it reads it.
+ */
+interface UIMessagePart {
+    type: string
+    [key: string]: any
+}
+
+type UIMessage = {
+    id: string
+    role: "user" | "assistant" | "system"
+    /** A plain string, or the multimodal part array the model was sent. */
+    content?: string | UIMessagePart[]
+    parts?: UIMessagePart[]
+}
 
 import {
     Check,
@@ -132,7 +148,7 @@ const getMessageTextContent = (message: UIMessage): string => {
     if (message.parts && message.parts.length > 0) {
         return message.parts
             .filter((part) => part.type === "text")
-            .map((part) => (part as { text: string }).text)
+            .map((part) => String(part.text ?? ""))
             .join("\n")
     }
     if (Array.isArray(message.content)) {
@@ -705,7 +721,7 @@ export function ChatMessageDisplay({
                                                     )
                                                 ) {
                                                     parts = message.content
-                                                        .map((item: any) => {
+                                                        .map((item: any): UIMessagePart | null => {
                                                             if (
                                                                 item?.type ===
                                                                 "text"
@@ -756,7 +772,10 @@ export function ChatMessageDisplay({
                                                             }
                                                             return null
                                                         })
-                                                        .filter(Boolean)
+                                                        .filter(
+                                                            (part): part is UIMessagePart =>
+                                                                part !== null,
+                                                        )
                                                 }
                                             }
 
@@ -1079,13 +1098,9 @@ export function ChatMessageDisplay({
                                                                         part.type ===
                                                                         "text"
                                                                     ) {
-                                                                        const textContent =
-                                                                            (
-                                                                                part as {
-                                                                                    text: string
-                                                                                }
-                                                                            )
-                                                                                .text
+                                                                        const textContent = String(
+                                                                            part.text ?? "",
+                                                                        )
                                                                         const sections = splitTextIntoFileSections(
                                                                             textContent,
                                                                         ).filter(

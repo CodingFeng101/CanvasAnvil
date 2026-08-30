@@ -1,4 +1,4 @@
-﻿import type React from "react";
+import type React from "react";
 import { FileSearch, FileText, Loader2, Play, Trash2 } from "lucide-react";
 import { Button } from "@/shared/ui/button";
 import { Textarea } from "@/shared/ui/textarea";
@@ -52,12 +52,10 @@ export function PptReviewSidebar(props: {
     reviewPhase,
     extractionSummary,
     reviewDrawMode,
-    confirmLabel,
     tr,
     onPanelResizeStart,
     onExtract,
     onStartEditing,
-    onExport,
     onToggleDrawMode,
     onSelectBlock,
     onDeleteBlock,

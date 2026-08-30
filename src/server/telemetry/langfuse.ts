@@ -1,4 +1,4 @@
-﻿import { LangfuseClient } from "@langfuse/client"
+import { LangfuseClient } from "@langfuse/client"
 import { observe, updateActiveTrace } from "@langfuse/tracing"
 import * as api from "@opentelemetry/api"
 
@@ -82,14 +82,17 @@ export function getTelemetryConfig(params: {
 }) {
     if (!isLangfuseEnabled()) return undefined
 
+    // OpenTelemetry attributes cannot be undefined, so omit the keys we lack
+    // rather than sending them as undefined.
+    const metadata: Record<string, string> = {}
+    if (params.sessionId) metadata.sessionId = params.sessionId
+    if (params.userId) metadata.userId = params.userId
+
     return {
         isEnabled: true,
         recordInputs: true,
         recordOutputs: true,
-        metadata: {
-            sessionId: params.sessionId,
-            userId: params.userId,
-        },
+        metadata,
     }
 }
 

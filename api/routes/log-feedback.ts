@@ -1,2 +1,2 @@
-﻿export { POST } from "../../src/server/routes/log-feedback"
+export { POST } from "../../src/server/routes/log-feedback"
 

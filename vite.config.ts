@@ -130,10 +130,42 @@ export default defineConfig({
   },
   build: {
     sourcemap: 'hidden',
+    rollupOptions: {
+      output: {
+        // Split by package rather than by named entry point: the object
+        // form of manualChunks makes each listed package a chunk entry, which
+        // let Vite's own preload helper get hoisted into a vendor chunk and
+        // pulled into the initial load. Returning undefined leaves placement
+        // to Rollup, which keeps the helper with the entry.
+        manualChunks(id: string) {
+          // Vite's dynamic-import preload helper is a virtual module every
+          // lazy chunk needs. Left to Rollup it landed in the PowerPoint
+          // chunk, which made the entry preload 800 kB to reach it.
+          if (id.includes("vite/preload-helper")) return "vendor-react"
+          if (!id.includes("node_modules")) return
+          const match = /node_modules[\\\/](?:(@[^\\\/]+)[\\\/])?([^\\\/]+)/.exec(id)
+          const pkg = match ? `${match[1] ? `${match[1]}/` : ""}${match[2]}` : ""
+          if (pkg === "react" || pkg === "react-dom" || pkg === "scheduler") return "vendor-react"
+          if (pkg === "pptxgenjs" || pkg === "pdf-lib") return "vendor-office"
+          if (pkg === "jszip" || pkg === "pako") return "vendor-zip"
+          if (pkg === "mammoth") return "vendor-docs"
+          if (pkg === "react-markdown" || pkg === "remark-gfm" || pkg === "prism-react-renderer") {
+            return "vendor-markdown"
+          }
+          if (pkg === "react-drawio") return "vendor-drawio"
+          if (pkg === "ai" || pkg.startsWith("@ai-sdk/") || pkg === "openai") return "vendor-ai"
+          if (pkg === "lucide-react" || pkg === "motion" || pkg === "framer-motion" || pkg === "sonner") {
+            return "vendor-ui"
+          }
+          if (pkg.startsWith("@radix-ui/")) return "vendor-radix"
+          return
+        },
+      },
+    },
   },
   plugins: [
     createLocalApiPlugin(),
     react(),
-    tsconfigPaths()
+    tsconfigPaths({ projects: ['./tsconfig.json'] })
   ],
 })

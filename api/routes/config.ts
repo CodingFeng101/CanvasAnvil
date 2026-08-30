@@ -1,2 +1,2 @@
-﻿export { GET } from "../../src/server/routes/config"
+export { GET } from "../../src/server/routes/config"
 

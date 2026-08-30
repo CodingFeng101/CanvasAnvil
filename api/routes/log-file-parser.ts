@@ -1,3 +1,3 @@
-﻿export { POST } from "../../src/server/routes/log-file-parser"
+export { POST } from "../../src/server/routes/log-file-parser"
 
 

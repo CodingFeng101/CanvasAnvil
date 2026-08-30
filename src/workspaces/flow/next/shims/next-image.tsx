@@ -1,4 +1,4 @@
-﻿import React from "react";
+import React from "react";
 
 type ImageProps = React.ImgHTMLAttributes<HTMLImageElement> & {
   src: string;

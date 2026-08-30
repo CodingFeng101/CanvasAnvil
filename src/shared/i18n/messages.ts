@@ -59,4 +59,7 @@ const messages = {
   "error.missingApiKey": { zh: "请先在设置中配置 API Key", en: "Please configure an API key in Settings first." },
 } satisfies Dict;
 
+/** Every key the app-shell dictionary defines. */
+export type MessageKey = keyof typeof messages;
+
 export const { t, translate: tAuto, useT } = createTranslator(messages);

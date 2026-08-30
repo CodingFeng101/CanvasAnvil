@@ -1,2 +1,2 @@
-﻿export { POST } from "../../src/server/routes/chat"
+export { POST } from "../../src/server/routes/chat"
 

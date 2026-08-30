@@ -37,7 +37,7 @@ export function createWorkspaceStore(databaseName: string): WorkspaceStore {
   /** Runs one transaction and closes the connection, whatever the outcome. */
   async function transact<T>(
     mode: IDBTransactionMode,
-    run: (store: IDBObjectStore, resolve: (value: T) => void) => void,
+    run: (store: IDBObjectStore, resolve: (value: T | null) => void) => void,
   ): Promise<T | null> {
     const db = await open();
     if (!db) return null;

@@ -379,7 +379,7 @@ export function PptWorkspace({
     startY: number;
   }>(null);
   const reviewPanelResizeRef = useRef<null | { startClientX: number; startWidth: number }>(null);
-  const reviewLayerPromiseRef = useRef<Record<string, Promise<{ versionId: string; imageUrl: string; layer: SlideRenderLayer } | null>>>({});
+  const reviewLayerPromiseRef = useRef<Record<string, Promise<{ versionId: string; imageUrl: string; layer: SlideRenderLayer } | null> | undefined>>({});
   const [materialPreview, setMaterialPreview] = useState<{ open: boolean; slideTitle: string; item: SlideMaterialImage | null }>({
     open: false,
     slideTitle: "",
@@ -3644,7 +3644,7 @@ export function PptWorkspace({
       status: "completed",
     };
     if (!versionId || !imageUrl) return basePage;
-    let layer = renderLayers[slide.id]?.[versionId];
+    let layer: SlideRenderLayer | undefined = renderLayers[slide.id]?.[versionId];
     if (!hasRenderableTextBlocks(layer)) {
       layer = (await ensureEditableReviewLayer(slide))?.layer;
     }

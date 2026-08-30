@@ -1,3 +1,3 @@
-﻿export { POST } from "../../src/server/routes/third-party-parser"
+export { POST } from "../../src/server/routes/third-party-parser"
 
 

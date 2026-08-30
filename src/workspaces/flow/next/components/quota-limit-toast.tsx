@@ -1,4 +1,4 @@
-﻿"use client"
+"use client"
 
 import { FaCoffee } from "react-icons/fa"
 import { useFlowT } from "@/workspaces/flow/next/lib/translations"

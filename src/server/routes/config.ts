@@ -1,4 +1,4 @@
-﻿export async function GET() {
+export async function GET() {
     return Response.json({
         accessCodeRequired: !!process.env.ACCESS_CODE_LIST,
         dailyRequestLimit: Number(process.env.DAILY_REQUEST_LIMIT) || 0,

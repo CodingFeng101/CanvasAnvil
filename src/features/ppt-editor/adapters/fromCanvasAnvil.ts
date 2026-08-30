@@ -2,6 +2,7 @@ import {
   pptElementsToTextBlocks,
   textBlocksToPptElements,
   type PptElement,
+  type PptTextBlock,
 } from "@/lib/ppt-service";
 import type {
   CanvasAnvilRenderLayerLike,
@@ -18,7 +19,7 @@ import type {
   EditorVideoElement,
 } from "@/features/ppt-editor/types";
 
-const toEditorElements = (elements?: PptElement[], textBlocksFallback = []): EditorElement[] => {
+const toEditorElements = (elements?: PptElement[], textBlocksFallback: PptTextBlock[] = []): EditorElement[] => {
   const source = Array.isArray(elements) && elements.length > 0 ? elements : textBlocksToPptElements(textBlocksFallback);
   return source
     .map((element): EditorElement | null => {
@@ -162,7 +163,7 @@ export const canvasAnvilToEditorSlide = (
   }
 ): EditorSlide => {
   const layer = options?.renderLayer || undefined;
-  const textBlocks = Array.isArray(layer?.textBlocks) ? layer!.textBlocks! : [];
+  const textBlocks: PptTextBlock[] = Array.isArray(layer?.textBlocks) ? layer.textBlocks : [];
   const elements = toEditorElements(layer?.elements, textBlocks);
 
   return {

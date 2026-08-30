@@ -1,5 +1,3 @@
-﻿import PptxGenJS from "pptxgenjs"
-import { PDFDocument } from "pdf-lib"
 import { generateChatMessage, generateImage, generateVisionChatMessage } from "@/ai/client"
 import { buildRisenPrompt } from "./risen-prompt"
 import pptOutlineSystem from "../../agent/ppt/outline.md?raw"
@@ -1146,11 +1144,13 @@ export const pptService = {
             ? normalizedAdditional.map((x) => String(x?.url || "")).filter(Boolean)
             : [];
 
-        return await generateImage({
+        const imageUrl = await generateImage({
             prompt,
-            referenceImageUrl: templateImageUrl,
+            referenceImageUrl: templateImageUrl || undefined,
             additionalReferenceImageUrls,
         });
+        if (!imageUrl) throw new Error("Slide image generation returned no image.");
+        return imageUrl;
     },
 
     extractSlideTextBlocks: async (
@@ -1215,10 +1215,12 @@ export const pptService = {
             ? `基于原图生成同一页 PPT 的无字底图。只移除下面这些文本框内的文字本身，且只允许修改已给出文本框范围内、被文字笔画实际占据的像素；如果某个文本框里没有文字，就不要做任何修改。文本框外任何像素都绝对不能改动。不要改版式、不要改图片、不要改图标、不要改图表、不要改装饰、不要扩大修改范围。禁止生成任何矩形补丁、纯色块、模糊块、修复块、遮罩边界、文本框痕迹或重新设计的背景。处理后的区域必须与周围原始背景连续一致，看起来像原图里从来没有放过文字。\n\n要删除的文字：\n${textList || "(none)"}\n\n文字位置：\n${textRegions}\n\n严格边界要求：\n${backgroundHints.join("\n") || "(none)"}`
             : `Create a textless background for this same slide. Remove only the text inside the listed text boxes, and modify only the pixels actually occupied by text glyphs inside those boxes. If a listed text box contains no text, do not change anything in that box. Absolutely do not modify any pixel outside the listed text boxes. Do not alter layout, images, icons, charts, decorations, or the surrounding background. Do not expand the edited area. Do not create any rectangular patch, flat color block, blur patch, inpaint patch, mask edge, textbox residue, or redesigned background. The cleaned area must blend seamlessly with the original nearby background so it looks like the text was never placed there.\n\nText to remove:\n${textList || "(none)"}\n\nText regions:\n${textRegions}\n\nHard boundaries:\n${backgroundHints.join("\n") || "(none)"}`;
 
-        return await generateImage({
+        const imageUrl = await generateImage({
             prompt,
-            referenceImageUrl: slideImageUrl,
+            referenceImageUrl: slideImageUrl || undefined,
         });
+        if (!imageUrl) throw new Error("Textless background generation returned no image.");
+        return imageUrl;
     },
 
     reviewSlideTextBlocks: async (
@@ -1381,6 +1383,7 @@ export const pptService = {
     },
 
     exportPptx: async (pages: PptPage[], images: Record<string, string>, filename: string) => {
+        const { default: PptxGenJS } = await import("pptxgenjs");
         const pptx = new PptxGenJS();
         pptx.layout = "LAYOUT_WIDE";
 
@@ -1587,6 +1590,7 @@ export const pptService = {
     },
 
     exportPdf: async (pages: PptPage[], images: Record<string, string>, filename: string) => {
+        const { PDFDocument } = await import("pdf-lib");
         const pdfDoc = await PDFDocument.create();
         const pageWidth = 960;
         const pageHeight = 540;

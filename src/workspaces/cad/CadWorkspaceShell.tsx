@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { cn } from "@/shared/lib/utils";
 import { t, useUiLanguage } from "@/shared/i18n";
@@ -29,6 +29,9 @@ const CAD_WORKSPACE_STORAGE_KEY = "CanvasAnvil-cad-state-v1";
 const CAD_RENDERS_STORAGE_KEY = "CanvasAnvil-cad-renders-v1";
 const CAD_ANALYSIS_IMAGES_STORAGE_KEY = "CanvasAnvil-cad-analysis-images-v1";
 const CAD_CHAT_STORAGE_KEY = "chat_history_v2_cad";
+
+/** What the model returns for a CAD image request; every field is unverified. */
+type CadImagePrompt = { title?: unknown; prompt?: unknown };
 
 const tryParseJson = (text: string) => {
   try {
@@ -644,7 +647,7 @@ export function CadWorkspaceShell() {
     }
 
     if (parsedType === "cad_analysis_images") {
-      const prompts = Array.isArray(parsed.prompts) ? parsed.prompts : [];
+      const prompts: CadImagePrompt[] = Array.isArray(parsed.prompts) ? parsed.prompts : [];
       const defaultTitles = [
         uiLang === "zh" ? "整体方案图" : "Overall Scheme",
         uiLang === "zh" ? "重点策略图" : "Key Strategy",
@@ -743,7 +746,7 @@ export function CadWorkspaceShell() {
     }
 
     if (parsedType === "cad_images") {
-      const prompts = Array.isArray(parsed.prompts) ? parsed.prompts : [];
+      const prompts: CadImagePrompt[] = Array.isArray(parsed.prompts) ? parsed.prompts : [];
       const previousStableRenders = normalizeCadRenderItems(cadImages, { allowBlob: false, max: 30 });
       const items = prompts
         .map((p: any) => ({

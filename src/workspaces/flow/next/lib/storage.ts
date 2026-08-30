@@ -1,4 +1,4 @@
-﻿// Centralized localStorage keys
+// Centralized localStorage keys
 // Consolidates all storage keys from chat-panel.tsx and settings-dialog.tsx
 
 export const STORAGE_KEYS = {

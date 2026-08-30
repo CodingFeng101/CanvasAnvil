@@ -1,4 +1,4 @@
-﻿import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Loader2, MessageSquarePlus, Box, Image as ImageIcon, Table2, Download } from 'lucide-react';
 import {
   ContextMenu,
@@ -8,7 +8,6 @@ import {
 } from "@/shared/ui/context-menu";
 import { Button } from "@/shared/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/shared/ui/dialog";
-import { PDFDocument } from "pdf-lib";
 import { useUiLanguage } from "@/shared/i18n";
 import { toast } from "sonner";
 import { getCadRenderSlotTitles } from "@/lib/cad-render-titles";
@@ -551,6 +550,7 @@ export function CadWorkspace({
     if (downloadable.length === 0 || isExporting) return;
     setIsExporting(true);
     try {
+      const { PDFDocument } = await import("pdf-lib");
       const pdfDoc = await PDFDocument.create();
       for (const it of downloadable) {
         const res = await fetch(it.url);

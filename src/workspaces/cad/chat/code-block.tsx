@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { Check, ChevronDown, ChevronUp, Copy, Cpu, Play, X } from "lucide-react";
 import { Highlight, themes, type Language } from "prism-react-renderer";
 import { useUiLanguage } from "@/shared/i18n";
