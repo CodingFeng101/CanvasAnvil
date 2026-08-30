@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { motion } from "motion/react";
 import { useLatestRef } from "@/shared/lib/use-latest-ref";
 import { errorText, isRetryableBeautifyError } from "./lib/errors";
@@ -6,8 +6,9 @@ import { runInParallel, sleep } from "./lib/concurrency";
 import { parseJsonLoose } from "./lib/parse-json";
 import { extractPdfPagesAsImages, isPdfFile } from "./lib/deck-source";
 import { getSlideshowDimensions } from "./lib/slideshow-size";
+import { useTemplateLibrary } from "./hooks/use-template-library";
 import { buildBeautifyInstruction } from "./lib/beautify-instruction";
-import { generateImage, generateChatMessage } from '@/ai/client';
+import { generateChatMessage } from '@/ai/client';
 import {
   pptService,
   PptPage,
@@ -16,8 +17,7 @@ import {
   PPT_REFERENCE_SLIDE_HEIGHT,
   PPT_REFERENCE_SLIDE_WIDTH,
 } from '@/workspaces/ppt/lib/ppt-service';
-import { getTemplateGenerationPrompt } from '@/workspaces/ppt/lib/ppt-prompts';
-import { PPT_STATE_KEY, PPT_TEMPLATE_LIBRARY_KEY, PPT_WORKSPACE_STORAGE_KEY, pptStore } from "@/workspaces/ppt/storage";
+import { PPT_STATE_KEY, PPT_WORKSPACE_STORAGE_KEY, pptStore } from "@/workspaces/ppt/storage";
 import {
   Loader2,
   Plus,
@@ -53,9 +53,6 @@ import {
   EDITABLE_EXPORT_CONCURRENCY,
   EDITABLE_REVIEW_CONCURRENCY,
   MODEL_CONCURRENCY,
-  PPT_TEMPLATE_HIDDEN_PRESETS_KEY,
-  PPT_TEMPLATE_UPLOADS_KEY,
-  PRESET_TEMPLATES,
   REVIEW_BOX_COLOR,
   REVIEW_BOX_SELECTED_COLOR,
   SYNTHETIC_PRIMARY_VERSION_PREFIX,
@@ -77,12 +74,8 @@ import {
   normalizePersistedRenderLayers,
   normalizePersistedSlideMaterials,
   normalizePersistedSlides,
-  normalizePersistedStringArray,
   normalizePersistedStringMap,
-  normalizePersistedUploadedTemplates,
   persistImageUrlIfNeeded,
-  readLegacyHiddenPresetTemplateIds,
-  readLegacyUploadedTemplates,
   shouldInlinePersistImageUrl,
 } from "@/workspaces/ppt/canvas/persisted-state";
 import type {
@@ -99,8 +92,6 @@ import type {
   SlideImageVersionType,
   SlideMaterialImage,
   SlideRenderLayer,
-  TemplateItem,
-  UploadTemplate,
 } from "@/workspaces/ppt/canvas/types";
 
 interface PptCanvasProps {
@@ -163,17 +154,15 @@ export function PptCanvas({
     const v = initialPptState?.currentSlideIndex;
     return typeof v === "number" && Number.isFinite(v) ? Math.max(0, Math.floor(v)) : 0;
   });
-  const [templateImage, setTemplateImage] = useState<string | null>(null);
-  const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(() => {
-    const v = initialPptState?.selectedTemplateId;
-    return typeof v === "string" ? v : null;
+  const templateLibrary = useTemplateLibrary({
+    initialSelectedTemplateId:
+      typeof initialPptState?.selectedTemplateId === "string" ? initialPptState.selectedTemplateId : null,
+    uiLang,
+    tr,
   });
-  const [uploadedTemplates, setUploadedTemplates] = useState<UploadTemplate[]>(() => readLegacyUploadedTemplates());
-  const [templateGeneratorOpen, setTemplateGeneratorOpen] = useState(false);
+  const { templates, templateImage, selectedTemplateId, restoreSelection: restoreTemplateSelection } =
+    templateLibrary;
   const [backConfirmOpen, setBackConfirmOpen] = useState(false);
-  const [templateGeneratorRequirement, setTemplateGeneratorRequirement] = useState("");
-  const [templateGeneratorIsGenerating, setTemplateGeneratorIsGenerating] = useState(false);
-  const [hiddenPresetTemplateIds, setHiddenPresetTemplateIds] = useState<string[]>(() => readLegacyHiddenPresetTemplateIds());
   const [generatedImages, setGeneratedImages] = useState<Record<string, string>>(() => {
     const v = initialPptState?.generatedImages;
     if (!v || typeof v !== "object" || Array.isArray(v)) return {};
@@ -333,7 +322,6 @@ export function PptCanvas({
   const pptImagePersistenceRunningRef = useRef(false);
   const pptImagePersistenceRetryRef = useRef(false);
   const [isPersistenceHydrated, setIsPersistenceHydrated] = useState(false);
-  const [isTemplateLibraryHydrated, setIsTemplateLibraryHydrated] = useState(false);
   const latestWorkspaceUpdatedAtRef = useRef(
     typeof initialPptState?.updatedAt === "number" ? initialPptState.updatedAt : 0
   );
@@ -479,7 +467,7 @@ export function PptCanvas({
             ? Math.max(0, Math.floor(coreState.currentSlideIndex))
             : 0,
         );
-        setSelectedTemplateId(
+        restoreTemplateSelection(
           typeof coreState?.selectedTemplateId === "string" ? coreState.selectedTemplateId : null,
         );
         setGeneratedImages(nextGeneratedImages);
@@ -539,55 +527,7 @@ export function PptCanvas({
     return () => {
       cancelled = true;
     };
-  }, []);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    void (async () => {
-      try {
-        const persistedTemplateLibrary = await pptStore.read<any>(PPT_TEMPLATE_LIBRARY_KEY);
-        if (cancelled || !persistedTemplateLibrary || typeof persistedTemplateLibrary !== "object") return;
-        setUploadedTemplates(normalizePersistedUploadedTemplates(persistedTemplateLibrary.uploadedTemplates));
-        setHiddenPresetTemplateIds(normalizePersistedStringArray(persistedTemplateLibrary.hiddenPresetTemplateIds));
-      } catch (e) {
-        console.error("Failed to load persisted PPT template library from IndexedDB", e);
-      } finally {
-        if (!cancelled) setIsTemplateLibraryHydrated(true);
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  const templates: TemplateItem[] = useMemo(() => [
-    ...PRESET_TEMPLATES
-      .filter((t) => !hiddenPresetTemplateIds.includes(t.id))
-      .map((t) => ({ id: t.id, name: uiLang === "zh" ? t.zhName : t.enName, kind: "preset" as const, previewSrc: t.path, presetPath: t.path })),
-    ...uploadedTemplates.map((t) => ({ id: t.id, name: t.name, kind: "upload" as const, previewSrc: t.dataUrl, dataUrl: t.dataUrl })),
-  ], [hiddenPresetTemplateIds, uploadedTemplates, uiLang]);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    if (!isTemplateLibraryHydrated) return;
-    void pptStore.save(PPT_TEMPLATE_LIBRARY_KEY, {
-      uploadedTemplates,
-      hiddenPresetTemplateIds,
-      updatedAt: Date.now(),
-    })
-      .then(() => {
-        try {
-          localStorage.removeItem(PPT_TEMPLATE_UPLOADS_KEY);
-          localStorage.removeItem(PPT_TEMPLATE_HIDDEN_PRESETS_KEY);
-        } catch {
-        }
-      })
-      .catch((e) => {
-        console.error("Failed to persist PPT template library to IndexedDB", e);
-      });
-  }, [uploadedTemplates, hiddenPresetTemplateIds, isTemplateLibraryHydrated]);
+  }, [restoreTemplateSelection]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -782,131 +722,12 @@ export function PptCanvas({
   }, [currentSlideIndex, imageVersions, currentImageVersionId, generatedImages, creationStep]);
 
 
-  const setTemplateFromItem = useCallback(async (item: TemplateItem) => {
-    setSelectedTemplateId(item.id);
-    if (item.kind === "upload") {
-      setTemplateImage(item.dataUrl);
-      return;
-    }
-    try {
-      const response = await fetch(item.presetPath);
-      const blob = await response.blob();
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setTemplateImage(reader.result as string);
-      };
-      reader.readAsDataURL(blob);
-    } catch (e) {
-      console.error("Failed to load template", e);
-    }
-  }, []);
 
-  useEffect(() => {
-    if (templates.length === 0) {
-      setSelectedTemplateId(null);
-      setTemplateImage(null);
-      return;
-    }
-    const selected = selectedTemplateId ? templates.find((t) => t.id === selectedTemplateId) : null;
-    if (!selected) {
-      void setTemplateFromItem(templates[0]);
-      return;
-    }
-    if (!templateImage) {
-      void setTemplateFromItem(selected);
-      return;
-    }
-    if (selected.kind === "upload" && templateImage !== selected.dataUrl) {
-      setTemplateImage(selected.dataUrl);
-    }
-  }, [selectedTemplateId, templateImage, templates, setTemplateFromItem]);
 
-  const addUploadedTemplates = async (files: File[]) => {
-    const imageFiles = Array.from(files || []).filter((f) => f && f.type.startsWith("image/"));
-    if (imageFiles.length === 0) return;
-    const toDataUrl = (file: File) =>
-      new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(reader.result as string);
-        reader.onerror = reject;
-        reader.readAsDataURL(file);
-      });
-    const baseName = (name: string) => String(name || "").replace(/\.[^.]+$/, "") || tr("模板", "Template");
 
-    const created: UploadTemplate[] = [];
-    for (const f of imageFiles) {
-      try {
-        const dataUrl = await toDataUrl(f);
-        const id = `upload-${Date.now()}-${Math.random().toString(16).slice(2)}`;
-        const name = baseName(f.name);
-        created.push({ id, name, dataUrl });
-      } catch (e) {
-        console.error("Failed to read template image", e);
-      }
-    }
-    if (created.length === 0) return;
-    setUploadedTemplates((prev) => [...prev, ...created]);
-    const last = created[created.length - 1];
-    setSelectedTemplateId(last.id);
-    setTemplateImage(last.dataUrl);
-  };
 
-  const handleTemplateUploadInputChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(e.target.files || []);
-    e.target.value = "";
-    await addUploadedTemplates(files);
-  };
 
-  const toDataUrlIfNeeded = async (url: string) => {
-    const dataUrl = await persistImageUrlIfNeeded(url);
-    return dataUrl.startsWith("data:image") ? dataUrl : "";
-  };
 
-  const addGeneratedTemplate = async (imageUrl: string) => {
-    const dataUrl = await toDataUrlIfNeeded(imageUrl);
-    if (!dataUrl || !dataUrl.startsWith("data:image")) {
-      throw new Error(tr("生成模板持久化失败：无法读取图片数据", "Failed to persist generated template: cannot read image data"));
-    }
-    const id = `generated-${Date.now()}-${Math.random().toString(16).slice(2)}`;
-    const name = `${tr("AI 模板", "AI Template")}-${Date.now()}`;
-    const created: UploadTemplate = { id, name, dataUrl };
-    setUploadedTemplates((prev) => [...prev, created]);
-    setSelectedTemplateId(created.id);
-    setTemplateImage(created.dataUrl);
-  };
-
-  const handleGenerateTemplate = async () => {
-    const requirement = templateGeneratorRequirement.trim();
-    if (!requirement) {
-      alert(tr("请输入模板需求。", "Please enter template requirements."));
-      return;
-    }
-    setTemplateGeneratorIsGenerating(true);
-    try {
-      const prompt = getTemplateGenerationPrompt({ requirements: requirement, language: uiLang });
-      const imageUrl = await generateImage({ prompt });
-      if (!imageUrl) {
-        alert(tr("模板生成失败，请重试", "Template generation failed. Please retry."));
-        return;
-      }
-      await addGeneratedTemplate(imageUrl);
-      setTemplateGeneratorRequirement("");
-      setTemplateGeneratorOpen(false);
-    } catch (e: any) {
-      console.error("Template generation failed", e);
-      alert(tr("模板生成失败，请重试", "Template generation failed. Please retry."));
-    } finally {
-      setTemplateGeneratorIsGenerating(false);
-    }
-  };
-
-  const deleteTemplate = (item: TemplateItem) => {
-    if (item.kind === "preset") {
-      setHiddenPresetTemplateIds((prev) => (prev.includes(item.id) ? prev : [...prev, item.id]));
-      return;
-    }
-    setUploadedTemplates((prev) => prev.filter((t) => t.id !== item.id));
-  };
 
   const [isApplyingEdits, setIsApplyingEdits] = useState(false);
 
@@ -3790,8 +3611,7 @@ export function PptCanvas({
     setImageVersions({});
     setCurrentImageVersionId({});
     setGeneratedImages({});
-    setTemplateImage(null);
-    setSelectedTemplateId(null);
+    restoreTemplateSelection(null);
     setProgress({ current: 0, total: 0, message: "" });
   };
 
@@ -3940,11 +3760,11 @@ export function PptCanvas({
                                     </div>
                                     <span className="text-xs font-medium">{tr("添加模板", "Add template")}</span>
                                 </div>
-                                <input type="file" accept="image/*" multiple className="hidden" onChange={handleTemplateUploadInputChange} />
+                                <input type="file" accept="image/*" multiple className="hidden" onChange={templateLibrary.handleUploadInputChange} />
                             </label>
                             <button
                               type="button"
-                              onClick={() => setTemplateGeneratorOpen(true)}
+                              onClick={() => templateLibrary.generator.setOpen(true)}
                               title={tr("AI生成模板", "AI generate template")}
                               className="cursor-pointer border-2 border-dashed rounded-xl transition-all duration-200 overflow-hidden relative aspect-video flex flex-col items-center justify-center group border-zinc-200 dark:border-zinc-700 hover:border-blue-500 hover:bg-blue-50/30 dark:hover:bg-zinc-800/50"
                             >
@@ -3958,7 +3778,7 @@ export function PptCanvas({
                             {templates.map((t) => (
                                 <div
                                     key={t.id}
-                                    onClick={() => void setTemplateFromItem(t)}
+                                    onClick={() => void templateLibrary.selectTemplate(t)}
                                     className={`cursor-pointer border rounded-xl overflow-hidden relative aspect-video group transition-all duration-200 bg-zinc-100 dark:bg-zinc-900 ${
                                         selectedTemplateId === t.id
                                             ? "border-blue-500 ring-2 ring-blue-500 shadow-md"
@@ -3975,7 +3795,7 @@ export function PptCanvas({
                                         type="button"
                                         onClick={(e) => {
                                             e.stopPropagation();
-                                            deleteTemplate(t);
+                                            templateLibrary.deleteTemplate(t);
                                         }}
                                         className="absolute top-2 right-2 rounded-full bg-black/50 text-white p-1 opacity-0 group-hover:opacity-100 transition-opacity"
                                         title={tr("删除模板", "Delete template")}
@@ -4227,7 +4047,7 @@ export function PptCanvas({
                     </DialogContent>
                 </Dialog>
 
-                <Dialog open={templateGeneratorOpen} onOpenChange={setTemplateGeneratorOpen}>
+                <Dialog open={templateLibrary.generator.open} onOpenChange={templateLibrary.generator.setOpen}>
                     <DialogContent className="max-w-2xl">
                         <DialogHeader>
                             <DialogTitle>{tr("AI生成模板", "AI Template Generator")}</DialogTitle>
@@ -4237,31 +4057,31 @@ export function PptCanvas({
                                 {tr("生成的模板会自动加入模板列表，可随时删除。", "Generated templates will be added to the template list automatically and can be deleted anytime.")}
                             </div>
                             <Textarea
-                              value={templateGeneratorRequirement}
-                              onChange={(e) => setTemplateGeneratorRequirement(e.target.value)}
+                              value={templateLibrary.generator.requirement}
+                              onChange={(e) => templateLibrary.generator.setRequirement(e.target.value)}
                               placeholder={tr(
                                 "例如：科技感、深色背景、蓝紫渐变、玻璃拟态、留白充足；不要出现任何文字。",
                                 "e.g. Futuristic, dark background, blue-purple gradient, glassmorphism, generous whitespace; no text."
                               )}
                               className="min-h-[140px]"
-                              disabled={templateGeneratorIsGenerating}
+                              disabled={templateLibrary.generator.isGenerating}
                             />
                             <div className="flex justify-end gap-3">
                                 <Button
                                   type="button"
                                   variant="outline"
-                                  onClick={() => setTemplateGeneratorOpen(false)}
-                                  disabled={templateGeneratorIsGenerating}
+                                  onClick={() => templateLibrary.generator.setOpen(false)}
+                                  disabled={templateLibrary.generator.isGenerating}
                                 >
                                   {tr("取消", "Cancel")}
                                 </Button>
                                 <Button
                                   type="button"
-                                  onClick={handleGenerateTemplate}
-                                  disabled={templateGeneratorIsGenerating || !templateGeneratorRequirement.trim()}
+                                  onClick={templateLibrary.generator.generate}
+                                  disabled={templateLibrary.generator.isGenerating || !templateLibrary.generator.requirement.trim()}
                                   className="bg-blue-600 hover:bg-blue-700"
                                 >
-                                  {templateGeneratorIsGenerating ? (
+                                  {templateLibrary.generator.isGenerating ? (
                                     <>
                                       <Loader2 className="w-4 h-4 mr-2 animate-spin" />
                                       {tr("生成中...", "Generating...")}
