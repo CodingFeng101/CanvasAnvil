@@ -11,7 +11,7 @@ import {
   PPT_OUTLINE_EDIT_SYSTEM_PROMPT,
   PPT_SLIDES_EDIT_SYSTEM_PROMPT,
 } from "@/lib/system-prompts";
-import { PPT_STATE_KEY, pptStore } from "@/workspaces/ppt/storage";
+import { PPT_STATE_KEY, PPT_WORKSPACE_STORAGE_KEY, pptStore } from "@/workspaces/ppt/storage";
 import type { ChatMessage } from "@/ai/client";
 import { PptWorkspace } from "@/workspaces/ppt/workspace/PptWorkspace";
 import { ChatPanel as PptChatPanel } from "@/workspaces/ppt/chat/ChatPanel";
@@ -26,7 +26,6 @@ type Attachment = {
 
 type CodeActionResult = { ok: boolean; retry?: boolean; error?: string };
 
-const PPT_WORKSPACE_STORAGE_KEY = "CanvasAnvil-ppt-state-v1";
 const PPT_RETURN_STAGE_STORAGE_KEY = "CanvasAnvil-ppt-return-stage-v1";
 const PPT_HISTORY_STORAGE_KEY = "CanvasAnvil-history-ppt-v1";
 const PPT_CHAT_STORAGE_KEY = "chat_history_v2_ppt";
@@ -318,7 +317,6 @@ export function PptWorkspaceShell() {
               onRemoveAttachment={(id) => setAttachments((prev) => prev.filter((a) => a.id !== id))}
               onClearAttachments={() => setAttachments([])}
               pptDraftSlides={pptDraftSlides}
-              onRemovePptDraftSlide={(id) => setPptDraftSlides((prev) => prev.filter((s) => s.id !== id))}
               onClearPptDraftSlides={() => setPptDraftSlides([])}
               onClearWorkspace={clearWorkspace}
               history={versionHistory}

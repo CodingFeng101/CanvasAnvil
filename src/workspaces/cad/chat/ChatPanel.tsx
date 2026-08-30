@@ -1,4 +1,4 @@
-﻿import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { PanelRightClose, PanelRightOpen } from 'lucide-react';
 import { cn } from '@/shared/lib/utils';
 import { streamChatMessage, generateChatMessage, ChatMessage, getAIConfig } from '@/ai/client';
@@ -9,7 +9,6 @@ import { ChatMessageDisplay, UIMessage } from '@/workspaces/cad/chat/ChatMessage
 import { STORAGE_GLOBAL_CONSTRAINTS_KEY } from '@/shared/chat';
 import { HistoryDialog, HistoryItem } from '@/shared/chat';
 import { ResetWarningModal } from '@/shared/chat';
-import { useFileProcessor } from '@/shared/files/use-file-processor';
 import {
   buildCadAnalysisMessages,
   buildCadBomMessages,
@@ -28,6 +27,15 @@ import flowPatchAgentPrompt from "../../../../agent/flow/patch.md?raw";
 import flowReplaceAgentPrompt from "../../../../agent/flow/replace.md?raw";
 import { t, useUiLanguage } from "@/shared/i18n";
 import { toast } from "sonner";
+import {
+  buildRecentHistoryContext,
+  chatStorageKey,
+  loadChatHistory,
+  saveChatHistory,
+} from '@/shared/chat/chat-storage';
+import { createAssistantUpdater, writeLastAssistant } from '@/shared/chat/assistant-stream';
+import { getChatErrorText } from '@/shared/chat/chat-errors';
+import { parseMarkdownBomTable } from '@/shared/chat/bom-table';
 
 interface Attachment {
   id: string;
@@ -44,7 +52,6 @@ interface ChatPanelProps {
   attachments?: Attachment[];
   onRemoveAttachment?: (id: string) => void;
   pptDraftSlides?: Array<{ id: string; slideId: string; title: string; json: string; kind: "outline" | "slide_image"; imageUrl?: string }>;
-  onRemovePptDraftSlide?: (id: string) => void;
   onClearPptDraftSlides?: () => void;
   onCodeAction?: (code: string, type: 'flow' | 'cad' | 'ppt') => MaybePromise<void | CodeActionResult>;
   systemPrompt?: string;
@@ -75,133 +82,13 @@ interface ChatPanelProps {
   onClearWorkspace?: () => void;
 }
 
-const STORAGE_KEY_PREFIX = 'chat_history_v2_';
-const CAD_STORAGE_TRUNCATE_SUFFIX = "\n...[truncated]";
-const CAD_STORAGE_DEFAULT_LIMITS = {
-  maxMessages: 50,
-  maxMessageChars: 24000,
-  maxTotalChars: 240000,
-};
-const CAD_STORAGE_FALLBACK_LIMITS = [
-  CAD_STORAGE_DEFAULT_LIMITS,
-  { maxMessages: 30, maxMessageChars: 12000, maxTotalChars: 120000 },
-  { maxMessages: 16, maxMessageChars: 6000, maxTotalChars: 60000 },
-  { maxMessages: 8, maxMessageChars: 3000, maxTotalChars: 30000 },
-];
-const CAD_ROUTER_HISTORY_LIMITS = {
-  maxMessages: 12,
-  maxMessageChars: 3000,
-  maxTotalChars: 18000,
-};
-
-const normalizeStoredChatMessages = (raw: any): ChatMessage[] => {
-  if (!Array.isArray(raw)) return [];
-  return raw
-    .filter((m: any) => m && typeof m === "object")
-    .map((m: any) => {
-      const roleRaw = String(m.role || "");
-      const role: ChatMessage["role"] =
-        roleRaw === "user" || roleRaw === "assistant" || roleRaw === "system"
-          ? roleRaw
-          : "user";
-      const content = typeof m.content === "string" ? m.content : String(m.content ?? "");
-      return { role, content };
-    })
-    .filter((m: ChatMessage) => !!m.content);
-};
-
-const truncateForStorage = (text: string, maxChars: number) => {
-  const value = String(text || "");
-  if (maxChars <= 0) return "";
-  if (value.length <= maxChars) return value;
-  if (maxChars <= CAD_STORAGE_TRUNCATE_SUFFIX.length) {
-    return value.slice(0, maxChars);
-  }
-  return value.slice(0, maxChars - CAD_STORAGE_TRUNCATE_SUFFIX.length) + CAD_STORAGE_TRUNCATE_SUFFIX;
-};
-
-const buildCadRouterHistoryContext = (source: ChatMessage[]) => {
-  if (!Array.isArray(source) || source.length === 0) return "";
-
-  const recent = source
-    .filter((m) => m && (m.role === "user" || m.role === "assistant"))
-    .slice(-CAD_ROUTER_HISTORY_LIMITS.maxMessages);
-  if (recent.length === 0) return "";
-
-  let totalChars = 0;
-  const lines: string[] = [];
-  for (const m of recent) {
-    const raw = truncateForStorage(String(m.content || ""), CAD_ROUTER_HISTORY_LIMITS.maxMessageChars);
-    if (!raw) continue;
-
-    const remaining = CAD_ROUTER_HISTORY_LIMITS.maxTotalChars - totalChars;
-    if (remaining <= 0) break;
-
-    const clipped = raw.length > remaining ? truncateForStorage(raw, remaining) : raw;
-    const roleLabel = m.role === "assistant" ? "Assistant" : "User";
-    lines.push(`[${roleLabel}] ${clipped}`);
-    totalChars += clipped.length;
-  }
-
-  if (lines.length === 0) return "";
-  return `Recent chat history (for intent continuity):\n\n${lines.join("\n\n")}`;
-};
-
-const compactCadMessagesForStorage = (
-  source: ChatMessage[],
-  limits: { maxMessages: number; maxMessageChars: number; maxTotalChars: number },
-): ChatMessage[] => {
-  const maxMessages = Math.max(1, Number(limits.maxMessages) || 1);
-  const maxMessageChars = Math.max(256, Number(limits.maxMessageChars) || 256);
-  const maxTotalChars = Math.max(1024, Number(limits.maxTotalChars) || 1024);
-
-  const normalized = normalizeStoredChatMessages(source).slice(-maxMessages).map((m) => ({
-    role: m.role,
-    content: truncateForStorage(m.content, maxMessageChars),
-  }));
-
-  let totalChars = normalized.reduce((sum, m) => sum + m.content.length, 0);
-  while (normalized.length > 1 && totalChars > maxTotalChars) {
-    const removed = normalized.shift();
-    totalChars -= removed?.content.length || 0;
-  }
-
-  if (normalized.length === 1 && normalized[0].content.length > maxTotalChars) {
-    normalized[0] = {
-      role: normalized[0].role,
-      content: truncateForStorage(normalized[0].content, maxTotalChars),
-    };
-  }
-
-  return normalized;
-};
-
-const persistCadMessagesWithFallback = (storageKey: string, source: ChatMessage[]) => {
-  for (const limits of CAD_STORAGE_FALLBACK_LIMITS) {
-    try {
-      const compacted = compactCadMessagesForStorage(source, limits);
-      localStorage.setItem(storageKey, JSON.stringify(compacted));
-      return true;
-    } catch {
-    }
-  }
-  return false;
-};
-
 // Convert internal ChatMessage to UIMessage
-const toUIMessage = (msg: ChatMessage, index: number): UIMessage => ({
-    id: `msg-${index}-${Date.now()}`,
-    role: msg.role as any,
-    content: msg.content,
-    parts: [{ type: 'text', text: msg.content }]
-});
 
 export function ChatPanel({ 
     className, 
     attachments = [],
     onRemoveAttachment,
     pptDraftSlides = [],
-    onRemovePptDraftSlide,
     onClearPptDraftSlides,
     onCodeAction,
     systemPrompt = DRAWIO_SYSTEM_PROMPT,
@@ -268,26 +155,11 @@ export function ChatPanel({
       ...refs.map((ref) => ({ type: "image_url", image_url: { url: ref.url } })),
     ];
   };
-  // Persistence key
-  const storageKey = `${STORAGE_KEY_PREFIX}${workspaceId}`;
+  const storageKey = chatStorageKey(workspaceId);
 
-  const [messages, setMessages] = useState<ChatMessage[]>(() => {
-    if (typeof window !== 'undefined') {
-        const saved = localStorage.getItem(storageKey);
-        if (saved) {
-            try {
-                if (workspaceId === "cad") {
-                  const parsed = normalizeStoredChatMessages(JSON.parse(saved));
-                  return compactCadMessagesForStorage(parsed, CAD_STORAGE_DEFAULT_LIMITS);
-                }
-                return JSON.parse(saved);
-            } catch (e) {
-                console.error("Failed to parse chat history", e);
-            }
-        }
-    }
-    return initialMessages.length > 0 ? initialMessages : [];
-  });
+  const [messages, setMessages] = useState<ChatMessage[]>(() =>
+    loadChatHistory(storageKey, initialMessages),
+  );
 
   const [input, setInput] = useState('');
   const [pptInputSegments, setPptInputSegments] = useState<Array<{ type: "text"; text: string } | { type: "ppt"; slideId: string; label: string; tag: string; tokenKind: "outline" | "slide_image" }>>([
@@ -366,45 +238,6 @@ export function ChatPanel({
     if (added.length === 0) return;
     for (const s of added) enqueuePptToken(s.slideId, s.title);
   }, [workspaceId, pptDraftSlides, setInput]);
-
-  const parseMarkdownBomTable = (text: string) => {
-    const normalized = String(text || "");
-    const lines = normalized.split(/\r?\n/);
-    for (let i = 0; i < lines.length - 2; i += 1) {
-      const header = lines[i];
-      const sep = lines[i + 1];
-      if (!header.includes("|")) continue;
-      if (!/^\s*\|?(\s*:?-+:?\s*\|)+\s*:?-+:?\s*\|?\s*$/.test(sep)) continue;
-
-      const parseRow = (line: string) => {
-        const trimmed = line
-          .trim()
-          .replace(/^[-*+]\s+/, "")
-          .replace(/^\d+\.\s+/, "");
-        const body = trimmed.startsWith("|") ? trimmed.slice(1) : trimmed;
-        const body2 = body.endsWith("|") ? body.slice(0, -1) : body;
-        return body2.split("|").map((c) => c.trim());
-      };
-
-      const columns = parseRow(header).filter((c) => c);
-      if (columns.length === 0) continue;
-
-      const rows: any[] = [];
-      for (let j = i + 2; j < lines.length; j += 1) {
-        const rowLine = lines[j];
-        if (!rowLine.includes("|")) break;
-        const row = parseRow(rowLine);
-        if (row.every((c) => !String(c || "").trim())) break;
-        const fixed = row.slice(0, columns.length);
-        while (fixed.length < columns.length) fixed.push("");
-        rows.push(fixed);
-      }
-
-      if (rows.length === 0) continue;
-      return { type: "cad_bom", columns, rows };
-    }
-    return null;
-  };
 
   const sanitizeAssistantContentForDisplay = (content: string) => {
     if (workspaceId !== "cad") return content;
@@ -543,65 +376,16 @@ export function ChatPanel({
     return next;
   };
 
-  const scheduleFrame = (cb: () => void) => {
-    if (typeof requestAnimationFrame === "function") return requestAnimationFrame(cb);
-    if (typeof window !== "undefined") return window.setTimeout(cb, 16);
-    return 0;
-  };
+  const updateLastAssistant = (content: string) =>
+    writeLastAssistant(setMessages, sanitizeAssistantContentForDisplay, content);
 
-  const cancelFrame = (id: number) => {
-    if (!id) return;
-    if (typeof cancelAnimationFrame === "function") cancelAnimationFrame(id);
-    else if (typeof window !== "undefined") window.clearTimeout(id);
-  };
+  const createThrottledAssistantUpdater = () =>
+    createAssistantUpdater(setMessages, sanitizeAssistantContentForDisplay);
 
-  const updateLastAssistant = (content: string) => {
-    const display = sanitizeAssistantContentForDisplay(content);
-    setMessages(prev => {
-      const last = prev[prev.length - 1];
-      if (last?.role === 'assistant') {
-        return [...prev.slice(0, -1), { role: 'assistant', content: display }];
-      }
-      return [...prev, { role: 'assistant', content: display }];
-    });
-  };
-
-  const createThrottledAssistantUpdater = () => {
-    let latest = '';
-    let frameId: number | null = null;
-    return {
-      push: (chunk: string) => {
-        latest = chunk;
-        if (frameId !== null) return;
-        frameId = scheduleFrame(() => {
-          frameId = null;
-          updateLastAssistant(latest);
-        });
-      },
-      flush: () => {
-        if (frameId !== null) {
-          cancelFrame(frameId);
-          frameId = null;
-        }
-        updateLastAssistant(latest);
-      }
-    };
-  };
-
-  // Persist messages
   useEffect(() => {
-    if (typeof window !== "undefined") {
-      if (workspaceId === "cad") {
-        const ok = persistCadMessagesWithFallback(storageKey, messages);
-        if (!ok) {
-          console.error("Failed to persist CAD chat history after fallback trimming.");
-        }
-      } else {
-        localStorage.setItem(storageKey, JSON.stringify(messages));
-      }
-    }
+    if (typeof window !== "undefined") saveChatHistory(storageKey, messages);
     onMessagesChange?.(messages);
-  }, [messages, storageKey, onMessagesChange, workspaceId]);
+  }, [messages, storageKey, onMessagesChange]);
 
   const clearHistory = () => {
     abortControllerRef.current?.abort();
@@ -622,24 +406,6 @@ export function ChatPanel({
     setShowResetWarning(false);
   };
 
-  const startNewChat = () => {
-    abortControllerRef.current?.abort();
-    abortControllerRef.current = null;
-    cadApprovedPlanRef.current = null;
-    setIsLoading(false);
-    setInput('');
-    setPptInputSegments([{ type: "text", text: "" }]);
-    setFiles([]);
-    onClearAttachments?.();
-    const newMsgs: ChatMessage[] = [
-      { role: 'assistant', content: t(uiLang, "chat.newChat") }
-    ];
-    setMessages(newMsgs);
-    try {
-      localStorage.removeItem(storageKey);
-    } catch {
-    }
-  };
 
   const runCodeAction = async (code: string, type: 'flow' | 'cad' | 'ppt') => {
     const result = await Promise.resolve(onCodeAction?.(code, type));
@@ -1211,7 +977,7 @@ export function ChatPanel({
         : "";
     const cadHistoryContextText =
       workspaceId === "cad"
-        ? buildCadRouterHistoryContext(messages)
+        ? buildRecentHistoryContext(messages)
         : "";
 
     const promptParts = [
@@ -2109,7 +1875,7 @@ export function ChatPanel({
       }
       setMessages(prev => {
         const last = prev[prev.length - 1];
-        const errorText = trText("抱歉，发生错误。请检查 API Key 设置。", "Sorry, an error occurred. Please check API key settings.");
+        const errorText = getChatErrorText(error, trText);
         if (last.role === 'assistant' && !last.content) {
             return [...prev.slice(0, -1), { role: 'assistant', content: errorText }];
         }
@@ -2156,7 +1922,7 @@ export function ChatPanel({
         : "";
     const cadHistoryContextText =
       workspaceId === "cad"
-        ? buildCadRouterHistoryContext(baseMessages.slice(0, -1))
+        ? buildRecentHistoryContext(baseMessages.slice(0, -1))
         : "";
     const promptContent = [lastUserText, flowContextText, cadContextText, cadHistoryContextText].filter(Boolean).join("\n\n");
 
@@ -2863,10 +2629,11 @@ export function ChatPanel({
 
       setMessages(prev => {
         const last = prev[prev.length - 1];
+        const errorText = getChatErrorText(error, trText);
         if (last?.role === 'assistant' && !last.content) {
-          return [...prev.slice(0, -1), { role: 'assistant', content: "Sorry, an error occurred. Please check API key settings." }];
+          return [...prev.slice(0, -1), { role: 'assistant', content: errorText }];
         }
-        return [...prev, { role: 'assistant', content: "Sorry, an error occurred. Please check API key settings." }];
+        return [...prev, { role: 'assistant', content: errorText }];
       });
     } finally {
       setIsLoading(false);

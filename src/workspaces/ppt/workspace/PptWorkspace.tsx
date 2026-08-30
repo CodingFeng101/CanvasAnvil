@@ -3,7 +3,7 @@ import { motion } from "motion/react";
 import { generateImage, generateChatMessage } from '@/ai/client';
 import { pptService, PptPage, type PptElement, type PptTextBlock, type SlideEditRoutingItem, resolveTextBlockFontSize, PPT_REFERENCE_SLIDE_HEIGHT, PPT_REFERENCE_SLIDE_WIDTH, textBlocksToPptElements } from '@/lib/ppt-service';
 import { getTemplateGenerationPrompt } from '@/lib/ppt-prompts';
-import { PPT_STATE_KEY, PPT_TEMPLATE_LIBRARY_KEY, pptStore } from "@/workspaces/ppt/storage";
+import { PPT_STATE_KEY, PPT_TEMPLATE_LIBRARY_KEY, PPT_WORKSPACE_STORAGE_KEY, pptStore } from "@/workspaces/ppt/storage";
 import { Loader2, Plus, Image as ImageIcon, MessageSquarePlus, Upload, Presentation, Sparkles, Check, Play, FileText, Download, Lightbulb, X, ArrowLeft, ArrowRight, Eye, Trash2, Maximize2, Minimize2, RefreshCcw } from 'lucide-react';
 import {
   ContextMenu,
@@ -491,7 +491,6 @@ type TemplateItem =
 
 const PPT_TEMPLATE_UPLOADS_KEY = "ppt_template_uploads_v1";
 const PPT_TEMPLATE_HIDDEN_PRESETS_KEY = "ppt_template_hidden_presets_v1";
-const PPT_WORKSPACE_STORAGE_KEY = "CanvasAnvil-ppt-state-v1";
 
 const readLegacyUploadedTemplates = (): UploadTemplate[] => {
   if (typeof window === "undefined") return [];

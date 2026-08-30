@@ -5,11 +5,15 @@ import { streamChatMessage, generateChatMessage, generatePptProxyChatMessage, Ch
 import { DRAWIO_SYSTEM_PROMPT } from '@/lib/system-prompts';
 import { ButtonWithTooltip } from '@/shared/chat';
 import { ChatInput } from '@/shared/chat';
+import { chatStorageKey, loadChatHistory, saveChatHistory } from '@/shared/chat/chat-storage';
+import { createAssistantUpdater, writeLastAssistant } from '@/shared/chat/assistant-stream';
+import { getChatErrorText } from '@/shared/chat/chat-errors';
+import { parseMarkdownBomTable } from '@/shared/chat/bom-table';
+import { PPT_WORKSPACE_STORAGE_KEY } from '@/workspaces/ppt/storage';
 import { ChatMessageDisplay, UIMessage } from '@/workspaces/ppt/chat/ChatMessageDisplay';
 import { STORAGE_GLOBAL_CONSTRAINTS_KEY } from '@/shared/chat';
 import { HistoryDialog, HistoryItem } from '@/shared/chat';
 import { ResetWarningModal } from '@/shared/chat';
-import { useFileProcessor } from '@/shared/files/use-file-processor';
 import { buildCadBomMessages, buildCadImagesMasterMessages, buildCadImagesSheetMessages, buildCadTasksSystemContent } from '@/lib/cad-tasks';
 import { CAD_PLAN_AGENT_PROMPT } from '@/lib/cad-agents';
 import flowPatchAgentPrompt from "../../../../agent/flow/patch.md?raw";
@@ -31,7 +35,6 @@ interface ChatPanelProps {
   attachments?: Attachment[];
   onRemoveAttachment?: (id: string) => void;
   pptDraftSlides?: Array<{ id: string; slideId: string; title: string; json: string; kind: "outline" | "slide_image"; imageUrl?: string }>;
-  onRemovePptDraftSlide?: (id: string) => void;
   onClearPptDraftSlides?: () => void;
   onCodeAction?: (code: string, type: 'flow' | 'cad' | 'ppt') => MaybePromise<void | CodeActionResult>;
   systemPrompt?: string;
@@ -61,72 +64,13 @@ interface ChatPanelProps {
   onClearWorkspace?: () => void;
 }
 
-const STORAGE_KEY_PREFIX = 'chat_history_v2_';
-const PPT_WORKSPACE_STORAGE_KEY = "CanvasAnvil-ppt-state-v1";
-const STORAGE_MESSAGE_LIMIT = 40;
-const STORAGE_CONTENT_LIMIT = 4000;
-
 // Convert internal ChatMessage to UIMessage
-const toUIMessage = (msg: ChatMessage, index: number): UIMessage => ({
-    id: `msg-${index}-${Date.now()}`,
-    role: msg.role as any,
-    content: msg.content,
-    parts: [{ type: 'text', text: msg.content }]
-});
-
-const compactMessageContent = (value: unknown) => {
-  const text = String(value || "");
-  const withoutImageTags = text.replace(/\[\[IMAGE\|([^|\]]*)\|data:image\/[\s\S]*?\]\]/gi, "[[IMAGE|$1|[image-data]]]");
-  const withoutDataUrls = withoutImageTags.replace(/data:image\/[^)\s]+/gi, "[image-data]");
-  if (withoutDataUrls.length <= STORAGE_CONTENT_LIMIT) return withoutDataUrls;
-  return `${withoutDataUrls.slice(0, STORAGE_CONTENT_LIMIT)}\n...[truncated]`;
-};
-
-const getMessagesForStorage = (messages: ChatMessage[]) =>
-  messages.slice(-STORAGE_MESSAGE_LIMIT).map((message) => ({
-    role: message.role,
-    content: compactMessageContent(message.content),
-  }));
-
-const getChatErrorText = (
-  error: unknown,
-  trText: (zhText: string, enText: string) => string
-) => {
-  const raw = String((error as any)?.message || error || "");
-
-  if (/input token count exceeds|maximum number of tokens allowed|too many tokens|context length/i.test(raw)) {
-    return trText(
-      "本次请求内容过长，通常是图片或附件内容过大。请重试；如果仍失败，请减少附件数量或缩小单个附件内容。",
-      "This request is too large, usually because an image or attachment expanded the input too much. Retry once; if it still fails, reduce the number or size of attachments."
-    );
-  }
-
-  if (/api key|invalid api key|incorrect api key|unauthorized|401/i.test(raw)) {
-    return trText(
-      "API 配置无效，请检查 API key 或服务配置。",
-      "The API configuration is invalid. Check the API key or provider settings."
-    );
-  }
-
-  if (/400|bad request/i.test(raw)) {
-    return trText(
-      "请求格式无效，请检查本次输入或附件内容。",
-      "The request payload is invalid. Check this input or its attachments."
-    );
-  }
-
-  return trText(
-    "抱歉，请求失败，请稍后重试。",
-    "Sorry, the request failed. Please try again."
-  );
-};
 
 export function ChatPanel({ 
     className, 
     attachments = [],
     onRemoveAttachment,
     pptDraftSlides = [],
-    onRemovePptDraftSlide,
     onClearPptDraftSlides,
     onCodeAction,
     systemPrompt = DRAWIO_SYSTEM_PROMPT,
@@ -152,22 +96,11 @@ export function ChatPanel({
   const uiLang = useUiLanguage();
   const trText = (zhText: string, enText: string) => (uiLang === "zh" ? zhText : enText);
   const resolvedTitle = title || t(uiLang, "workspace.default.title");
-  // Persistence key
-  const storageKey = `${STORAGE_KEY_PREFIX}${workspaceId}`;
+  const storageKey = chatStorageKey(workspaceId);
 
-  const [messages, setMessages] = useState<ChatMessage[]>(() => {
-    if (typeof window !== 'undefined') {
-        const saved = localStorage.getItem(storageKey);
-        if (saved) {
-            try {
-                return JSON.parse(saved);
-            } catch (e) {
-                console.error("Failed to parse chat history", e);
-            }
-        }
-    }
-    return initialMessages.length > 0 ? initialMessages : [];
-  });
+  const [messages, setMessages] = useState<ChatMessage[]>(() =>
+    loadChatHistory(storageKey, initialMessages),
+  );
 
   const [input, setInput] = useState('');
   const [pptInputSegments, setPptInputSegments] = useState<Array<{ type: "text"; text: string } | { type: "ppt"; slideId: string; label: string; tag: string; tokenKind: "outline" | "slide_image" }>>([
@@ -242,45 +175,6 @@ export function ChatPanel({
     for (const s of added) enqueuePptToken(s.slideId, s.title, s.kind);
   }, [workspaceId, pptDraftSlides, setInput]);
 
-  const parseMarkdownBomTable = (text: string) => {
-    const normalized = String(text || "");
-    const lines = normalized.split(/\r?\n/);
-    for (let i = 0; i < lines.length - 2; i += 1) {
-      const header = lines[i];
-      const sep = lines[i + 1];
-      if (!header.includes("|")) continue;
-      if (!/^\s*\|?(\s*:?-+:?\s*\|)+\s*:?-+:?\s*\|?\s*$/.test(sep)) continue;
-
-      const parseRow = (line: string) => {
-        const trimmed = line
-          .trim()
-          .replace(/^[-*+]\s+/, "")
-          .replace(/^\d+\.\s+/, "");
-        const body = trimmed.startsWith("|") ? trimmed.slice(1) : trimmed;
-        const body2 = body.endsWith("|") ? body.slice(0, -1) : body;
-        return body2.split("|").map((c) => c.trim());
-      };
-
-      const columns = parseRow(header).filter((c) => c);
-      if (columns.length === 0) continue;
-
-      const rows: any[] = [];
-      for (let j = i + 2; j < lines.length; j += 1) {
-        const rowLine = lines[j];
-        if (!rowLine.includes("|")) break;
-        const row = parseRow(rowLine);
-        if (row.every((c) => !String(c || "").trim())) break;
-        const fixed = row.slice(0, columns.length);
-        while (fixed.length < columns.length) fixed.push("");
-        rows.push(fixed);
-      }
-
-      if (rows.length === 0) continue;
-      return { type: "cad_bom", columns, rows };
-    }
-    return null;
-  };
-
   const sanitizeAssistantContentForDisplay = (content: string) => {
     if (workspaceId !== "cad") return content;
     if (!content) return content;
@@ -328,62 +222,14 @@ export function ChatPanel({
     });
   };
 
-  const scheduleFrame = (cb: () => void) => {
-    if (typeof requestAnimationFrame === "function") return requestAnimationFrame(cb);
-    if (typeof window !== "undefined") return window.setTimeout(cb, 16);
-    return 0;
-  };
+  const updateLastAssistant = (content: string) =>
+    writeLastAssistant(setMessages, sanitizeAssistantContentForDisplay, content);
 
-  const cancelFrame = (id: number) => {
-    if (!id) return;
-    if (typeof cancelAnimationFrame === "function") cancelAnimationFrame(id);
-    else if (typeof window !== "undefined") window.clearTimeout(id);
-  };
+  const createThrottledAssistantUpdater = () =>
+    createAssistantUpdater(setMessages, sanitizeAssistantContentForDisplay);
 
-  const updateLastAssistant = (content: string) => {
-    const display = sanitizeAssistantContentForDisplay(content);
-    setMessages(prev => {
-      const last = prev[prev.length - 1];
-      if (last?.role === 'assistant') {
-        return [...prev.slice(0, -1), { role: 'assistant', content: display }];
-      }
-      return [...prev, { role: 'assistant', content: display }];
-    });
-  };
-
-  const createThrottledAssistantUpdater = () => {
-    let latest = '';
-    let frameId: number | null = null;
-    return {
-      push: (chunk: string) => {
-        latest = chunk;
-        if (frameId !== null) return;
-        frameId = scheduleFrame(() => {
-          frameId = null;
-          updateLastAssistant(latest);
-        });
-      },
-      flush: () => {
-        if (frameId !== null) {
-          cancelFrame(frameId);
-          frameId = null;
-        }
-        updateLastAssistant(latest);
-      }
-    };
-  };
-
-  // Persist messages
   useEffect(() => {
-    try {
-      localStorage.setItem(storageKey, JSON.stringify(getMessagesForStorage(messages)));
-    } catch (error) {
-      console.warn("Failed to persist chat history", error);
-      try {
-        localStorage.removeItem(storageKey);
-      } catch {
-      }
-    }
+    if (typeof window !== "undefined") saveChatHistory(storageKey, messages);
     onMessagesChange?.(messages);
   }, [messages, storageKey, onMessagesChange]);
 
@@ -405,23 +251,6 @@ export function ChatPanel({
     setShowResetWarning(false);
   };
 
-  const startNewChat = () => {
-    abortControllerRef.current?.abort();
-    abortControllerRef.current = null;
-    setIsLoading(false);
-    setInput('');
-    setPptInputSegments([{ type: "text", text: "" }]);
-    setFiles([]);
-    onClearAttachments?.();
-    const newMsgs: ChatMessage[] = [
-      { role: 'assistant', content: t(uiLang, "chat.newChat") }
-    ];
-    setMessages(newMsgs);
-    try {
-      localStorage.removeItem(storageKey);
-    } catch {
-    }
-  };
 
   const runCodeAction = async (code: string, type: 'flow' | 'cad' | 'ppt') => {
     const result = await Promise.resolve(onCodeAction?.(code, type));
