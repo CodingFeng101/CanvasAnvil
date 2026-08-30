@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { Toaster } from "sonner";
-import { ChartNoAxesCombined, FileCode, Layers, Package, Presentation, ScrollText } from "lucide-react";
+import { FileCode, Layers, Presentation } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { SettingsDialog } from "@/components/SettingsDialog";
 import { LandingPage } from "@/pages/LandingPage";
@@ -11,12 +11,9 @@ import { useUiLanguage } from "@/lib/use-ui-language";
 import { FlowWorkspaceShell } from "@/workspaces/flow/FlowWorkspaceShell";
 import { CadWorkspaceShell } from "@/workspaces/cad/CadWorkspaceShell";
 import { PptWorkspaceShell } from "@/workspaces/ppt/PptWorkspaceShell";
-import { PosterWorkspaceShell } from "@/workspaces/poster/PosterWorkspaceShell";
-import { InfographicWorkspaceShell } from "@/workspaces/infographic/InfographicWorkspaceShell";
-import { ProductWorkspaceShell } from "@/workspaces/product/ProductWorkspaceShell";
 import type { PortalWorkspace } from "@/pages/portal/data";
 
-type WorkspaceType = "flow" | "cad" | "ppt" | "poster" | "infographic" | "product";
+type WorkspaceType = "flow" | "cad" | "ppt";
 const APP_VIEW_STORAGE_KEY = "CanvasAnvil-app-view-v1";
 const APP_WORKSPACE_STORAGE_KEY = "CanvasAnvil-active-workspace-v1";
 
@@ -84,7 +81,7 @@ function App() {
   const [activeWorkspace, setActiveWorkspace] = useState<WorkspaceType>(() => {
     if (typeof window === "undefined") return "flow";
     const saved = localStorage.getItem(APP_WORKSPACE_STORAGE_KEY);
-    return saved === "cad" || saved === "ppt" || saved === "flow" || saved === "poster" || saved === "infographic" || saved === "product" ? saved : "flow";
+    return saved === "cad" || saved === "ppt" || saved === "flow" ? saved : "flow";
   });
 
   React.useEffect(() => {
@@ -159,42 +156,6 @@ function App() {
             <Presentation className="w-4 h-4" />
             {t(uiLang, "nav.ppt")}
           </button>
-          <button
-            onClick={() => setActiveWorkspace("poster")}
-            className={cn(
-              "flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-all duration-300 ease-out",
-              activeWorkspace === "poster"
-                ? "bg-background text-foreground shadow-sm ring-1 ring-border/50 scale-100"
-                : "text-muted-foreground hover:text-foreground hover:bg-background/50",
-            )}
-          >
-            <ScrollText className="w-4 h-4" />
-            {t(uiLang, "nav.poster")}
-          </button>
-          <button
-            onClick={() => setActiveWorkspace("infographic")}
-            className={cn(
-              "flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-all duration-300 ease-out",
-              activeWorkspace === "infographic"
-                ? "bg-background text-foreground shadow-sm ring-1 ring-border/50 scale-100"
-                : "text-muted-foreground hover:text-foreground hover:bg-background/50",
-            )}
-          >
-            <ChartNoAxesCombined className="w-4 h-4" />
-            {t(uiLang, "nav.infographic")}
-          </button>
-          <button
-            onClick={() => setActiveWorkspace("product")}
-            className={cn(
-              "flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-all duration-300 ease-out",
-              activeWorkspace === "product"
-                ? "bg-background text-foreground shadow-sm ring-1 ring-border/50 scale-100"
-                : "text-muted-foreground hover:text-foreground hover:bg-background/50",
-            )}
-          >
-            <Package className="w-4 h-4" />
-            {t(uiLang, "nav.product")}
-          </button>
         </div>
         </div>
 
@@ -208,9 +169,6 @@ function App() {
           {activeWorkspace === "flow" && <FlowWorkspaceShell />}
           {activeWorkspace === "cad" && <CadWorkspaceShell />}
           {activeWorkspace === "ppt" && <PptWorkspaceShell />}
-          {activeWorkspace === "poster" && <PosterWorkspaceShell />}
-          {activeWorkspace === "infographic" && <InfographicWorkspaceShell />}
-          {activeWorkspace === "product" && <ProductWorkspaceShell />}
         </ErrorBoundary>
       </div>
     </div>

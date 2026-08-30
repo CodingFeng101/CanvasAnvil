@@ -1,13 +1,13 @@
 "use client"
 import { useEffect, useRef, useState } from "react"
 import { DrawIoEmbed } from "react-drawio"
-import type { ImperativePanelHandle } from "react-resizable-panels-v3"
 import ChatPanel from "@/workspaces/flow/next/components/chat-panel"
 import { STORAGE_CLOSE_PROTECTION_KEY } from "@/workspaces/flow/next/components/settings-dialog"
 import {
     ResizableHandle,
     ResizablePanel,
     ResizablePanelGroup,
+    type PanelImperativeHandle,
 } from "@/workspaces/flow/next/components/ui/resizable"
 import { useDiagram } from "@/workspaces/flow/next/contexts/diagram-context"
 
@@ -28,7 +28,7 @@ export default function Home() {
     const [isLoaded, setIsLoaded] = useState(false)
     const [closeProtection, setCloseProtection] = useState(false)
 
-    const chatPanelRef = useRef<ImperativePanelHandle>(null)
+    const chatPanelRef = useRef<PanelImperativeHandle>(null)
 
     // Load preferences from localStorage after mount
     useEffect(() => {
@@ -127,14 +127,14 @@ export default function Home() {
             <ResizablePanelGroup
                 id="main-panel-group-v3"
                 key={isMobile ? "mobile" : "desktop"}
-                direction={isMobile ? "vertical" : "horizontal"}
+                orientation={isMobile ? "vertical" : "horizontal"}
                 className="h-full"
             >
                 {/* Draw.io Canvas */}
                 <ResizablePanel
                     id="drawio-panel"
-                    defaultSize={isMobile ? 50 : 67}
-                    minSize={20}
+                    defaultSize={isMobile ? "50%" : "67%"}
+                    minSize="20%"
                 >
                     <div
                         className={`h-full relative ${
@@ -172,14 +172,13 @@ export default function Home() {
                 {/* Chat Panel */}
                 <ResizablePanel
                     id="chat-panel"
-                    ref={chatPanelRef}
-                    defaultSize={isMobile ? 50 : 33}
-                    minSize={isMobile ? 20 : 15}
-                    maxSize={isMobile ? 80 : 50}
+                    panelRef={chatPanelRef}
+                    defaultSize={isMobile ? "50%" : "33%"}
+                    minSize={isMobile ? "20%" : "15%"}
+                    maxSize={isMobile ? "80%" : "50%"}
                     collapsible={!isMobile}
-                    collapsedSize={isMobile ? 0 : 3}
-                    onCollapse={() => setIsChatVisible(false)}
-                    onExpand={() => setIsChatVisible(true)}
+                    collapsedSize={isMobile ? "0%" : "3%"}
+                    onResize={(panelSize) => setIsChatVisible(panelSize.inPixels > 80)}
                 >
                     <div className={`h-full ${isMobile ? "p-1" : "py-2 pr-2"}`}>
                         <ChatPanel

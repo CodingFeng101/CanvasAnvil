@@ -11,7 +11,6 @@ import { POST as postLogFileParser } from "./api/routes/log-file-parser";
 import { POST as postThirdPartyParser } from "./api/routes/third-party-parser";
 import { POST as postChat } from "./api/routes/chat";
 import { POST as postPptAi } from "./api/routes/ppt-ai";
-import { createProxyMiddleware } from "http-proxy-middleware";
 
 type RouteHandler = (request: Request) => Promise<Response>;
 
@@ -116,33 +115,6 @@ function createLocalApiPlugin(): Plugin {
   };
 }
 
-function createPptistLabProxyPlugin(): Plugin {
-  const attachProxy = (middlewares: Connect.ServerStack) => {
-    const proxy = createProxyMiddleware({
-      target: "http://127.0.0.1:8003",
-      changeOrigin: true,
-      ws: true,
-      pathRewrite: {
-        '^/pptist-lab': '',
-      },
-      cookiePathRewrite: {
-        '*': '/pptist-lab/',
-      },
-    });
-    middlewares.use('/pptist-lab', proxy);
-  };
-
-  return {
-    name: "pptist-lab-proxy",
-    configureServer(server) {
-      attachProxy(server.middlewares);
-    },
-    configurePreviewServer(server) {
-      attachProxy(server.middlewares);
-    },
-  };
-}
-
 // https://vite.dev/config/
 export default defineConfig({
   server: {
@@ -161,7 +133,6 @@ export default defineConfig({
   },
   plugins: [
     createLocalApiPlugin(),
-    createPptistLabProxyPlugin(),
     react(),
     tsconfigPaths()
   ],

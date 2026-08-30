@@ -686,7 +686,7 @@ export function autoFixXml(xml: string): { fixed: string; fixes: string[] } {
             `<mxCell${before} id="cell_${Date.now()}_${Math.random().toString(36).slice(2, 8)}"${after}>`,
     )
 
-    fixed = fixed.replace(/\s([a-zA-Z_:][a-zA-Z0-9_:.-]*)=\=/g, ' $1=')
+    fixed = fixed.replace(/\s([a-zA-Z_:][a-zA-Z0-9_:.-]*)==/g, ' $1=')
     fixed = fixed.replace(/\bparent==/g, 'parent=')
     fixed = fixed.replace(/\bstyle==/g, 'style=')
     fixed = fixed.replace(/\bhtml==/g, 'html=')

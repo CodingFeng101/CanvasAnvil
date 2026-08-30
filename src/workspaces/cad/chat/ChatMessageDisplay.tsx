@@ -339,7 +339,7 @@ function extractPptToolPayload(text: string): PptToolPayload | null {
     if (!parsed || typeof parsed !== "object") return null;
     const typeRaw = String((parsed as any).type || "").trim().toLowerCase();
     if (typeRaw && typeRaw !== "ppt_edit") return null;
-    const type: "ppt_edit" = "ppt_edit";
+    const type = "ppt_edit" as const;
     const slides = Array.isArray((parsed as any).slides)
         ? (parsed as any).slides.filter((s: any) => s && typeof s === "object")
         : [];

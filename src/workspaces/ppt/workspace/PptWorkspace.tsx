@@ -31,11 +31,6 @@ import {
   type EditableResizeHandle,
   type ReviewResizeHandle as BridgeReviewResizeHandle,
 } from "@/features/ppt-editor";
-import {
-  buildPptistBootstrapPayload,
-  CANVASANVIL_PPTIST_MESSAGE_TYPE,
-  type PptistLabBootstrapPayload,
-} from "@/features/ppt-editor/adapters/toPptistLab";
 
 interface SlideData {
   id: string;
@@ -220,7 +215,6 @@ interface PptWorkspaceProps {
   onPptStageChange?: (stage: "start" | "outline" | "slides") => void;
   onCreationModeChange?: (mode: "idea" | "outline" | "beautify" | "image_transform") => void;
   onExportReviewModeChange?: (active: boolean) => void;
-  onEmbeddedEditorActiveChange?: (active: boolean) => void;
   incomingEdit?: { id: string; payload: string } | null;
   onIncomingEditHandled?: (id: string) => void;
   onResetWorkspace?: () => void;
@@ -712,7 +706,6 @@ export function PptWorkspace({
   onPptStageChange,
   onCreationModeChange,
   onExportReviewModeChange,
-  onEmbeddedEditorActiveChange,
   incomingEdit,
   onIncomingEditHandled,
   onResetWorkspace
@@ -964,8 +957,6 @@ export function PptWorkspace({
   const slideshowStartIndexRef = useRef<number | null>(null);
   const [exportMenuOpen, setExportMenuOpen] = useState(false);
   const [exportReviewMode, setExportReviewMode] = useState(false);
-  const [embeddedPptistPayload, setEmbeddedPptistPayload] = useState<PptistLabBootstrapPayload | null>(null);
-  const [embeddedPptistSessionId, setEmbeddedPptistSessionId] = useState(0);
   const [editableExtractionStatusBySlideId, setEditableExtractionStatusBySlideId] = useState<Record<string, EditableExtractionStatus>>({});
   const [reviewPreparingSlideIds, setReviewPreparingSlideIds] = useState<string[]>([]);
   const [selectedReviewTextBlockId, setSelectedReviewTextBlockId] = useState<string | null>(null);
@@ -980,7 +971,6 @@ export function PptWorkspace({
     startY: number;
   }>(null);
   const reviewPanelResizeRef = useRef<null | { startClientX: number; startWidth: number }>(null);
-  const pptistIframeRef = useRef<HTMLIFrameElement | null>(null);
   const reviewLayerPromiseRef = useRef<Record<string, Promise<{ versionId: string; imageUrl: string; layer: SlideRenderLayer } | null>>>({});
   const editableElementDragRef = useRef<null | {
     slideId: string;
@@ -1029,9 +1019,6 @@ export function PptWorkspace({
     onExportReviewModeChange?.(exportReviewMode);
   }, [exportReviewMode, onExportReviewModeChange]);
 
-  useEffect(() => {
-    onEmbeddedEditorActiveChange?.(!!embeddedPptistPayload);
-  }, [embeddedPptistPayload, onEmbeddedEditorActiveChange]);
   const isParsingReferenceFiles = Array.from(referencePdfData.values()).some((x) => x.isExtracting);
   const referenceFiles: ReferenceFile[] = referenceUploadFiles
     .map((file) => {
@@ -3501,57 +3488,6 @@ export function PptWorkspace({
     if (isExporting) setExportMenuOpen(false);
   }, [isExporting]);
 
-  const postEmbeddedPptistPayload = (payload: PptistLabBootstrapPayload | null) => {
-    if (!payload || typeof window === "undefined") return false;
-    const iframe = pptistIframeRef.current;
-    const iframeWindow = iframe?.contentWindow;
-    if (!iframeWindow) return false;
-    const targetOrigin = (() => {
-      try {
-        return new URL(iframe?.src || "", window.location.href).origin;
-      } catch {
-        return `${window.location.protocol}//${window.location.hostname}:8003`;
-      }
-    })();
-    try {
-      iframeWindow.postMessage(
-        {
-          type: CANVASANVIL_PPTIST_MESSAGE_TYPE,
-          payload,
-        },
-        targetOrigin,
-      );
-    } catch {
-      return false;
-    }
-    return true;
-  };
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const handleEmbeddedPptistMessage = (event: MessageEvent) => {
-      const expectedOrigins = new Set([
-        `${window.location.protocol}//${window.location.hostname}:8003`,
-        window.location.origin,
-      ]);
-      if (!expectedOrigins.has(event.origin)) return;
-      const data = event.data;
-      if (!data || typeof data !== "object") return;
-      if ((data as { type?: string }).type !== "canvasanvil:ppt-return") return;
-      resetToStart();
-    };
-    window.addEventListener("message", handleEmbeddedPptistMessage);
-    return () => window.removeEventListener("message", handleEmbeddedPptistMessage);
-  }, []);
-
-  useEffect(() => {
-    if (!embeddedPptistPayload) return;
-    const timer = window.setTimeout(() => {
-      postEmbeddedPptistPayload(embeddedPptistPayload);
-    }, 80);
-    return () => window.clearTimeout(timer);
-  }, [embeddedPptistPayload, embeddedPptistSessionId]);
-
   const setRenderLayerState = (slideId: string, versionId: string, layer: SlideRenderLayer) => {
       const normalizedLayer: SlideRenderLayer = {
         ...layer,
@@ -5306,16 +5242,14 @@ export function PptWorkspace({
       if (pages.some((page) => !page)) {
         throw new Error("Missing editable export page");
       }
-      const payload = buildPptistBootstrapPayload(pages as PptPage[]);
-      setEmbeddedPptistPayload(payload);
-      setEmbeddedPptistSessionId(Date.now());
+      await pptService.exportPptx(pages as PptPage[], {}, `presentation-editable-${Date.now()}`);
       setExportReviewMode(false);
       setReviewDrawMode(false);
       setReviewDraftRect(null);
       setSelectedReviewTextBlockId(null);
     } catch (e) {
       console.error("Editable export failed", e);
-      alert(tr("进入可编辑 PPT 编辑器失败", "Failed to open editable PPT editor"));
+      alert(tr("导出可编辑 PPTX 失败", "Failed to export editable PPTX"));
     } finally {
       setIsExporting(null);
     }
@@ -5367,8 +5301,6 @@ export function PptWorkspace({
     setImageTransformFile(null);
     setExportReviewMode(false);
     setEditableExtractionStatusBySlideId({});
-    setEmbeddedPptistPayload(null);
-    setEmbeddedPptistSessionId(0);
     setSelectedReviewTextBlockId(null);
     setReviewDrawMode(false);
     setReviewDraftRect(null);
@@ -6374,7 +6306,6 @@ export function PptWorkspace({
   return (
     <div className="w-full h-full bg-zinc-100 dark:bg-zinc-900 flex flex-col">
       {/* Toolbar */}
-      {!embeddedPptistPayload ? (
       <div className="relative z-50 h-14 px-4 bg-white dark:bg-zinc-800 border-b border-zinc-200 dark:border-zinc-700 flex justify-between items-center shadow-sm">
         <div className="flex items-center gap-4 [&>h2]:hidden">
             <h2 className="hidden font-semibold text-sm text-foreground">{tr("PPT 演示文稿", "PPT Deck")}</h2>
@@ -6439,16 +6370,6 @@ export function PptWorkspace({
                 </motion.div>
               ) : null}
             </div>
-            {embeddedPptistPayload ? (
-              <button
-                onClick={() => setEmbeddedPptistPayload(null)}
-                title={tr("退出编辑器", "Exit editor")}
-                className="flex items-center gap-2 px-3 py-1.5 bg-zinc-100 dark:bg-zinc-700 hover:bg-zinc-200 dark:hover:bg-zinc-600 text-xs rounded transition-colors shadow-sm"
-              >
-                <ArrowLeft className="w-3.5 h-3.5" />
-                <span>{tr("退出编辑器", "Exit editor")}</span>
-              </button>
-            ) : null}
             {creationMode === "beautify" && (
               <button
                 onClick={handleRetryFailedBeautify}
@@ -6476,23 +6397,8 @@ export function PptWorkspace({
             <span>{activeSlides.length > 0 ? tr(`第 ${currentSlideIndex + 1} / ${activeSlides.length} 页`, `Slide ${currentSlideIndex + 1} / ${activeSlides.length}`) : tr("空文档", "Empty")}</span>
         </div>
       </div>
-      ) : null}
 
       {/* Main View */}
-      {embeddedPptistPayload ? (
-        <div className="flex-1 overflow-hidden bg-zinc-950">
-          <iframe
-            key={embeddedPptistSessionId}
-            ref={pptistIframeRef}
-            src={`${window.location.protocol}//${window.location.hostname}:8003/?canvasanvil=embedded&session=${embeddedPptistSessionId}`}
-            className="h-full w-full border-0 bg-white"
-            title="PPTist Editor"
-            onLoad={() => {
-              postEmbeddedPptistPayload(embeddedPptistPayload);
-            }}
-          />
-        </div>
-      ) : (
       <div className="flex-1 flex overflow-hidden">
         {/* Thumbnails */}
         <div className="w-64 bg-zinc-50 dark:bg-zinc-900 border-r border-border overflow-y-auto p-4 space-y-4">
@@ -6742,7 +6648,6 @@ export function PptWorkspace({
         </div>
         {exportReviewMode ? renderReviewSidebarBridge() : null}
       </div>
-      )}
 
       <Dialog open={slideshowOpen} onOpenChange={(open) => (open ? setSlideshowOpen(true) : closeSlideshow())}>
         <DialogContent className="inset-0 left-0 top-0 translate-x-0 translate-y-0 w-screen h-screen max-w-none sm:max-w-none rounded-none p-0 bg-black/95 border-none">

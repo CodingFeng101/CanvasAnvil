@@ -18,13 +18,12 @@ npm install
 Start the full local development stack:
 
 ```bash
-npm run dev:full
+npm run dev
 ```
 
-Default local services:
+Default local service:
 
 - 🧩 Main app: [http://127.0.0.1:8001](http://127.0.0.1:8001)
-- 📑 PPTist Lab: [http://127.0.0.1:8003](http://127.0.0.1:8003)
 
 ## ✅ Quality Checks
 
@@ -34,12 +33,6 @@ Before opening a pull request, run:
 npm run check
 ```
 
-If your change touches `pptist-lab`, also run:
-
-```bash
-npm --prefix pptist-lab run type-check
-```
-
 ## 🧭 What To Contribute
 
 Good contribution areas include:
@@ -47,8 +40,8 @@ Good contribution areas include:
 - 🐛 Bug fixes with clear reproduction steps
 - ⚡ Performance and stability improvements
 - 📝 Documentation improvements
-- 🎨 UX improvements for Flow, CAD, PPT, Poster, Infographic, and Product workspaces
-- 📦 Deployment improvements for the main app and standalone `pptist-lab` service
+- 🎨 UX improvements for the Flow, CAD, and PPT workspaces
+- 📦 Deployment improvements for the app service
 
 For large changes, open an issue first so the direction can be discussed before implementation.
 

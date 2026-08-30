@@ -53,7 +53,6 @@ export function PptWorkspaceShell() {
   });
   const [pptCreationMode, setPptCreationMode] = useState<"idea" | "outline" | "beautify" | "image_transform">("idea");
   const [pptExportReviewActive, setPptExportReviewActive] = useState(false);
-  const [pptEmbeddedEditorActive, setPptEmbeddedEditorActive] = useState(false);
 
   const [chatHistory, setChatHistory] = useState<ChatMessage[]>([]);
   const [versionHistory, setVersionHistory] = useState<HistoryItem[]>(() => {
@@ -72,8 +71,7 @@ export function PptWorkspaceShell() {
   const showPptChat =
     (pptStage === "outline" || pptStage === "slides") &&
     pptCreationMode !== "image_transform" &&
-    !pptExportReviewActive &&
-    !pptEmbeddedEditorActive;
+    !pptExportReviewActive;
   const pptChatLocked = !showPptChat || !pptReady;
 
   useEffect(() => {
@@ -243,7 +241,6 @@ export function PptWorkspaceShell() {
     setPptStage("start");
     setPptCreationMode("idea");
     setPptExportReviewActive(false);
-    setPptEmbeddedEditorActive(false);
     setChatHistory([]);
     setAttachments([]);
     setVersionHistory([]);
@@ -284,7 +281,6 @@ export function PptWorkspaceShell() {
             onPptStageChange={setPptStage}
             onCreationModeChange={setPptCreationMode}
             onExportReviewModeChange={setPptExportReviewActive}
-            onEmbeddedEditorActiveChange={setPptEmbeddedEditorActive}
             incomingEdit={pptIncomingEdit}
             onIncomingEditHandled={() => setPptIncomingEdit(null)}
             onResetWorkspace={clearWorkspace}
