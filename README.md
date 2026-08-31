@@ -115,10 +115,13 @@ Generate full presentations through a controlled pipeline: outline first, visual
 
 Current release: `v2.1.0`
 
+Unreleased on `main`:
+
 - Narrowed the product to three canvases: Flow, Interior Design, and PPT.
 - Removed the embedded `pptist-lab` editor; editable decks now export directly as `.pptx`.
 - Consolidated model access on a single OpenAI-compatible request path.
-- Updated the online access URL to `https://canvasanvil.codingfgd.asia`.
+
+See [CHANGELOG.md](CHANGELOG.md) for the full list.
 
 ## 🌐 Online Access
 

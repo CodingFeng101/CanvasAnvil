@@ -4,6 +4,47 @@ All notable changes to this project will be documented in this file.
 
 The format is based on Keep a Changelog, and the project aims to follow Semantic Versioning.
 
+## [Unreleased]
+
+A structural refactor of the whole project. The repository now separates
+`client/`, `server/`, `contracts/` and `resources/`, every workspace has the
+same shape, and the shared UI kit, storage layer, file pipeline and i18n each
+exist once instead of per workspace.
+
+### Removed
+
+- Removed the `pptist-lab` editor integration. The PPT canvas stays; editable decks export directly as `.pptx`.
+- Removed the poster, product and infographic canvases, narrowing the product to Flow, Interior Design and PPT.
+- Removed the multi-provider model layer and the vendor picker. All model access goes through one OpenAI-compatible transport.
+- Removed the Next.js port that shadowed the Vite client, and roughly 900 lines of unreachable code the old `PptWorkspace` was hiding.
+
+### Added
+
+- Added a **Present** button to the deck toolbar. The slideshow was complete but had no entry point, so full-screen presentation, arrow-key paging and Escape had all been unreachable.
+- Added a test suite (`npm test`, node:test) covering the pure logic the refactor had to preserve: AI request shaping, draw.io XML repair, chat storage, PPT persistence and editor adapters, the deck state machine, slide-version resolution, render-layer edits, material tokens and the chat message readers.
+
+### Changed
+
+- Turned on TypeScript strict mode and split the bundle; initial load dropped from 2.89 MB to roughly 700 KB raw.
+- Replaced the deck's 25 scattered step assignments with a state machine, so the creation step and its progress bar can no longer drift apart.
+- Consolidated the CAD and PPT chat panels, chat inputs and transcript message readers, which had been forks of one another.
+
+### Fixed
+
+- Fixed an infinite render loop in every workspace's chat panel. Two file-sync effects running one step apart traded two equal-but-distinct arrays back and forth on every render.
+- Fixed the theme and dark-mode switches in the Flow chat panel, which received their handlers as props and used none of them.
+- Fixed CAD patch failures being swallowed: an exception while applying a patch left no error and no retry, so the patch appeared to do nothing.
+- Fixed the SVG load-failure toast keeping the previous language after a language switch.
+- Fixed the export-review selection pointing at a text block from an image version no longer on screen.
+- Fixed attachment chips in the CAD and PPT transcripts showing an empty character count.
+- Fixed messages whose content is a multimodal part array reading as empty text in the CAD and PPT transcripts.
+- Fixed a Docker image that copied directories which no longer exist and omitted `resources/`, which the server reads at request time.
+
+### Security
+
+- Removed server-side debug logging that wrote entire conversations, including inline base64 images and everything the user typed, to the console on every request.
+- Prompt logging now writes only when `PROMPT_LOG_DIR` is set, instead of dropping a file containing the full prompt into the working directory by default.
+
 ## [2.1.0] - 2026-04-25
 
 ### Added

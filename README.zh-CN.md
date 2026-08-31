@@ -115,10 +115,13 @@
 
 当前版本：`v2.1.0`
 
+`main` 上尚未发布的改动：
+
 - 产品收敛为三个画布：流程绘制、室内设计、PPT 演示
 - 移除内嵌 `pptist-lab` 编辑器，可编辑演示稿改为直接导出 `.pptx`
 - 模型访问统一收敛到单一 OpenAI 兼容请求路径
-- 更新并同步在线访问地址为 `https://canvasanvil.codingfgd.asia`
+
+完整列表见 [CHANGELOG.md](CHANGELOG.md)。
 
 ## 🌐 在线使用
 
