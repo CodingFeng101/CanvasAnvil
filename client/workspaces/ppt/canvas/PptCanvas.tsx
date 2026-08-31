@@ -6,7 +6,11 @@ import { runInParallel, sleep } from "./lib/concurrency";
 import { parseJsonLoose } from "./lib/parse-json";
 import { extractPdfPagesAsImages, isPdfFile } from "./lib/deck-source";
 import { getSlideshowDimensions } from "./lib/slideshow-size";
-import { clampTextBlockRect, withTextBlocks } from "./lib/render-layers";
+import {
+  clampTextBlockRect,
+  resizeRectFromHandle,
+  withTextBlocks,
+} from "./lib/render-layers";
 import { GenerationProgress } from "./views/GenerationProgress";
 import { OutlineReview } from "./views/OutlineReview";
 import { CreationStart } from "./views/CreationStart";
@@ -1418,36 +1422,13 @@ export function PptCanvas({
             resize.versionId,
           );
         } else {
-          const minW = 0.05;
-          const minH = 0.04;
-          let nextX = resize.startX;
-          let nextY = resize.startY;
-          let nextW = resize.startW;
-          let nextH = resize.startH;
-          if (resize.handle.includes("e")) nextW = resize.startW + dw;
-          if (resize.handle.includes("s")) nextH = resize.startH + dh;
-          if (resize.handle.includes("w")) {
-            nextX = resize.startX + dw;
-            nextW = resize.startW - dw;
-          }
-          if (resize.handle.includes("n")) {
-            nextY = resize.startY + dh;
-            nextH = resize.startH - dh;
-          }
-          if (nextW < minW) {
-            if (resize.handle.includes("w")) nextX -= minW - nextW;
-            nextW = minW;
-          }
-          if (nextH < minH) {
-            if (resize.handle.includes("n")) nextY -= minH - nextH;
-            nextH = minH;
-          }
-          updateSlideTextBlockRect(
-            resize.slideId,
-            resize.blockId,
-            { x: nextX, y: nextY, w: nextW, h: nextH },
-            resize.versionId,
+          const next = resizeRectFromHandle(
+            { x: resize.startX, y: resize.startY, w: resize.startW, h: resize.startH },
+            resize.handle,
+            dw,
+            dh,
           );
+          updateSlideTextBlockRect(resize.slideId, resize.blockId, next, resize.versionId);
         }
       }
     };

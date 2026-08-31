@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
   clampTextBlockRect,
+  resizeRectFromHandle,
   withTextBlocks,
   type RenderLayerMap,
 } from "../client/workspaces/ppt/canvas/lib/render-layers";
@@ -126,4 +127,61 @@ test("clamping returns a new block rather than mutating", () => {
   assert.notEqual(after, before);
   assert.equal(before.x, 0.1);
   assert.equal(after.text, "hello", "everything else is carried over");
+});
+
+/**
+ * Resizing a text box by one of its eight handles. The compass letters say
+ * which edges move; a west or north drag moves the origin too, which is where
+ * the arithmetic stops being obvious.
+ */
+
+const rect = { x: 0.2, y: 0.2, w: 0.4, h: 0.4 };
+
+test("an east or south handle moves only the size", () => {
+  assert.deepEqual(resizeRectFromHandle(rect, "e", 0.1, 0.1), { x: 0.2, y: 0.2, w: 0.5, h: 0.4 });
+  assert.deepEqual(resizeRectFromHandle(rect, "s", 0.1, 0.1), { x: 0.2, y: 0.2, w: 0.4, h: 0.5 });
+});
+
+test("a west or north handle moves the origin as well", () => {
+  const west = resizeRectFromHandle(rect, "w", 0.1, 0);
+  assert.ok(Math.abs(west.x - 0.3) < 1e-9, `x ${west.x}`);
+  assert.ok(Math.abs(west.w - 0.3) < 1e-9, "the right edge stays put");
+
+  const north = resizeRectFromHandle(rect, "n", 0, 0.1);
+  assert.ok(Math.abs(north.y - 0.3) < 1e-9);
+  assert.ok(Math.abs(north.h - 0.3) < 1e-9, "the bottom edge stays put");
+});
+
+test("a corner handle moves both axes", () => {
+  const nw = resizeRectFromHandle(rect, "nw", 0.1, 0.1);
+  assert.ok(Math.abs(nw.x - 0.3) < 1e-9);
+  assert.ok(Math.abs(nw.y - 0.3) < 1e-9);
+  assert.ok(Math.abs(nw.w - 0.3) < 1e-9);
+  assert.ok(Math.abs(nw.h - 0.3) < 1e-9);
+});
+
+test("a west drag past the minimum stops rather than sliding the box along", () => {
+  // Without the origin compensation the right edge would keep following the
+  // pointer and the whole box would travel across the slide.
+  const squashed = resizeRectFromHandle(rect, "w", 0.5, 0);
+  assert.equal(squashed.w, 0.05, "clamped to the floor");
+  assert.ok(Math.abs(squashed.x - 0.55) < 1e-9, "the right edge stays at 0.6");
+  assert.ok(Math.abs(squashed.x + squashed.w - 0.6) < 1e-9);
+});
+
+test("a north drag past the minimum keeps the bottom edge in place", () => {
+  const squashed = resizeRectFromHandle(rect, "n", 0, 0.5);
+  assert.equal(squashed.h, 0.04);
+  assert.ok(Math.abs(squashed.y + squashed.h - 0.6) < 1e-9, "the bottom edge stays at 0.6");
+});
+
+test("an east drag past the minimum does not move the origin", () => {
+  const squashed = resizeRectFromHandle(rect, "e", -0.5, 0);
+  assert.equal(squashed.w, 0.05);
+  assert.equal(squashed.x, 0.2, "the left edge is the anchor");
+});
+
+test("a zero drag returns the rectangle unchanged", () => {
+  assert.deepEqual(resizeRectFromHandle(rect, "se", 0, 0), rect);
+  assert.deepEqual(resizeRectFromHandle(rect, "nw", 0, 0), rect);
 });
