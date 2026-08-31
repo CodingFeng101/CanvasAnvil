@@ -1,13 +1,10 @@
 import { useState, useEffect, useRef, useCallback, useMemo, useReducer } from 'react';
-import { motion } from "motion/react";
 import { useLatestRef } from "@/shared/lib/use-latest-ref";
 import { errorText, isRetryableBeautifyError } from "./lib/errors";
 import { runInParallel, sleep } from "./lib/concurrency";
 import { parseJsonLoose } from "./lib/parse-json";
 import { extractPdfPagesAsImages, isPdfFile } from "./lib/deck-source";
-import { getSlideshowDimensions } from "./lib/slideshow-size";
 import {
-  reviewProgressSummary,
   summariseReviewProgress,
 } from "./lib/review-progress";
 import {
@@ -17,7 +14,7 @@ import {
 import { GenerationProgress } from "./views/GenerationProgress";
 import { OutlineReview } from "./views/OutlineReview";
 import { CreationStart } from "./views/CreationStart";
-import { ReviewSelectionOverlay } from "./views/ReviewSelectionOverlay";
+import { DeckView } from "./views/DeckView";
 import {
   getOriginalSlideVersion as originalVersionOf,
   getTextlessBackgroundVersion as textlessBackgroundOf,
@@ -45,29 +42,10 @@ import {
   PptPage,
   type PptTextBlock,
   type SlideEditRoutingItem,
-  PPT_REFERENCE_SLIDE_HEIGHT,
-  PPT_REFERENCE_SLIDE_WIDTH,
 } from '@/workspaces/ppt/lib/ppt-service';
 import { PPT_STATE_KEY, PPT_WORKSPACE_STORAGE_KEY, pptStore } from "@/workspaces/ppt/storage";
-import {
-  Loader2,
-  Image as ImageIcon,
-  MessageSquarePlus,
-  Presentation,
-  Sparkles,
-  Download,
-  X,
-  ArrowLeft,
-  ArrowRight,
-  Maximize2,
-  Minimize2,
-  RefreshCcw,
-} from 'lucide-react';
-import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuTrigger } from "@/shared/ui/context-menu";
-import { Button } from "@/shared/ui/button";
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/shared/ui/dialog";
 import { useUiLanguage } from "@/shared/i18n";
-import { canvasAnvilToEditorSlide, editorSlideToExportPayload, PptEditorBridge, PptReviewSidebar } from "@/features/ppt-editor";
+import { canvasAnvilToEditorSlide, editorSlideToExportPayload } from "@/features/ppt-editor";
 import {
   BEAUTIFY_CONCURRENCY,
   BEAUTIFY_RETRY_BASE_DELAY_MS,
@@ -1358,37 +1336,6 @@ export function PptCanvas({
   });
 
 
-  const renderScaledSlideScene = (
-    slide: SlideData,
-    _editable = false,
-    outerWidth = PPT_REFERENCE_SLIDE_WIDTH,
-    outerHeight = PPT_REFERENCE_SLIDE_HEIGHT,
-  ) => {
-    const backgroundUrl = getSlideBackgroundUrl(slide.id);
-    if (!backgroundUrl) return null;
-
-    return (
-      <PptEditorBridge
-        slide={canvasAnvilToEditorSlide(slide, {
-          renderLayer: getSlideRenderLayer(slide.id),
-          backgroundImageUrl: backgroundUrl,
-        })}
-        canvasWidth={outerWidth}
-        canvasHeight={outerHeight}
-        showElements={false}
-      />
-    );
-  };
-  const renderReviewSelectionOverlay = (slide: SlideData) => (
-    <ReviewSelectionOverlay
-      slide={slide}
-      review={review}
-      getLayer={getSlideRenderLayer}
-      getVersionId={(slideId) => getSlideVersionMeta(slideId).versionId}
-      canvasRef={previewCanvasRef}
-      tr={tr}
-    />
-  );
 
   const activeSlides = localSlides;
 
@@ -1404,59 +1351,6 @@ export function PptCanvas({
   const isAnyEditableExtractionRunning = reviewProgress.isExtracting;
   const allReviewLayersPrepared = reviewProgress.allLayersPrepared;
   const allEditableExtractionsDone = reviewProgress.allExtractionsDone;
-  const reviewPhase = reviewProgress.phase;
-  const renderReviewSidebarBridge = () => (
-    <PptReviewSidebar
-      panelWidth={review.panelWidth}
-      slideNumber={currentSlide ? currentSlideIndex + 1 : null}
-      textBlocks={currentReviewLayer?.textBlocks || []}
-      selectedTextBlockId={review.selectedBlockId}
-      isScanning={!!currentSlide && review.isPreparing(currentSlide.id) && !hasRenderableTextBlocks(currentReviewLayer)}
-      isExtracting={isAnyEditableExtractionRunning}
-      canExtract={allReviewLayersPrepared}
-      canStartEditing={allEditableExtractionsDone}
-      reviewPhase={reviewPhase}
-      extractionSummary={reviewProgressSummary(
-        reviewProgress,
-        activeSlides.length,
-        uiLang as "zh" | "en",
-      )}
-      reviewDrawMode={review.drawMode}
-      tr={tr}
-      onPanelResizeStart={(event) => {
-        event.preventDefault();
-        review.beginPanelResize(event);
-      }}
-      onExtract={() => void handleExtractEditableText()}
-      onStartEditing={() => void handleDownloadEditablePpt()}
-      onToggleDrawMode={() => review.setDrawMode((current) => !current)}
-      onSelectBlock={review.setSelectedBlockId}
-      onDeleteBlock={(blockId) => {
-        if (!currentSlide) return;
-        deleteSlideTextBlock(currentSlide.id, blockId);
-      }}
-      onChangeText={(blockId, nextText) => {
-        if (!currentSlide) return;
-        updateSlideTextBlock(currentSlide.id, blockId, nextText);
-      }}
-      onChangeRectField={(blockId, field, value) => {
-        if (!currentSlide) return;
-        const nextValue = Number.parseFloat(value);
-        if (!Number.isFinite(nextValue)) return;
-        updateSlideTextBlockRect(
-          currentSlide.id,
-          blockId,
-          field === "x"
-            ? { x: nextValue }
-            : field === "y"
-              ? { y: nextValue }
-              : field === "w"
-                ? { w: nextValue }
-                : { h: nextValue }
-        );
-      }}
-    />
-  );
   const failedBeautifyCount = activeSlides.reduce((n, s) => n + (inputs.beautify.failures[s.id] ? 1 : 0), 0);
   const failedImageTransformCount = activeSlides.reduce((n, s) => n + (inputs.imageTransform.failures[s.id] ? 1 : 0), 0);
   const currentSlideFailure = currentSlide
@@ -2722,530 +2616,63 @@ export function PptCanvas({
 
   // Regular View (creationStep === 'done' or manually provided data)
   return (
-    <div className="w-full h-full bg-zinc-100 dark:bg-zinc-900 flex flex-col">
-      {/* Toolbar */}
-      <div className="relative z-50 h-14 px-4 bg-white dark:bg-zinc-800 border-b border-zinc-200 dark:border-zinc-700 flex justify-between items-center shadow-sm">
-        <div className="flex items-center gap-4 [&>h2]:hidden">
-            <h2 className="hidden font-semibold text-sm text-foreground">{tr("PPT 演示文稿", "PPT Deck")}</h2>
-            <div className="font-semibold text-sm text-foreground">{tr("PPT \u6f14\u793a\u6587\u7a3f", "PPT Deck")}</div>
-            <button
-                onClick={handleBackToStart}
-                title={tr("返回开始", "Back to start")}
-                className="flex items-center gap-2 px-3 py-1.5 bg-zinc-100 dark:bg-zinc-700 hover:bg-zinc-200 dark:hover:bg-zinc-600 text-xs rounded transition-colors shadow-sm"
-            >
-                <ArrowLeft className="w-3.5 h-3.5" />
-                <span>{tr("返回", "Back")}</span>
-            </button>
-            <h2 className="font-semibold text-sm text-foreground">{tr("PPT 演示文稿", "PPT Deck")}</h2>
-            <div className="h-4 w-px bg-border"></div>
-            <button
-                onClick={() => slideshow.open(currentSlideIndex)}
-                disabled={activeSlides.length === 0}
-                title={tr("从当前页开始放映", "Present from the current slide")}
-                className="flex items-center gap-2 px-3 py-1.5 bg-zinc-100 dark:bg-zinc-700 hover:bg-zinc-200 dark:hover:bg-zinc-600 text-foreground rounded-md text-xs font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-                <Presentation className="w-3.5 h-3.5" />
-                <span>{tr("放映", "Present")}</span>
-            </button>
-            <div ref={review.menuRef} className="relative z-[60]">
-              <button
-                onClick={() => review.setMenuOpen((open) => !open)}
-                disabled={activeSlides.length === 0 || !!review.isExporting}
-                title={tr("导出", "Export")}
-                className="flex items-center gap-2 px-3 py-1.5 bg-zinc-100 dark:bg-zinc-700 hover:bg-zinc-200 dark:hover:bg-zinc-600 text-xs rounded transition-colors shadow-sm disabled:opacity-60"
-              >
-                {review.isExporting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
-                <span>{review.isExporting ? tr("导出中…", "Exporting...") : tr("导出", "Export")}</span>
-              </button>
-              {review.menuOpen && !review.isExporting ? (
-                <motion.div
-                  initial={{ opacity: 0, y: -6 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.16, ease: "easeOut" }}
-                  className="absolute left-0 top-full z-[70] mt-2 min-w-[190px] rounded-xl border border-zinc-200 bg-white p-2 shadow-xl dark:border-zinc-700 dark:bg-zinc-800"
-                >
-                  <button
-                    type="button"
-                    className="flex w-full items-center rounded-lg px-3 py-2 text-left text-xs text-zinc-700 transition-colors hover:bg-zinc-100 dark:text-zinc-100 dark:hover:bg-zinc-700"
-                    onClick={() => {
-                      review.setMenuOpen(false);
-                      void handleDownloadPdf();
-                    }}
-                  >
-                    {tr("导出 PDF", "Export PDF")}
-                  </button>
-                  <button
-                    type="button"
-                    className="flex w-full items-center rounded-lg px-3 py-2 text-left text-xs text-zinc-700 transition-colors hover:bg-zinc-100 dark:text-zinc-100 dark:hover:bg-zinc-700"
-                    onClick={() => {
-                      review.setMenuOpen(false);
-                      void handleDownloadPpt();
-                    }}
-                  >
-                    {tr("导出图片版 PPT", "Export Image PPT")}
-                  </button>
-                  <button
-                    type="button"
-                    className="flex w-full items-center rounded-lg px-3 py-2 text-left text-xs text-zinc-700 transition-colors hover:bg-zinc-100 dark:text-zinc-100 dark:hover:bg-zinc-700"
-                    onClick={() => {
-                      review.setMenuOpen(false);
-                      void handleDownloadEditablePpt();
-                    }}
-                  >
-                    {tr("导出可编辑 PPTX", "Export Editable PPTX")}
-                  </button>
-                </motion.div>
-              ) : null}
-            </div>
-            {creationMode === "beautify" && (
-              <button
-                onClick={handleRetryFailedBeautify}
-                disabled={failedBeautifyCount === 0 || Boolean(progress.message)}
-                title={tr("重试失败页", "Retry failed slides")}
-                className="flex items-center gap-2 px-3 py-1.5 bg-zinc-100 dark:bg-zinc-700 hover:bg-zinc-200 dark:hover:bg-zinc-600 text-xs rounded transition-colors shadow-sm disabled:opacity-60"
-              >
-                <Sparkles className="w-3.5 h-3.5" />
-                <span>{tr("重试失败页", "Retry failed")}</span>
-                {failedBeautifyCount > 0 ? <span className="rounded bg-red-100 px-1.5 py-0.5 text-[10px] text-red-700">{failedBeautifyCount}</span> : null}
-              </button>
-            )}
-        </div>
-        <div className="flex items-center gap-3 text-xs text-muted-foreground">
-            {creationMode === "beautify" && failedBeautifyCount > 0 ? (
-              <span className="rounded border border-red-200 bg-red-50 px-2 py-1 text-red-700">
-                {tr(`失败 ${failedBeautifyCount} 页`, `${failedBeautifyCount} failed`)}
-              </span>
-            ) : null}
-            {creationMode === "image_transform" && failedImageTransformCount > 0 ? (
-              <span className="rounded border border-red-200 bg-red-50 px-2 py-1 text-red-700">
-                {tr(`转化失败 ${failedImageTransformCount} 页`, `${failedImageTransformCount} failed`)}
-              </span>
-            ) : null}
-            <span>{activeSlides.length > 0 ? tr(`第 ${currentSlideIndex + 1} / ${activeSlides.length} 页`, `Slide ${currentSlideIndex + 1} / ${activeSlides.length}`) : tr("空文档", "Empty")}</span>
-        </div>
-      </div>
-
-      {/* Main View */}
-      <div className="flex-1 flex overflow-hidden">
-        {/* Thumbnails */}
-        <div className="w-64 bg-zinc-50 dark:bg-zinc-900 border-r border-border overflow-y-auto p-4 space-y-4">
-          {activeSlides.map((slide, index) => {
-            const hasGeneratedImage = getSlideBackgroundUrl(slide.id);
-            const slideFailure = creationMode === "image_transform" ? inputs.imageTransform.failures[slide.id] : inputs.beautify.failures[slide.id];
-            return (
-            <ContextMenu key={slide.id || index}>
-                <ContextMenuTrigger asChild>
-                    <div 
-                    onClick={() => setCurrentSlideIndex(index)}
-                    className={`cursor-pointer border-2 rounded-lg overflow-hidden relative aspect-[16/9] group transition-all duration-200 ${
-                        currentSlideIndex === index 
-                        ? 'border-blue-600 shadow-md scale-[1.02]' 
-                        : 'border-transparent hover:border-zinc-300 dark:hover:border-zinc-700 bg-white dark:bg-zinc-800 shadow-sm'
-                    }`}
-                    >
-                    {creationMode !== "image_transform" && !review.isActive ? (
-                      <div
-                        className="absolute top-1 left-1 z-20"
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        <Button
-                          size="sm"
-                          variant="destructive"
-                          className="h-6 px-2 text-[10px] gap-1 shadow-sm opacity-0 group-hover:opacity-100 transition-opacity"
-                          onClick={() => handleAddSlideToChat(slide)}
-                        >
-                          <Presentation className="w-3 h-3" />
-                          {tr("加入对话", "Add to chat")}
-                        </Button>
-                      </div>
-                    ) : null}
-                    {/* Thumbnail Preview */}
-                    {hasGeneratedImage ? (
-                        renderScaledSlideScene(slide, false, 240, 135)
-                    ) : (
-                        <div className="w-full h-full p-2 flex flex-col bg-white overflow-hidden text-[6px]">
-                            {templateImage && (
-                                <img src={templateImage} className="absolute inset-0 w-full h-full object-cover opacity-20 pointer-events-none" alt="" />
-                            )}
-                            <div className="font-bold mb-1 truncate z-10 relative">{slide.title}</div>
-                            <div className="flex-1 space-y-0.5 z-10 relative">
-                                {(slide.content || []).slice(0, 3).map((line, i) => (
-                                    <div key={i} className="truncate text-zinc-500">• {line}</div>
-                                ))}
-                            </div>
-                        </div>
-                    )}
-                    
-                    <div className="absolute bottom-1 right-1 bg-black/60 text-white text-[10px] px-1.5 rounded-sm backdrop-blur-sm">
-                        {index + 1}
-                    </div>
-                    {review.isActive && review.getExtractionStatus(slide.id) === "done" ? (
-                      <Button
-                        size="sm"
-                        variant="secondary"
-                        className="absolute left-1 top-1 z-20 h-6 gap-1 px-2 text-[10px] shadow-sm"
-                        disabled={isAnyEditableExtractionRunning}
-                        onClick={(event) => {
-                          event.preventDefault();
-                          event.stopPropagation();
-                          void handleExtractEditableText(slide.id);
-                        }}
-                      >
-                        <RefreshCcw className="h-3 w-3" />
-                        {tr("重新提取", "Re-extract")}
-                      </Button>
-                    ) : null}
-                    {slideFailure ? (
-                      <div
-                        className="absolute top-1 right-1 bg-red-600/90 text-white text-[10px] px-1.5 py-0.5 rounded-sm max-w-[85%] truncate"
-                        title={slideFailure}
-                      >
-                        {creationMode === "image_transform" ? tr("转化失败", "Transform failed") : tr("美化失败", "Beautify failed")}
-                      </div>
-                    ) : null}
-                    {review.isActive ? (
-                      <div className="absolute bottom-1 left-1 rounded-sm bg-black/60 px-1.5 py-0.5 text-[10px] text-white backdrop-blur-sm">
-                        {review.getExtractionStatus(slide.id) === "done"
-                          ? tr("文字已提取", "Text extracted")
-                          : review.getExtractionStatus(slide.id) === "extracting"
-                            ? tr("文字提取中", "Extracting text")
-                            : review.isPreparing(slide.id)
-                              ? tr("文本框识别中", "Preparing text boxes")
-                              : getSlideRenderLayer(slide.id)?.status === "ready"
-                                ? tr("文本框已就绪", "Text boxes ready")
-                                : tr("待准备", "Pending")}
-                      </div>
-                    ) : null}
-                    </div>
-                </ContextMenuTrigger>
-                {creationMode !== "image_transform" && !review.isActive ? (
-                  <ContextMenuContent>
-                      <ContextMenuItem onClick={() => handleAddSlideToChat(slide)} className="gap-2">
-                          <MessageSquarePlus className="w-4 h-4" />
-                          <span>{tr("把此页添加到对话", "Add this slide to chat")}</span>
-                      </ContextMenuItem>
-                  </ContextMenuContent>
-                ) : null}
-            </ContextMenu>
-          )})}
-          
-          {activeSlides.length === 0 && (
-             <div className="text-center py-8">
-                <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-muted mb-3">
-                    <Presentation className="w-6 h-6 text-muted-foreground" />
-                </div>
-                <p className="text-sm text-muted-foreground">
-                  {uiLang === "zh" ? "在右侧对话框中输入需求" : "Describe your needs in the chat on the right"}
-                  <br />
-                  {uiLang === "zh" ? "让 AI 为您生成 PPT" : "Let AI generate your PPT"}
-                </p>
-             </div>
-          )}
-        </div>
-
-        {/* Preview */}
-        <div className="flex-1 p-4 flex items-center justify-center bg-zinc-200/50 dark:bg-zinc-950/50 overflow-auto relative">
-          <div className="absolute top-4 left-4 z-30 flex items-center gap-2 bg-white/80 dark:bg-zinc-900/70 backdrop-blur rounded-xl border border-border/50 px-3 py-2 shadow-sm">
-            {!review.isActive ? (
-              <Button
-                size="sm"
-                className="h-7 px-2 text-xs"
-                onClick={handleGenerateAiImage}
-                disabled={!currentSlide || isGeneratingImage}
-              >
-                {isGeneratingImage ? <Loader2 className="w-3 h-3 mr-1 animate-spin" /> : null}
-                {tr("重新渲染本页", "Regenerate this slide")}
-              </Button>
-            ) : null}
-            {currentSlide && getVisibleSlideVersions(currentSlide.id).length > 0 && (
-              <select
-                className="h-7 text-xs rounded-md border border-input bg-background px-2"
-                value={
-                  (() => {
-                    const visibleVersions = getVisibleSlideVersions(currentSlide.id);
-                    const currentVersionId = currentImageVersionId[currentSlide.id];
-                    const preferredVersion =
-                      [...visibleVersions].reverse().find((item) => item.type !== "derived_textless") ||
-                      visibleVersions[visibleVersions.length - 1];
-                    return visibleVersions.some((item) => item.id === currentVersionId)
-                      ? currentVersionId
-                      : preferredVersion?.id || "";
-                  })()
-                }
-                onChange={(e) => {
-                  const slideId = currentSlide.id;
-                  const versionId = e.target.value;
-                  const versions = getVisibleSlideVersions(slideId);
-                  const v = versions.find(x => x.id === versionId);
-                  if (v) {
-                    setCurrentImageVersionId(prev => ({ ...prev, [slideId]: versionId }));
-                  }
-                }}
-              >
-                {getVisibleSlideVersions(currentSlide.id).map((v, idx) => (
-                  <option key={v.id} value={v.id}>
-                    {v.type === "derived_textless"
-                      ? formatImageVersionLabel(v, idx)
-                      : `${formatImageVersionLabel(v, idx)} · ${new Date(v.timestamp).toLocaleString()}`}
-                  </option>
-                ))}
-              </select>
-            )}
-          </div>
-          {currentSlideFailure ? (
-            <div className="absolute top-16 left-4 z-30 max-w-[520px] rounded-lg border border-red-200 bg-red-50/95 px-3 py-2 text-xs text-red-700 shadow-sm">
-              <span className="font-medium mr-1">{creationMode === "image_transform" ? tr("本页转化失败：", "Slide transform failed:") : tr("本页美化失败：", "Slide beautify failed:")}</span>
-              <span>{currentSlideFailure}</span>
-            </div>
-          ) : null}
-          {currentSlide ? (
-             <ContextMenu>
-                <ContextMenuTrigger asChild>
-                    <div 
-                        ref={previewCanvasRef}
-                        className="relative w-full max-w-[1100px] bg-white shadow-2xl rounded-sm overflow-hidden flex flex-col transition-transform duration-300 outline-none"
-                        style={{ aspectRatio: "16/9" }}
-                    >
-                        <PptEditorBridge
-                          slide={currentSlide ? canvasAnvilToEditorSlide(currentSlide, {
-                            renderLayer: currentReviewLayer,
-                            backgroundImageUrl: currentSlideImage || undefined,
-                          }) : null}
-                          canvasWidth={previewCanvasSize.width}
-                          canvasHeight={previewCanvasSize.height}
-                          showElements={review.isActive}
-                          showTextElements={false}
-                          showImageElements
-                          showShapeElements
-                          emptyState={
-                            <div className="w-full h-full p-12 flex flex-col relative">
-                              {templateImage && (
-                                <img src={templateImage} className="absolute inset-0 w-full h-full object-cover opacity-30 pointer-events-none" alt="Template" />
-                              )}
-
-                              <div className="relative z-10 h-full flex flex-col">
-                                <h1 className="mb-8 w-fit border-b-4 border-blue-600 pb-4 pr-12 text-4xl font-bold text-zinc-900">
-                                  {currentSlide.title}
-                                </h1>
-                                <div className="flex-1 space-y-6">
-                                  {(currentSlide.content || []).map((point, i) => (
-                                    <div key={i} className="flex items-start gap-4 text-2xl leading-relaxed text-zinc-700">
-                                      <span className="mt-2 text-blue-600">•</span>
-                                      <span>{point}</span>
-                                    </div>
-                                  ))}
-                                </div>
-                                <div className="mt-auto flex justify-between border-t border-zinc-100 pt-8 text-sm text-zinc-400">
-                                  <span>Generated by Unified AI Workspace</span>
-                                  <span>{currentSlideIndex + 1}</span>
-                                </div>
-                              </div>
-                            </div>
-                          }
-                        >
-                          {review.isActive && currentSlideImage ? renderReviewSelectionOverlay(currentSlide) : null}
-                        </PptEditorBridge>
-                        
-                        {/* Overlay Label if Generated */}
-                        {(isApplyingEdits || isGeneratingImage) && (
-                            <div className="absolute inset-0 z-50 flex items-center justify-center bg-white/50 backdrop-blur-[2px]">
-                                <div className="flex flex-col items-center gap-3 bg-white shadow-xl px-6 py-4 rounded-xl border border-blue-100">
-                                    <Loader2 className="w-6 h-6 text-blue-600 animate-spin" />
-                                    <span className="text-sm font-medium text-zinc-700">{tr("幻灯片正在生成中...", "Generating slides...")}</span>
-                                </div>
-                            </div>
-                        )}
-                    </div>
-                </ContextMenuTrigger>
-                {creationMode !== "image_transform" && !review.isActive ? (
-                  <ContextMenuContent>
-                      <ContextMenuItem onClick={() => handleAddSlideToChat(currentSlide)} className="gap-2">
-                          <MessageSquarePlus className="w-4 h-4" />
-                          <span>把此页添加到对话</span>
-                      </ContextMenuItem>
-                  </ContextMenuContent>
-                ) : null}
-            </ContextMenu>
-          ) : (
-            <div className="text-muted-foreground flex flex-col items-center">
-              <ImageIcon className="w-16 h-16 mb-4 opacity-20" />
-              <p>{tr("暂无幻灯片", "No slides yet")}</p>
-            </div>
-          )}
-        </div>
-        {review.isActive ? renderReviewSidebarBridge() : null}
-      </div>
-
-      <Dialog open={slideshow.isOpen} onOpenChange={(open) => { if (!open) slideshow.close(); }}>
-        <DialogContent className="inset-0 left-0 top-0 translate-x-0 translate-y-0 w-screen h-screen max-w-none sm:max-w-none rounded-none p-0 bg-black/95 border-none">
-          <div ref={slideshow.rootRef} className="w-full h-full flex flex-col">
-          <div className="h-16 px-6 flex items-center justify-between text-white/90 bg-black/50 backdrop-blur-sm z-50">
-            <div className="text-sm font-medium">
-              {activeSlides.length > 0 ? `${uiLang === "zh" ? "第" : "Slide "}${slideshow.index + 1} / ${activeSlides.length}${uiLang === "zh" ? " 页" : ""}` : ""}
-            </div>
-            <div className="flex items-center gap-4">
-              <Button
-                variant="ghost"
-                size="sm"
-                title={slideshow.isFullscreen ? tr("退出全屏", "Exit fullscreen") : tr("进入全屏", "Enter fullscreen")}
-                className="text-white hover:text-white hover:bg-white/10 gap-2"
-                onClick={() => {
-                  if (slideshow.isFullscreen) {
-                    void slideshow.exitFullscreen();
-                  } else {
-                    void slideshow.enterFullscreen();
-                  }
-                }}
-              >
-                {slideshow.isFullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
-                {slideshow.isFullscreen ? tr("退出全屏", "Exit fullscreen") : tr("全屏", "Fullscreen")}
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="text-white hover:text-white hover:bg-white/10 gap-2"
-                onClick={slideshow.close}
-              >
-                <X className="w-4 h-4" />
-                {tr("退出", "Close")}
-              </Button>
-            </div>
-          </div>
-          
-          <div className="flex-1 flex items-center justify-center p-8 overflow-hidden bg-black/90">
-            {activeSlides[slideshow.index] ? (
-              (() => {
-                const slideDims = getSlideshowDimensions(windowDimensions);
-                const slideWidth = typeof slideDims.width === "number" ? slideDims.width : 1100;
-                const slideHeight = typeof slideDims.height === "number" ? slideDims.height : 619;
-                return (
-              <div className="relative w-full h-full flex items-center justify-center">
-                  <div 
-                    className="relative bg-white shadow-2xl overflow-hidden rounded-lg mx-auto"
-                    style={{
-                      width: slideDims.width,
-                      height: slideDims.height
-                    }}
-                  >
-                  {getSlideBackgroundUrl(activeSlides[slideshow.index].id) ? (
-                    renderScaledSlideScene(activeSlides[slideshow.index], false, slideWidth, slideHeight)
-                  ) : (
-                    <div className="w-full h-full p-16 flex flex-col">
-                      <h1 className="text-5xl font-bold mb-12 text-zinc-900 border-b-4 border-blue-600 pb-6 w-fit pr-16">
-                        {activeSlides[slideshow.index].title}
-                      </h1>
-                      <div className="flex-1 space-y-8">
-                        {(activeSlides[slideshow.index].content || []).map((point, i) => (
-                          <div key={i} className="flex gap-6 text-3xl text-zinc-700 leading-relaxed items-start">
-                            <span className="text-blue-600 mt-2">•</span>
-                            <span>{point}</span>
-                          </div>
-                        ))}
-                      </div>
-                      <div className="mt-auto pt-8 flex justify-between text-lg text-zinc-400 border-t border-zinc-100">
-                        <span>Generated by Unified AI Workspace</span>
-                        <span>{slideshow.index + 1}</span>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </div>
-                );
-              })()
-            ) : null}
-          </div>
-
-          <div className="h-20 px-4 flex items-center justify-center gap-8 pb-4">
-            <Button
-              variant="outline"
-              size="lg"
-              className="bg-white/10 border-white/20 text-white hover:bg-white/20 hover:text-white rounded-full w-12 h-12 p-0"
-              onClick={slideshow.previous}
-              disabled={activeSlides.length <= 1}
-            >
-              <ArrowLeft className="w-6 h-6" />
-            </Button>
-            <div className="text-white/50 text-sm font-medium">
-                {slideshow.index + 1} / {activeSlides.length}
-            </div>
-            <Button
-              variant="outline"
-              size="lg"
-              className="bg-white/10 border-white/20 text-white hover:bg-white/20 hover:text-white rounded-full w-12 h-12 p-0"
-              onClick={slideshow.next}
-              disabled={activeSlides.length <= 1}
-            >
-              <ArrowRight className="w-6 h-6" />
-            </Button>
-          </div>
-          </div>
-        </DialogContent>
-      </Dialog>
-      <Dialog open={backConfirmOpen} onOpenChange={setBackConfirmOpen}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>{tr("确认返回开始", "Confirm restart")}</DialogTitle>
-          </DialogHeader>
-          <div className="text-sm text-muted-foreground">
-            {tr(
-              "返回开始将清空当前 PPT（建议先导出保存）。是否继续？",
-              "Restart will clear the current deck (export first if needed). Continue?"
-            )}
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setBackConfirmOpen(false)}>
-              {tr("取消", "Cancel")}
-            </Button>
-            <Button
-              variant="destructive"
-              onClick={() => {
-                setBackConfirmOpen(false);
-                resetToStart();
-              }}
-            >
-              {tr("确认返回", "Confirm")}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-      <Dialog
-        open={materials.preview.open}
-        onOpenChange={(open) => materials.setPreview((prev) => ({ ...prev, open }))}
-      >
-        <DialogContent className="w-[92vw] max-w-[92vw] max-h-[92vh] overflow-hidden">
-          <DialogHeader>
-            <DialogTitle>{tr("素材预览", "Material preview")}</DialogTitle>
-          </DialogHeader>
-          {materials.preview.item && (
-            <div className="space-y-3">
-              <div className="h-[72vh] min-h-[360px] w-full overflow-auto rounded-lg border bg-muted/20 flex items-center justify-center">
-                <img
-                  src={materials.preview.item.dataUrl}
-                  alt={materials.preview.item.name}
-                  className="block max-h-full max-w-full object-scale-down"
-                />
-              </div>
-              <div className="grid gap-1 text-xs text-muted-foreground">
-                <div>{tr("所在幻灯片", "Slide")}: {materials.preview.slideTitle || "-"}</div>
-                <div>{tr("素材编号", "Material label")}: {materials.preview.item.name}</div>
-                {materials.preview.item.refLabel ? <div>{tr("来源标签", "Reference label")}: {materials.preview.item.refLabel}</div> : null}
-                {materials.preview.item.caption ? <div>{tr("简短说明", "Caption")}: {materials.preview.item.caption}</div> : null}
-                {materials.preview.item.sourceFileName ? <div>{tr("来源文件", "Source file")}: {materials.preview.item.sourceFileName}</div> : null}
-                {typeof materials.preview.item.sourcePage === "number" ? <div>{tr("来源页码", "Source page")}: {materials.preview.item.sourcePage}</div> : null}
-              </div>
-              <div className="flex justify-end">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => window.open(materials.preview.item!.dataUrl, "_blank", "noopener,noreferrer")}
-                >
-                  {tr("在新窗口查看原图", "Open full image in new tab")}
-                </Button>
-              </div>
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
-    </div>
+    <DeckView
+      deck={{
+        slides: activeSlides,
+        currentSlide,
+        currentIndex: currentSlideIndex,
+        setCurrentIndex: setCurrentSlideIndex,
+        currentSlideImage,
+        currentLayer: currentReviewLayer,
+        currentVersionId: currentSlide ? getSlideVersionMeta(currentSlide.id).versionId : "",
+        versionIdBySlide: currentImageVersionId,
+        setVersionIdBySlide: setCurrentImageVersionId,
+        getVisibleVersions: getVisibleSlideVersions,
+        getLayer: getSlideRenderLayer,
+        getBackgroundUrl: getSlideBackgroundUrl,
+        formatVersionLabel: formatImageVersionLabel,
+        getVersionId: (slideId) => getSlideVersionMeta(slideId).versionId,
+        templateImage,
+      }}
+      textBlocks={{
+        update: updateSlideTextBlock,
+        updateRect: updateSlideTextBlockRect,
+        remove: deleteSlideTextBlock,
+      }}
+      review={review}
+      reviewProgress={reviewProgress}
+      materials={materials}
+      inputs={inputs}
+      slideshow={slideshow}
+      actions={{
+        addSlideToChat: handleAddSlideToChat,
+        backToStart: handleBackToStart,
+        backConfirmOpen,
+        setBackConfirmOpen,
+        confirmBackToStart: resetToStart,
+        downloadPpt: () => void handleDownloadPpt(),
+        downloadPdf: () => void handleDownloadPdf(),
+        downloadEditablePpt: () => void handleDownloadEditablePpt(),
+        extractEditableText: (slideId) => void handleExtractEditableText(slideId),
+        generateAiImage: () => void handleGenerateAiImage(),
+        retryFailedBeautify: () => void handleRetryFailedBeautify(),
+      }}
+      status={{
+        currentSlideFailure,
+        failedBeautifyCount,
+        failedImageTransformCount,
+        isApplyingEdits,
+        isGeneratingImage,
+      }}
+      layout={{
+        canvasRef: previewCanvasRef,
+        canvasSize: previewCanvasSize,
+        window: windowDimensions,
+      }}
+      creationMode={creationMode}
+      progress={progress}
+      tr={tr}
+      uiLang={uiLang}
+    />
   );
 }
