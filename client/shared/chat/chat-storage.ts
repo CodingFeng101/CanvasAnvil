@@ -127,15 +127,19 @@ export function buildRecentHistoryContext(
         .slice(-limits.maxMessages)
     if (recent.length === 0) return ""
 
+    // Walked newest-first so the budget is spent on the turns that matter:
+    // this exists for intent continuity, and the latest exchange is the one
+    // the model needs. Filling from the oldest end would drop it.
     const lines: string[] = []
     let totalChars = 0
-    for (const message of recent) {
+    for (let i = recent.length - 1; i >= 0; i -= 1) {
+        const message = recent[i]
         const text = truncateForStorage(String(message.content || ""), limits.maxMessageChars)
         if (!text) continue
         const remaining = limits.maxTotalChars - totalChars
         if (remaining <= 0) break
         const clipped = text.length > remaining ? truncateForStorage(text, remaining) : text
-        lines.push(`[${message.role === "assistant" ? "Assistant" : "User"}] ${clipped}`)
+        lines.unshift(`[${message.role === "assistant" ? "Assistant" : "User"}] ${clipped}`)
         totalChars += clipped.length
     }
 

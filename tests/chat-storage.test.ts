@@ -169,21 +169,37 @@ test("buildRecentHistoryContext respects its budget", () => {
   assert.ok(context.length < 600, `expected a small context, got ${context.length}`);
 });
 
-test("KNOWN ODDITY: over budget, it drops the newest turns, not the oldest", () => {
-  // It takes the last maxMessages turns, then fills forward from the oldest of
-  // those until maxTotalChars runs out — so turns 48 and 49 are the ones lost.
-  // For something labelled "recent chat history (for intent continuity)" that
-  // is backwards. Pinned as-is so the fix is a deliberate, visible change.
-  const messages = Array.from({ length: 50 }, (_, i) => message("user", `turn ${i} ${"y".repeat(500)}`));
+test("an over-budget history keeps the newest turns, not the oldest", () => {
+  // This is for intent continuity, so the latest exchange is the one the
+  // model needs; spending the budget from the oldest end would drop it.
+  const messages = [
+    message("user", `old ${"y".repeat(200)}`),
+    message("user", `middle ${"y".repeat(200)}`),
+    message("user", `newest ${"y".repeat(200)}`),
+  ];
   const context = buildRecentHistoryContext(messages, {
-    maxMessages: 5,
-    maxMessageChars: 100,
-    maxTotalChars: 300,
+    maxMessages: 10,
+    maxMessageChars: 500,
+    maxTotalChars: 250,
   });
 
-  assert.ok(context.includes("turn 45"), "keeps the oldest of the window");
-  assert.ok(!context.includes("turn 49"), "and drops the newest turn");
+  assert.ok(context.includes("newest"), context.slice(0, 120));
+  assert.ok(!context.includes("old y"), "the oldest turn is the one dropped");
 });
+
+test("turns stay in the order they were said", () => {
+  const context = buildRecentHistoryContext([
+    message("user", "first"),
+    message("assistant", "second"),
+    message("user", "third"),
+  ]);
+  assert.ok(
+    context.indexOf("first") < context.indexOf("second") &&
+      context.indexOf("second") < context.indexOf("third"),
+    context,
+  );
+});
+
 
 /**
  * The guard that stops ChatInput's two file-sync effects from swapping arrays
