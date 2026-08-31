@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLatestRef } from "@/shared/lib/use-latest-ref";
+import { normalizeSvgMarkup } from "@/workspaces/cad/lib/svg-markup";
 import { Loader2, MessageSquarePlus, Box, Image as ImageIcon, Table2, Download } from 'lucide-react';
 import {
   ContextMenu,
@@ -32,17 +33,6 @@ const EMPTY_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 100
 const EMPTY_SENTINEL = "__EMPTY_SVG__";
 const ENABLE_EDITOR_AUTOSYNC = false;
 const SVG_EDITOR_IFRAME_PATH = "/svg-editor.html";
-
-const normalizeSvgMarkup = (text: string) => {
-  const raw = String(text || "").trim();
-  if (!raw) return "";
-  const start = raw.search(/<svg[\s/>]/i);
-  if (start < 0) return "";
-  const tail = raw.slice(start);
-  const end = tail.toLowerCase().lastIndexOf("</svg>");
-  if (end >= 0) return tail.slice(0, end + "</svg>".length).trim();
-  return tail.trim();
-};
 
 const unwrapMarkdownStrong = (text: string) => {
   let out = String(text || "").trim();

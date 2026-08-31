@@ -23,6 +23,13 @@ import {
   CAD_SVG_FLOW_REPLACE_AGENT_PROMPT,
 } from '@/workspaces/cad/lib/agents';
 import { getCadRenderFallbackTitle, getCadRenderSlotTitles } from "@/workspaces/cad/lib/render-titles";
+import {
+  extractCadPatchFullSvg,
+  extractRawSvg,
+  extractSvgFence,
+  hasCadPatchPayload,
+  normalizeSvgMarkup,
+} from "@/workspaces/cad/lib/svg-markup";
 import { t, useUiLanguage } from "@/shared/i18n";
 import { toast } from "sonner";
 import {
@@ -509,131 +516,6 @@ export function ChatPanel({
     return !!r.ok;
   };
 
-  const normalizeSvgMarkup = (text: string): string => {
-    const decodeBasicHtmlEntities = (value: string) =>
-      String(value || "")
-        .replace(/&lt;/gi, "<")
-        .replace(/&gt;/gi, ">")
-        .replace(/&quot;/gi, '"')
-        .replace(/&#39;|&apos;/gi, "'")
-        .replace(/&amp;/gi, "&");
-
-    const original = String(text || "").trim();
-    const raw = !/<svg[\s/>]/i.test(original) && /&lt;\s*svg[\s\S]*&gt;/i.test(original)
-      ? decodeBasicHtmlEntities(original).trim()
-      : original;
-    if (!raw) return "";
-    const start = raw.search(/<svg[\s/>]/i);
-    if (start < 0) return "";
-    const tail = raw.slice(start);
-    const end = tail.toLowerCase().lastIndexOf("</svg>");
-    if (end >= 0) return tail.slice(0, end + "</svg>".length).trim();
-    return tail.trim();
-  };
-
-  const extractSvgCodeBlock = (text: string): string => {
-    const raw = String(text || "");
-    const re = /```svg\s*([\s\S]*?)```/gi;
-    let m: RegExpExecArray | null;
-    let last = "";
-    while ((m = re.exec(raw))) {
-      const candidate = normalizeSvgMarkup(m?.[1] || "");
-      if (candidate) last = candidate;
-    }
-    return last;
-  };
-
-  const extractRawSvgBlock = (text: string): string => {
-    const raw = String(text || "");
-    const re = /<svg[\s\S]*?<\/svg>/gi;
-    let m: RegExpExecArray | null;
-    let last = "";
-    while ((m = re.exec(raw))) {
-      const candidate = normalizeSvgMarkup(m?.[0] || "");
-      if (candidate) last = candidate;
-    }
-    return last;
-  };
-
-  const extractReplaceSvgFromCadPatchText = (text: string): string => {
-    const raw = String(text || "");
-    const jsonRegex = /```json\s*([\s\S]*?)```/g;
-    let m: RegExpExecArray | null;
-    while ((m = jsonRegex.exec(raw))) {
-      const jsonText = String(m[1] || "").trim();
-      if (!jsonText) continue;
-      try {
-        const parsed = JSON.parse(jsonText);
-        const full = normalizeSvgMarkup(parsed?.full || "");
-        if (parsed?.type === "cad_patch" && parsed?.target === "2d_svg" && parsed?.mode === "replace" && full) {
-          return full;
-        }
-      } catch {
-        // Not this payload; the caller falls through to the next shape.
-      }
-    }
-    const trimmed = raw.trim();
-    if (trimmed.startsWith("{")) {
-      try {
-        const parsed = JSON.parse(trimmed);
-        const full = normalizeSvgMarkup(parsed?.full || "");
-        if (parsed?.type === "cad_patch" && parsed?.target === "2d_svg" && parsed?.mode === "replace" && full) {
-          return full;
-        }
-      } catch {
-        // Not this payload; the caller falls through to the next shape.
-      }
-    }
-    return "";
-  };
-
-  const hasCadPatchPayloadInText = (text: string): boolean => {
-    const raw = String(text || "");
-    if (!raw.trim()) return false;
-
-    const isCadPatchPayload = (value: any) =>
-      value &&
-      typeof value === "object" &&
-      String(value?.type || "").trim().toLowerCase() === "cad_patch" &&
-      String(value?.target || "").trim().toLowerCase() === "2d_svg";
-
-    const jsonRegex = /```json\s*([\s\S]*?)```/g;
-    let jm: RegExpExecArray | null;
-    while ((jm = jsonRegex.exec(raw))) {
-      const jsonText = String(jm[1] || "").trim();
-      if (!jsonText) continue;
-      try {
-        const parsed = JSON.parse(jsonText);
-        if (isCadPatchPayload(parsed)) return true;
-      } catch {
-        // Not this payload; the caller falls through to the next shape.
-      }
-    }
-
-    const trimmed = raw.trim();
-    if (trimmed.startsWith("{")) {
-      try {
-        const parsed = JSON.parse(trimmed);
-        if (isCadPatchPayload(parsed)) return true;
-      } catch {
-        // Not this payload; the caller falls through to the next shape.
-      }
-    }
-
-    const start = raw.indexOf("{");
-    const end = raw.lastIndexOf("}");
-    if (start >= 0 && end > start) {
-      try {
-        const parsed = JSON.parse(raw.slice(start, end + 1));
-        if (isCadPatchPayload(parsed)) return true;
-      } catch {
-        // Not this payload; the caller falls through to the next shape.
-      }
-    }
-
-    return /"type"\s*:\s*"cad_patch"/i.test(raw) && /"target"\s*:\s*"2d_svg"/i.test(raw);
-  };
-
   const handleAssistantResponse = async (fullResponse: string) => {
     if (!fullResponse) return { flowPatchFound: false, flowRetryError: null as string | null };
 
@@ -645,16 +527,16 @@ export function ChatPanel({
     }
 
     if (workspaceId === "cad") {
-      const hasCadPatchPayload = hasCadPatchPayloadInText(fullResponse);
+      const hasPatch = hasCadPatchPayload(fullResponse);
       const svgCandidate =
-        extractReplaceSvgFromCadPatchText(fullResponse) ||
-        extractSvgCodeBlock(fullResponse) ||
-        extractRawSvgBlock(fullResponse);
-      if (!hasCadPatchPayload && svgCandidate) {
+        extractCadPatchFullSvg(fullResponse) ||
+        extractSvgFence(fullResponse) ||
+        extractRawSvg(fullResponse);
+      if (!hasPatch && svgCandidate) {
         await runCodeAction(svgCandidate, "cad");
       }
     } else {
-      const svgText = extractSvgCodeBlock(fullResponse);
+      const svgText = extractSvgFence(fullResponse);
       if (svgText) {
         await runCodeAction(svgText, "cad");
       }
@@ -1415,7 +1297,7 @@ export function ChatPanel({
               }
 
               if (!cadPatchFound) {
-                const svgText = extractSvgCodeBlock(toolFull) || extractRawSvgBlock(toolFull);
+                const svgText = extractSvgFence(toolFull) || extractRawSvg(toolFull);
                 if (svgText) {
                   const r = await runCodeAction(svgText, "cad");
                     if (r.ok) {
@@ -1427,7 +1309,7 @@ export function ChatPanel({
               }
 
               if (!producedHasSvg2d && !cadPatchFound) {
-                const fallbackSvg = extractReplaceSvgFromCadPatchText(toolFull) || extractSvgCodeBlock(toolFull) || extractRawSvgBlock(toolFull);
+                const fallbackSvg = extractCadPatchFullSvg(toolFull) || extractSvgFence(toolFull) || extractRawSvg(toolFull);
                 if (fallbackSvg) {
                   const r = await runCodeAction(fallbackSvg, "cad");
                     if (r.ok) {
@@ -1506,7 +1388,7 @@ export function ChatPanel({
             if (producedHasSvg2d && !hasSvgFence && !hasCadPatchJson) {
                 const svgForDisplay = normalizeSvgMarkup(appliedSvg)
                   ? normalizeSvgMarkup(appliedSvg)
-                  : extractReplaceSvgFromCadPatchText(cadSvgToolFull) || extractRawSvgBlock(cadSvgToolFull);
+                  : extractCadPatchFullSvg(cadSvgToolFull) || extractRawSvg(cadSvgToolFull);
               if (svgForDisplay) assistantOutput = `${assistantOutput}\n\n\`\`\`svg\n${svgForDisplay}\n\`\`\``;
             }
             if (guide) updateLastAssistant(`${assistantOutput}\n\n${guide}`);
@@ -1545,12 +1427,12 @@ export function ChatPanel({
             }
 
             let producedHasSvg2d = false;
-            const hasCadPatchPayload = hasCadPatchPayloadInText(routedFull);
+            const hasPatch = hasCadPatchPayload(routedFull);
             const svgCandidate =
-              extractReplaceSvgFromCadPatchText(routedFull) ||
-              extractSvgCodeBlock(routedFull) ||
-              extractRawSvgBlock(routedFull);
-            if (!hasCadPatchPayload && svgCandidate) {
+              extractCadPatchFullSvg(routedFull) ||
+              extractSvgFence(routedFull) ||
+              extractRawSvg(routedFull);
+            if (!hasPatch && svgCandidate) {
               const svgResult = await runCodeAction(svgCandidate, "cad");
               producedHasSvg2d = !!svgResult.ok;
             }
@@ -2082,7 +1964,7 @@ export function ChatPanel({
                 }
 
                 if (!cadPatchFound) {
-                  const svgText = extractSvgCodeBlock(toolFull) || extractRawSvgBlock(toolFull);
+                  const svgText = extractSvgFence(toolFull) || extractRawSvg(toolFull);
                   if (svgText) {
                     const r = await runCodeAction(svgText, "cad");
                   if (r.ok) {
@@ -2094,7 +1976,7 @@ export function ChatPanel({
                 }
 
                 if (!producedHasSvg2d && !cadPatchFound) {
-                  const fallbackSvg = extractReplaceSvgFromCadPatchText(toolFull) || extractSvgCodeBlock(toolFull) || extractRawSvgBlock(toolFull);
+                  const fallbackSvg = extractCadPatchFullSvg(toolFull) || extractSvgFence(toolFull) || extractRawSvg(toolFull);
                   if (fallbackSvg) {
                     const r = await runCodeAction(fallbackSvg, "cad");
                   if (r.ok) {
@@ -2173,7 +2055,7 @@ export function ChatPanel({
               if (producedHasSvg2d && !hasSvgFence && !hasCadPatchJson) {
               const svgForDisplay = normalizeSvgMarkup(appliedSvg)
                 ? normalizeSvgMarkup(appliedSvg)
-                : extractReplaceSvgFromCadPatchText(cadSvgToolFull) || extractRawSvgBlock(cadSvgToolFull);
+                : extractCadPatchFullSvg(cadSvgToolFull) || extractRawSvg(cadSvgToolFull);
                 if (svgForDisplay) assistantOutput = `${assistantOutput}\n\n\`\`\`svg\n${svgForDisplay}\n\`\`\``;
               }
               if (guide) updateLastAssistant(`${assistantOutput}\n\n${guide}`);
@@ -2212,12 +2094,12 @@ export function ChatPanel({
               }
 
               let producedHasSvg2d = false;
-              const hasCadPatchPayload = hasCadPatchPayloadInText(routedFull);
+              const hasPatch = hasCadPatchPayload(routedFull);
               const svgCandidate =
-                extractReplaceSvgFromCadPatchText(routedFull) ||
-                extractSvgCodeBlock(routedFull) ||
-                extractRawSvgBlock(routedFull);
-              if (!hasCadPatchPayload && svgCandidate) {
+                extractCadPatchFullSvg(routedFull) ||
+                extractSvgFence(routedFull) ||
+                extractRawSvg(routedFull);
+              if (!hasPatch && svgCandidate) {
                 const svgResult = await runCodeAction(svgCandidate, "cad");
                 producedHasSvg2d = !!svgResult.ok;
               }

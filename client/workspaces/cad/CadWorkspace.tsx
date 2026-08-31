@@ -11,6 +11,12 @@ import {
   type PanelImperativeHandle,
 } from "@/shared/ui/resizable";
 import { CAD_SYSTEM_PROMPT } from "@/workspaces/cad/lib/prompts";
+import {
+  applyStringEdits,
+  extractLatestSvgFromText,
+  normalizeSvgMarkup,
+} from "@/workspaces/cad/lib/svg-markup";
+import { hasDrawableSvgContent, isValidSvgMarkup } from "@/workspaces/cad/lib/svg-dom";
 import type { ChatMessage } from "@/ai/client";
 import { generateImage } from "@/ai/client";
 import { CadCanvas } from "@/workspaces/cad/canvas/CadCanvas";
@@ -48,113 +54,6 @@ const tryParseJson = (text: string) => {
     }
     return null;
   }
-};
-
-const decodeBasicHtmlEntities = (text: string) =>
-  String(text || "")
-    .replace(/&lt;/gi, "<")
-    .replace(/&gt;/gi, ">")
-    .replace(/&quot;/gi, '"')
-    .replace(/&#39;|&apos;/gi, "'")
-    .replace(/&amp;/gi, "&");
-
-const normalizeSvgMarkup = (text: string) => {
-  const original = String(text || "").trim();
-  let raw = original;
-  if (!/<svg[\s/>]/i.test(raw) && /&lt;\s*svg[\s\S]*&gt;/i.test(raw)) {
-    raw = decodeBasicHtmlEntities(raw).trim();
-  }
-  if (!raw) return "";
-  const start = raw.search(/<svg[\s/>]/i);
-  if (start < 0) return "";
-  const tail = raw.slice(start);
-  const end = tail.toLowerCase().lastIndexOf("</svg>");
-  if (end >= 0) return tail.slice(0, end + "</svg>".length).trim();
-  return tail.trim();
-};
-
-const isValidSvgMarkup = (text: string) => {
-  const normalized = normalizeSvgMarkup(text);
-  if (!normalized) return false;
-  if (typeof DOMParser === "undefined") return /^<svg[\s/>]/i.test(normalized);
-  try {
-    const doc = new DOMParser().parseFromString(normalized, "image/svg+xml");
-    if (doc.querySelector("parsererror")) return false;
-    return String(doc.documentElement?.nodeName || "").toLowerCase() === "svg";
-  } catch {
-    return false;
-  }
-};
-
-const hasDrawableSvgContent = (text: string) => {
-  const normalized = normalizeSvgMarkup(text);
-  if (!normalized) return false;
-  if (typeof DOMParser === "undefined") return true;
-  try {
-    const doc = new DOMParser().parseFromString(normalized, "image/svg+xml");
-    if (doc.querySelector("parsererror")) return false;
-    const root = doc.documentElement;
-    if (!root || String(root.nodeName || "").toLowerCase() !== "svg") return false;
-    const drawable = root.querySelector(
-      "path,rect,circle,ellipse,line,polyline,polygon,text,image,use,foreignObject",
-    );
-    return !!drawable;
-  } catch {
-    return false;
-  }
-};
-
-function applyStringEdits(source: string, edits: { search: string; replace: string }[]) {
-  if (!Array.isArray(edits) || edits.length === 0) throw new Error("Empty patch edits");
-  let out = source;
-  for (const edit of edits) {
-    if (!edit || typeof edit.search !== "string" || typeof edit.replace !== "string") {
-      throw new Error("Invalid patch edit item");
-    }
-    if (!edit.search) throw new Error("Empty search pattern in patch edit");
-    if (!out.includes(edit.search)) throw new Error("Search pattern not found in current content");
-    out = out.replace(edit.search, edit.replace);
-  }
-  return out;
-}
-
-const extractLatestSvgFromText = (text: string) => {
-  const raw = String(text || "");
-  let latest = "";
-
-  const svgFence = /```svg\s*([\s\S]*?)```/gi;
-  let fenceMatch: RegExpExecArray | null;
-  while ((fenceMatch = svgFence.exec(raw))) {
-    const normalized = normalizeSvgMarkup(String(fenceMatch[1] || ""));
-    if (normalized) latest = normalized;
-  }
-
-  if (latest) return latest;
-
-  const rawSvg = /<svg[\s\S]*?<\/svg>/gi;
-  let svgMatch: RegExpExecArray | null;
-  while ((svgMatch = rawSvg.exec(raw))) {
-    const normalized = normalizeSvgMarkup(String(svgMatch[0] || ""));
-    if (normalized) latest = normalized;
-  }
-
-  if (latest) return latest;
-
-  const jsonFence = /```json\s*([\s\S]*?)```/gi;
-  let jsonMatch: RegExpExecArray | null;
-  while ((jsonMatch = jsonFence.exec(raw))) {
-    try {
-      const parsed = JSON.parse(String(jsonMatch[1] || ""));
-      const normalized = normalizeSvgMarkup(String(parsed?.full || ""));
-      if (parsed?.type === "cad_patch" && parsed?.target === "2d_svg" && normalized) {
-        latest = normalized;
-      }
-    } catch {
-      // Not this payload; the caller falls through to the next shape.
-    }
-  }
-
-  return latest;
 };
 
 type CadRenderItem = { title: string; url: string };
