@@ -6,14 +6,14 @@ import {
   PPT_TEMPLATE_HIDDEN_PRESETS_KEY,
   PPT_TEMPLATE_UPLOADS_KEY,
   PRESET_TEMPLATES,
-} from "@/workspaces/ppt/canvas/constants";
+} from "@/workspaces/ppt/canvas/lib/constants";
 import {
   normalizePersistedStringArray,
   normalizePersistedUploadedTemplates,
   persistImageUrlIfNeeded,
   readLegacyHiddenPresetTemplateIds,
   readLegacyUploadedTemplates,
-} from "@/workspaces/ppt/canvas/persisted-state";
+} from "@/workspaces/ppt/canvas/lib/persisted-state";
 import type { TemplateItem, UploadTemplate } from "@/workspaces/ppt/canvas/types";
 
 type Translate = (zh: string, en: string) => string;

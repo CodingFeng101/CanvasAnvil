@@ -1,4 +1,4 @@
-import { mergeTextBlocksIntoElements } from "@/workspaces/ppt/canvas/slide-content";
+import { mergeTextBlocksIntoElements } from "@/workspaces/ppt/canvas/lib/slide-content";
 import type { SlideRenderLayer } from "@/workspaces/ppt/canvas/types";
 import type { PptTextBlock } from "@/workspaces/ppt/lib/ppt-service";
 

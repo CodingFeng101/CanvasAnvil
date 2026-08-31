@@ -1,4 +1,4 @@
-import { SYNTHETIC_PRIMARY_VERSION_PREFIX } from "@/workspaces/ppt/canvas/constants";
+import { SYNTHETIC_PRIMARY_VERSION_PREFIX } from "@/workspaces/ppt/canvas/lib/constants";
 import type { SlideImageVersion } from "@/workspaces/ppt/canvas/types";
 
 /**

@@ -16,7 +16,7 @@ import { toast } from "sonner"
 import { ButtonWithTooltip } from "@/shared/chat"
 import { ErrorToast } from "@/workspaces/flow/chat/error-toast"
 import { GlobalConstraintsDialog } from "@/shared/chat"
-import { STORAGE_KEYS } from "@/workspaces/flow/lib/storage";
+import { STORAGE_KEYS } from "@/workspaces/flow/storage";
 import { HistoryDialog } from "@/workspaces/flow/chat/history-dialog"
 import { ResetWarningModal } from "@/shared/chat"
 import { Textarea } from "@/shared/ui/textarea"

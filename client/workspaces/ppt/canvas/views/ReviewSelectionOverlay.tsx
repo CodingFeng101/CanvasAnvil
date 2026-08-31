@@ -1,7 +1,7 @@
 import {
   REVIEW_BOX_COLOR,
   REVIEW_BOX_SELECTED_COLOR,
-} from "@/workspaces/ppt/canvas/constants";
+} from "@/workspaces/ppt/canvas/lib/constants";
 import type {
   ReviewResizeHandle,
   SlideData,

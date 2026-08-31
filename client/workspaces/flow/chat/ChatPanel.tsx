@@ -12,7 +12,7 @@ import { Toaster, toast } from "sonner"
 import { ButtonWithTooltip } from "@/shared/chat"
 import { ChatInput } from "@/workspaces/flow/chat/ChatInput"
 import { SettingsDialog } from "@/workspaces/flow/chat/settings-dialog"
-import { STORAGE_KEYS } from "@/workspaces/flow/lib/storage";
+import { STORAGE_KEYS } from "@/workspaces/flow/storage";
 import { useDiagram } from "@/workspaces/flow/state/diagram-context"
 import { useFlowT } from "@/workspaces/flow/lib/translations"
 import { getAIConfig } from "@/workspaces/flow/lib/ai-config"
@@ -25,7 +25,7 @@ import {
     isTextFile,
 } from "@/shared/files"
 import { type FileData, useFileProcessor } from "@/shared/files/use-file-processor"
-import { useQuotaManager } from "@/workspaces/flow/lib/use-quota-manager"
+import { useQuotaManager } from "@/workspaces/flow/hooks/use-quota-manager"
 import { applyDiagramOperations, isMxCellXmlComplete, type DiagramOperation } from "@/workspaces/flow/lib/diagram-operations"
 import { formatXML, validateAndFixXml, wrapWithMxFile } from "@/workspaces/flow/lib/drawio-xml"
 import { ChatMessageDisplay } from "./ChatMessageDisplay"

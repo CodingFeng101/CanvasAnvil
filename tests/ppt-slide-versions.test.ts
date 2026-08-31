@@ -7,7 +7,7 @@ import {
   resolveSlideVersion,
   type VersionState,
 } from "../client/workspaces/ppt/canvas/lib/slide-versions";
-import { SYNTHETIC_PRIMARY_VERSION_PREFIX } from "../client/workspaces/ppt/canvas/constants";
+import { SYNTHETIC_PRIMARY_VERSION_PREFIX } from "../client/workspaces/ppt/canvas/lib/constants";
 import type { SlideImageVersion } from "../client/workspaces/ppt/canvas/types";
 
 /**

@@ -53,7 +53,7 @@ import {
   EDITABLE_EXPORT_CONCURRENCY,
   EDITABLE_REVIEW_CONCURRENCY,
   MODEL_CONCURRENCY,
-} from "@/workspaces/ppt/canvas/constants";
+} from "@/workspaces/ppt/canvas/lib/constants";
 import {
   deriveTextElementsFromBlocks,
   hasRenderableTextBlocks,
@@ -62,7 +62,7 @@ import {
   normalizeLocalizedSlideTitle,
   parseSlideNo,
   stripLeadingBullet,
-} from "@/workspaces/ppt/canvas/slide-content";
+} from "@/workspaces/ppt/canvas/lib/slide-content";
 import {
   filterRecordByAllowedKeys,
   migrateLegacyTextlessVersions,
@@ -74,7 +74,7 @@ import {
   normalizePersistedStringMap,
   persistImageUrlIfNeeded,
   shouldInlinePersistImageUrl,
-} from "@/workspaces/ppt/canvas/persisted-state";
+} from "@/workspaces/ppt/canvas/lib/persisted-state";
 import type {
   PptData,
   ReferenceVisualAsset,

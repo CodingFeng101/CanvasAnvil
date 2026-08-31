@@ -12,7 +12,7 @@ import {
   normalizePersistedStringMap,
   normalizePersistedUploadedTemplates,
   shouldInlinePersistImageUrl,
-} from "../client/workspaces/ppt/canvas/persisted-state";
+} from "../client/workspaces/ppt/canvas/lib/persisted-state";
 
 /**
  * These readers stand between a user's saved deck and the workspace. Every one

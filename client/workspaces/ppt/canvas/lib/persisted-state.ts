@@ -1,5 +1,5 @@
-import { PPT_TEMPLATE_HIDDEN_PRESETS_KEY, PPT_TEMPLATE_UPLOADS_KEY } from "@/workspaces/ppt/canvas/constants";
-import { deriveTextElementsFromBlocks, hasRenderableTextBlocks } from "@/workspaces/ppt/canvas/slide-content";
+import { PPT_TEMPLATE_HIDDEN_PRESETS_KEY, PPT_TEMPLATE_UPLOADS_KEY } from "@/workspaces/ppt/canvas/lib/constants";
+import { deriveTextElementsFromBlocks, hasRenderableTextBlocks } from "@/workspaces/ppt/canvas/lib/slide-content";
 import type {
   SlideData,
   SlideImageVersion,

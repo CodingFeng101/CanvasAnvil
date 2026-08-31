@@ -36,7 +36,7 @@ import {
   PPT_REFERENCE_SLIDE_HEIGHT,
   PPT_REFERENCE_SLIDE_WIDTH,
 } from "@/workspaces/ppt/lib/ppt-service";
-import { hasRenderableTextBlocks } from "@/workspaces/ppt/canvas/slide-content";
+import { hasRenderableTextBlocks } from "@/workspaces/ppt/canvas/lib/slide-content";
 import { getSlideshowDimensions } from "@/workspaces/ppt/canvas/lib/slideshow-size";
 import { reviewProgressSummary, type ReviewProgress } from "@/workspaces/ppt/canvas/lib/review-progress";
 import { ReviewSelectionOverlay } from "@/workspaces/ppt/canvas/views/ReviewSelectionOverlay";

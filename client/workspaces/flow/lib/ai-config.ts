@@ -1,4 +1,4 @@
-import { STORAGE_KEYS } from "@/workspaces/flow/lib/storage"
+import { STORAGE_KEYS } from "@/workspaces/flow/storage"
 import { DEFAULT_AI_CONFIG } from "@contracts/ai";
 import { getAIConfig as getWorkspaceAIConfig } from "@/ai/storage";
 import type { AIConfig } from "@contracts/ai"

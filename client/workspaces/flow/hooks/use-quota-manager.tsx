@@ -3,7 +3,7 @@
 import { useCallback, useMemo } from "react"
 import { toast } from "sonner"
 import { QuotaLimitToast } from "@/workspaces/flow/chat/quota-limit-toast"
-import { STORAGE_KEYS } from "@/workspaces/flow/lib/storage"
+import { STORAGE_KEYS } from "@/workspaces/flow/storage"
 
 export interface QuotaConfig {
     dailyRequestLimit: number
