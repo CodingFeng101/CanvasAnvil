@@ -6,6 +6,7 @@ import { runInParallel, sleep } from "./lib/concurrency";
 import { parseJsonLoose } from "./lib/parse-json";
 import { extractPdfPagesAsImages, isPdfFile } from "./lib/deck-source";
 import { getSlideshowDimensions } from "./lib/slideshow-size";
+import { clampTextBlockRect, withTextBlocks } from "./lib/render-layers";
 import {
   getOriginalSlideVersion as originalVersionOf,
   getTextlessBackgroundVersion as textlessBackgroundOf,
@@ -1396,21 +1397,7 @@ export function PptCanvas({
     const nextBlocks = (currentLayer?.textBlocks || []).map((block) =>
       block.id === blockId ? { ...block, text: nextText } : block
     );
-    setRenderLayers((prev) => {
-      const layer = prev[slideId]?.[versionId];
-      if (!layer) return prev;
-      return {
-        ...prev,
-        [slideId]: {
-          ...(prev[slideId] || {}),
-          [versionId]: {
-            ...layer,
-            textBlocks: nextBlocks,
-            elements: mergeTextBlocksIntoElements(nextBlocks, layer.elements),
-          },
-        },
-      };
-    });
+    setRenderLayers((prev) => withTextBlocks(prev, slideId, versionId, () => nextBlocks));
     setLocalSlides((prev) =>
       prev.map((slide) => {
         if (slide.id !== slideId) return slide;
@@ -1435,75 +1422,29 @@ export function PptCanvas({
     const { versionId: currentVersionId } = getSlideVersionMeta(slideId);
     const versionId = targetVersionId || currentVersionId;
     if (!versionId) return;
-    setRenderLayers((prev) => {
-      const layer = prev[slideId]?.[versionId];
-      if (!layer) return prev;
-      const nextBlocks = layer.textBlocks.map((block) => {
-        if (block.id !== blockId) return block;
-        const minW = Math.max(0.05, block.role === "title" ? 0.18 : block.role === "tag" ? 0.07 : 0.1);
-        const minH = Math.max(0.04, block.role === "title" ? 0.08 : block.role === "tag" ? 0.045 : 0.06);
-        let x = typeof nextRect.x === "number" ? nextRect.x : block.x;
-        let y = typeof nextRect.y === "number" ? nextRect.y : block.y;
-        let w = typeof nextRect.w === "number" ? nextRect.w : block.w;
-        let h = typeof nextRect.h === "number" ? nextRect.h : block.h;
-        w = Math.max(minW, Math.min(1, w));
-        h = Math.max(minH, Math.min(1, h));
-        x = Math.max(0, Math.min(1 - w, x));
-        y = Math.max(0, Math.min(1 - h, y));
-        return { ...block, x, y, w, h };
-      });
-      return {
-        ...prev,
-        [slideId]: {
-          ...(prev[slideId] || {}),
-          [versionId]: {
-            ...layer,
-            textBlocks: nextBlocks,
-            elements: mergeTextBlocksIntoElements(nextBlocks, layer.elements),
-          },
-        },
-      };
-    });
+    setRenderLayers((prev) =>
+      withTextBlocks(prev, slideId, versionId, (blocks) =>
+        blocks.map((block) =>
+          block.id === blockId ? clampTextBlockRect(block, nextRect) : block,
+        ),
+      ),
+    );
   };
   const appendSlideTextBlock = (slideId: string, block: PptTextBlock) => {
     const { versionId } = getSlideVersionMeta(slideId);
     if (!versionId) return;
-    setRenderLayers((prev) => {
-      const layer = prev[slideId]?.[versionId];
-      if (!layer) return prev;
-      const nextBlocks = [...layer.textBlocks, block];
-      return {
-        ...prev,
-        [slideId]: {
-          ...(prev[slideId] || {}),
-          [versionId]: {
-            ...layer,
-            textBlocks: nextBlocks,
-            elements: mergeTextBlocksIntoElements(nextBlocks, layer.elements),
-          },
-        },
-      };
-    });
+    setRenderLayers((prev) =>
+      withTextBlocks(prev, slideId, versionId, (blocks) => [...blocks, block]),
+    );
   };
   const deleteSlideTextBlock = (slideId: string, blockId: string) => {
     const { versionId } = getSlideVersionMeta(slideId);
     if (!versionId) return;
-    setRenderLayers((prev) => {
-      const layer = prev[slideId]?.[versionId];
-      if (!layer) return prev;
-      const nextBlocks = layer.textBlocks.filter((block) => block.id !== blockId);
-      return {
-        ...prev,
-        [slideId]: {
-          ...(prev[slideId] || {}),
-          [versionId]: {
-            ...layer,
-            textBlocks: nextBlocks,
-            elements: mergeTextBlocksIntoElements(nextBlocks, layer.elements),
-          },
-        },
-      };
-    });
+    setRenderLayers((prev) =>
+      withTextBlocks(prev, slideId, versionId, (blocks) =>
+        blocks.filter((block) => block.id !== blockId),
+      ),
+    );
     setSelectedReviewTextBlockId((current) => (current === blockId ? null : current));
   };
 
