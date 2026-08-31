@@ -184,3 +184,36 @@ test("KNOWN ODDITY: over budget, it drops the newest turns, not the oldest", () 
   assert.ok(context.includes("turn 45"), "keeps the oldest of the window");
   assert.ok(!context.includes("turn 49"), "and drops the newest turn");
 });
+
+/**
+ * The guard that stops ChatInput's two file-sync effects from swapping arrays
+ * forever. It lives in chat-input.tsx alongside the effects it protects; this
+ * pins the contract that made the loop possible -- equal-but-distinct arrays
+ * must compare as the same.
+ */
+function sameFileList(a: File[], b: File[]): boolean {
+  return a.length === b.length && a.every((file, i) => file === b[i]);
+}
+
+const fakeFile = (name: string) => ({ name }) as unknown as File;
+
+test("two separate empty arrays count as the same file list", () => {
+  // This is the exact pair that used to ping-pong: the parent and the input
+  // each start with their own [], equal in content and distinct by reference.
+  assert.equal(sameFileList([], []), true);
+});
+
+test("the same files in the same order count as the same list", () => {
+  const a = fakeFile("a.png");
+  const b = fakeFile("b.png");
+  assert.equal(sameFileList([a, b], [a, b]), true);
+});
+
+test("a changed list is still detected", () => {
+  const a = fakeFile("a.png");
+  const b = fakeFile("b.png");
+  assert.equal(sameFileList([a], [a, b]), false, "an added file");
+  assert.equal(sameFileList([a, b], [a]), false, "a removed file");
+  assert.equal(sameFileList([a, b], [b, a]), false, "a reorder");
+  assert.equal(sameFileList([a], [fakeFile("a.png")]), false, "a different File with the same name");
+});

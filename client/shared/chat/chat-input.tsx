@@ -35,6 +35,11 @@ interface ChatInputProps {
     workspaceId?: FileWorkspace;
 }
 
+/** File objects keep their identity, so a member-wise check is enough. */
+function sameFileList(a: File[], b: File[]): boolean {
+    return a.length === b.length && a.every((file, i) => file === b[i]);
+}
+
 export function ChatInput({
     input,
     setInput,
@@ -71,11 +76,20 @@ export function ChatInput({
     const { files, handleFileChange, setFiles, pdfData } = useFileProcessor(workspaceId);
     const isRich = !!(richSegments && onRichSegmentsChange);
     
-    // Sync controlled files if provided
+    /**
+     * Sync controlled files in, without starting a fight with the effect
+     * below that syncs them back out.
+     *
+     * The two run one step apart: this one writes the parent's array into
+     * local state while the next still holds the previous local array and
+     * writes that one back up. Two arrays that are equal but not identical --
+     * such as the separate empty arrays the two sides start with -- therefore
+     * swap places on every render, forever. Keeping the array we already have
+     * whenever the contents match is what breaks the cycle.
+     */
     useEffect(() => {
-        if (controlledFiles) {
-            setFiles(controlledFiles);
-        }
+        if (!controlledFiles) return;
+        setFiles((prev) => (sameFileList(prev, controlledFiles) ? prev : controlledFiles));
     }, [controlledFiles, setFiles]);
 
     // Notify parent when files change
@@ -113,7 +127,7 @@ export function ChatInput({
             if (raf) cancelAnimationFrame(raf);
             raf = requestAnimationFrame(() => {
                 raf = 0;
-                autoResizeTextarea();
+        autoResizeTextarea();
             });
         };
 
