@@ -7,6 +7,7 @@ import { parseJsonLoose } from "./lib/parse-json";
 import { extractPdfPagesAsImages, isPdfFile } from "./lib/deck-source";
 import { getSlideshowDimensions } from "./lib/slideshow-size";
 import { clampTextBlockRect, withTextBlocks } from "./lib/render-layers";
+import { GenerationProgress } from "./views/GenerationProgress";
 import {
   getOriginalSlideVersion as originalVersionOf,
   getTextlessBackgroundVersion as textlessBackgroundOf,
@@ -46,7 +47,6 @@ import {
   Upload,
   Presentation,
   Sparkles,
-  Check,
   FileText,
   Download,
   Lightbulb,
@@ -4172,41 +4172,7 @@ export function PptCanvas({
 
   // Render Progress
   if (isGenerating(creationStep)) {
-      const progressRatio = progress.total > 0 ? progress.current / progress.total : 0;
-      const clampedRatio = Math.max(0, Math.min(1, progressRatio));
-      const dash = clampedRatio * 251.2;
-      const percent = Math.round(clampedRatio * 100);
-      return (
-        <div className="w-full h-full bg-zinc-50 dark:bg-zinc-900 flex flex-col overflow-hidden">
-            <div className="flex-1 flex items-center justify-center p-6">
-              <div className="w-full max-w-md bg-white dark:bg-zinc-800 p-8 rounded-xl shadow-lg text-center space-y-6">
-                <div className="relative w-20 h-20 mx-auto">
-                    <svg className="w-full h-full" viewBox="0 0 100 100">
-                        <circle className="text-zinc-200 dark:text-zinc-700 stroke-current" strokeWidth="8" cx="50" cy="50" r="40" fill="transparent"></circle>
-                        <circle className="text-blue-600 stroke-current transition-all duration-300 ease-in-out origin-center -rotate-90" strokeWidth="8" strokeLinecap="round" cx="50" cy="50" r="40" fill="transparent" strokeDasharray={`${dash} 251.2`}></circle>
-                    </svg>
-                    <div className="absolute inset-0 flex items-center justify-center text-sm font-bold">
-                        {percent}%
-                    </div>
-                </div>
-                
-                <div className="space-y-2">
-                    <h3 className="font-semibold text-lg">{tr("AI 正在创作中", "AI is creating")}</h3>
-                    <p className="text-sm text-muted-foreground">
-                      {progress.message || tr("正在渲染图片…", "Rendering images...")}
-                    </p>
-                </div>
-
-                <div className="flex justify-center gap-2 text-xs text-muted-foreground">
-                   <div className={`flex items-center gap-1 ${creationStep === 'generating_images' ? 'text-blue-600' : 'text-green-600'}`}>
-                        {creationStep === 'generating_images' ? <Loader2 className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />}
-                        <span>{tr("渲染图片", "Render images")}</span>
-                   </div>
-                </div>
-                </div>
-              </div>
-            </div>
-      );
+    return <GenerationProgress step={creationStep} progress={progress} tr={tr} />;
   }
 
   // Regular View (creationStep === 'done' or manually provided data)
