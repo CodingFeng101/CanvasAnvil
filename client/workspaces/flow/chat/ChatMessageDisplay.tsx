@@ -115,10 +115,7 @@ function stripFileSectionsFromText(text: string): string {
 // Get only the user's original text, excluding appended file content
 interface ChatMessageDisplayProps {
     messages: UIMessage[]
-    setInput: (input: string) => void
-    setFiles: (files: File[]) => void
     processedToolCallsRef: MutableRefObject<Set<string>>
-    sessionId?: string
     onRegenerate?: (messageIndex: number) => void
     onEditMessage?: (messageIndex: number, newText: string) => void
     status?: "streaming" | "submitted" | "idle" | "error" | "ready"
@@ -127,10 +124,7 @@ interface ChatMessageDisplayProps {
 
 export function ChatMessageDisplay({
     messages,
-    setInput,
-    setFiles,
     processedToolCallsRef,
-    sessionId,
     onRegenerate,
     onEditMessage,
     status = "idle",

@@ -29,7 +29,6 @@ export type { MessagePart, UIMessage };
 // Types
 interface ChatMessageDisplayProps {
     messages: UIMessage[];
-    setInput: (input: string) => void;
     onApplyCode?: (code: string, language?: string) => void | boolean | Promise<void | boolean>;
     onRegenerate?: (messageIndex: number) => void;
     onEditMessage?: (messageIndex: number, newText: string) => void;
@@ -222,7 +221,6 @@ function CadPatchEditsDisplay({ edits, uiLang }: { edits: CadPatchEdit[]; uiLang
 
 export function ChatMessageDisplay({
     messages,
-    setInput,
     onApplyCode,
     onRegenerate,
     onEditMessage,

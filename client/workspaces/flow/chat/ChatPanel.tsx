@@ -1353,10 +1353,7 @@ Please fix the XML issues. Ensure cell_id values exist in the current XML and th
             <main className="flex-1 w-full overflow-hidden min-h-0">
                 <ChatMessageDisplay
                     messages={messages}
-                    setInput={setInput}
-                    setFiles={handleFileChange}
                     processedToolCallsRef={processedToolCallsRef}
-                    sessionId={sessionId}
                     onRegenerate={handleRegenerate}
                     status={status}
                     isParsingFiles={isParsingFiles}

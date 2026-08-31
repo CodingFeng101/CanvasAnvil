@@ -29,7 +29,6 @@ export type { MessagePart, UIMessage };
 // Types
 interface ChatMessageDisplayProps {
     messages: UIMessage[];
-    setInput: (input: string) => void;
     onRegenerate?: (messageIndex: number) => void;
     onEditMessage?: (messageIndex: number, newText: string) => void;
     status?: "streaming" | "submitted" | "idle" | "error" | "ready";
@@ -39,7 +38,6 @@ interface ChatMessageDisplayProps {
 // Helper to split text content into regular text and file sections
 export function ChatMessageDisplay({
     messages,
-    setInput,
     onRegenerate,
     onEditMessage,
     status = "idle",
@@ -595,7 +593,7 @@ export function ChatMessageDisplay({
                                                                     pre({ children }: any) {
                                                                         return <>{children}</>;
                                                                     },
-                                                                    code({ node, inline, className, children, ...props }: any) {
+                                                                    code({ node: _node, inline, className, children, ...props }: any) {
                                                                         const match = /language-(\w+)/.exec(className || "");
                                                                         const isStreaming = status === "streaming" && isLastAssistantMessage;
                                                                         const language = match?.[1] || "text";

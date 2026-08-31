@@ -295,7 +295,6 @@ function OrbitCard({
 function Header({
   uiLang,
   copy,
-  activeCanvas,
   activeSection,
   setActiveSection,
   setActiveCanvas,
@@ -303,7 +302,6 @@ function Header({
 }: {
   uiLang: UiLanguage;
   copy: { home: string; openRepo: string };
-  activeCanvas: PortalWorkspace;
   activeSection: PortalSection;
   setActiveSection: (section: PortalSection) => void;
   setActiveCanvas: (workspace: PortalWorkspace) => void;
@@ -644,7 +642,6 @@ export function PortalPage({ onEnterWorkspace }: PortalPageProps) {
         <Header
           uiLang={uiLang}
           copy={copy}
-          activeCanvas={activeCanvas}
           activeSection={activeSection}
           setActiveSection={setActiveSection}
           setActiveCanvas={setActiveCanvas}

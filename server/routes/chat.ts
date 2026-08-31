@@ -363,7 +363,7 @@ ${parsedFilesContext ? `\n\nParsed file summaries:\n"""md\n${parsedFilesContext}
     }
 
     // Normalize messages to expected format (convert content to parts if needed)
-    const normalizedMessages = messages.map((message: any, index: number) => {
+    const normalizedMessages = messages.map((message: any, _index: number) => {
         // Handle completely malformed messages
         if (!message) {
             return { role: 'user', parts: [{ type: 'text', text: '' }] }

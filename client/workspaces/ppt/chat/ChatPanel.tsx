@@ -53,9 +53,6 @@ interface ChatPanelProps {
     plan?: any;
     svg2d?: string;
   };
-  flowContext?: {
-    xml?: string;
-  };
   onClearWorkspace?: () => void;
 }
 
@@ -664,7 +661,6 @@ const getPptTag = (slideId: string, title: string, kind: "outline" | "slide_imag
       <div className="flex-1 w-full overflow-hidden">
           <ChatMessageDisplay 
             messages={uiMessages} 
-            setInput={setInput} 
             status={isLoading ? "streaming" : "idle"}
             onDisplayChart={(xml) => onCodeAction?.(xml, 'flow')}
             onRegenerate={handleRegenerate}

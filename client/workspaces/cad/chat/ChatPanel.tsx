@@ -73,9 +73,6 @@ interface ChatPanelProps {
     svg2d?: string;
     analysisImages?: Array<{ title: string; url: string }>;
   };
-  flowContext?: {
-    xml?: string;
-  };
   onClearWorkspace?: () => void;
 }
 
@@ -103,7 +100,6 @@ export function ChatPanel({
     onClearVersionHistory,
     onClearAttachments,
     cadContext,
-    flowContext,
     onClearWorkspace
 }: ChatPanelProps) {
   const uiLang = useUiLanguage();
@@ -2395,7 +2391,6 @@ export function ChatPanel({
       <div className="flex-1 w-full overflow-hidden">
           <ChatMessageDisplay 
             messages={uiMessages} 
-            setInput={setInput} 
             status={isLoading ? "streaming" : "idle"}
             onDisplayChart={(xml) => onCodeAction?.(xml, 'flow')}
             onApplyCode={applyCodeFromMessage}
