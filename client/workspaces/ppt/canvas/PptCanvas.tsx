@@ -7,6 +7,12 @@ import { parseJsonLoose } from "./lib/parse-json";
 import { extractPdfPagesAsImages, isPdfFile } from "./lib/deck-source";
 import { getSlideshowDimensions } from "./lib/slideshow-size";
 import {
+  buildSlideMaterialsFromAutoLabels,
+  materialLabel,
+  materialToken,
+  removeMaterialToken,
+} from "./lib/material-tokens";
+import {
   creationReducer,
   initialCreationState,
   isGenerating,
@@ -2247,9 +2253,6 @@ export function PptCanvas({
       setReferencePreviewOpen(true);
   };
 
-  const getMaterialLabel = (index: number) => {
-    return uiLang === "zh" ? `第${index}张` : `Image ${index}`;
-  };
 
 
   const buildReferenceVisualAssetsWithCaptions = async (): Promise<ReferenceVisualAsset[]> => {
@@ -2307,118 +2310,7 @@ export function PptCanvas({
     }));
   };
 
-  const ensureDescriptionHasMaterialTokens = (description: string, materials: Array<{ name: string; caption?: string }>) => {
-    const source = String(description || "");
-    const escapeRegExp = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    const placementsZh = [
-      "放在左侧主视觉区域，约占画面宽度 40%",
-      "放在右上区域，作为辅助图示",
-      "放在底部横向区域，作为补充对比",
-    ];
-    const placementsEn = [
-      "place it in the left primary visual area, about 40% width",
-      "place it in the upper-right area as a supporting visual",
-      "place it in the bottom horizontal area as supplementary comparison",
-    ];
 
-    let working = source;
-    const lines: string[] = [];
-    for (let i = 0; i < materials.length; i += 1) {
-      const m = materials[i];
-      const token = `{{image:${m.name}}}`;
-      const tokenEscaped = escapeRegExp(token);
-      const placement = uiLang === "zh"
-        ? placementsZh[Math.min(i, placementsZh.length - 1)]
-        : placementsEn[Math.min(i, placementsEn.length - 1)];
-      const captionPart = String(m.caption || "").trim();
-      const sentence = uiLang === "zh"
-        ? `${token}${placement}${captionPart ? `，内容重点为：${captionPart}` : ""}。`
-        : `${token} ${placement}${captionPart ? `, focus: ${captionPart}` : ""}.`;
-
-      const wrongLangPlacementRe = uiLang === "zh"
-        ? new RegExp(`${tokenEscaped}[^\\n]*\\bplace\\b[^\\n]*`, "gi")
-        : new RegExp(`${tokenEscaped}[^\\n]*放在[^\\n]*`, "g");
-      if (wrongLangPlacementRe.test(working)) {
-        working = working.replace(wrongLangPlacementRe, "");
-      }
-
-      const hasToken = working.includes(token);
-      const hasPlacement = uiLang === "zh"
-        ? new RegExp(`${tokenEscaped}[^\\n]*放在`).test(working)
-        : new RegExp(`${tokenEscaped}[^\\n]*\\bplace\\b`, "i").test(working);
-      if (!hasToken || !hasPlacement) lines.push(sentence);
-    }
-
-    working = working
-      .replace(/[ \t]+\n/g, "\n")
-      .replace(/\n{3,}/g, "\n\n")
-      .trim();
-    if (lines.length === 0) return working || source;
-    const trimmed = working.trim();
-    if (!trimmed) return lines.join("\n");
-    return `${trimmed}\n${lines.join("\n")}`;
-  };
-
-  const buildSlideMaterialsFromAutoLabels = (
-    pages: PptPage[],
-    slides: SlideData[],
-    assets: ReferenceVisualAsset[]
-  ) => {
-    const assetMap = new Map<string, ReferenceVisualAsset>();
-    for (const a of assets) assetMap.set(a.label, a);
-
-    const pageLabels: string[][] = slides.map((_, idx) => {
-      const labels = Array.isArray(pages[idx]?.materialLabels)
-        ? pages[idx]!.materialLabels!.map((x) => String(x || "").trim()).filter(Boolean)
-        : [];
-      return labels.slice(0, 3);
-    });
-    const explicitLabelCount = pageLabels.reduce((sum, arr) => sum + arr.length, 0);
-
-    // Fallback: if AI returned no labels at all but assets exist, attach a few assets
-    // to representative slides so users can review and adjust instead of seeing empty materials.
-    if (explicitLabelCount === 0 && assets.length > 0 && slides.length > 0) {
-      const fallbackCount = Math.min(assets.length, Math.max(1, Math.min(6, Math.ceil(slides.length / 2))));
-      const step = Math.max(1, Math.floor(slides.length / fallbackCount));
-      for (let n = 0; n < fallbackCount; n += 1) {
-        const slideIndex = Math.min(slides.length - 1, n * step);
-        const label = assets[n]?.label;
-        if (!label) continue;
-        if (!pageLabels[slideIndex]) pageLabels[slideIndex] = [];
-        if (!pageLabels[slideIndex].includes(label)) pageLabels[slideIndex].push(label);
-      }
-    }
-
-    const nextMaterials: Record<string, SlideMaterialImage[]> = {};
-    const nextSlides = slides.map((slide, idx) => {
-      const labels = (pageLabels[idx] || []).slice(0, 3);
-      const matched = labels
-        .map((lb) => assetMap.get(lb))
-        .filter((x): x is ReferenceVisualAsset => !!x)
-        .slice(0, 3);
-      if (matched.length === 0) return slide;
-
-      const materialItems: SlideMaterialImage[] = matched.map((asset, mIdx) => ({
-        id: `auto-mat-${slide.id}-${asset.label}-${mIdx + 1}`,
-        name: getMaterialLabel(mIdx + 1),
-        fileName: asset.sourceFileName,
-        dataUrl: asset.dataUrl,
-        refLabel: asset.label,
-        caption: asset.caption,
-        sourceFileName: asset.sourceFileName,
-        sourcePage: asset.sourcePage,
-      }));
-      nextMaterials[slide.id] = materialItems;
-
-      const withTokens = ensureDescriptionHasMaterialTokens(
-        String(slide.description || ""),
-        materialItems.map((m) => ({ name: m.name, caption: m.caption }))
-      );
-      return { ...slide, description: withTokens };
-    });
-
-    return { nextSlides, nextMaterials };
-  };
 
   const addSlideMaterialImages = async (slideId: string, files: File[]) => {
     const imageFiles = files.filter((f) => f.type.startsWith("image/"));
@@ -2438,7 +2330,7 @@ export function PptCanvas({
       try {
         const dataUrl = await toDataUrl(file);
         if (!dataUrl.startsWith("data:image")) continue;
-        const label = getMaterialLabel(currentCount + i + 1);
+        const label = materialLabel(currentCount + i + 1, uiLang as "zh" | "en");
         created.push({
           id: `mat-${Date.now()}-${Math.random().toString(16).slice(2)}`,
           name: label,
@@ -2464,17 +2356,12 @@ export function PptCanvas({
     }));
     if (!removed) return;
 
-    const escapeRegExp = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    const tokenRe = new RegExp(`\\{\\{image:${escapeRegExp(removed.name)}\\}\\}`, "g");
     setLocalSlides((prev) =>
-      prev.map((s) => {
-        if (s.id !== slideId) return s;
-        const nextDesc = String(s.description || "")
-          .replace(tokenRe, "")
-          .replace(/[ \t]{2,}/g, " ")
-          .replace(/ *\n */g, "\n");
-        return { ...s, description: nextDesc };
-      })
+      prev.map((s) =>
+        s.id === slideId
+          ? { ...s, description: removeMaterialToken(s.description || "", removed.name) }
+          : s,
+      ),
     );
 
     const editor = descriptionEditorRefs.current[slideId];
@@ -2497,7 +2384,7 @@ export function PptCanvas({
       .filter((x) => !!x.url);
 
   const insertMaterialTokenToSlideDescription = (slideIndex: number, slideId: string, materialName: string) => {
-    const token = `{{image:${materialName}}}`;
+    const token = materialToken(materialName);
     const editor = descriptionEditorRefs.current[slideId];
     if (editor) {
       const sel = window.getSelection();
@@ -2544,7 +2431,7 @@ export function PptCanvas({
           }
           const tokenName = el.getAttribute("data-material-token");
           if (tokenName) {
-            parts.push(`{{image:${tokenName}}}`);
+            parts.push(materialToken(tokenName));
             continue;
           }
           parts.push(el.textContent || "");
@@ -2707,7 +2594,7 @@ export function PptCanvas({
       }
       const name = el.getAttribute("data-material-token");
       if (name) {
-        out.push(`{{image:${name}}}`);
+        out.push(materialToken(name));
         continue;
       }
       out.push(el.textContent || "");
@@ -3096,7 +2983,7 @@ export function PptCanvas({
             note: p.note || "",
             layout: localizeLayoutHint(p.layout || "", uiLang as "zh" | "en"),
         }));
-        const autoMaterial = buildSlideMaterialsFromAutoLabels(pages, slides, referenceVisualAssets);
+        const autoMaterial = buildSlideMaterialsFromAutoLabels(pages, slides, referenceVisualAssets, uiLang as "zh" | "en");
         setSlideMaterials(autoMaterial.nextMaterials);
         setLocalSlides(autoMaterial.nextSlides);
         dispatchCreation({ type: "outlined" });
@@ -3139,7 +3026,7 @@ export function PptCanvas({
             note: p.note,
             layout: localizeLayoutHint(p.layout || "", uiLang as "zh" | "en")
         }));
-        const autoMaterial = buildSlideMaterialsFromAutoLabels(pages, slides, referenceVisualAssets);
+        const autoMaterial = buildSlideMaterialsFromAutoLabels(pages, slides, referenceVisualAssets, uiLang as "zh" | "en");
         setSlideMaterials(autoMaterial.nextMaterials);
         setLocalSlides(autoMaterial.nextSlides);
         dispatchCreation({ type: "outlined" });
