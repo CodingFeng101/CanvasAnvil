@@ -23,6 +23,7 @@ import {
   CAD_SVG_FLOW_REPLACE_AGENT_PROMPT,
 } from '@/workspaces/cad/lib/agents';
 import { getCadRenderFallbackTitle, getCadRenderSlotTitles } from "@/workspaces/cad/lib/render-titles";
+import { applyCadPatchFromReply } from "@/workspaces/cad/lib/apply-cad-patch";
 import {
   assembleDisplay,
   assemblePrompt,
@@ -1198,113 +1199,14 @@ export function ChatPanel({
               }, chatModel, controller.signal);
               toolUpdater.flush();
 
-              let cadPatchFound = false;
-              let cadPatchRetryError: string | null = null;
-              let producedHasSvg2d = false;
-              let appliedSvg = "";
-
-              const jsonRegex = /```json\s*([\s\S]*?)```/g;
-              let jm: RegExpExecArray | null;
-              while ((jm = jsonRegex.exec(toolFull))) {
-                const jsonText = String(jm[1] || "").trim();
-                if (!jsonText) continue;
-
-                let parsed: any = null;
-                try {
-                  parsed = JSON.parse(jsonText);
-                } catch {
-                  // Not this payload; the caller falls through to the next shape.
-                }
-
-                const isCadPatch = parsed?.type === "cad_patch" && parsed?.target === "2d_svg";
-                if (isCadPatch) cadPatchFound = true;
-
-                const result = await runCodeAction(jsonText, "cad");
-                  if (isCadPatch && result.ok) {
-                    producedHasSvg2d = true;
-                    const normalizedAppliedSvg = normalizeSvgMarkup(result.svg || "");
-                    if (normalizedAppliedSvg) appliedSvg = normalizedAppliedSvg;
-                  }
-                if (isCadPatch && !result.ok && result.retry) {
-                  cadPatchRetryError = result.error || "Unknown error";
-                }
-              }
-
-              if (!cadPatchFound) {
-                const trimmed = String(toolFull || "").trim();
-                if (trimmed.startsWith("{")) {
-                  let rawParsed: unknown = null;
-                  try {
-                    rawParsed = JSON.parse(trimmed);
-                  } catch {
-                    // Not JSON at all; this fallback only guesses at the payload.
-                  }
-
-                  const patch = rawParsed as { type?: string; target?: string } | null;
-                  if (patch?.type === "cad_patch" && patch?.target === "2d_svg") {
-                      cadPatchFound = true;
-                      const result = await runCodeAction(trimmed, "cad");
-                        if (result.ok) {
-                          producedHasSvg2d = true;
-                          const normalizedAppliedSvg = normalizeSvgMarkup(result.svg || "");
-                          if (normalizedAppliedSvg) appliedSvg = normalizedAppliedSvg;
-                        }
-                      if (!result.ok && result.retry) cadPatchRetryError = result.error || "Unknown error";
-                  }
-                }
-              }
-
-              if (!cadPatchFound) {
-                const start = toolFull.indexOf("{");
-                const end = toolFull.lastIndexOf("}");
-                if (start >= 0 && end > start) {
-                  const maybeJson = toolFull.slice(start, end + 1).trim();
-                  let rawParsed: unknown = null;
-                  try {
-                    rawParsed = JSON.parse(maybeJson);
-                  } catch {
-                    // Not JSON at all; this fallback only guesses at the payload.
-                  }
-
-                  const patch = rawParsed as { type?: string; target?: string } | null;
-                  if (patch?.type === "cad_patch" && patch?.target === "2d_svg") {
-                      cadPatchFound = true;
-                      const result = await runCodeAction(maybeJson, "cad");
-                        if (result.ok) {
-                          producedHasSvg2d = true;
-                          const normalizedAppliedSvg = normalizeSvgMarkup(result.svg || "");
-                          if (normalizedAppliedSvg) appliedSvg = normalizedAppliedSvg;
-                        }
-                      if (!result.ok && result.retry) cadPatchRetryError = result.error || "Unknown error";
-                  }
-                }
-              }
-
-              if (!cadPatchFound) {
-                const svgText = extractSvgFence(toolFull) || extractRawSvg(toolFull);
-                if (svgText) {
-                  const r = await runCodeAction(svgText, "cad");
-                    if (r.ok) {
-                      producedHasSvg2d = true;
-                      appliedSvg = normalizeSvgMarkup(r.svg || "") || svgText;
-                    }
-                  if (!r.ok && r.retry) cadPatchRetryError = r.error || "Unknown error";
-                }
-              }
-
-              if (!producedHasSvg2d && !cadPatchFound) {
-                const fallbackSvg = extractCadPatchFullSvg(toolFull) || extractSvgFence(toolFull) || extractRawSvg(toolFull);
-                if (fallbackSvg) {
-                  const r = await runCodeAction(fallbackSvg, "cad");
-                    if (r.ok) {
-                      producedHasSvg2d = true;
-                      appliedSvg = normalizeSvgMarkup(r.svg || "") || fallbackSvg;
-                    }
-                  if (!r.ok && r.retry) cadPatchRetryError = r.error || "Unknown error";
-                }
-              }
-
-              return { toolFull, cadPatchFound, cadPatchRetryError, producedHasSvg2d, appliedSvg };
+              const applied = await applyCadPatchFromReply(toolFull, runCodeAction);
+              return {
+                toolFull,
+                cadPatchFound: applied.patchFound,
+                cadPatchRetryError: applied.retryError,
+                producedHasSvg2d: applied.producedSvg,
+                appliedSvg: applied.appliedSvg,
+              };
             };
 
             const getCadSvgToolPrompt = (tool: "patch" | "replace") =>
@@ -1865,113 +1767,14 @@ export function ChatPanel({
                 }, chatModel, controller.signal);
                 toolUpdater.flush();
 
-                let cadPatchFound = false;
-                let cadPatchRetryError: string | null = null;
-                let producedHasSvg2d = false;
-                let appliedSvg = "";
-
-                const jsonRegex = /```json\s*([\s\S]*?)```/g;
-                let jm: RegExpExecArray | null;
-                while ((jm = jsonRegex.exec(toolFull))) {
-                  const jsonText = String(jm[1] || "").trim();
-                  if (!jsonText) continue;
-
-                  let parsed: any = null;
-                  try {
-                    parsed = JSON.parse(jsonText);
-                  } catch {
-                    // Not this payload; the caller falls through to the next shape.
-                  }
-
-                  const isCadPatch = parsed?.type === "cad_patch" && parsed?.target === "2d_svg";
-                  if (isCadPatch) cadPatchFound = true;
-
-                  const result = await runCodeAction(jsonText, "cad");
-                  if (isCadPatch && result.ok) {
-                    producedHasSvg2d = true;
-                    const normalizedAppliedSvg = normalizeSvgMarkup(result.svg || "");
-                    if (normalizedAppliedSvg) appliedSvg = normalizedAppliedSvg;
-                  }
-                  if (isCadPatch && !result.ok && result.retry) {
-                    cadPatchRetryError = result.error || "Unknown error";
-                  }
-                }
-
-                if (!cadPatchFound) {
-                  const trimmed = String(toolFull || "").trim();
-                  if (trimmed.startsWith("{")) {
-                    let rawParsed: unknown = null;
-                    try {
-                      rawParsed = JSON.parse(trimmed);
-                    } catch {
-                      // Not JSON at all; this fallback only guesses at the payload.
-                    }
-
-                    const patch = rawParsed as { type?: string; target?: string } | null;
-                    if (patch?.type === "cad_patch" && patch?.target === "2d_svg") {
-                        cadPatchFound = true;
-                        const result = await runCodeAction(trimmed, "cad");
-                      if (result.ok) {
-                        producedHasSvg2d = true;
-                        const normalizedAppliedSvg = normalizeSvgMarkup(result.svg || "");
-                        if (normalizedAppliedSvg) appliedSvg = normalizedAppliedSvg;
-                      }
-                        if (!result.ok && result.retry) cadPatchRetryError = result.error || "Unknown error";
-                    }
-                  }
-                }
-
-                if (!cadPatchFound) {
-                  const start = toolFull.indexOf("{");
-                  const end = toolFull.lastIndexOf("}");
-                  if (start >= 0 && end > start) {
-                    const maybeJson = toolFull.slice(start, end + 1).trim();
-                    let rawParsed: unknown = null;
-                    try {
-                      rawParsed = JSON.parse(maybeJson);
-                    } catch {
-                      // Not JSON at all; this fallback only guesses at the payload.
-                    }
-
-                    const patch = rawParsed as { type?: string; target?: string } | null;
-                    if (patch?.type === "cad_patch" && patch?.target === "2d_svg") {
-                        cadPatchFound = true;
-                        const result = await runCodeAction(maybeJson, "cad");
-                      if (result.ok) {
-                        producedHasSvg2d = true;
-                        const normalizedAppliedSvg = normalizeSvgMarkup(result.svg || "");
-                        if (normalizedAppliedSvg) appliedSvg = normalizedAppliedSvg;
-                      }
-                        if (!result.ok && result.retry) cadPatchRetryError = result.error || "Unknown error";
-                    }
-                  }
-                }
-
-                if (!cadPatchFound) {
-                  const svgText = extractSvgFence(toolFull) || extractRawSvg(toolFull);
-                  if (svgText) {
-                    const r = await runCodeAction(svgText, "cad");
-                  if (r.ok) {
-                    producedHasSvg2d = true;
-                    appliedSvg = normalizeSvgMarkup(r.svg || "") || svgText;
-                  }
-                    if (!r.ok && r.retry) cadPatchRetryError = r.error || "Unknown error";
-                  }
-                }
-
-                if (!producedHasSvg2d && !cadPatchFound) {
-                  const fallbackSvg = extractCadPatchFullSvg(toolFull) || extractSvgFence(toolFull) || extractRawSvg(toolFull);
-                  if (fallbackSvg) {
-                    const r = await runCodeAction(fallbackSvg, "cad");
-                  if (r.ok) {
-                    producedHasSvg2d = true;
-                    appliedSvg = normalizeSvgMarkup(r.svg || "") || fallbackSvg;
-                  }
-                    if (!r.ok && r.retry) cadPatchRetryError = r.error || "Unknown error";
-                  }
-                }
-
-                return { toolFull, cadPatchFound, cadPatchRetryError, producedHasSvg2d, appliedSvg };
+                const applied = await applyCadPatchFromReply(toolFull, runCodeAction);
+                return {
+                  toolFull,
+                  cadPatchFound: applied.patchFound,
+                  cadPatchRetryError: applied.retryError,
+                  producedHasSvg2d: applied.producedSvg,
+                  appliedSvg: applied.appliedSvg,
+                };
               };
 
               const getCadSvgToolPrompt = (tool: "patch" | "replace") =>
