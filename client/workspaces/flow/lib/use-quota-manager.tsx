@@ -53,6 +53,7 @@ export function useQuotaManager(config: QuotaConfig): {
                     return true
                 }
             } catch {
+              // Unreadable settings count as no key configured.
             }
         }
 

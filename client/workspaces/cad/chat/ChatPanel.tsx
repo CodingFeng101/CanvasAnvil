@@ -220,6 +220,7 @@ export function ChatPanel({
         const parsed = JSON.parse(raw);
         return formatCadPlanForDisplay(parsed);
       } catch {
+        // Not this payload; the caller falls through to the next shape.
       }
       const start = raw.indexOf("{");
       const end = raw.lastIndexOf("}");
@@ -228,6 +229,7 @@ export function ChatPanel({
           const parsed = JSON.parse(raw.slice(start, end + 1));
           return formatCadPlanForDisplay(parsed);
         } catch {
+          // Not this payload; the caller falls through to the next shape.
         }
       }
       return null;
@@ -261,6 +263,7 @@ export function ChatPanel({
           return bomUpdatedText;
         }
       } catch {
+        // Not this payload; the caller falls through to the next shape.
       }
       if (text.includes('"type"') && text.includes('"cad_images"')) {
         return trText("（已提交装修图生成任务）", "(CAD drawing generation task submitted)");
@@ -300,6 +303,7 @@ export function ChatPanel({
       }
       if (parsedWhole?.type === "cad_bom") return bomUpdatedText;
     } catch {
+      // Not this payload; the caller falls through to the next shape.
     }
     return next;
   };
@@ -327,6 +331,7 @@ export function ChatPanel({
     try {
       localStorage.removeItem(storageKey);
     } catch {
+      // A blocked localStorage only means the old history lingers.
     }
     setMessages([]);
     setShowResetWarning(false);
@@ -366,6 +371,7 @@ export function ChatPanel({
         const parsed = JSON.parse(jsonText);
         if (parsed?.type === "cad_plan" && parsed?.plan) return parsed;
       } catch {
+        // Not this payload; the caller falls through to the next shape.
       }
     }
     const fallback = extractJsonPayloadText(raw);
@@ -373,6 +379,7 @@ export function ChatPanel({
       const parsed = JSON.parse(fallback);
       if (parsed?.type === "cad_plan" && parsed?.plan) return parsed;
     } catch {
+      // Not this payload; the caller falls through to the next shape.
     }
     return null;
   };
@@ -387,6 +394,7 @@ export function ChatPanel({
       const parsed = JSON.parse(content);
       if (typeof parsed?.prompt === "string" && parsed.prompt.trim()) return parsed.prompt.trim();
     } catch {
+      // Not this payload; the caller falls through to the next shape.
     }
     const line = content.replace(/\r?\n+/g, " ").trim();
     return line || fallback;
@@ -466,6 +474,7 @@ export function ChatPanel({
           const parsed = JSON.parse(text);
           parsedType = String(parsed?.type || "").trim().toLowerCase();
         } catch {
+          // Not this payload; the caller falls through to the next shape.
         }
       }
       const r = await runCodeAction(text, "cad");
@@ -564,6 +573,7 @@ export function ChatPanel({
           return full;
         }
       } catch {
+        // Not this payload; the caller falls through to the next shape.
       }
     }
     const trimmed = raw.trim();
@@ -575,6 +585,7 @@ export function ChatPanel({
           return full;
         }
       } catch {
+        // Not this payload; the caller falls through to the next shape.
       }
     }
     return "";
@@ -599,6 +610,7 @@ export function ChatPanel({
         const parsed = JSON.parse(jsonText);
         if (isCadPatchPayload(parsed)) return true;
       } catch {
+        // Not this payload; the caller falls through to the next shape.
       }
     }
 
@@ -608,6 +620,7 @@ export function ChatPanel({
         const parsed = JSON.parse(trimmed);
         if (isCadPatchPayload(parsed)) return true;
       } catch {
+        // Not this payload; the caller falls through to the next shape.
       }
     }
 
@@ -618,6 +631,7 @@ export function ChatPanel({
         const parsed = JSON.parse(raw.slice(start, end + 1));
         if (isCadPatchPayload(parsed)) return true;
       } catch {
+        // Not this payload; the caller falls through to the next shape.
       }
     }
 
@@ -842,6 +856,7 @@ export function ChatPanel({
           const parsed = JSON.parse(jsonText);
           if (parsed?.type === "cad_bom") bomEmitted = true;
         } catch {
+          // Not this payload; the caller falls through to the next shape.
         }
         onCodeAction?.(jsonText, 'cad');
       };
@@ -902,6 +917,7 @@ export function ChatPanel({
               try {
                 return JSON.parse(normalized.slice(start, end + 1));
               } catch {
+                // Not this payload; the caller falls through to the next shape.
               }
             }
             return null;
@@ -919,6 +935,7 @@ export function ChatPanel({
             masterSchemeJson = JSON.stringify(parsedMaster, null, 2);
           }
         } catch {
+          // No master scheme in this reply, which is the common case.
         }
 
         const imagesSheetMessages = buildCadImagesSheetMessages({ systemContent, planJson, svg2d, masterSchemeJson, outputLanguage: cadOutputLanguage });
@@ -970,6 +987,7 @@ export function ChatPanel({
           });
         }
       } catch {
+        // allSettled cannot reject, so only a render error reaches here.
       } finally {
         setIsLoading(false);
         abortControllerRef.current = null;
@@ -1051,6 +1069,7 @@ export function ChatPanel({
               break;
             }
           } catch {
+            // Not this payload; the caller falls through to the next shape.
           }
         }
 
@@ -1188,6 +1207,7 @@ export function ChatPanel({
                   try {
                     return JSON.parse(normalized.slice(start, end + 1));
                   } catch {
+                    // Not this payload; the caller falls through to the next shape.
                   }
                 }
                 return null;
@@ -1205,6 +1225,7 @@ export function ChatPanel({
                 masterSchemeJson = JSON.stringify(parsedMaster, null, 2);
               }
             } catch {
+              // No master scheme in this reply, which is the common case.
             }
 
             const imagesSheetMessages = buildCadImagesSheetMessages({
@@ -1330,6 +1351,7 @@ export function ChatPanel({
                 try {
                   parsed = JSON.parse(jsonText);
                 } catch {
+                  // Not this payload; the caller falls through to the next shape.
                 }
 
                 const isCadPatch = parsed?.type === "cad_patch" && parsed?.target === "2d_svg";
@@ -1349,9 +1371,15 @@ export function ChatPanel({
               if (!cadPatchFound) {
                 const trimmed = String(toolFull || "").trim();
                 if (trimmed.startsWith("{")) {
+                  let rawParsed: unknown = null;
                   try {
-                    const rawParsed = JSON.parse(trimmed);
-                    if (rawParsed?.type === "cad_patch" && rawParsed?.target === "2d_svg") {
+                    rawParsed = JSON.parse(trimmed);
+                  } catch {
+                    // Not JSON at all; this fallback only guesses at the payload.
+                  }
+
+                  const patch = rawParsed as { type?: string; target?: string } | null;
+                  if (patch?.type === "cad_patch" && patch?.target === "2d_svg") {
                       cadPatchFound = true;
                       const result = await runCodeAction(trimmed, "cad");
                         if (result.ok) {
@@ -1360,8 +1388,6 @@ export function ChatPanel({
                           if (normalizedAppliedSvg) appliedSvg = normalizedAppliedSvg;
                         }
                       if (!result.ok && result.retry) cadPatchRetryError = result.error || "Unknown error";
-                    }
-                  } catch {
                   }
                 }
               }
@@ -1371,9 +1397,15 @@ export function ChatPanel({
                 const end = toolFull.lastIndexOf("}");
                 if (start >= 0 && end > start) {
                   const maybeJson = toolFull.slice(start, end + 1).trim();
+                  let rawParsed: unknown = null;
                   try {
-                    const rawParsed = JSON.parse(maybeJson);
-                    if (rawParsed?.type === "cad_patch" && rawParsed?.target === "2d_svg") {
+                    rawParsed = JSON.parse(maybeJson);
+                  } catch {
+                    // Not JSON at all; this fallback only guesses at the payload.
+                  }
+
+                  const patch = rawParsed as { type?: string; target?: string } | null;
+                  if (patch?.type === "cad_patch" && patch?.target === "2d_svg") {
                       cadPatchFound = true;
                       const result = await runCodeAction(maybeJson, "cad");
                         if (result.ok) {
@@ -1382,8 +1414,6 @@ export function ChatPanel({
                           if (normalizedAppliedSvg) appliedSvg = normalizedAppliedSvg;
                         }
                       if (!result.ok && result.retry) cadPatchRetryError = result.error || "Unknown error";
-                    }
-                  } catch {
                   }
                 }
               }
@@ -1706,6 +1736,7 @@ export function ChatPanel({
                 break;
               }
             } catch {
+              // Not this payload; the caller falls through to the next shape.
             }
           }
 
@@ -1843,6 +1874,7 @@ export function ChatPanel({
                     try {
                       return JSON.parse(normalized.slice(start, end + 1));
                     } catch {
+                      // Not this payload; the caller falls through to the next shape.
                     }
                   }
                   return null;
@@ -1860,6 +1892,7 @@ export function ChatPanel({
                   masterSchemeJson = JSON.stringify(parsedMaster, null, 2);
                 }
               } catch {
+                // No master scheme in this reply, which is the common case.
               }
 
               const imagesSheetMessages = buildCadImagesSheetMessages({
@@ -1985,6 +2018,7 @@ export function ChatPanel({
                   try {
                     parsed = JSON.parse(jsonText);
                   } catch {
+                    // Not this payload; the caller falls through to the next shape.
                   }
 
                   const isCadPatch = parsed?.type === "cad_patch" && parsed?.target === "2d_svg";
@@ -2004,9 +2038,15 @@ export function ChatPanel({
                 if (!cadPatchFound) {
                   const trimmed = String(toolFull || "").trim();
                   if (trimmed.startsWith("{")) {
+                    let rawParsed: unknown = null;
                     try {
-                      const rawParsed = JSON.parse(trimmed);
-                      if (rawParsed?.type === "cad_patch" && rawParsed?.target === "2d_svg") {
+                      rawParsed = JSON.parse(trimmed);
+                    } catch {
+                      // Not JSON at all; this fallback only guesses at the payload.
+                    }
+
+                    const patch = rawParsed as { type?: string; target?: string } | null;
+                    if (patch?.type === "cad_patch" && patch?.target === "2d_svg") {
                         cadPatchFound = true;
                         const result = await runCodeAction(trimmed, "cad");
                       if (result.ok) {
@@ -2015,8 +2055,6 @@ export function ChatPanel({
                         if (normalizedAppliedSvg) appliedSvg = normalizedAppliedSvg;
                       }
                         if (!result.ok && result.retry) cadPatchRetryError = result.error || "Unknown error";
-                      }
-                    } catch {
                     }
                   }
                 }
@@ -2026,9 +2064,15 @@ export function ChatPanel({
                   const end = toolFull.lastIndexOf("}");
                   if (start >= 0 && end > start) {
                     const maybeJson = toolFull.slice(start, end + 1).trim();
+                    let rawParsed: unknown = null;
                     try {
-                      const rawParsed = JSON.parse(maybeJson);
-                      if (rawParsed?.type === "cad_patch" && rawParsed?.target === "2d_svg") {
+                      rawParsed = JSON.parse(maybeJson);
+                    } catch {
+                      // Not JSON at all; this fallback only guesses at the payload.
+                    }
+
+                    const patch = rawParsed as { type?: string; target?: string } | null;
+                    if (patch?.type === "cad_patch" && patch?.target === "2d_svg") {
                         cadPatchFound = true;
                         const result = await runCodeAction(maybeJson, "cad");
                       if (result.ok) {
@@ -2037,8 +2081,6 @@ export function ChatPanel({
                         if (normalizedAppliedSvg) appliedSvg = normalizedAppliedSvg;
                       }
                         if (!result.ok && result.retry) cadPatchRetryError = result.error || "Unknown error";
-                      }
-                    } catch {
                     }
                   }
                 }

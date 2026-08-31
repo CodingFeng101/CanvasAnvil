@@ -74,6 +74,7 @@ export function PptWorkspace() {
     try {
       localStorage.setItem(PPT_HISTORY_STORAGE_KEY, JSON.stringify(versionHistory));
     } catch {
+      // A blocked localStorage only means the old history lingers.
     }
   }, [versionHistory]);
 
@@ -82,6 +83,7 @@ export function PptWorkspace() {
     try {
       localStorage.setItem(PPT_RETURN_STAGE_STORAGE_KEY, pptStage);
     } catch {
+      // A blocked localStorage only means the old history lingers.
     }
   }, [pptStage]);
 
@@ -98,10 +100,12 @@ export function PptWorkspace() {
     try {
       localStorage.removeItem(PPT_CHAT_STORAGE_KEY);
     } catch {
+      // A blocked localStorage only means the old history lingers.
     }
     try {
       localStorage.removeItem(PPT_HISTORY_STORAGE_KEY);
     } catch {
+      // A blocked localStorage only means the old history lingers.
     }
   }, [pptStage]);
 
@@ -121,6 +125,7 @@ export function PptWorkspace() {
         panel.resize("32%");
         setIsChatCollapsed(false);
       } catch {
+        // The panel is not mounted yet; the next toggle will find it.
       }
     }, 0);
     return () => window.clearTimeout(timer);
@@ -242,6 +247,7 @@ export function PptWorkspace() {
     try {
       localStorage.removeItem(PPT_WORKSPACE_STORAGE_KEY);
     } catch {
+      // A blocked localStorage only means the old history lingers.
     }
     void pptStore.clear(PPT_STATE_KEY).catch((e) => {
       console.error("Failed to clear persisted PPT workspace", e);
@@ -249,10 +255,12 @@ export function PptWorkspace() {
     try {
       localStorage.removeItem(PPT_CHAT_STORAGE_KEY);
     } catch {
+      // A blocked localStorage only means the old history lingers.
     }
     try {
       localStorage.removeItem(PPT_HISTORY_STORAGE_KEY);
     } catch {
+      // A blocked localStorage only means the old history lingers.
     }
     setPptResetTick((x) => x + 1);
   };

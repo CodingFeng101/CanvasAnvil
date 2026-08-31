@@ -200,6 +200,7 @@ export function CadCanvas({
         latestLoadedSvgRef.current = EMPTY_SENTINEL;
       }
     } catch {
+      // The editor iframe is gone or cross-origin; the retry ladder covers it.
     }
   };
 

@@ -189,6 +189,7 @@ const getPptTag = (slideId: string, title: string, kind: "outline" | "slide_imag
     try {
       localStorage.removeItem(storageKey);
     } catch {
+      // A blocked localStorage only means the old history lingers.
     }
     setMessages([]);
     setShowResetWarning(false);

@@ -23,10 +23,12 @@ export function setUiLanguage(lang: UiLanguage) {
   try {
     document.documentElement.setAttribute("lang", lang === "zh" ? "zh-CN" : "en");
   } catch {
+    // A blocked localStorage only means the old history lingers.
   }
   try {
     window.dispatchEvent(new Event("ui-language-changed"));
   } catch {
+    // No window to notify (server render, or a detached document).
   }
 }
 

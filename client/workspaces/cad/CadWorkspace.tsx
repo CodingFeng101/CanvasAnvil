@@ -43,6 +43,7 @@ const tryParseJson = (text: string) => {
       try {
         return JSON.parse(text.slice(start, end + 1));
       } catch {
+        // Not this payload; the caller falls through to the next shape.
       }
     }
     return null;
@@ -149,6 +150,7 @@ const extractLatestSvgFromText = (text: string) => {
         latest = normalized;
       }
     } catch {
+      // Not this payload; the caller falls through to the next shape.
     }
   }
 
@@ -358,6 +360,7 @@ export function CadWorkspace() {
         }),
       );
     } catch {
+      // Losing one autosave is better than interrupting the user.
     }
   }, [cad2dSvg, cadPlan, cadAnalysisImages, cadBom, cadFocusPanel]);
 
@@ -515,6 +518,7 @@ export function CadWorkspace() {
         try {
           URL.revokeObjectURL(u);
         } catch {
+          // The URL was already revoked, or never belonged to this document.
         }
       }
     }
@@ -986,18 +990,22 @@ export function CadWorkspace() {
     try {
       localStorage.removeItem(CAD_WORKSPACE_STORAGE_KEY);
     } catch {
+      // A blocked localStorage only means the old history lingers.
     }
     try {
       localStorage.removeItem(CAD_RENDERS_STORAGE_KEY);
     } catch {
+      // A blocked localStorage only means the old history lingers.
     }
     try {
       localStorage.removeItem(CAD_ANALYSIS_IMAGES_STORAGE_KEY);
     } catch {
+      // A blocked localStorage only means the old history lingers.
     }
     try {
       localStorage.removeItem(CAD_CHAT_STORAGE_KEY);
     } catch {
+      // A blocked localStorage only means the old history lingers.
     }
     void Promise.all([
       cadStore.clear(CAD_RENDERS_KEY),
@@ -1008,6 +1016,7 @@ export function CadWorkspace() {
     try {
       localStorage.removeItem("CanvasAnvil-history-cad-v1");
     } catch {
+      // A blocked localStorage only means the old history lingers.
     }
     setCadResetTick((x) => x + 1);
   };

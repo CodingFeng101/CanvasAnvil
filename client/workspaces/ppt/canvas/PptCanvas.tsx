@@ -3292,6 +3292,7 @@ export function PptCanvas({
     try {
       localStorage.removeItem(PPT_WORKSPACE_STORAGE_KEY);
     } catch {
+      // A blocked localStorage only means the old history lingers.
     }
     void pptStore.clear(PPT_STATE_KEY).catch((e) => {
       console.error("Failed to clear persisted PPT workspace", e);

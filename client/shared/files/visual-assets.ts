@@ -95,6 +95,7 @@ const renderPdfPageCanvas = async (page: any, targetWidth = 980) => {
             textBoxes.push({ text: str, x, y, w, h })
         }
     } catch {
+      // A page whose text layer will not decode still yields its image.
     }
 
     return { canvas, textBoxes, pageText: pageText.trim() }
@@ -850,6 +851,7 @@ export async function extractThirdPartyVisualAssets(
             const errPayload = await resp.json()
             detail = String(errPayload?.error || "")
         } catch {
+          // The proxy did not send a JSON body; the status code below is enough.
         }
         throw new Error(
             `Third-party parser proxy failed: ${resp.status}${detail ? ` - ${detail}` : ""}`,
