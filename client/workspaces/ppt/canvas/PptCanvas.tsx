@@ -26,6 +26,7 @@ import {
 } from "./lib/creation-machine";
 import { useTemplateLibrary } from "./hooks/use-template-library";
 import { useSlideMaterials } from "./hooks/use-slide-materials";
+import { useCreationInputs } from "./hooks/use-creation-inputs";
 import { useSlideshow } from "./hooks/use-slideshow";
 import { buildBeautifyInstruction } from "./lib/beautify-instruction";
 import { generateChatMessage } from '@/ai/client';
@@ -60,7 +61,6 @@ import { Button } from "@/shared/ui/button";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/shared/ui/dialog";
 import { Textarea } from "@/shared/ui/textarea";
 import { useUiLanguage } from "@/shared/i18n";
-import { useFileProcessor as useFlowFileProcessor } from "@/shared/files/use-file-processor";
 import { canvasAnvilToEditorSlide, editorSlideToExportPayload, PptEditorBridge, PptReviewSidebar } from "@/features/ppt-editor";
 import {
   BEAUTIFY_CONCURRENCY,
@@ -94,10 +94,8 @@ import {
   shouldInlinePersistImageUrl,
 } from "@/workspaces/ppt/canvas/persisted-state";
 import type {
-  CreationMode,
   EditableExtractionStatus,
   PptData,
-  ReferenceFile,
   ReferenceVisualAsset,
   ReviewDraftRect,
   ReviewResizeHandle,
@@ -264,46 +262,15 @@ export function PptCanvas({
     }
     onPptStageChange?.("start");
   }, [creationStep, onPptStageChange]);
-  const [creationMode, setCreationMode] = useState<CreationMode>(() => {
-    const v = initialPptState?.creationMode;
-    return v === "idea" || v === "outline" || v === "beautify" || v === "image_transform" ? v : "idea";
+  const inputs = useCreationInputs({
+    initialState: initialPptState,
+    onCreationModeChange,
   });
-  useEffect(() => {
-    onCreationModeChange?.(creationMode);
-  }, [creationMode, onCreationModeChange]);
-  const [ideaInput, setIdeaInput] = useState(() => (typeof initialPptState?.ideaInput === "string" ? initialPptState.ideaInput : ""));
-  const [outlineInput, setOutlineInput] = useState(() => (typeof initialPptState?.outlineInput === "string" ? initialPptState.outlineInput : ""));
-  const [beautifyRequirement, setBeautifyRequirement] = useState(() => (typeof initialPptState?.beautifyRequirement === "string" ? initialPptState.beautifyRequirement : ""));
-  const [beautifyUseTemplate, setBeautifyUseTemplate] = useState(() => Boolean(initialPptState?.beautifyUseTemplate));
-  const [beautifyFile, setBeautifyFile] = useState<File | null>(null);
-  const [imageTransformFile, setImageTransformFile] = useState<File | null>(null);
-  const [beautifyFailures, setBeautifyFailures] = useState<Record<string, string>>(() => {
-    const v = initialPptState?.beautifyFailures;
-    if (!v || typeof v !== "object" || Array.isArray(v)) return {};
-    const out: Record<string, string> = {};
-    for (const [k, val] of Object.entries(v)) {
-      if (typeof k === "string" && typeof val === "string" && val.trim()) out[k] = val;
-    }
-    return out;
-  });
-  const [imageTransformFailures, setImageTransformFailures] = useState<Record<string, string>>(() => {
-    const v = initialPptState?.imageTransformFailures;
-    if (!v || typeof v !== "object" || Array.isArray(v)) return {};
-    const out: Record<string, string> = {};
-    for (const [k, val] of Object.entries(v)) {
-      if (typeof k === "string" && typeof val === "string" && val.trim()) out[k] = val;
-    }
-    return out;
-  });
-  const {
-    files: referenceUploadFiles,
-    pdfData: referencePdfData,
-    visualAssets: referenceVisualAssetsRaw,
-    handleFileChange: handleReferenceFileChange,
-    setFiles: setReferenceUploadFiles
-  } = useFlowFileProcessor("ppt");
-  const [referencePreviewOpen, setReferencePreviewOpen] = useState(false);
-  const [referencePreviewFile, setReferencePreviewFile] = useState<ReferenceFile | null>(null);
+  const { creationMode, setCreationMode, ideaInput, outlineInput } = inputs;
+  const { setIdeaInput, setOutlineInput } = inputs;
+  const { setRequirement: setBeautifyRequirement, setUseTemplate: setBeautifyUseTemplate,
+    setFailures: setBeautifyFailures } = inputs.beautify;
+  const { setFailures: setImageTransformFailures } = inputs.imageTransform;
   const materials = useSlideMaterials({
     localSlides,
     setLocalSlides,
@@ -311,9 +278,6 @@ export function PptCanvas({
     initialMaterials: normalizePersistedSlideMaterials(initialPptState?.slideMaterials),
   });
   const { slideMaterials, setSlideMaterials } = materials;
-  const referenceFileInputRef = useRef<HTMLInputElement | null>(null);
-  const beautifyFileInputRef = useRef<HTMLInputElement | null>(null);
-  const imageTransformFileInputRef = useRef<HTMLInputElement | null>(null);
   const assetCaptionCacheRef = useRef<Record<string, string>>({});
   const pptImagePersistenceRunningRef = useRef(false);
   const pptImagePersistenceRetryRef = useRef(false);
@@ -372,19 +336,6 @@ export function PptCanvas({
     onExportReviewModeChange?.(exportReviewMode);
   }, [exportReviewMode, onExportReviewModeChange]);
 
-  const isParsingReferenceFiles = Array.from(referencePdfData.values()).some((x) => x.isExtracting);
-  const referenceFiles: ReferenceFile[] = referenceUploadFiles
-    .map((file) => {
-      const meta = referencePdfData.get(file);
-      if (!meta || meta.isExtracting || !meta.text) return null;
-      return {
-        id: `ref-${file.name}-${file.lastModified}-${file.size}`,
-        filename: file.name,
-        content: String(meta.text || "").slice(0, 150000),
-        charCount: meta.charCount || 0,
-      } as ReferenceFile;
-    })
-    .filter((x): x is ReferenceFile => !!x);
 
   useEffect(() => {
     let cancelled = false;
@@ -515,7 +466,17 @@ export function PptCanvas({
     return () => {
       cancelled = true;
     };
-  }, [restoreTemplateSelection, setSlideMaterials]);
+  }, [
+    restoreTemplateSelection,
+    setSlideMaterials,
+    setCreationMode,
+    setIdeaInput,
+    setOutlineInput,
+    setBeautifyRequirement,
+    setBeautifyUseTemplate,
+    setBeautifyFailures,
+    setImageTransformFailures,
+  ]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -535,10 +496,10 @@ export function PptCanvas({
       ideaInput,
       outlineInput,
       slideMaterials,
-      beautifyRequirement,
-      beautifyUseTemplate,
-      beautifyFailures,
-      imageTransformFailures,
+      beautifyRequirement: inputs.beautify.requirement,
+      beautifyUseTemplate: inputs.beautify.useTemplate,
+      beautifyFailures: inputs.beautify.failures,
+      imageTransformFailures: inputs.imageTransform.failures,
       updatedAt,
     };
     try {
@@ -557,10 +518,10 @@ export function PptCanvas({
           ideaInput,
           outlineInput,
           slideMaterials: {},
-          beautifyRequirement,
-          beautifyUseTemplate,
-          beautifyFailures,
-          imageTransformFailures,
+          beautifyRequirement: inputs.beautify.requirement,
+          beautifyUseTemplate: inputs.beautify.useTemplate,
+          beautifyFailures: inputs.beautify.failures,
+          imageTransformFailures: inputs.imageTransform.failures,
           updatedAt,
         })
       );
@@ -583,10 +544,10 @@ export function PptCanvas({
     ideaInput,
     outlineInput,
     slideMaterials,
-    beautifyRequirement,
-    beautifyUseTemplate,
-    beautifyFailures,
-    imageTransformFailures,
+    inputs.beautify.requirement,
+    inputs.beautify.useTemplate,
+    inputs.beautify.failures,
+    inputs.imageTransform.failures,
     isPersistenceHydrated,
   ]);
 
@@ -1842,10 +1803,10 @@ export function PptCanvas({
       }}
     />
   );
-  const failedBeautifyCount = activeSlides.reduce((n, s) => n + (beautifyFailures[s.id] ? 1 : 0), 0);
-  const failedImageTransformCount = activeSlides.reduce((n, s) => n + (imageTransformFailures[s.id] ? 1 : 0), 0);
+  const failedBeautifyCount = activeSlides.reduce((n, s) => n + (inputs.beautify.failures[s.id] ? 1 : 0), 0);
+  const failedImageTransformCount = activeSlides.reduce((n, s) => n + (inputs.imageTransform.failures[s.id] ? 1 : 0), 0);
   const currentSlideFailure = currentSlide
-    ? (creationMode === "image_transform" ? imageTransformFailures[currentSlide.id] : beautifyFailures[currentSlide.id])
+    ? (creationMode === "image_transform" ? inputs.imageTransform.failures[currentSlide.id] : inputs.beautify.failures[currentSlide.id])
     : "";
 
   const formatImageVersionLabel = (version: SlideImageVersion, index: number) => {
@@ -2130,22 +2091,12 @@ export function PptCanvas({
     };
   };
 
-  const handleReferenceFileInputChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-      const files = Array.from(e.target.files || []);
-      e.target.value = "";
-      if (files.length === 0) return;
-      await handleReferenceFileChange([...referenceUploadFiles, ...files]);
-  };
 
-  const openReferencePreview = (file: ReferenceFile) => {
-      setReferencePreviewFile(file);
-      setReferencePreviewOpen(true);
-  };
 
 
 
   const buildReferenceVisualAssetsWithCaptions = async (): Promise<ReferenceVisualAsset[]> => {
-    const raw = (referenceVisualAssetsRaw || []).filter((x: any) => x && typeof x.dataUrl === "string" && x.dataUrl.startsWith("data:image"));
+    const raw = (inputs.reference.visualAssetsRaw || []).filter((x: any) => x && typeof x.dataUrl === "string" && x.dataUrl.startsWith("data:image"));
     if (raw.length === 0) return [];
 
     const baseItems = raw.slice(0, 24).map((x: any, idx: number) => {
@@ -2242,17 +2193,7 @@ export function PptCanvas({
   };
 
 
-  const handleBeautifyFileInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const f = e.target.files?.[0] || null;
-    e.target.value = "";
-    setBeautifyFile(f);
-  };
 
-  const handleImageTransformFileInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const f = e.target.files?.[0] || null;
-    e.target.value = "";
-    setImageTransformFile(f);
-  };
 
   const createImageTransformSlideVersion = async (slide: SlideData, sourceUrl: string) => {
     const persistedSourceUrl = await persistImageUrlIfNeeded(sourceUrl);
@@ -2309,7 +2250,7 @@ export function PptCanvas({
   };
 
   const handleStartImageTransform = async () => {
-    const file = imageTransformFile;
+    const file = inputs.imageTransform.file;
     if (!file) return;
 
     resetGenerationState();
@@ -2404,7 +2345,7 @@ export function PptCanvas({
   };
 
   const handleStartBeautify = async () => {
-    const file = beautifyFile;
+    const file = inputs.beautify.file;
     if (!file) return;
 
     resetGenerationState();
@@ -2460,8 +2401,8 @@ export function PptCanvas({
       );
       progressTracker.start();
 
-      const instruction = buildBeautifyInstruction(beautifyRequirement);
-      const beautifyTemplate = beautifyUseTemplate ? (templateImage || undefined) : undefined;
+      const instruction = buildBeautifyInstruction(inputs.beautify.requirement);
+      const beautifyTemplate = inputs.beautify.useTemplate ? (templateImage || undefined) : undefined;
       const tasks = slides.map((s, i) => async () => {
         let baseReady = false;
         try {
@@ -2507,7 +2448,7 @@ export function PptCanvas({
     if (creationMode !== "beautify") return;
     const failedSlideIds = activeSlides
       .map((s) => s.id)
-      .filter((id) => !!beautifyFailures[id]);
+      .filter((id) => !!inputs.beautify.failures[id]);
     if (failedSlideIds.length === 0) return;
 
     dispatchCreation({ type: "rendering" });
@@ -2521,8 +2462,8 @@ export function PptCanvas({
     progressTracker.start();
 
     try {
-      const instruction = buildBeautifyInstruction(beautifyRequirement);
-      const beautifyTemplate = beautifyUseTemplate ? (templateImage || undefined) : undefined;
+      const instruction = buildBeautifyInstruction(inputs.beautify.requirement);
+      const beautifyTemplate = inputs.beautify.useTemplate ? (templateImage || undefined) : undefined;
       const tasks = failedSlideIds.map((slideId) => async () => {
         let baseReady = false;
         const slide = activeSlides.find((x) => x.id === slideId);
@@ -2577,7 +2518,7 @@ export function PptCanvas({
         const pages = await pptService.generatePlanFromOutline(
           outlineInput,
           uiLang as "zh" | "en",
-          referenceFiles,
+          inputs.reference.files,
           referenceVisualAssets.map((x) => ({
             label: x.label,
             caption: x.caption,
@@ -2617,7 +2558,7 @@ export function PptCanvas({
         const pages = await pptService.generateOutline(
           ideaInput,
           uiLang as "zh" | "en",
-          referenceFiles,
+          inputs.reference.files,
           referenceVisualAssets.map((x) => ({
             label: x.label,
             caption: x.caption,
@@ -2995,8 +2936,8 @@ export function PptCanvas({
     setOutlineInput("");
     setBeautifyRequirement("");
     setBeautifyUseTemplate(false);
-    setBeautifyFile(null);
-    setImageTransformFile(null);
+    inputs.beautify.setFile(null);
+    inputs.imageTransform.setFile(null);
     setExportReviewMode(false);
     setEditableExtractionStatusBySlideId({});
     setSelectedReviewTextBlockId(null);
@@ -3004,7 +2945,7 @@ export function PptCanvas({
     setReviewDraftRect(null);
     setBeautifyFailures({});
     setImageTransformFailures({});
-    setReferenceUploadFiles([]);
+    inputs.reference.setUploadFiles([]);
     setSlideMaterials({});
     materials.picker.close();
     setReviewPreparingSlideIds([]);
@@ -3245,12 +3186,12 @@ export function PptCanvas({
                         </div>
 
                         <input
-                            ref={referenceFileInputRef}
+                            ref={inputs.reference.inputRef}
                             type="file"
                             multiple
                             accept=".pdf,.docx,.zip,.tex,.tgz,.tar.gz,application/pdf,application/zip,application/x-zip-compressed,application/gzip,application/x-gzip,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/*,.txt,.md,.markdown,.json,.csv,.xml,.yaml,.yml,.toml"
                             className="hidden"
-                            onChange={handleReferenceFileInputChange}
+                            onChange={inputs.reference.onInputChange}
                         />
 
                         <motion.div
@@ -3269,25 +3210,25 @@ export function PptCanvas({
                             {creationMode === "beautify" ? (
                               <div className="space-y-3">
                                 <input
-                                  ref={beautifyFileInputRef}
+                                  ref={inputs.beautify.inputRef}
                                   type="file"
                                   accept=".pdf,application/pdf"
                                   className="hidden"
-                                  onChange={handleBeautifyFileInputChange}
+                                  onChange={inputs.beautify.onInputChange}
                                 />
 
                                 <div className="flex items-center justify-between gap-3 rounded-xl border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-900/50 px-4 py-3">
                                   <div className="min-w-0">
                                     <div className="text-sm font-medium text-zinc-900 dark:text-zinc-100">{tr("上传 PDF", "Upload PDF")}</div>
                                     <div className="text-xs text-zinc-500 dark:text-zinc-400 truncate">
-                                      {beautifyFile ? beautifyFile.name : tr("未选择文件", "No file selected")}
+                                      {inputs.beautify.file ? inputs.beautify.file.name : tr("未选择文件", "No file selected")}
                                     </div>
                                   </div>
                                   <Button
                                     type="button"
                                     variant="outline"
                                     className="shrink-0"
-                                    onClick={() => beautifyFileInputRef.current?.click()}
+                                    onClick={() => inputs.beautify.inputRef.current?.click()}
                                   >
                                     <Upload className="w-4 h-4 mr-2" />
                                     {tr("选择文件", "Choose")}
@@ -3303,14 +3244,14 @@ export function PptCanvas({
                                   </div>
                                   <input
                                     type="checkbox"
-                                    checked={beautifyUseTemplate}
+                                    checked={inputs.beautify.useTemplate}
                                     onChange={(e) => setBeautifyUseTemplate(e.target.checked)}
                                     className="h-4 w-4 rounded border-zinc-300 text-blue-600 focus:ring-blue-500"
                                   />
                                 </label>
 
                                 <textarea
-                                  value={beautifyRequirement}
+                                  value={inputs.beautify.requirement}
                                   onChange={(e) => setBeautifyRequirement(e.target.value)}
                                   className="w-full h-36 p-4 rounded-xl border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-900/50 text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all resize-none outline-none"
                                   placeholder={modeCopy.placeholder}
@@ -3319,25 +3260,25 @@ export function PptCanvas({
                             ) : creationMode === "image_transform" ? (
                               <div className="space-y-3">
                                 <input
-                                  ref={imageTransformFileInputRef}
+                                  ref={inputs.imageTransform.inputRef}
                                   type="file"
                                   accept=".pdf,application/pdf"
                                   className="hidden"
-                                  onChange={handleImageTransformFileInputChange}
+                                  onChange={inputs.imageTransform.onInputChange}
                                 />
 
                                 <div className="flex items-center justify-between gap-3 rounded-xl border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-900/50 px-4 py-3">
                                   <div className="min-w-0">
                                     <div className="text-sm font-medium text-zinc-900 dark:text-zinc-100">{tr("上传 PDF", "Upload PDF")}</div>
                                     <div className="text-xs text-zinc-500 dark:text-zinc-400 truncate">
-                                      {imageTransformFile ? imageTransformFile.name : tr("未选择文件", "No file selected")}
+                                      {inputs.imageTransform.file ? inputs.imageTransform.file.name : tr("未选择文件", "No file selected")}
                                     </div>
                                   </div>
                                   <Button
                                     type="button"
                                     variant="outline"
                                     className="shrink-0"
-                                    onClick={() => imageTransformFileInputRef.current?.click()}
+                                    onClick={() => inputs.imageTransform.inputRef.current?.click()}
                                   >
                                     <Upload className="w-4 h-4 mr-2" />
                                     {tr("选择文件", "Choose")}
@@ -3365,12 +3306,12 @@ export function PptCanvas({
                                     />
                                     <button
                                         type="button"
-                                        onClick={() => referenceFileInputRef.current?.click()}
-                                        disabled={isParsingReferenceFiles}
+                                        onClick={() => inputs.reference.inputRef.current?.click()}
+                                        disabled={inputs.reference.isParsing}
                                         title={tr("上传参考文件", "Upload reference files")}
                                         className="absolute bottom-3 right-3 inline-flex items-center gap-2 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white/80 dark:bg-zinc-900/60 px-3 py-1.5 text-xs text-zinc-700 dark:text-zinc-200 shadow-sm hover:bg-white dark:hover:bg-zinc-900 transition-colors disabled:opacity-60"
                                     >
-                                        {isParsingReferenceFiles ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />}
+                                        {inputs.reference.isParsing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />}
                                         {tr("上传文件", "Upload files")}
                                     </button>
                                 </div>
@@ -3382,26 +3323,26 @@ export function PptCanvas({
                                           "Upload PDF/Word/LaTeX/TXT as reference (optional); Word/LaTeX recommended for stable figures."
                                         )}
                                     </div>
-                                    {referenceFiles.length > 0 && (
+                                    {inputs.reference.files.length > 0 && (
                                         <button
                                             type="button"
-                                            onClick={() => setReferenceUploadFiles([])}
+                                            onClick={() => inputs.reference.setUploadFiles([])}
                                             title={tr("清空参考文件", "Clear reference files")}
                                             className="text-xs text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200"
-                                            disabled={isParsingReferenceFiles}
+                                            disabled={inputs.reference.isParsing}
                                         >
                                             {tr("清空", "Clear")}
                                         </button>
                                     )}
                                 </div>
 
-                                {referenceFiles.length > 0 && (
+                                {inputs.reference.files.length > 0 && (
                                     <div className="grid gap-2">
-                                        {referenceFiles.map((f) => (
+                                        {inputs.reference.files.map((f) => (
                                             <div key={f.id} className="flex items-center justify-between gap-3 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-900/40 px-3 py-2">
                                                 <button
                                                     type="button"
-                                                    onClick={() => openReferencePreview(f)}
+                                                    onClick={() => inputs.reference.openPreview(f)}
                                                     title={tr("预览文件", "Preview file")}
                                                     className="flex items-center gap-2 min-w-0 text-left"
                                                 >
@@ -3414,8 +3355,8 @@ export function PptCanvas({
                                                     className="text-xs text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200"
                                                     title={tr("移除文件", "Remove file")}
                                                     onClick={() => {
-                                                      const nextFiles = referenceUploadFiles.filter((rf) => rf.name !== f.filename);
-                                                      void handleReferenceFileChange(nextFiles);
+                                                      const nextFiles = inputs.reference.uploadFiles.filter((rf) => rf.name !== f.filename);
+                                                      void inputs.reference.handleFileChange(nextFiles);
                                                     }}
                                                 >
                                                     {tr("移除", "Remove")}
@@ -3431,7 +3372,7 @@ export function PptCanvas({
 
                     <Button 
                         onClick={creationMode === "beautify" ? handleStartBeautify : creationMode === "image_transform" ? handleStartImageTransform : creationMode === "idea" ? handleGenerateOutline : handleLoadOutline}
-                        disabled={Boolean(progress.message) || (creationMode === "beautify" ? !beautifyFile : creationMode === "image_transform" ? !imageTransformFile || !isPdfFile(imageTransformFile) : isParsingReferenceFiles || (creationMode === "idea" ? !ideaInput.trim() : !outlineInput.trim()))}
+                        disabled={Boolean(progress.message) || (creationMode === "beautify" ? !inputs.beautify.file : creationMode === "image_transform" ? !inputs.imageTransform.file || !isPdfFile(inputs.imageTransform.file) : inputs.reference.isParsing || (creationMode === "idea" ? !ideaInput.trim() : !outlineInput.trim()))}
                         className="w-full py-6 text-lg font-medium bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white shadow-lg shadow-blue-500/20 rounded-xl transition-all hover:scale-[1.01] active:scale-[0.99]"
                     >
                         {progress.message ? <Loader2 className="w-5 h-5 mr-2 animate-spin" /> : <Sparkles className="w-5 h-5 mr-2" />}
@@ -3439,12 +3380,12 @@ export function PptCanvas({
                     </Button>
                 </div>
 
-                <Dialog open={referencePreviewOpen} onOpenChange={setReferencePreviewOpen}>
+                <Dialog open={inputs.reference.previewOpen} onOpenChange={inputs.reference.setPreviewOpen}>
                     <DialogContent className="max-w-3xl">
                         <DialogHeader>
-                            <DialogTitle>{referencePreviewFile?.filename || tr("参考文件", "Reference file")}</DialogTitle>
+                            <DialogTitle>{inputs.reference.previewFile?.filename || tr("参考文件", "Reference file")}</DialogTitle>
                         </DialogHeader>
-                        <Textarea value={referencePreviewFile?.content || ""} readOnly className="min-h-[420px] font-mono text-xs" />
+                        <Textarea value={inputs.reference.previewFile?.content || ""} readOnly className="min-h-[420px] font-mono text-xs" />
                     </DialogContent>
                 </Dialog>
 
@@ -3637,7 +3578,7 @@ export function PptCanvas({
         <div className="w-64 bg-zinc-50 dark:bg-zinc-900 border-r border-border overflow-y-auto p-4 space-y-4">
           {activeSlides.map((slide, index) => {
             const hasGeneratedImage = getSlideBackgroundUrl(slide.id);
-            const slideFailure = creationMode === "image_transform" ? imageTransformFailures[slide.id] : beautifyFailures[slide.id];
+            const slideFailure = creationMode === "image_transform" ? inputs.imageTransform.failures[slide.id] : inputs.beautify.failures[slide.id];
             return (
             <ContextMenu key={slide.id || index}>
                 <ContextMenuTrigger asChild>
