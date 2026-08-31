@@ -7,11 +7,6 @@ import { parseJsonLoose } from "./lib/parse-json";
 import { extractPdfPagesAsImages, isPdfFile } from "./lib/deck-source";
 import { getSlideshowDimensions } from "./lib/slideshow-size";
 import { clampTextBlockRect, withTextBlocks } from "./lib/render-layers";
-import {
-  createMaterialChip,
-  readDescriptionFrom,
-  renderDescriptionInto,
-} from "./lib/description-editor";
 import { GenerationProgress } from "./views/GenerationProgress";
 import {
   getOriginalSlideVersion as originalVersionOf,
@@ -21,9 +16,6 @@ import {
 } from "./lib/slide-versions";
 import {
   buildSlideMaterialsFromAutoLabels,
-  materialLabel,
-  materialToken,
-  removeMaterialToken,
 } from "./lib/material-tokens";
 import {
   creationReducer,
@@ -32,6 +24,7 @@ import {
   type CreationState,
 } from "./lib/creation-machine";
 import { useTemplateLibrary } from "./hooks/use-template-library";
+import { useSlideMaterials } from "./hooks/use-slide-materials";
 import { useSlideshow } from "./hooks/use-slideshow";
 import { buildBeautifyInstruction } from "./lib/beautify-instruction";
 import { generateChatMessage } from '@/ai/client';
@@ -113,7 +106,6 @@ import type {
   SlideData,
   SlideImageVersion,
   SlideImageVersionType,
-  SlideMaterialImage,
   SlideRenderLayer,
 } from "@/workspaces/ppt/canvas/types";
 
@@ -314,36 +306,16 @@ export function PptCanvas({
   } = useFlowFileProcessor("ppt");
   const [referencePreviewOpen, setReferencePreviewOpen] = useState(false);
   const [referencePreviewFile, setReferencePreviewFile] = useState<ReferenceFile | null>(null);
-  const [slideMaterials, setSlideMaterials] = useState<Record<string, SlideMaterialImage[]>>(() => {
-    const v = initialPptState?.slideMaterials;
-    if (!v || typeof v !== "object" || Array.isArray(v)) return {};
-    const out: Record<string, SlideMaterialImage[]> = {};
-    for (const [k, val] of Object.entries(v)) {
-      if (typeof k !== "string" || !Array.isArray(val)) continue;
-      out[k] = val
-        .filter((x: any) => x && typeof x.id === "string" && typeof x.name === "string" && typeof x.dataUrl === "string")
-        .map((x: any) => ({
-          id: x.id,
-          name: x.name,
-          fileName: typeof x.fileName === "string" ? x.fileName : x.name,
-          dataUrl: x.dataUrl,
-        }));
-    }
-    return out;
+  const materials = useSlideMaterials({
+    localSlides,
+    setLocalSlides,
+    uiLang,
+    initialMaterials: normalizePersistedSlideMaterials(initialPptState?.slideMaterials),
   });
-  const [materialPickerSlideId, setMaterialPickerSlideId] = useState<string | null>(null);
-  const [materialPickerPos, setMaterialPickerPos] = useState<{ left: number; top: number } | null>(null);
-  const [materialPickerActiveIndex, setMaterialPickerActiveIndex] = useState(0);
-  const materialPickerReplaceRangeRef = useRef<Range | null>(null);
-  const materialPickerRef = useRef<HTMLDivElement | null>(null);
+  const { slideMaterials, setSlideMaterials } = materials;
   const referenceFileInputRef = useRef<HTMLInputElement | null>(null);
   const beautifyFileInputRef = useRef<HTMLInputElement | null>(null);
   const imageTransformFileInputRef = useRef<HTMLInputElement | null>(null);
-  const slideMaterialInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
-  const descriptionTextareaRefs = useRef<Record<string, HTMLTextAreaElement | null>>({});
-  const descriptionEditorRefs = useRef<Record<string, HTMLDivElement | null>>({});
-  const descriptionEditorAppliedRef = useRef<Record<string, string>>({});
-  const descriptionEditorFocusedRef = useRef<string | null>(null);
   const assetCaptionCacheRef = useRef<Record<string, string>>({});
   const pptImagePersistenceRunningRef = useRef(false);
   const pptImagePersistenceRetryRef = useRef(false);
@@ -396,11 +368,6 @@ export function PptCanvas({
   }>(null);
   const reviewPanelResizeRef = useRef<null | { startClientX: number; startWidth: number }>(null);
   const reviewLayerPromiseRef = useRef<Record<string, Promise<{ versionId: string; imageUrl: string; layer: SlideRenderLayer } | null> | undefined>>({});
-  const [materialPreview, setMaterialPreview] = useState<{ open: boolean; slideTitle: string; item: SlideMaterialImage | null }>({
-    open: false,
-    slideTitle: "",
-    item: null
-  });
   const [windowDimensions, setWindowDimensions] = useState({ width: 0, height: 0 });
   const [previewCanvasSize, setPreviewCanvasSize] = useState({ width: 1100, height: 619 });
   useEffect(() => {
@@ -550,7 +517,7 @@ export function PptCanvas({
     return () => {
       cancelled = true;
     };
-  }, [restoreTemplateSelection]);
+  }, [restoreTemplateSelection, setSlideMaterials]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -987,7 +954,7 @@ export function PptCanvas({
             templateImage || undefined,
             [
               ...styleRefRefs.map((x) => ({ url: x.url, label: x.label })),
-              ...getSlideMaterialImageRefs(id),
+              ...materials.getImageRefs(id),
             ],
             [instruction.trim(), styleReferenceInstruction].filter(Boolean).join("\n")
           );
@@ -1010,7 +977,7 @@ export function PptCanvas({
             templateImage || undefined,
             [
               ...styleRefRefs.map((x) => ({ url: x.url, label: x.label })),
-              ...getSlideMaterialImageRefs(id),
+              ...materials.getImageRefs(id),
             ],
             [instruction.trim(), styleReferenceInstruction].filter(Boolean).join("\n")
           );
@@ -1028,7 +995,7 @@ export function PptCanvas({
             ...styleRefImageUrls,
             ...explicitMaterialImageUrls,
             ...uploadedImages,
-            ...getSlideMaterialImageUrls(id),
+            ...materials.getImageUrls(id),
           ]))
         );
         if (editedUrl) {
@@ -1143,7 +1110,7 @@ export function PptCanvas({
             templateImage || undefined,
             [
               ...styleRefRefs.map((x) => ({ url: x.url, label: x.label })),
-              ...getSlideMaterialImageRefs(id),
+              ...materials.getImageRefs(id),
             ],
             [
               kind === "both" && instruction.trim() ? instruction : "",
@@ -1202,7 +1169,7 @@ export function PptCanvas({
           ].filter(Boolean).join("\n"),
           currentUrl || undefined,
           templateImage || undefined,
-          Array.from(new Set([...styleRefImageUrls, ...uploadedImages, ...getSlideMaterialImageUrls(id)]))
+          Array.from(new Set([...styleRefImageUrls, ...uploadedImages, ...materials.getImageUrls(id)]))
         );
         if (editedUrl) {
           await pushImageVersionAndProcess(slide, editedUrl, "edited", instruction);
@@ -2236,222 +2203,16 @@ export function PptCanvas({
 
 
 
-  const addSlideMaterialImages = async (slideId: string, files: File[]) => {
-    const imageFiles = files.filter((f) => f.type.startsWith("image/"));
-    if (imageFiles.length === 0) return;
-    const toDataUrl = (file: File) =>
-      new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(String(reader.result || ""));
-        reader.onerror = reject;
-        reader.readAsDataURL(file);
-      });
 
-    const currentCount = (slideMaterials[slideId] || []).length;
-    const created: SlideMaterialImage[] = [];
-    for (let i = 0; i < imageFiles.length; i += 1) {
-      const file = imageFiles[i];
-      try {
-        const dataUrl = await toDataUrl(file);
-        if (!dataUrl.startsWith("data:image")) continue;
-        const label = materialLabel(currentCount + i + 1, uiLang as "zh" | "en");
-        created.push({
-          id: `mat-${Date.now()}-${Math.random().toString(16).slice(2)}`,
-          name: label,
-          fileName: file.name,
-          dataUrl,
-        });
-      } catch (e) {
-        console.error("Failed to read slide material image", file.name, e);
-      }
-    }
-    if (created.length === 0) return;
-    setSlideMaterials((prev) => ({
-      ...prev,
-      [slideId]: [...(prev[slideId] || []), ...created],
-    }));
-  };
 
-  const removeSlideMaterialImage = (slideId: string, id: string) => {
-    const removed = (slideMaterials[slideId] || []).find((x) => x.id === id);
-    setSlideMaterials((prev) => ({
-      ...prev,
-      [slideId]: (prev[slideId] || []).filter((x) => x.id !== id),
-    }));
-    if (!removed) return;
 
-    setLocalSlides((prev) =>
-      prev.map((s) =>
-        s.id === slideId
-          ? { ...s, description: removeMaterialToken(s.description || "", removed.name) }
-          : s,
-      ),
-    );
 
-    const editor = descriptionEditorRefs.current[slideId];
-    if (editor) {
-      for (const node of Array.from(editor.querySelectorAll("[data-material-token]"))) {
-        const el = node as HTMLElement;
-        if (el.getAttribute("data-material-token") === removed.name) {
-          el.remove();
-        }
-      }
-    }
-  };
 
-  const getSlideMaterialImageUrls = (slideId: string) =>
-    (slideMaterials[slideId] || []).map((x) => x.dataUrl).filter(Boolean);
-
-  const getSlideMaterialImageRefs = (slideId: string) =>
-    (slideMaterials[slideId] || [])
-      .map((x) => ({ url: x.dataUrl, label: x.name }))
-      .filter((x) => !!x.url);
-
-  const insertMaterialTokenToSlideDescription = (slideIndex: number, slideId: string, materialName: string) => {
-    const token = materialToken(materialName);
-    const editor = descriptionEditorRefs.current[slideId];
-    if (editor) {
-      const sel = window.getSelection();
-      const replaceRange = materialPickerReplaceRangeRef.current;
-      if (replaceRange) {
-        replaceRange.deleteContents();
-        const chip = createMaterialChip(materialName);
-        replaceRange.insertNode(chip);
-        const space = document.createTextNode(" ");
-        replaceRange.collapse(false);
-        replaceRange.insertNode(space);
-        const next = document.createRange();
-        next.setStartAfter(space);
-        next.collapse(true);
-        if (sel) {
-          sel.removeAllRanges();
-          sel.addRange(next);
-        }
-      } else {
-        const chip = createMaterialChip(materialName);
-        editor.appendChild(chip);
-      }
-
-      const nextValue = readDescriptionFrom(editor);
-      descriptionEditorAppliedRef.current[slideId] = nextValue;
-      setLocalSlides((prev) =>
-        prev.map((slide, n) => (n === slideIndex ? { ...slide, description: nextValue } : slide)),
-      );
-      setMaterialPickerSlideId(null);
-      setMaterialPickerPos(null);
-      setMaterialPickerActiveIndex(0);
-      materialPickerReplaceRangeRef.current = null;
-      return;
-    }
-
-    const textarea = descriptionTextareaRefs.current[slideId];
-    const currentDescription = localSlides[slideIndex]?.description || "";
-    if (!textarea) {
-      setLocalSlides((prev) =>
-        prev.map((slide, n) => (n === slideIndex ? { ...slide, description: `${currentDescription}${token}` } : slide)),
-      );
-      setMaterialPickerSlideId(null);
-      setMaterialPickerPos(null);
-      setMaterialPickerActiveIndex(0);
-      return;
-    }
-
-    const cursor = textarea.selectionStart ?? currentDescription.length;
-    const before = currentDescription.slice(0, cursor);
-    const slashAt = Math.max(before.lastIndexOf("/"), before.lastIndexOf("／"));
-    const nextValue =
-      slashAt >= 0
-        ? `${currentDescription.slice(0, slashAt)}${token}${currentDescription.slice(cursor)}`
-        : `${before}${token}${currentDescription.slice(cursor)}`;
-    const nextCursor = (slashAt >= 0 ? slashAt : cursor) + token.length;
-    setLocalSlides((prev) =>
-      prev.map((slide, n) => (n === slideIndex ? { ...slide, description: nextValue } : slide)),
-    );
-    setMaterialPickerSlideId(null);
-    setMaterialPickerPos(null);
-    setMaterialPickerActiveIndex(0);
-    requestAnimationFrame(() => {
-      const input = descriptionTextareaRefs.current[slideId];
-      if (!input) return;
-      input.focus();
-      input.setSelectionRange(nextCursor, nextCursor);
-    });
-  };
-
-  const openMaterialPickerAtCaret = (slideId: string) => {
-    const editor = descriptionEditorRefs.current[slideId];
-    if (!editor) return;
-    const sel = window.getSelection();
-    if (!sel || sel.rangeCount === 0) return;
-    const r = sel.getRangeAt(0);
-    if (!editor.contains(r.startContainer)) return;
-    if (!r.collapsed) return;
-    if (r.startContainer.nodeType !== Node.TEXT_NODE) return;
-    const textNode = r.startContainer as Text;
-    if (r.startOffset <= 0) return;
-    const prevChar = textNode.data[r.startOffset - 1];
-    if (prevChar !== "/" && prevChar !== "／") return;
-
-    const replaceRange = document.createRange();
-    replaceRange.setStart(textNode, r.startOffset - 1);
-    replaceRange.setEnd(textNode, r.startOffset);
-    materialPickerReplaceRangeRef.current = replaceRange;
-
-    const marker = r.cloneRange();
-    marker.setStart(textNode, r.startOffset);
-    marker.collapse(true);
-    const rect = marker.getBoundingClientRect();
-    const hostRect = editor.getBoundingClientRect();
-    setMaterialPickerPos({
-      left: editor.offsetLeft + (rect.left - hostRect.left),
-      top: editor.offsetTop + (rect.bottom - hostRect.top) + 2,
-    });
-    setMaterialPickerActiveIndex(0);
-    setMaterialPickerSlideId(slideId);
-  };
-
-  useEffect(() => {
-    if (!materialPickerSlideId) return;
-    const onPointerDown = (ev: MouseEvent) => {
-      const target = ev.target as Node | null;
-      if (!target) return;
-      if (materialPickerRef.current?.contains(target)) return;
-      setMaterialPickerSlideId(null);
-      setMaterialPickerPos(null);
-      setMaterialPickerActiveIndex(0);
-      materialPickerReplaceRangeRef.current = null;
-    };
-    document.addEventListener("mousedown", onPointerDown);
-    return () => document.removeEventListener("mousedown", onPointerDown);
-  }, [materialPickerSlideId]);
-
-  useEffect(() => {
-    if (!materialPickerSlideId) return;
-    const len = (slideMaterials[materialPickerSlideId] || []).length;
-    if (len <= 0) return;
-    setMaterialPickerActiveIndex((prev) => {
-      if (prev < 0) return 0;
-      if (prev >= len) return len - 1;
-      return prev;
-    });
-  }, [materialPickerSlideId, slideMaterials]);
 
 
 
   /** Redraws a slide's editor unless the user is typing in it. */
-  const renderDescriptionEditor = (slideId: string, value: string) => {
-    const editor = descriptionEditorRefs.current[slideId];
-    if (!editor) return;
-    if (descriptionEditorFocusedRef.current === slideId) return;
-    if (descriptionEditorAppliedRef.current[slideId] === value) return;
-    descriptionEditorAppliedRef.current[slideId] = value;
-    renderDescriptionInto(editor, value);
-  };
 
-  const parseDescriptionEditor = (slideId: string) => {
-    const editor = descriptionEditorRefs.current[slideId];
-    return editor ? readDescriptionFrom(editor) : "";
-  };
 
   const resetGenerationState = () => {
       setGeneratedImages({});
@@ -2926,7 +2687,7 @@ export function PptCanvas({
                   pages[i],
                   uiLang as "zh" | "en",
                   templateImage || undefined,
-                 getSlideMaterialImageRefs(pages[i].id || `slide-${i + 1}`)
+                 materials.getImageRefs(pages[i].id || `slide-${i + 1}`)
                 );
                  progressTracker.markBaseReady();
                  baseReady = true;
@@ -2982,7 +2743,7 @@ export function PptCanvas({
           pages[pageIndex],
           uiLang as "zh" | "en",
           templateImage || undefined,
-          getSlideMaterialImageRefs(currentSlide.id || `slide-${pageIndex + 1}`)
+          materials.getImageRefs(currentSlide.id || `slide-${pageIndex + 1}`)
         );
 
         if (imageUrl) {
@@ -3247,7 +3008,7 @@ export function PptCanvas({
     setImageTransformFailures({});
     setReferenceUploadFiles([]);
     setSlideMaterials({});
-    setMaterialPickerSlideId(null);
+    materials.picker.close();
     setReviewPreparingSlideIds([]);
     setRenderLayers({});
     setImageVersions({});
@@ -3846,58 +3607,55 @@ export function PptCanvas({
                                     <div className="text-xs font-medium text-foreground mb-1">{tr("画面描述（description，用于生图）", "Visual description (description)")}</div>
                                     <div
                                       ref={(el) => {
-                                        descriptionEditorRefs.current[slide.id] = el;
-                                        if (el) renderDescriptionEditor(slide.id, slide.description || "");
+                                        materials.editor.refs.current[slide.id] = el;
+                                        if (el) materials.editor.render(slide.id, slide.description || "");
                                       }}
                                       contentEditable
                                       suppressContentEditableWarning
                                       onFocus={() => {
-                                        descriptionEditorFocusedRef.current = slide.id;
+                                        materials.editor.focusedRef.current = slide.id;
                                       }}
                                       onBlur={() => {
-                                        descriptionEditorFocusedRef.current = null;
-                                        const nextValue = parseDescriptionEditor(slide.id);
-                                        descriptionEditorAppliedRef.current[slide.id] = nextValue;
+                                        materials.editor.focusedRef.current = null;
+                                        const nextValue = materials.editor.parse(slide.id);
+                                        materials.editor.appliedRef.current[slide.id] = nextValue;
                                         setLocalSlides((prev) =>
                                           prev.map((slide, n) => (n === i ? { ...slide, description: nextValue } : slide)),
                                         );
                                       }}
                                       onInput={() => {
-                                        const nextValue = parseDescriptionEditor(slide.id);
-                                        descriptionEditorAppliedRef.current[slide.id] = nextValue;
+                                        const nextValue = materials.editor.parse(slide.id);
+                                        materials.editor.appliedRef.current[slide.id] = nextValue;
                                         setLocalSlides((prev) =>
                                           prev.map((slide, n) => (n === i ? { ...slide, description: nextValue } : slide)),
                                         );
                                       }}
                                       onKeyDown={(e) => {
-                                        if (materialPickerSlideId === slide.id && (slideMaterials[slide.id] || []).length > 0) {
+                                        if (materials.picker.slideId === slide.id && (slideMaterials[slide.id] || []).length > 0) {
                                           const list = slideMaterials[slide.id] || [];
                                           const len = list.length;
                                           if (e.key === "ArrowDown") {
                                             e.preventDefault();
-                                            setMaterialPickerActiveIndex((prev) => (prev + 1) % len);
+                                            materials.picker.setActiveIndex((prev) => (prev + 1) % len);
                                             return;
                                           }
                                           if (e.key === "ArrowUp") {
                                             e.preventDefault();
-                                            setMaterialPickerActiveIndex((prev) => (prev - 1 + len) % len);
+                                            materials.picker.setActiveIndex((prev) => (prev - 1 + len) % len);
                                             return;
                                           }
                                           if (e.key === "Enter") {
                                             e.preventDefault();
-                                            const idx = Math.max(0, Math.min(materialPickerActiveIndex, len - 1));
+                                            const idx = Math.max(0, Math.min(materials.picker.activeIndex, len - 1));
                                             const picked = list[idx];
                                             if (picked) {
-                                              insertMaterialTokenToSlideDescription(i, slide.id, picked.name);
+                                              materials.picker.insertToken(i, slide.id, picked.name);
                                             }
                                             return;
                                           }
                                         }
                                         if (e.key === "Escape") {
-                                          setMaterialPickerSlideId(null);
-                                          setMaterialPickerPos(null);
-                                          setMaterialPickerActiveIndex(0);
-                                          materialPickerReplaceRangeRef.current = null;
+                                          materials.picker.close();
                                           return;
                                         }
                                         if ((e.key === "Backspace" || e.key === "Delete") && e.currentTarget) {
@@ -3933,28 +3691,28 @@ export function PptCanvas({
                                       onKeyUp={(e) => {
                                         if ((slideMaterials[slide.id] || []).length === 0) return;
                                         if (e.key === "/" || e.key === "／") {
-                                          openMaterialPickerAtCaret(slide.id);
+                                          materials.picker.openAtCaret(slide.id);
                                         }
                                       }}
                                       className="w-full min-h-[96px] max-h-[200px] overflow-y-auto whitespace-pre-wrap break-words rounded-md border border-input bg-background p-3 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                                       data-placeholder={tr("例如：科技感蓝色渐变背景，中间是 AI 芯片与电路纹理，留白清晰。", "e.g. Futuristic blue gradient background, abstract AI chip and circuit textures, clean whitespace.")}
                                     />
-                                    {materialPickerSlideId === slide.id && (slideMaterials[slide.id] || []).length > 0 && (
+                                    {materials.picker.slideId === slide.id && (slideMaterials[slide.id] || []).length > 0 && (
                                       <div
-                                        ref={materialPickerRef}
+                                        ref={materials.picker.ref}
                                         className="absolute z-20 w-56 rounded-md border border-border bg-popover p-2 shadow-sm"
-                                        style={{ left: materialPickerPos?.left ?? 8, top: materialPickerPos?.top ?? 8 }}
+                                        style={{ left: materials.picker.pos?.left ?? 8, top: materials.picker.pos?.top ?? 8 }}
                                       >
                                         <div className="max-h-56 space-y-1 overflow-y-auto">
                                           {(slideMaterials[slide.id] || []).map((img, idx) => (
                                           <button
                                             key={img.id}
                                             type="button"
-                                            onClick={() => insertMaterialTokenToSlideDescription(i, slide.id, img.name)}
-                                            onMouseEnter={() => setMaterialPickerActiveIndex(idx)}
+                                            onClick={() => materials.picker.insertToken(i, slide.id, img.name)}
+                                            onMouseEnter={() => materials.picker.setActiveIndex(idx)}
                                             title={tr(`插入第 ${idx + 1} 张素材`, `Insert material ${idx + 1}`)}
                                             className={`flex w-full items-center gap-2 rounded-md border px-2 py-1.5 text-left text-xs ${
-                                              materialPickerActiveIndex === idx
+                                              materials.picker.activeIndex === idx
                                                 ? "border-blue-300 bg-blue-100 text-blue-800 ring-1 ring-blue-300"
                                                   : "border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100"
                                               }`}
@@ -3972,7 +3730,7 @@ export function PptCanvas({
                                       <span>{tr("素材图片（用于该页生图）", "Material images (for this slide)")}</span>
                                       <button
                                         type="button"
-                                        onClick={() => slideMaterialInputRefs.current[slide.id]?.click()}
+                                        onClick={() => materials.editor.inputRefs.current[slide.id]?.click()}
                                         title={tr("上传素材图片", "Upload material images")}
                                         className="inline-flex items-center gap-1 rounded-md border border-zinc-300 px-2 py-1 text-xs text-zinc-700 hover:bg-zinc-100"
                                       >
@@ -3981,7 +3739,7 @@ export function PptCanvas({
                                       </button>
                                       <input
                                         ref={(el) => {
-                                          slideMaterialInputRefs.current[slide.id] = el;
+                                          materials.editor.inputRefs.current[slide.id] = el;
                                         }}
                                         type="file"
                                         accept="image/*"
@@ -3990,7 +3748,7 @@ export function PptCanvas({
                                         onChange={(e) => {
                                           const files = Array.from(e.target.files || []);
                                           e.target.value = "";
-                                          void addSlideMaterialImages(slide.id, files);
+                                          void materials.addImages(slide.id, files);
                                         }}
                                       />
                                     </div>
@@ -4004,7 +3762,7 @@ export function PptCanvas({
                                           <div key={img.id} className="w-20">
                                             <div
                                               className="group relative h-20 w-20 cursor-zoom-in overflow-hidden rounded-md border bg-background"
-                                              onClick={() => setMaterialPreview({ open: true, slideTitle: slide.title, item: img })}
+                                              onClick={() => materials.setPreview({ open: true, slideTitle: slide.title, item: img })}
                                               title={tr("点击查看素材", "Click to preview material")}
                                             >
                                               <img src={img.dataUrl} alt={img.name} className="h-full w-full object-cover" />
@@ -4012,7 +3770,7 @@ export function PptCanvas({
                                                 type="button"
                                                 onClick={(e) => {
                                                   e.stopPropagation();
-                                                  setMaterialPreview({ open: true, slideTitle: slide.title, item: img });
+                                                  materials.setPreview({ open: true, slideTitle: slide.title, item: img });
                                                 }}
                                                 className="absolute bottom-1 left-1 inline-flex h-5 w-5 items-center justify-center rounded-full bg-blue-600/85 text-white opacity-0 transition-all group-hover:opacity-100 hover:bg-blue-700"
                                                 aria-label={tr("查看素材", "Preview material")}
@@ -4024,7 +3782,7 @@ export function PptCanvas({
                                                 type="button"
                                                 onClick={(e) => {
                                                   e.stopPropagation();
-                                                  removeSlideMaterialImage(slide.id, img.id);
+                                                  materials.removeImage(slide.id, img.id);
                                                 }}
                                                 className="absolute right-1 top-1 inline-flex h-5 w-5 items-center justify-center rounded-full bg-black/60 text-white opacity-0 transition-all group-hover:opacity-100 hover:bg-black/80"
                                                 aria-label={tr("移除素材", "Remove material")}
@@ -4035,7 +3793,7 @@ export function PptCanvas({
                                             </div>
                                             <button
                                               type="button"
-                                              onClick={() => setMaterialPreview({ open: true, slideTitle: slide.title, item: img })}
+                                              onClick={() => materials.setPreview({ open: true, slideTitle: slide.title, item: img })}
                                               className="mt-1 w-full truncate text-center text-xs text-foreground hover:text-blue-600"
                                               title={tr("点击查看素材", "Click to preview material")}
                                             >
@@ -4060,35 +3818,35 @@ export function PptCanvas({
                     </Button>
                 </div>
                 <Dialog
-                  open={materialPreview.open}
-                  onOpenChange={(open) => setMaterialPreview((prev) => ({ ...prev, open }))}
+                  open={materials.preview.open}
+                  onOpenChange={(open) => materials.setPreview((prev) => ({ ...prev, open }))}
                 >
                   <DialogContent className="w-[92vw] max-w-[92vw] max-h-[92vh] overflow-hidden">
                     <DialogHeader>
                       <DialogTitle>{tr("素材预览", "Material preview")}</DialogTitle>
                     </DialogHeader>
-                    {materialPreview.item && (
+                    {materials.preview.item && (
                       <div className="space-y-3">
                         <div className="h-[72vh] min-h-[360px] w-full overflow-auto rounded-lg border bg-muted/20 flex items-center justify-center">
                           <img
-                            src={materialPreview.item.dataUrl}
-                            alt={materialPreview.item.name}
+                            src={materials.preview.item.dataUrl}
+                            alt={materials.preview.item.name}
                             className="block max-h-full max-w-full object-scale-down"
                           />
                         </div>
                         <div className="grid gap-1 text-xs text-muted-foreground">
-                          <div>{tr("所在幻灯片", "Slide")}: {materialPreview.slideTitle || "-"}</div>
-                          <div>{tr("素材编号", "Material label")}: {materialPreview.item.name}</div>
-                          {materialPreview.item.refLabel ? <div>{tr("来源标签", "Reference label")}: {materialPreview.item.refLabel}</div> : null}
-                          {materialPreview.item.caption ? <div>{tr("简短说明", "Caption")}: {materialPreview.item.caption}</div> : null}
-                          {materialPreview.item.sourceFileName ? <div>{tr("来源文件", "Source file")}: {materialPreview.item.sourceFileName}</div> : null}
-                          {typeof materialPreview.item.sourcePage === "number" ? <div>{tr("来源页码", "Source page")}: {materialPreview.item.sourcePage}</div> : null}
+                          <div>{tr("所在幻灯片", "Slide")}: {materials.preview.slideTitle || "-"}</div>
+                          <div>{tr("素材编号", "Material label")}: {materials.preview.item.name}</div>
+                          {materials.preview.item.refLabel ? <div>{tr("来源标签", "Reference label")}: {materials.preview.item.refLabel}</div> : null}
+                          {materials.preview.item.caption ? <div>{tr("简短说明", "Caption")}: {materials.preview.item.caption}</div> : null}
+                          {materials.preview.item.sourceFileName ? <div>{tr("来源文件", "Source file")}: {materials.preview.item.sourceFileName}</div> : null}
+                          {typeof materials.preview.item.sourcePage === "number" ? <div>{tr("来源页码", "Source page")}: {materials.preview.item.sourcePage}</div> : null}
                         </div>
                         <div className="flex justify-end">
                           <Button
                             variant="outline"
                             size="sm"
-                            onClick={() => window.open(materialPreview.item!.dataUrl, "_blank", "noopener,noreferrer")}
+                            onClick={() => window.open(materials.preview.item!.dataUrl, "_blank", "noopener,noreferrer")}
                           >
                             {tr("在新窗口查看原图", "Open full image in new tab")}
                           </Button>
@@ -4597,35 +4355,35 @@ export function PptCanvas({
         </DialogContent>
       </Dialog>
       <Dialog
-        open={materialPreview.open}
-        onOpenChange={(open) => setMaterialPreview((prev) => ({ ...prev, open }))}
+        open={materials.preview.open}
+        onOpenChange={(open) => materials.setPreview((prev) => ({ ...prev, open }))}
       >
         <DialogContent className="w-[92vw] max-w-[92vw] max-h-[92vh] overflow-hidden">
           <DialogHeader>
             <DialogTitle>{tr("素材预览", "Material preview")}</DialogTitle>
           </DialogHeader>
-          {materialPreview.item && (
+          {materials.preview.item && (
             <div className="space-y-3">
               <div className="h-[72vh] min-h-[360px] w-full overflow-auto rounded-lg border bg-muted/20 flex items-center justify-center">
                 <img
-                  src={materialPreview.item.dataUrl}
-                  alt={materialPreview.item.name}
+                  src={materials.preview.item.dataUrl}
+                  alt={materials.preview.item.name}
                   className="block max-h-full max-w-full object-scale-down"
                 />
               </div>
               <div className="grid gap-1 text-xs text-muted-foreground">
-                <div>{tr("所在幻灯片", "Slide")}: {materialPreview.slideTitle || "-"}</div>
-                <div>{tr("素材编号", "Material label")}: {materialPreview.item.name}</div>
-                {materialPreview.item.refLabel ? <div>{tr("来源标签", "Reference label")}: {materialPreview.item.refLabel}</div> : null}
-                {materialPreview.item.caption ? <div>{tr("简短说明", "Caption")}: {materialPreview.item.caption}</div> : null}
-                {materialPreview.item.sourceFileName ? <div>{tr("来源文件", "Source file")}: {materialPreview.item.sourceFileName}</div> : null}
-                {typeof materialPreview.item.sourcePage === "number" ? <div>{tr("来源页码", "Source page")}: {materialPreview.item.sourcePage}</div> : null}
+                <div>{tr("所在幻灯片", "Slide")}: {materials.preview.slideTitle || "-"}</div>
+                <div>{tr("素材编号", "Material label")}: {materials.preview.item.name}</div>
+                {materials.preview.item.refLabel ? <div>{tr("来源标签", "Reference label")}: {materials.preview.item.refLabel}</div> : null}
+                {materials.preview.item.caption ? <div>{tr("简短说明", "Caption")}: {materials.preview.item.caption}</div> : null}
+                {materials.preview.item.sourceFileName ? <div>{tr("来源文件", "Source file")}: {materials.preview.item.sourceFileName}</div> : null}
+                {typeof materials.preview.item.sourcePage === "number" ? <div>{tr("来源页码", "Source page")}: {materials.preview.item.sourcePage}</div> : null}
               </div>
               <div className="flex justify-end">
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => window.open(materialPreview.item!.dataUrl, "_blank", "noopener,noreferrer")}
+                  onClick={() => window.open(materials.preview.item!.dataUrl, "_blank", "noopener,noreferrer")}
                 >
                   {tr("在新窗口查看原图", "Open full image in new tab")}
                 </Button>
