@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback, useReducer } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo, useReducer } from 'react';
 import { motion } from "motion/react";
 import { useLatestRef } from "@/shared/lib/use-latest-ref";
 import { errorText, isRetryableBeautifyError } from "./lib/errors";
@@ -6,6 +6,12 @@ import { runInParallel, sleep } from "./lib/concurrency";
 import { parseJsonLoose } from "./lib/parse-json";
 import { extractPdfPagesAsImages, isPdfFile } from "./lib/deck-source";
 import { getSlideshowDimensions } from "./lib/slideshow-size";
+import {
+  getOriginalSlideVersion as originalVersionOf,
+  getTextlessBackgroundVersion as textlessBackgroundOf,
+  getVisibleSlideVersions as getVisibleVersions,
+  resolveSlideVersion,
+} from "./lib/slide-versions";
 import {
   buildSlideMaterialsFromAutoLabels,
   materialLabel,
@@ -68,7 +74,6 @@ import {
   MODEL_CONCURRENCY,
   REVIEW_BOX_COLOR,
   REVIEW_BOX_SELECTED_COLOR,
-  SYNTHETIC_PRIMARY_VERSION_PREFIX,
 } from "@/workspaces/ppt/canvas/constants";
 import {
   deriveTextElementsFromBlocks,
@@ -1227,56 +1232,29 @@ export function PptCanvas({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [incomingEdit?.id]);
 
-  const getVisibleSlideVersions = useCallback((slideId: string) => {
-    const versions = imageVersions[slideId] || [];
-    const hasPrimaryVersion = versions.some((version) => version.type !== "derived_textless");
-    if (hasPrimaryVersion || !generatedImages[slideId]) return versions;
-    return [
-      {
-        id: `${SYNTHETIC_PRIMARY_VERSION_PREFIX}${slideId}`,
-        url: generatedImages[slideId],
-        timestamp: Date.now(),
-        type: "generated" as const,
-        instruction: tr("原始版本", "Original version"),
-      },
-      ...versions,
-    ];
-  }, [imageVersions, generatedImages, tr]);
-  const getSlideVersionMeta = useCallback((slideId: string) => {
-      const visibleVersions = getVisibleSlideVersions(slideId);
-      const versions = imageVersions[slideId] || [];
-      const requestedVersionId = currentImageVersionId[slideId] || "";
-      const preferredDefaultVersion =
-        [...visibleVersions].reverse().find((item) => item.type !== "derived_textless") ||
-        visibleVersions[visibleVersions.length - 1];
-      const resolvedVersionId =
-        (requestedVersionId && visibleVersions.some((item) => item.id === requestedVersionId)
-          ? requestedVersionId
-          : preferredDefaultVersion?.id) ||
-        requestedVersionId ||
-        versions[versions.length - 1]?.id ||
-        "";
-      const version = resolvedVersionId ? visibleVersions.find((x) => x.id === resolvedVersionId) : undefined;
-      return {
-        versionId: resolvedVersionId,
-        version,
-        imageUrl: version?.url || generatedImages[slideId] || "",
-      };
-  }, [getVisibleSlideVersions, imageVersions, currentImageVersionId, generatedImages]);
+  // The three maps the version resolver reads, gathered once per render.
+  const versionState = useMemo(
+    () => ({ imageVersions, currentImageVersionId, generatedImages }),
+    [imageVersions, currentImageVersionId, generatedImages],
+  );
+  const originalVersionLabel = tr("原始版本", "Original version");
+
+  const getSlideVersionMeta = useCallback(
+    (slideId: string) => resolveSlideVersion(slideId, versionState, originalVersionLabel),
+    [versionState, originalVersionLabel],
+  );
+  const getVisibleSlideVersions = useCallback(
+    (slideId: string) => getVisibleVersions(slideId, versionState, originalVersionLabel),
+    [versionState, originalVersionLabel],
+  );
+  const getOriginalSlideVersion = (slideId: string) => originalVersionOf(slideId, versionState);
+  const getTextlessBackgroundVersion = (slideId: string) => textlessBackgroundOf(slideId, versionState);
   const getSlideImageUrl = (slideId: string) => getSlideVersionMeta(slideId).imageUrl;
-  const getOriginalSlideVersion = (slideId: string) => {
-    const versions = imageVersions[slideId] || [];
-    return versions.find((version) => !version.sourceVersionId) || versions[0];
-  };
   const getSlideRenderLayer = useCallback((slideId: string) => {
     const { versionId } = getSlideVersionMeta(slideId);
     if (!versionId) return undefined;
     return renderLayers[slideId]?.[versionId];
   }, [getSlideVersionMeta, renderLayers]);
-  const getTextlessBackgroundVersion = (slideId: string) => {
-    const versions = imageVersions[slideId] || [];
-    return versions.find((version) => version.type === "derived_textless");
-  };
   const getEditableExtractionStatus = (slideId: string): EditableExtractionStatus =>
     editableExtractionStatusBySlideId[slideId] || "idle";
   const getSlideBackgroundUrl = (slideId: string) => {
