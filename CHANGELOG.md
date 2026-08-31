@@ -28,6 +28,8 @@ exist once instead of per workspace.
 - Turned on TypeScript strict mode and split the bundle; initial load dropped from 2.89 MB to roughly 700 KB raw.
 - Replaced the deck's 25 scattered step assignments with a state machine, so the creation step and its progress bar can no longer drift apart.
 - Consolidated the CAD and PPT chat panels, chat inputs and transcript message readers, which had been forks of one another.
+- Split the PPT canvas from one 5,300-line component into pure modules, per-feature hooks and one file per screen, and wrote that shape down in `docs/architecture.md` so it is a convention rather than one worked example.
+- Gave the CAD workspace one way to read SVG out of a model reply, and one ladder for applying a patch, replacing three drifted copies of the first and two identical copies of the second.
 
 ### Fixed
 
@@ -39,6 +41,11 @@ exist once instead of per workspace.
 - Fixed attachment chips in the CAD and PPT transcripts showing an empty character count.
 - Fixed messages whose content is a multimodal part array reading as empty text in the CAD and PPT transcripts.
 - Fixed a Docker image that copied directories which no longer exist and omitted `resources/`, which the server reads at request time.
+- Fixed SVG arriving HTML-escaped being read as "no drawing here" by the CAD canvas, which silently dropped it. The three copies of that reader had drifted; only two decoded entities.
+- Fixed the CAD workspace preferring bare `<svg>` text over a declared patch payload, which returned markup with the JSON escaping still in it.
+- Fixed the recent-history context dropping the newest turns when over budget and keeping the oldest -- backwards for something the intent router reads for continuity.
+- Fixed nine slide edits in the outline editor mutating the state they were replacing, by copying the array but not the slide inside it.
+- Fixed `ppt-skill` accepting an unsupported image provider through configuration and failing later at the HTTP layer, where `cad-skill` rejects it up front.
 
 ### Security
 
