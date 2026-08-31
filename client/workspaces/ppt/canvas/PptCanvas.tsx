@@ -117,7 +117,7 @@ export function PptCanvas({
         const raw = localStorage.getItem(PPT_WORKSPACE_STORAGE_KEY);
         const parsed = raw ? JSON.parse(raw) : null;
         if (!parsed || typeof parsed !== "object") return null;
-        return migrateLegacyTextlessVersions(parsed as any);
+        return migrateLegacyTextlessVersions(parsed);
       } catch {
         return null;
       }

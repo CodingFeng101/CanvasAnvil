@@ -184,14 +184,17 @@ test("the textless migration folds a derived layer back onto its source", () => 
     currentImageVersionId: { s1: "v2" },
   });
 
-  assert.deepEqual(migrated.imageVersions.s1.map((v: { id: string }) => v.id), ["v1"],
+  assert.deepEqual((read(migrated, "imageVersions.s1") as { id: string }[]).map((v) => v.id), ["v1"],
     "the derived version is gone");
-  assert.equal(migrated.renderLayers.s1.v1.textBlocks.length, 1,
+  assert.equal((read(migrated, "renderLayers.s1.v1.textBlocks") as unknown[]).length, 1,
     "its text blocks moved onto the source version");
-  assert.equal(migrated.currentImageVersionId.s1, "v1",
+  assert.equal(read(migrated, "currentImageVersionId.s1"), "v1",
     "and the selection follows, rather than pointing at a version that no longer exists");
 });
 
+/** The migration hands back the record it was given; tests read into it. */
+const read = (state: unknown, path: string): unknown =>
+  path.split(".").reduce<unknown>((value, key) => (value as Record<string, unknown>)?.[key], state);
 test("the migration leaves a deck without derived versions alone", () => {
   const state = {
     imageVersions: { s1: [{ id: "v1", url: "u", timestamp: 1, type: "generated" }] },
@@ -201,15 +204,105 @@ test("the migration leaves a deck without derived versions alone", () => {
   };
 
   const migrated = migrateLegacyTextlessVersions(state);
-  assert.deepEqual(migrated.imageVersions, state.imageVersions);
-  assert.equal(migrated.currentImageVersionId.s1, "v1");
-  assert.equal(migrated.somethingElse, "preserved", "unrelated keys pass through");
+  assert.deepEqual(read(migrated, "imageVersions"), state.imageVersions);
+  assert.equal(read(migrated, "currentImageVersionId.s1"), "v1");
+  assert.equal(read(migrated, "somethingElse"), "preserved", "unrelated keys pass through");
 });
 
 test("the migration tolerates junk instead of throwing", () => {
-  assert.equal(migrateLegacyTextlessVersions(null), null);
-  assert.equal(migrateLegacyTextlessVersions("nonsense"), "nonsense");
+  // It always hands back something the callers can read fields off, so a
+  // stored value that is not an object at all becomes an empty one.
+  assert.deepEqual(migrateLegacyTextlessVersions(null), {});
+  assert.deepEqual(migrateLegacyTextlessVersions("nonsense"), {});
+
   const migrated = migrateLegacyTextlessVersions({ imageVersions: "bad", renderLayers: [] });
-  assert.deepEqual(migrated.imageVersions, {});
-  assert.deepEqual(migrated.renderLayers, {});
+  assert.deepEqual(read(migrated, "imageVersions"), {});
+  assert.deepEqual(read(migrated, "renderLayers"), {});
+});
+
+/**
+ * These readers exist to make stored data safe to use. Anything that gets
+ * past them is typed as real from that point on, so a field they wave
+ * through is a field nothing checks again.
+ */
+
+test("a version's type is checked, not just copied", () => {
+  // resolveSlideVersion keys its central rule off this field -- a textless
+  // background must never become the default -- so a corrupted type would
+  // silently show the user a slide with its text stripped out.
+  const out = normalizePersistedImageVersions({
+    "slide-1": [
+      { id: "v1", url: "a.png", timestamp: 1, type: "generated" },
+      { id: "v2", url: "b.png", timestamp: 2, type: "not-a-real-type" },
+      { id: "v3", url: "c.png", timestamp: 3 },
+    ],
+  });
+
+  const types = out["slide-1"].map((v) => v.type);
+  assert.ok(
+    types.every((t) => t === "generated" || t === "edited" || t === "derived_textless"),
+    `unknown types survived: ${JSON.stringify(types)}`,
+  );
+});
+
+test("a text block missing its geometry does not reach the render layer", () => {
+  // The review canvas positions blocks from x/y/w/h, so a missing number puts
+  // an unreachable box somewhere off the slide and nothing looks again.
+  const out = normalizePersistedRenderLayers({
+    "slide-1": {
+      v1: {
+        backgroundImageUrl: "bg.png",
+        status: "ready",
+        textBlocks: [
+          { id: "b1", role: "title", text: "ok", x: 0.1, y: 0.1, w: 0.4, h: 0.1 },
+          { id: "b2", role: "title", text: "no geometry" },
+          { id: "b3", role: "title", text: "half", x: 0.1, y: 0.1 },
+          "not an object",
+        ],
+      },
+    },
+  });
+
+  assert.deepEqual(
+    out["slide-1"].v1.textBlocks.map((b) => b.id),
+    ["b1"],
+  );
+});
+
+test("a block stored before ids and roles were guaranteed is repaired, not dropped", () => {
+  // Losing a layer that only lacks a label would cost the user their text;
+  // the extractor fills both the same way, so this agrees with it.
+  const out = normalizePersistedRenderLayers({
+    "slide-1": {
+      v1: {
+        backgroundImageUrl: "bg.png",
+        textBlocks: [{ text: "legacy", x: 0, y: 0, w: 1, h: 0.2 }],
+      },
+    },
+  });
+
+  const [block] = out["slide-1"].v1.textBlocks;
+  assert.equal(block.text, "legacy");
+  assert.equal(block.role, "bullet", "a missing role defaults rather than dropping the block");
+  assert.ok(block.id, "and it gets an id to be selectable by");
+});
+
+test("a partly malformed element set is redrawn from the blocks", () => {
+  // Keeping the good half would render fewer shapes than the layer claims.
+  const out = normalizePersistedRenderLayers({
+    "slide-1": {
+      v1: {
+        backgroundImageUrl: "bg.png",
+        textBlocks: [{ id: "b1", role: "title", text: "T", x: 0, y: 0, w: 1, h: 0.2 }],
+        elements: [
+          { id: "e1", type: "text", x: 0, y: 0, w: 1, h: 0.2 },
+          { id: "e2", type: "text" },
+        ],
+      },
+    },
+  });
+
+  const elements = out["slide-1"].v1.elements;
+  assert.equal(elements.length, 1, "derived from the one block, not the one good element");
+  assert.equal(elements[0].id, "b1");
 });

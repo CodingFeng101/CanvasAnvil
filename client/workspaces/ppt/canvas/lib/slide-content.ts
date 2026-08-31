@@ -3,8 +3,11 @@ import type { SlideRenderLayer } from "@/workspaces/ppt/canvas/types";
 
 /** Text-shape helpers: bullets, layout hints, and slide-title normalisation. */
 
-export const hasRenderableTextBlocks = (layer?: SlideRenderLayer) =>
-  Array.isArray(layer?.textBlocks) && layer.textBlocks.length > 0;
+/** Also called on stored layers, before anything has vouched for their shape. */
+export const hasRenderableTextBlocks = (layer?: SlideRenderLayer | unknown) => {
+  const blocks = (layer as SlideRenderLayer | undefined)?.textBlocks;
+  return Array.isArray(blocks) && blocks.length > 0;
+};
 
 export const cloneSerializable = <T,>(value: T): T => JSON.parse(JSON.stringify(value));
 

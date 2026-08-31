@@ -7,6 +7,7 @@ import type {
   SlideRenderLayer,
   UploadTemplate,
 } from "@/workspaces/ppt/canvas/types";
+import type { PptElement, PptTextBlock } from "@/workspaces/ppt/lib/ppt-service";
 
 /**
  * Reading the workspace back from storage.
@@ -16,31 +17,35 @@ import type {
  * normaliser drops what it cannot understand rather than throwing.
  */
 
-export const migrateLegacyTextlessVersions = (rawState: any) => {
-  if (!rawState || typeof rawState !== "object") return rawState;
+export const migrateLegacyTextlessVersions = (rawState: unknown): Unknown => {
+  if (!isRecord(rawState)) return {};
 
-  const imageVersions =
-    rawState.imageVersions && typeof rawState.imageVersions === "object" && !Array.isArray(rawState.imageVersions)
-      ? { ...rawState.imageVersions }
+  const state = rawState as {
+    imageVersions?: unknown;
+    renderLayers?: unknown;
+    currentImageVersionId?: unknown;
+  };
+
+  const imageVersions: Unknown =
+    state.imageVersions && typeof state.imageVersions === "object" && !Array.isArray(state.imageVersions)
+      ? { ...state.imageVersions }
       : {};
-  const renderLayers =
-    rawState.renderLayers && typeof rawState.renderLayers === "object" && !Array.isArray(rawState.renderLayers)
-      ? { ...rawState.renderLayers }
+  const renderLayers: Unknown =
+    state.renderLayers && typeof state.renderLayers === "object" && !Array.isArray(state.renderLayers)
+      ? { ...state.renderLayers }
       : {};
-  const currentImageVersionId =
-    rawState.currentImageVersionId &&
-    typeof rawState.currentImageVersionId === "object" &&
-    !Array.isArray(rawState.currentImageVersionId)
-      ? { ...rawState.currentImageVersionId }
+  const currentImageVersionId: Unknown =
+    state.currentImageVersionId &&
+    typeof state.currentImageVersionId === "object" &&
+    !Array.isArray(state.currentImageVersionId)
+      ? { ...state.currentImageVersionId }
       : {};
 
   for (const [slideId, rawVersions] of Object.entries(imageVersions)) {
     if (!Array.isArray(rawVersions)) continue;
     const versions = rawVersions as SlideImageVersion[];
-    const layerMap =
-      renderLayers[slideId] && typeof renderLayers[slideId] === "object" && !Array.isArray(renderLayers[slideId])
-        ? { ...renderLayers[slideId] }
-        : {};
+    const storedLayers = renderLayers[slideId];
+    const layerMap: Unknown = isRecord(storedLayers) ? { ...storedLayers } : {};
     let changed = false;
 
     for (const version of versions) {
@@ -128,7 +133,7 @@ export const shouldInlinePersistImageUrl = (url: string) => {
   return raw.startsWith("blob:") || raw.startsWith("http://") || raw.startsWith("https://");
 };
 
-export const normalizePersistedSlides = (value: any): SlideData[] => {
+export const normalizePersistedSlides = (value: unknown): SlideData[] => {
   if (!Array.isArray(value)) return [];
   return value
     .filter((s: any) => s && typeof s.id === "string")
@@ -142,7 +147,7 @@ export const normalizePersistedSlides = (value: any): SlideData[] => {
     }));
 };
 
-export const normalizePersistedImageMap = (value: any): Record<string, string> => {
+export const normalizePersistedImageMap = (value: unknown): Record<string, string> => {
   if (!value || typeof value !== "object" || Array.isArray(value)) return {};
   const out: Record<string, string> = {};
   for (const [k, val] of Object.entries(value)) {
@@ -151,7 +156,7 @@ export const normalizePersistedImageMap = (value: any): Record<string, string> =
   return out;
 };
 
-export const normalizePersistedImageVersions = (value: any): Record<string, SlideImageVersion[]> => {
+export const normalizePersistedImageVersions = (value: unknown): Record<string, SlideImageVersion[]> => {
   if (!value || typeof value !== "object" || Array.isArray(value)) return {};
   const out: Record<string, SlideImageVersion[]> = {};
   for (const [k, val] of Object.entries(value)) {
@@ -170,24 +175,85 @@ export const normalizePersistedImageVersions = (value: any): Record<string, Slid
   return out;
 };
 
-export const normalizePersistedRenderLayers = (value: any): Record<string, Record<string, SlideRenderLayer>> => {
+/** A record whose fields still have to be checked one by one. */
+type Unknown = Record<string, unknown>;
+
+const isRecord = (value: unknown): value is Unknown =>
+  !!value && typeof value === "object" && !Array.isArray(value);
+
+const asArray = (value: unknown): unknown[] => (Array.isArray(value) ? value : []);
+
+const isFiniteNumber = (value: unknown): value is number =>
+  typeof value === "number" && Number.isFinite(value);
+
+const TEXT_BLOCK_ROLES = ["title", "bullet", "summary", "tag"];
+const ELEMENT_TYPES = ["text", "image", "shape", "table", "chart", "formula", "video", "audio"];
+
+/**
+ * A block the review canvas can actually place, repaired where it can be.
+ *
+ * Geometry is the part that cannot be guessed: the canvas positions a block
+ * from x/y/w/h, so one missing number puts an unreachable box somewhere off
+ * the slide and nothing downstream looks again. An id or a role can be filled
+ * in the same way the extractor fills them, which keeps layers stored before
+ * either was guaranteed.
+ */
+const toTextBlock = (value: unknown, index: number): PptTextBlock | null => {
+  if (!isRecord(value)) return null;
+  if (typeof value.text !== "string") return null;
+  if (![value.x, value.y, value.w, value.h].every(isFiniteNumber)) return null;
+
+  const role = TEXT_BLOCK_ROLES.includes(String(value.role))
+    ? (value.role as PptTextBlock["role"])
+    : "bullet";
+  const id =
+    typeof value.id === "string" && value.id.trim() ? value.id.trim() : `text-block-${index + 1}`;
+
+  return {
+    ...(value as unknown as PptTextBlock),
+    id,
+    role,
+    text: value.text,
+    x: value.x as number,
+    y: value.y as number,
+    w: value.w as number,
+    h: value.h as number,
+  };
+};
+
+/** The same geometry check for the shapes the exporter draws. */
+const isElement = (value: unknown): value is PptElement =>
+  isRecord(value) &&
+  typeof value.id === "string" &&
+  ELEMENT_TYPES.includes(String(value.type)) &&
+  [value.x, value.y, value.w, value.h].every(isFiniteNumber);
+
+export const normalizePersistedRenderLayers = (value: unknown): Record<string, Record<string, SlideRenderLayer>> => {
   if (!value || typeof value !== "object" || Array.isArray(value)) return {};
   const out: Record<string, Record<string, SlideRenderLayer>> = {};
   for (const [slideId, versions] of Object.entries(value)) {
     if (typeof slideId !== "string" || !versions || typeof versions !== "object" || Array.isArray(versions)) continue;
     const nextVersions: Record<string, SlideRenderLayer> = {};
     for (const [versionId, layer] of Object.entries(versions)) {
-      if (typeof versionId !== "string" || !layer || typeof layer !== "object" || Array.isArray(layer)) continue;
-      const backgroundImageUrl = typeof (layer as any).backgroundImageUrl === "string" ? (layer as any).backgroundImageUrl : "";
-      const textBlocks = Array.isArray((layer as any).textBlocks) ? (layer as any).textBlocks : [];
-      const elements = Array.isArray((layer as any).elements) ? (layer as any).elements : deriveTextElementsFromBlocks(textBlocks);
-      const status = (layer as any).status === "pending" || (layer as any).status === "failed" ? (layer as any).status : "ready";
+      if (typeof versionId !== "string" || !isRecord(layer)) continue;
+      const backgroundImageUrl = typeof layer.backgroundImageUrl === "string" ? layer.backgroundImageUrl : "";
+      const textBlocks = asArray(layer.textBlocks)
+        .map(toTextBlock)
+        .filter((block): block is PptTextBlock => !!block);
+      const storedElements = asArray(layer.elements);
+      // Elements come back only if every one of them survives: a partial
+      // set would render fewer shapes than the layer says it has.
+      const elements =
+        storedElements.length > 0 && storedElements.every(isElement)
+          ? (storedElements as PptElement[])
+          : deriveTextElementsFromBlocks(textBlocks);
+      const status = layer.status === "pending" || layer.status === "failed" ? layer.status : "ready";
       nextVersions[versionId] = {
         backgroundImageUrl,
         textBlocks,
         elements,
         status,
-        error: typeof (layer as any).error === "string" ? (layer as any).error : undefined,
+        error: typeof layer.error === "string" ? layer.error : undefined,
       };
     }
     out[slideId] = nextVersions;
@@ -195,7 +261,7 @@ export const normalizePersistedRenderLayers = (value: any): Record<string, Recor
   return out;
 };
 
-export const normalizePersistedStringMap = (value: any, trim = false): Record<string, string> => {
+export const normalizePersistedStringMap = (value: unknown, trim = false): Record<string, string> => {
   if (!value || typeof value !== "object" || Array.isArray(value)) return {};
   const out: Record<string, string> = {};
   for (const [k, val] of Object.entries(value)) {
@@ -214,7 +280,7 @@ export const filterRecordByAllowedKeys = <T,>(value: Record<string, T>, allowedK
   return out;
 };
 
-export const normalizePersistedSlideMaterials = (value: any): Record<string, SlideMaterialImage[]> => {
+export const normalizePersistedSlideMaterials = (value: unknown): Record<string, SlideMaterialImage[]> => {
   if (!value || typeof value !== "object" || Array.isArray(value)) return {};
   const out: Record<string, SlideMaterialImage[]> = {};
   for (const [k, val] of Object.entries(value)) {
@@ -235,14 +301,14 @@ export const normalizePersistedSlideMaterials = (value: any): Record<string, Sli
   return out;
 };
 
-export const normalizePersistedUploadedTemplates = (value: any): UploadTemplate[] => {
+export const normalizePersistedUploadedTemplates = (value: unknown): UploadTemplate[] => {
   if (!Array.isArray(value)) return [];
   return value
     .filter((x: any) => x && typeof x.id === "string" && typeof x.name === "string" && typeof x.dataUrl === "string")
     .map((x: any) => ({ id: x.id, name: x.name, dataUrl: x.dataUrl }));
 };
 
-export const normalizePersistedStringArray = (value: any): string[] => {
+export const normalizePersistedStringArray = (value: unknown): string[] => {
   if (!Array.isArray(value)) return [];
   return value.map((item: any) => String(item));
 };
