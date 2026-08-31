@@ -24,6 +24,13 @@ import {
 } from '@/workspaces/cad/lib/agents';
 import { getCadRenderFallbackTitle, getCadRenderSlotTitles } from "@/workspaces/cad/lib/render-titles";
 import {
+  assembleDisplay,
+  assemblePrompt,
+  buildContextAttachments,
+  buildImageTags,
+  type Attachment,
+} from "@/workspaces/cad/lib/chat-prompt";
+import {
   extractCadPatchFullSvg,
   extractRawSvg,
   extractSvgFence,
@@ -41,13 +48,6 @@ import {
 import { createAssistantUpdater, writeLastAssistant } from '@/shared/chat/assistant-stream';
 import { getChatErrorText } from '@/shared/chat/chat-errors';
 import { parseMarkdownBomTable } from '@/shared/chat/bom-table';
-
-interface Attachment {
-  id: string;
-  type: 'xml' | 'python' | 'json' | 'image' | 'text';
-  content: string;
-  name: string;
-}
 
 type CodeActionResult = { ok: boolean; retry?: boolean; error?: string; svg?: string };
 type MaybePromise<T> = T | Promise<T>;
@@ -659,16 +659,7 @@ export function ChatPanel({
         }
     }
 
-    const contextAttachmentsText = attachments.length > 0
-        ? attachments
-            .slice(0, 12)
-            .map((a, idx) => {
-                const header = `[Context ${idx + 1}: ${a.name} | ${a.type}]`;
-                const body = String(a.content || "").slice(0, 12000);
-                return `${header}\n\`\`\`${a.type}\n${body}\n\`\`\``;
-            })
-            .join("\n\n")
-        : "";
+    const contextAttachmentsText = buildContextAttachments(attachments);
 
     const effectiveCadPlan = cadApprovedPlanRef.current ?? cadContext?.plan;
     const cadContextText =
@@ -692,27 +683,20 @@ export function ChatPanel({
         ? buildRecentHistoryContext(messages)
         : "";
 
-    const promptParts = [
+    const promptContent = assemblePrompt({
       rawInput,
-      fileTexts.length > 0 ? fileTexts.join("\n\n") : "",
-      contextAttachmentsText,
-      cadContextText,
-      cadHistoryContextText,
-    ].filter(Boolean);
-    const promptContent = promptParts.join("\n\n");
+      fileTexts,
+      contextAttachments: contextAttachmentsText,
+      cadContext: cadContextText,
+      history: cadHistoryContextText,
+    });
     lastUploadedImagesRef.current = currentUploadedImages;
 
-    const safeTagText = (text: string) =>
-      String(text || "").split("|").join(",").split("]]").join("").replace(/\r?\n/g, " ");
-    const imageTags = currentUploadedImageItems
-      .map((it) => `[[IMAGE|${safeTagText(it.name)}|${it.url}]]`)
-      .join("\n");
-    const displayParts = [
-      imageTags,
+    const displayContent = assembleDisplay(
+      buildImageTags(currentUploadedImageItems),
       rawInput,
-      displayFileTexts.length > 0 ? displayFileTexts.join("\n\n") : "",
-    ].filter(Boolean);
-    const displayContent = displayParts.join("\n\n");
+      displayFileTexts,
+    );
 
     const userMessageForDisplay: ChatMessage = { role: 'user', content: displayContent };
     const displayMessages = [...messages, userMessageForDisplay];
