@@ -38,8 +38,8 @@ export function getDefaultBaseUrl(provider) {
 
 export function resolveImageRoute(channel) {
   const provider = String(channel.provider || "").toLowerCase();
-  if (provider === "custom") {
-    throw new Error("Custom image providers are not supported in ppt-skill.");
+  if (!IMAGE_PROVIDER_OPTIONS.some((item) => item.id === provider)) {
+    throw new Error(`Unsupported image provider: ${provider}`);
   }
 
   return {
