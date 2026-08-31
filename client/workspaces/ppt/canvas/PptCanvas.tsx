@@ -7,6 +7,10 @@ import { parseJsonLoose } from "./lib/parse-json";
 import { extractPdfPagesAsImages, isPdfFile } from "./lib/deck-source";
 import { getSlideshowDimensions } from "./lib/slideshow-size";
 import {
+  reviewProgressSummary,
+  summariseReviewProgress,
+} from "./lib/review-progress";
+import {
   clampTextBlockRect,
   withTextBlocks,
 } from "./lib/render-layers";
@@ -1389,25 +1393,18 @@ export function PptCanvas({
   const activeSlides = localSlides;
 
   const slideshow = useSlideshow(activeSlides.length);
-  const isAnyEditableExtractionRunning = activeSlides.some((slide) => review.getExtractionStatus(slide.id) === "extracting");
-  const allReviewLayersPrepared =
-    activeSlides.length > 0 &&
-    activeSlides.every((slide) => {
-      const layer = getSlideRenderLayer(slide.id);
-      return layer?.status === "ready" || layer?.status === "failed";
-    });
-  const allEditableExtractionsDone =
-    activeSlides.length > 0 && activeSlides.every((slide) => review.getExtractionStatus(slide.id) === "done");
   const currentSlide = activeSlides[currentSlideIndex];
   const currentSlideImage = currentSlide ? getSlideBackgroundUrl(currentSlide.id) : "";
   const currentReviewLayer = currentSlide ? getSlideRenderLayer(currentSlide.id) : undefined;
-  const extractionDoneCount = activeSlides.filter((slide) => review.getExtractionStatus(slide.id) === "done").length;
-  const extractionFailedCount = activeSlides.filter((slide) => review.getExtractionStatus(slide.id) === "failed").length;
-  const preparedReviewLayerCount = activeSlides.filter((slide) => {
-    const layer = getSlideRenderLayer(slide.id);
-    return layer?.status === "ready" || layer?.status === "failed";
-  }).length;
-  const reviewPhase: "boxes" | "text" = isAnyEditableExtractionRunning ? "text" : "boxes";
+
+  const reviewProgress = summariseReviewProgress(
+    activeSlides.map((slide) => review.getExtractionStatus(slide.id)),
+    activeSlides.map((slide) => getSlideRenderLayer(slide.id)?.status),
+  );
+  const isAnyEditableExtractionRunning = reviewProgress.isExtracting;
+  const allReviewLayersPrepared = reviewProgress.allLayersPrepared;
+  const allEditableExtractionsDone = reviewProgress.allExtractionsDone;
+  const reviewPhase = reviewProgress.phase;
   const renderReviewSidebarBridge = () => (
     <PptReviewSidebar
       panelWidth={review.panelWidth}
@@ -1419,17 +1416,10 @@ export function PptCanvas({
       canExtract={allReviewLayersPrepared}
       canStartEditing={allEditableExtractionsDone}
       reviewPhase={reviewPhase}
-      extractionSummary={tr(
-        isAnyEditableExtractionRunning
-          ? `文本提取中 ${extractionDoneCount}/${activeSlides.length} 页`
-          : allReviewLayersPrepared
-          ? `文本提取完成 ${extractionDoneCount}/${activeSlides.length} 页${extractionFailedCount > 0 ? `，失败 ${extractionFailedCount} 页` : ""}`
-          : `文本框准备中 ${preparedReviewLayerCount}/${activeSlides.length} 页`,
-        isAnyEditableExtractionRunning
-          ? `${extractionDoneCount}/${activeSlides.length} slides text extracted`
-          : allReviewLayersPrepared
-          ? `${extractionDoneCount}/${activeSlides.length} slides text extracted${extractionFailedCount > 0 ? `, ${extractionFailedCount} failed` : ""}`
-          : `${preparedReviewLayerCount}/${activeSlides.length} text-box layers prepared`
+      extractionSummary={reviewProgressSummary(
+        reviewProgress,
+        activeSlides.length,
+        uiLang as "zh" | "en",
       )}
       reviewDrawMode={review.drawMode}
       tr={tr}
