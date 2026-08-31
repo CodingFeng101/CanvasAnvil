@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback, useMemo, useReducer } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo, useReducer } from 'react';
 import { motion } from "motion/react";
 import { useLatestRef } from "@/shared/lib/use-latest-ref";
 import { errorText, isRetryableBeautifyError } from "./lib/errors";
@@ -8,7 +8,6 @@ import { extractPdfPagesAsImages, isPdfFile } from "./lib/deck-source";
 import { getSlideshowDimensions } from "./lib/slideshow-size";
 import {
   clampTextBlockRect,
-  resizeRectFromHandle,
   withTextBlocks,
 } from "./lib/render-layers";
 import { GenerationProgress } from "./views/GenerationProgress";
@@ -32,6 +31,7 @@ import {
 import { useTemplateLibrary } from "./hooks/use-template-library";
 import { useSlideMaterials } from "./hooks/use-slide-materials";
 import { useCreationInputs } from "./hooks/use-creation-inputs";
+import { useExportReview } from "./hooks/use-export-review";
 import { useSlideshow } from "./hooks/use-slideshow";
 import { buildBeautifyInstruction } from "./lib/beautify-instruction";
 import { generateChatMessage } from '@/ai/client';
@@ -95,10 +95,8 @@ import {
   shouldInlinePersistImageUrl,
 } from "@/workspaces/ppt/canvas/persisted-state";
 import type {
-  EditableExtractionStatus,
   PptData,
   ReferenceVisualAsset,
-  ReviewDraftRect,
   ReviewResizeHandle,
   SlideData,
   SlideImageVersion,
@@ -237,10 +235,7 @@ export function PptCanvas({
     }
     return out;
   });
-  const [draggingTextBlockId, setDraggingTextBlockId] = useState<string | null>(null);
-  const [resizingTextBlockId, setResizingTextBlockId] = useState<string | null>(null);
   const [isGeneratingImage, setIsGeneratingImage] = useState(false);
-  const [isExporting, setIsExporting] = useState<null | "pptx" | "pptx_editable" | "pdf">(null);
   
   // Creation Wizard State
   const [creation, dispatchCreation] = useReducer(
@@ -287,55 +282,8 @@ export function PptCanvas({
     typeof initialPptState?.updatedAt === "number" ? initialPptState.updatedAt : 0
   );
   const previewCanvasRef = useRef<HTMLDivElement | null>(null);
-  const textBlockDragRef = useRef<null | {
-    slideId: string;
-    versionId: string;
-    blockId: string;
-    startClientX: number;
-    startClientY: number;
-    startX: number;
-    startY: number;
-    blockW: number;
-    blockH: number;
-    canvasWidth: number;
-    canvasHeight: number;
-  }>(null);
-  const textBlockResizeRef = useRef<null | {
-    slideId: string;
-    versionId: string;
-    blockId: string;
-    startClientX: number;
-    startClientY: number;
-    startW: number;
-    startH: number;
-    startX: number;
-    startY: number;
-    canvasWidth: number;
-    canvasHeight: number;
-    handle?: ReviewResizeHandle;
-  }>(null);
-  const [exportMenuOpen, setExportMenuOpen] = useState(false);
-  const [exportReviewMode, setExportReviewMode] = useState(false);
-  const [editableExtractionStatusBySlideId, setEditableExtractionStatusBySlideId] = useState<Record<string, EditableExtractionStatus>>({});
-  const [reviewPreparingSlideIds, setReviewPreparingSlideIds] = useState<string[]>([]);
-  const [selectedReviewTextBlockId, setSelectedReviewTextBlockId] = useState<string | null>(null);
-  const [reviewDrawMode, setReviewDrawMode] = useState(false);
-  const [reviewDraftRect, setReviewDraftRect] = useState<ReviewDraftRect | null>(null);
-  const [reviewPanelWidth, setReviewPanelWidth] = useState(420);
-  const exportMenuRef = useRef<HTMLDivElement | null>(null);
-  const reviewDrawRef = useRef<null | {
-    slideId: string;
-    rect: DOMRect;
-    startX: number;
-    startY: number;
-  }>(null);
-  const reviewPanelResizeRef = useRef<null | { startClientX: number; startWidth: number }>(null);
-  const reviewLayerPromiseRef = useRef<Record<string, Promise<{ versionId: string; imageUrl: string; layer: SlideRenderLayer } | null> | undefined>>({});
   const [windowDimensions, setWindowDimensions] = useState({ width: 0, height: 0 });
   const [previewCanvasSize, setPreviewCanvasSize] = useState({ width: 1100, height: 619 });
-  useEffect(() => {
-    onExportReviewModeChange?.(exportReviewMode);
-  }, [exportReviewMode, onExportReviewModeChange]);
 
 
   useEffect(() => {
@@ -1188,8 +1136,6 @@ export function PptCanvas({
     if (!versionId) return undefined;
     return renderLayers[slideId]?.[versionId];
   }, [getSlideVersionMeta, renderLayers]);
-  const getEditableExtractionStatus = (slideId: string): EditableExtractionStatus =>
-    editableExtractionStatusBySlideId[slideId] || "idle";
   const getSlideBackgroundUrl = (slideId: string) => {
     return getSlideImageUrl(slideId) || "";
   };
@@ -1201,7 +1147,6 @@ export function PptCanvas({
       layer: versionId ? renderLayers[slideId]?.[versionId] : undefined,
     };
   };
-  const isReviewPreparing = (slideId?: string | null) => !!slideId && reviewPreparingSlideIds.includes(slideId);
   const extractReviewTextLayer = async (slide: SlideData, slideImageUrl: string): Promise<SlideRenderLayer> => {
     const existingLayer = getSlideRenderLayer(slide.id);
     const persistedSlideImageUrl = await persistImageUrlIfNeeded(slideImageUrl);
@@ -1227,11 +1172,11 @@ export function PptCanvas({
     if (hasRenderableTextBlocks(layer)) {
       return { versionId, imageUrl, layer };
     }
-    if (reviewLayerPromiseRef.current[slide.id]) {
-      return await reviewLayerPromiseRef.current[slide.id];
+    if (review.layerPromiseRef.current[slide.id]) {
+      return await review.layerPromiseRef.current[slide.id];
     }
     const task = (async () => {
-      setReviewPreparingSlideIds((current) => (current.includes(slide.id) ? current : [...current, slide.id]));
+      review.setPreparingSlideIds((current) => (current.includes(slide.id) ? current : [...current, slide.id]));
       setRenderLayerState(slide.id, versionId, {
         backgroundImageUrl: imageUrl,
         textBlocks: Array.isArray(layer?.textBlocks) ? layer.textBlocks : [],
@@ -1244,11 +1189,11 @@ export function PptCanvas({
         setRenderLayerState(slide.id, versionId, nextLayer);
         return { versionId, imageUrl, layer: nextLayer };
       } finally {
-        setReviewPreparingSlideIds((current) => current.filter((id) => id !== slide.id));
-        delete reviewLayerPromiseRef.current[slide.id];
+        review.setPreparingSlideIds((current) => current.filter((id) => id !== slide.id));
+        delete review.layerPromiseRef.current[slide.id];
       }
     })();
-    reviewLayerPromiseRef.current[slide.id] = task;
+    review.layerPromiseRef.current[slide.id] = task;
     return await task;
   };
   const createDefaultTextBlock = (
@@ -1377,7 +1322,7 @@ export function PptCanvas({
         blocks.filter((block) => block.id !== blockId),
       ),
     );
-    setSelectedReviewTextBlockId((current) => (current === blockId ? null : current));
+    review.setSelectedBlockId((current) => (current === blockId ? null : current));
   };
 
   const updateSlideTextBlockPosition = (slideId: string, blockId: string, nextX: number, nextY: number, targetVersionId?: string) => {
@@ -1394,163 +1339,22 @@ export function PptCanvas({
     updateSlideTextBlockRect(slideId, blockId, { w: nextW, h: nextH }, targetVersionId);
   };
 
-  useEffect(() => {
-    if (!draggingTextBlockId && !resizingTextBlockId) return;
-    const handlePointerMove = (event: PointerEvent) => {
-      const drag = textBlockDragRef.current;
-      if (drag) {
-        const dx = (event.clientX - drag.startClientX) / Math.max(drag.canvasWidth, 1);
-        const dy = (event.clientY - drag.startClientY) / Math.max(drag.canvasHeight, 1);
-        updateSlideTextBlockPosition(
-          drag.slideId,
-          drag.blockId,
-          drag.startX + dx,
-          drag.startY + dy,
-          drag.versionId,
-        );
-      }
-      const resize = textBlockResizeRef.current;
-      if (resize) {
-        const dw = (event.clientX - resize.startClientX) / Math.max(resize.canvasWidth, 1);
-        const dh = (event.clientY - resize.startClientY) / Math.max(resize.canvasHeight, 1);
-        if (!resize.handle || resize.handle === "se") {
-          updateSlideTextBlockSize(
-            resize.slideId,
-            resize.blockId,
-            resize.startW + dw,
-            resize.startH + dh,
-            resize.versionId,
-          );
-        } else {
-          const next = resizeRectFromHandle(
-            { x: resize.startX, y: resize.startY, w: resize.startW, h: resize.startH },
-            resize.handle,
-            dw,
-            dh,
-          );
-          updateSlideTextBlockRect(resize.slideId, resize.blockId, next, resize.versionId);
-        }
-      }
-    };
-    const stopDrag = () => {
-      textBlockDragRef.current = null;
-      textBlockResizeRef.current = null;
-      setDraggingTextBlockId(null);
-      setResizingTextBlockId(null);
-    };
-    window.addEventListener("pointermove", handlePointerMove);
-    window.addEventListener("pointerup", stopDrag);
-    window.addEventListener("pointercancel", stopDrag);
-    return () => {
-      window.removeEventListener("pointermove", handlePointerMove);
-      window.removeEventListener("pointerup", stopDrag);
-      window.removeEventListener("pointercancel", stopDrag);
-    };
-  // Registered for the duration of one drag. The updaters it calls write
-  // through setRenderLayers's functional form, so they see current state
-  // despite being captured at drag start; depending on them would tear the
-  // listeners down and rebuild them on every pointermove.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [draggingTextBlockId, resizingTextBlockId]);
-  useEffect(() => {
-    const activeSlide = localSlides[currentSlideIndex];
-    if (!exportReviewMode) {
-      setSelectedReviewTextBlockId(null);
-      setReviewDrawMode(false);
-      setReviewDraftRect(null);
-      return;
-    }
-    const layer = activeSlide ? getSlideRenderLayer(activeSlide.id) : undefined;
-    const blocks = layer?.textBlocks || [];
-    if (blocks.length === 0) {
-      setSelectedReviewTextBlockId(null);
-      return;
-    }
-    if (!selectedReviewTextBlockId || !blocks.some((block) => block.id === selectedReviewTextBlockId)) {
-      setSelectedReviewTextBlockId(blocks[0].id);
-    }
-  }, [exportReviewMode, localSlides, currentSlideIndex, renderLayers, selectedReviewTextBlockId, getSlideRenderLayer]);
-  useEffect(() => {
-    if (!reviewDrawRef.current) return;
-    const handlePointerMove = (event: PointerEvent) => {
-      const draft = reviewDrawRef.current;
-      if (!draft) return;
-      const nextX = Math.max(0, Math.min(1, (event.clientX - draft.rect.left) / Math.max(draft.rect.width, 1)));
-      const nextY = Math.max(0, Math.min(1, (event.clientY - draft.rect.top) / Math.max(draft.rect.height, 1)));
-      setReviewDraftRect({
-        startX: draft.startX,
-        startY: draft.startY,
-        currentX: nextX,
-        currentY: nextY,
-      });
-    };
-    const stopPointer = () => {
-      const draft = reviewDrawRef.current;
-      reviewDrawRef.current = null;
-      if (!draft || !reviewDraftRect) {
-        setReviewDraftRect(null);
-        return;
-      }
-      const minX = Math.min(reviewDraftRect.startX, reviewDraftRect.currentX);
-      const minY = Math.min(reviewDraftRect.startY, reviewDraftRect.currentY);
-      const width = Math.abs(reviewDraftRect.currentX - reviewDraftRect.startX);
-      const height = Math.abs(reviewDraftRect.currentY - reviewDraftRect.startY);
-      setReviewDraftRect(null);
-      if (width < 0.025 || height < 0.025) return;
-      const block = createDefaultTextBlock(draft.slideId, minX, minY, width, height);
-      appendSlideTextBlock(draft.slideId, block);
-      setSelectedReviewTextBlockId(block.id);
-      setReviewDrawMode(false);
-    };
-    window.addEventListener("pointermove", handlePointerMove);
-    window.addEventListener("pointerup", stopPointer);
-    window.addEventListener("pointercancel", stopPointer);
-    return () => {
-      window.removeEventListener("pointermove", handlePointerMove);
-      window.removeEventListener("pointerup", stopPointer);
-      window.removeEventListener("pointercancel", stopPointer);
-    };
-  // Same as the text-block drag above: rebuilt per draw gesture, not per frame.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [reviewDraftRect]);
-  useEffect(() => {
-    const handlePointerMove = (event: PointerEvent) => {
-      const draft = reviewPanelResizeRef.current;
-      if (!draft) return;
-      const delta = draft.startClientX - event.clientX;
-      setReviewPanelWidth(Math.max(320, Math.min(720, draft.startWidth + delta)));
-    };
-    const stopPointer = () => {
-      reviewPanelResizeRef.current = null;
-    };
-    window.addEventListener("pointermove", handlePointerMove);
-    window.addEventListener("pointerup", stopPointer);
-    window.addEventListener("pointercancel", stopPointer);
-    return () => {
-      window.removeEventListener("pointermove", handlePointerMove);
-      window.removeEventListener("pointerup", stopPointer);
-      window.removeEventListener("pointercancel", stopPointer);
-    };
-  }, []);
-  const handleReviewCanvasPointerDown = (event: React.PointerEvent<HTMLDivElement>, slide: SlideData) => {
-    if (!reviewDrawMode) return;
-    const rect = previewCanvasRef.current?.getBoundingClientRect();
-    if (!rect) return;
-    const startX = Math.max(0, Math.min(1, (event.clientX - rect.left) / Math.max(rect.width, 1)));
-    const startY = Math.max(0, Math.min(1, (event.clientY - rect.top) / Math.max(rect.height, 1)));
-    reviewDrawRef.current = {
-      slideId: slide.id,
-      rect,
-      startX,
-      startY,
-    };
-    setReviewDraftRect({
-      startX,
-      startY,
-      currentX: startX,
-      currentY: startY,
-    });
-  };
+  const review = useExportReview({
+    slides: localSlides,
+    currentSlideIndex,
+    renderLayers,
+    canvasRef: previewCanvasRef,
+    onExportReviewModeChange,
+    textBlocks: {
+      updatePosition: updateSlideTextBlockPosition,
+      updateRect: updateSlideTextBlockRect,
+      updateSize: updateSlideTextBlockSize,
+      append: appendSlideTextBlock,
+      createDefault: createDefaultTextBlock,
+      getLayer: getSlideRenderLayer,
+    },
+  });
+
 
   const renderScaledSlideScene = (
     slide: SlideData,
@@ -1590,11 +1394,11 @@ export function PptCanvas({
     return (
       <div
         className="absolute inset-0 z-20"
-        style={{ cursor: reviewDrawMode ? "crosshair" : "default" }}
-        onPointerDown={(event) => handleReviewCanvasPointerDown(event, slide)}
+        style={{ cursor: review.drawMode ? "crosshair" : "default" }}
+        onPointerDown={(event) => review.beginCanvasDraw(event, slide)}
       >
         {layer.textBlocks.map((block, index) => {
-          const isSelected = selectedReviewTextBlockId === block.id;
+          const isSelected = review.selectedBlockId === block.id;
           const borderColor = isSelected ? REVIEW_BOX_SELECTED_COLOR : REVIEW_BOX_COLOR;
           const fillColor = isSelected ? "rgba(245,158,11,0.18)" : "rgba(34,211,238,0.12)";
           return (
@@ -1610,18 +1414,18 @@ export function PptCanvas({
                 background: fillColor,
                 boxShadow: isSelected ? `0 0 0 2px rgba(255,255,255,0.25), 0 0 18px ${borderColor}` : "none",
                 pointerEvents: "auto",
-                cursor: reviewDrawMode ? "crosshair" : "move",
+                cursor: review.drawMode ? "crosshair" : "move",
               }}
               onPointerDown={(event) => {
-                if (reviewDrawMode) return;
+                if (review.drawMode) return;
                 event.preventDefault();
                 event.stopPropagation();
                 const rect = previewCanvasRef.current?.getBoundingClientRect();
                 if (!rect) return;
                 const { versionId } = getSlideVersionMeta(slide.id);
                 if (!versionId) return;
-                setSelectedReviewTextBlockId(block.id);
-                textBlockDragRef.current = {
+                review.setSelectedBlockId(block.id);
+                review.dragRef.current = {
                   slideId: slide.id,
                   versionId,
                   blockId: block.id,
@@ -1634,7 +1438,7 @@ export function PptCanvas({
                   canvasWidth: rect.width,
                   canvasHeight: rect.height,
                 };
-                setDraggingTextBlockId(block.id);
+                review.setDraggingBlockId(block.id);
               }}
             >
               <div className="absolute left-1 top-1 rounded bg-black/70 px-1.5 py-0.5 text-[10px] font-medium text-white shadow-sm">
@@ -1660,7 +1464,7 @@ export function PptCanvas({
                         if (!rect) return;
                         const { versionId } = getSlideVersionMeta(slide.id);
                         if (!versionId) return;
-                        textBlockResizeRef.current = {
+                        review.resizeRef.current = {
                           slideId: slide.id,
                           versionId,
                           blockId: block.id,
@@ -1674,7 +1478,7 @@ export function PptCanvas({
                           canvasHeight: rect.height,
                           handle: handle.key,
                         };
-                        setResizingTextBlockId(block.id);
+                        review.setResizingBlockId(block.id);
                       }}
                     />
                   ))
@@ -1682,14 +1486,14 @@ export function PptCanvas({
             </div>
           );
         })}
-        {reviewDraftRect ? (
+        {review.draftRect ? (
           <div
             className="absolute border-2 border-dashed"
             style={{
-              left: `${Math.min(reviewDraftRect.startX, reviewDraftRect.currentX) * 100}%`,
-              top: `${Math.min(reviewDraftRect.startY, reviewDraftRect.currentY) * 100}%`,
-              width: `${Math.abs(reviewDraftRect.currentX - reviewDraftRect.startX) * 100}%`,
-              height: `${Math.abs(reviewDraftRect.currentY - reviewDraftRect.startY) * 100}%`,
+              left: `${Math.min(review.draftRect.startX, review.draftRect.currentX) * 100}%`,
+              top: `${Math.min(review.draftRect.startY, review.draftRect.currentY) * 100}%`,
+              width: `${Math.abs(review.draftRect.currentX - review.draftRect.startX) * 100}%`,
+              height: `${Math.abs(review.draftRect.currentY - review.draftRect.startY) * 100}%`,
               borderColor: REVIEW_BOX_SELECTED_COLOR,
               background: "rgba(245,158,11,0.14)",
               pointerEvents: "none",
@@ -1703,7 +1507,7 @@ export function PptCanvas({
   const activeSlides = localSlides;
 
   const slideshow = useSlideshow(activeSlides.length);
-  const isAnyEditableExtractionRunning = activeSlides.some((slide) => getEditableExtractionStatus(slide.id) === "extracting");
+  const isAnyEditableExtractionRunning = activeSlides.some((slide) => review.getExtractionStatus(slide.id) === "extracting");
   const allReviewLayersPrepared =
     activeSlides.length > 0 &&
     activeSlides.every((slide) => {
@@ -1711,12 +1515,12 @@ export function PptCanvas({
       return layer?.status === "ready" || layer?.status === "failed";
     });
   const allEditableExtractionsDone =
-    activeSlides.length > 0 && activeSlides.every((slide) => getEditableExtractionStatus(slide.id) === "done");
+    activeSlides.length > 0 && activeSlides.every((slide) => review.getExtractionStatus(slide.id) === "done");
   const currentSlide = activeSlides[currentSlideIndex];
   const currentSlideImage = currentSlide ? getSlideBackgroundUrl(currentSlide.id) : "";
   const currentReviewLayer = currentSlide ? getSlideRenderLayer(currentSlide.id) : undefined;
-  const extractionDoneCount = activeSlides.filter((slide) => getEditableExtractionStatus(slide.id) === "done").length;
-  const extractionFailedCount = activeSlides.filter((slide) => getEditableExtractionStatus(slide.id) === "failed").length;
+  const extractionDoneCount = activeSlides.filter((slide) => review.getExtractionStatus(slide.id) === "done").length;
+  const extractionFailedCount = activeSlides.filter((slide) => review.getExtractionStatus(slide.id) === "failed").length;
   const preparedReviewLayerCount = activeSlides.filter((slide) => {
     const layer = getSlideRenderLayer(slide.id);
     return layer?.status === "ready" || layer?.status === "failed";
@@ -1724,11 +1528,11 @@ export function PptCanvas({
   const reviewPhase: "boxes" | "text" = isAnyEditableExtractionRunning ? "text" : "boxes";
   const renderReviewSidebarBridge = () => (
     <PptReviewSidebar
-      panelWidth={reviewPanelWidth}
+      panelWidth={review.panelWidth}
       slideNumber={currentSlide ? currentSlideIndex + 1 : null}
       textBlocks={currentReviewLayer?.textBlocks || []}
-      selectedTextBlockId={selectedReviewTextBlockId}
-      isScanning={!!currentSlide && isReviewPreparing(currentSlide.id) && !hasRenderableTextBlocks(currentReviewLayer)}
+      selectedTextBlockId={review.selectedBlockId}
+      isScanning={!!currentSlide && review.isPreparing(currentSlide.id) && !hasRenderableTextBlocks(currentReviewLayer)}
       isExtracting={isAnyEditableExtractionRunning}
       canExtract={allReviewLayersPrepared}
       canStartEditing={allEditableExtractionsDone}
@@ -1745,16 +1549,16 @@ export function PptCanvas({
           ? `${extractionDoneCount}/${activeSlides.length} slides text extracted${extractionFailedCount > 0 ? `, ${extractionFailedCount} failed` : ""}`
           : `${preparedReviewLayerCount}/${activeSlides.length} text-box layers prepared`
       )}
-      reviewDrawMode={reviewDrawMode}
+      reviewDrawMode={review.drawMode}
       tr={tr}
       onPanelResizeStart={(event) => {
         event.preventDefault();
-        reviewPanelResizeRef.current = { startClientX: event.clientX, startWidth: reviewPanelWidth };
+        review.beginPanelResize(event);
       }}
       onExtract={() => void handleExtractEditableText()}
       onStartEditing={() => void handleDownloadEditablePpt()}
-      onToggleDrawMode={() => setReviewDrawMode((current) => !current)}
-      onSelectBlock={setSelectedReviewTextBlockId}
+      onToggleDrawMode={() => review.setDrawMode((current) => !current)}
+      onSelectBlock={review.setSelectedBlockId}
       onDeleteBlock={(blockId) => {
         if (!currentSlide) return;
         deleteSlideTextBlock(currentSlide.id, blockId);
@@ -1801,21 +1605,7 @@ export function PptCanvas({
 
 
 
-  useEffect(() => {
-    if (!exportMenuOpen || typeof document === "undefined") return;
-    const handlePointerDown = (event: PointerEvent) => {
-      const target = event.target as Node | null;
-      if (!target) return;
-      if (exportMenuRef.current?.contains(target)) return;
-      setExportMenuOpen(false);
-    };
-    document.addEventListener("pointerdown", handlePointerDown);
-    return () => document.removeEventListener("pointerdown", handlePointerDown);
-  }, [exportMenuOpen]);
 
-  useEffect(() => {
-    if (isExporting) setExportMenuOpen(false);
-  }, [isExporting]);
 
   const setRenderLayerState = (slideId: string, versionId: string, layer: SlideRenderLayer) => {
       const normalizedLayer: SlideRenderLayer = {
@@ -1928,8 +1718,8 @@ export function PptCanvas({
   const extractEditableReviewSlide = async (slide: SlideData) => {
     const { versionId, imageUrl } = getSlideVersionMeta(slide.id);
     if (!versionId || !imageUrl) return;
-    setEditableExtractionStatusBySlideId((prev) => ({ ...prev, [slide.id]: "extracting" }));
-    setReviewPreparingSlideIds((current) => (current.includes(slide.id) ? current : [...current, slide.id]));
+    review.setExtractionStatus((prev) => ({ ...prev, [slide.id]: "extracting" }));
+    review.setPreparingSlideIds((current) => (current.includes(slide.id) ? current : [...current, slide.id]));
     setRenderLayerState(slide.id, versionId, {
       backgroundImageUrl: imageUrl,
       textBlocks: [],
@@ -1941,16 +1731,16 @@ export function PptCanvas({
       const nextLayer = await processRenderedSlideVersion(slide, imageUrl, versionId);
       setRenderLayerState(slide.id, versionId, nextLayer);
       if (nextLayer.status === "failed") {
-        setEditableExtractionStatusBySlideId((prev) => ({ ...prev, [slide.id]: "failed" }));
+        review.setExtractionStatus((prev) => ({ ...prev, [slide.id]: "failed" }));
         return;
       }
       await upsertTextlessBackgroundVersion(slide.id, versionId, nextLayer.backgroundImageUrl || imageUrl);
-      setEditableExtractionStatusBySlideId((prev) => ({ ...prev, [slide.id]: "done" }));
+      review.setExtractionStatus((prev) => ({ ...prev, [slide.id]: "done" }));
     } catch (error) {
       console.error("Failed to extract editable review slide", error);
-      setEditableExtractionStatusBySlideId((prev) => ({ ...prev, [slide.id]: "failed" }));
+      review.setExtractionStatus((prev) => ({ ...prev, [slide.id]: "failed" }));
     } finally {
-      setReviewPreparingSlideIds((current) => current.filter((id) => id !== slide.id));
+      review.setPreparingSlideIds((current) => current.filter((id) => id !== slide.id));
     }
   };
 
@@ -2782,8 +2572,8 @@ export function PptCanvas({
   };
 
   const handleDownloadPpt = async () => {
-    if (isExporting) return;
-    setIsExporting("pptx");
+    if (review.isExporting) return;
+    review.setIsExporting("pptx");
     try {
         const pages: PptPage[] = activeSlides.map((s) => toRenderablePage(s));
         const images = buildCurrentSlideImagesMap();
@@ -2792,13 +2582,13 @@ export function PptCanvas({
         console.error("Export failed", e);
         alert(tr("导出失败", "Export failed"));
     } finally {
-        setIsExporting(null);
+        review.setIsExporting(null);
     }
   };
 
   const handleDownloadPdf = async () => {
-    if (isExporting) return;
-    setIsExporting("pdf");
+    if (review.isExporting) return;
+    review.setIsExporting("pdf");
     try {
         const pages: PptPage[] = activeSlides.map((s) => toRenderablePage(s));
         const images = buildCurrentSlideImagesMap();
@@ -2807,15 +2597,15 @@ export function PptCanvas({
         console.error("Export failed", e);
         alert(tr("导出失败", "Export failed"));
     } finally {
-        setIsExporting(null);
+        review.setIsExporting(null);
     }
   };
 
   const startEditableExportReview = async () => {
     if (activeSlides.length === 0) return;
     await ensurePrimaryImageVersions(activeSlides);
-    setExportReviewMode(true);
-    setEditableExtractionStatusBySlideId((prev) => {
+    review.setIsActive(true);
+    review.setExtractionStatus((prev) => {
       const next = { ...prev };
       for (const item of activeSlides) {
         if (!next[item.id]) next[item.id] = "idle";
@@ -2842,13 +2632,13 @@ export function PptCanvas({
   };
 
   const handleDownloadEditablePpt = async () => {
-    if (!exportReviewMode) {
+    if (!review.isActive) {
       await startEditableExportReview();
       return;
     }
     if (!allEditableExtractionsDone) return;
-    if (isExporting) return;
-    setIsExporting("pptx_editable");
+    if (review.isExporting) return;
+    review.setIsExporting("pptx_editable");
     try {
       const pages = new Array<PptPage | null>(activeSlides.length).fill(null);
       const tasks = activeSlides.map((slide, index) => async () => {
@@ -2859,20 +2649,20 @@ export function PptCanvas({
         throw new Error("Missing editable export page");
       }
       await pptService.exportPptx(pages as PptPage[], {}, `presentation-editable-${Date.now()}`);
-      setExportReviewMode(false);
-      setReviewDrawMode(false);
-      setReviewDraftRect(null);
-      setSelectedReviewTextBlockId(null);
+      review.setIsActive(false);
+      review.setDrawMode(false);
+      review.setDraftRect(null);
+      review.setSelectedBlockId(null);
     } catch (e) {
       console.error("Editable export failed", e);
       alert(tr("导出可编辑 PPTX 失败", "Failed to export editable PPTX"));
     } finally {
-      setIsExporting(null);
+      review.setIsExporting(null);
     }
   };
 
   const handleExtractEditableText = async (targetSlideId?: string) => {
-    if (!exportReviewMode || isAnyEditableExtractionRunning) return;
+    if (!review.isActive || isAnyEditableExtractionRunning) return;
     if (!targetSlideId && !allReviewLayersPrepared) return;
     const targets = (targetSlideId
       ? activeSlides.filter((slide) => slide.id === targetSlideId)
@@ -2916,17 +2706,17 @@ export function PptCanvas({
     setBeautifyUseTemplate(false);
     inputs.beautify.setFile(null);
     inputs.imageTransform.setFile(null);
-    setExportReviewMode(false);
-    setEditableExtractionStatusBySlideId({});
-    setSelectedReviewTextBlockId(null);
-    setReviewDrawMode(false);
-    setReviewDraftRect(null);
+    review.setIsActive(false);
+    review.setExtractionStatus({});
+    review.setSelectedBlockId(null);
+    review.setDrawMode(false);
+    review.setDraftRect(null);
     setBeautifyFailures({});
     setImageTransformFailures({});
     inputs.reference.setUploadFiles([]);
     setSlideMaterials({});
     materials.picker.close();
-    setReviewPreparingSlideIds([]);
+    review.setPreparingSlideIds([]);
     setRenderLayers({});
     setImageVersions({});
     setCurrentImageVersionId({});
@@ -3026,7 +2816,7 @@ export function PptCanvas({
         inputs={inputs}
         templateLibrary={templateLibrary}
         progress={progress}
-        exportReviewMode={exportReviewMode}
+        exportReviewMode={review.isActive}
         tr={tr}
         onGenerateOutline={handleGenerateOutline}
         onLoadOutline={handleLoadOutline}
@@ -3085,17 +2875,17 @@ export function PptCanvas({
                 <Presentation className="w-3.5 h-3.5" />
                 <span>{tr("放映", "Present")}</span>
             </button>
-            <div ref={exportMenuRef} className="relative z-[60]">
+            <div ref={review.menuRef} className="relative z-[60]">
               <button
-                onClick={() => setExportMenuOpen((open) => !open)}
-                disabled={activeSlides.length === 0 || !!isExporting}
+                onClick={() => review.setMenuOpen((open) => !open)}
+                disabled={activeSlides.length === 0 || !!review.isExporting}
                 title={tr("导出", "Export")}
                 className="flex items-center gap-2 px-3 py-1.5 bg-zinc-100 dark:bg-zinc-700 hover:bg-zinc-200 dark:hover:bg-zinc-600 text-xs rounded transition-colors shadow-sm disabled:opacity-60"
               >
-                {isExporting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
-                <span>{isExporting ? tr("导出中…", "Exporting...") : tr("导出", "Export")}</span>
+                {review.isExporting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
+                <span>{review.isExporting ? tr("导出中…", "Exporting...") : tr("导出", "Export")}</span>
               </button>
-              {exportMenuOpen && !isExporting ? (
+              {review.menuOpen && !review.isExporting ? (
                 <motion.div
                   initial={{ opacity: 0, y: -6 }}
                   animate={{ opacity: 1, y: 0 }}
@@ -3106,7 +2896,7 @@ export function PptCanvas({
                     type="button"
                     className="flex w-full items-center rounded-lg px-3 py-2 text-left text-xs text-zinc-700 transition-colors hover:bg-zinc-100 dark:text-zinc-100 dark:hover:bg-zinc-700"
                     onClick={() => {
-                      setExportMenuOpen(false);
+                      review.setMenuOpen(false);
                       void handleDownloadPdf();
                     }}
                   >
@@ -3116,7 +2906,7 @@ export function PptCanvas({
                     type="button"
                     className="flex w-full items-center rounded-lg px-3 py-2 text-left text-xs text-zinc-700 transition-colors hover:bg-zinc-100 dark:text-zinc-100 dark:hover:bg-zinc-700"
                     onClick={() => {
-                      setExportMenuOpen(false);
+                      review.setMenuOpen(false);
                       void handleDownloadPpt();
                     }}
                   >
@@ -3126,7 +2916,7 @@ export function PptCanvas({
                     type="button"
                     className="flex w-full items-center rounded-lg px-3 py-2 text-left text-xs text-zinc-700 transition-colors hover:bg-zinc-100 dark:text-zinc-100 dark:hover:bg-zinc-700"
                     onClick={() => {
-                      setExportMenuOpen(false);
+                      review.setMenuOpen(false);
                       void handleDownloadEditablePpt();
                     }}
                   >
@@ -3181,7 +2971,7 @@ export function PptCanvas({
                         : 'border-transparent hover:border-zinc-300 dark:hover:border-zinc-700 bg-white dark:bg-zinc-800 shadow-sm'
                     }`}
                     >
-                    {creationMode !== "image_transform" && !exportReviewMode ? (
+                    {creationMode !== "image_transform" && !review.isActive ? (
                       <div
                         className="absolute top-1 left-1 z-20"
                         onClick={(e) => e.stopPropagation()}
@@ -3217,7 +3007,7 @@ export function PptCanvas({
                     <div className="absolute bottom-1 right-1 bg-black/60 text-white text-[10px] px-1.5 rounded-sm backdrop-blur-sm">
                         {index + 1}
                     </div>
-                    {exportReviewMode && getEditableExtractionStatus(slide.id) === "done" ? (
+                    {review.isActive && review.getExtractionStatus(slide.id) === "done" ? (
                       <Button
                         size="sm"
                         variant="secondary"
@@ -3241,13 +3031,13 @@ export function PptCanvas({
                         {creationMode === "image_transform" ? tr("转化失败", "Transform failed") : tr("美化失败", "Beautify failed")}
                       </div>
                     ) : null}
-                    {exportReviewMode ? (
+                    {review.isActive ? (
                       <div className="absolute bottom-1 left-1 rounded-sm bg-black/60 px-1.5 py-0.5 text-[10px] text-white backdrop-blur-sm">
-                        {getEditableExtractionStatus(slide.id) === "done"
+                        {review.getExtractionStatus(slide.id) === "done"
                           ? tr("文字已提取", "Text extracted")
-                          : getEditableExtractionStatus(slide.id) === "extracting"
+                          : review.getExtractionStatus(slide.id) === "extracting"
                             ? tr("文字提取中", "Extracting text")
-                            : isReviewPreparing(slide.id)
+                            : review.isPreparing(slide.id)
                               ? tr("文本框识别中", "Preparing text boxes")
                               : getSlideRenderLayer(slide.id)?.status === "ready"
                                 ? tr("文本框已就绪", "Text boxes ready")
@@ -3256,7 +3046,7 @@ export function PptCanvas({
                     ) : null}
                     </div>
                 </ContextMenuTrigger>
-                {creationMode !== "image_transform" && !exportReviewMode ? (
+                {creationMode !== "image_transform" && !review.isActive ? (
                   <ContextMenuContent>
                       <ContextMenuItem onClick={() => handleAddSlideToChat(slide)} className="gap-2">
                           <MessageSquarePlus className="w-4 h-4" />
@@ -3284,7 +3074,7 @@ export function PptCanvas({
         {/* Preview */}
         <div className="flex-1 p-4 flex items-center justify-center bg-zinc-200/50 dark:bg-zinc-950/50 overflow-auto relative">
           <div className="absolute top-4 left-4 z-30 flex items-center gap-2 bg-white/80 dark:bg-zinc-900/70 backdrop-blur rounded-xl border border-border/50 px-3 py-2 shadow-sm">
-            {!exportReviewMode ? (
+            {!review.isActive ? (
               <Button
                 size="sm"
                 className="h-7 px-2 text-xs"
@@ -3351,7 +3141,7 @@ export function PptCanvas({
                           }) : null}
                           canvasWidth={previewCanvasSize.width}
                           canvasHeight={previewCanvasSize.height}
-                          showElements={exportReviewMode}
+                          showElements={review.isActive}
                           showTextElements={false}
                           showImageElements
                           showShapeElements
@@ -3381,7 +3171,7 @@ export function PptCanvas({
                             </div>
                           }
                         >
-                          {exportReviewMode && currentSlideImage ? renderReviewSelectionOverlay(currentSlide) : null}
+                          {review.isActive && currentSlideImage ? renderReviewSelectionOverlay(currentSlide) : null}
                         </PptEditorBridge>
                         
                         {/* Overlay Label if Generated */}
@@ -3395,7 +3185,7 @@ export function PptCanvas({
                         )}
                     </div>
                 </ContextMenuTrigger>
-                {creationMode !== "image_transform" && !exportReviewMode ? (
+                {creationMode !== "image_transform" && !review.isActive ? (
                   <ContextMenuContent>
                       <ContextMenuItem onClick={() => handleAddSlideToChat(currentSlide)} className="gap-2">
                           <MessageSquarePlus className="w-4 h-4" />
@@ -3411,7 +3201,7 @@ export function PptCanvas({
             </div>
           )}
         </div>
-        {exportReviewMode ? renderReviewSidebarBridge() : null}
+        {review.isActive ? renderReviewSidebarBridge() : null}
       </div>
 
       <Dialog open={slideshow.isOpen} onOpenChange={(open) => { if (!open) slideshow.close(); }}>
