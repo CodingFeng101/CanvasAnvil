@@ -7,6 +7,11 @@ import { parseJsonLoose } from "./lib/parse-json";
 import { extractPdfPagesAsImages, isPdfFile } from "./lib/deck-source";
 import { getSlideshowDimensions } from "./lib/slideshow-size";
 import { clampTextBlockRect, withTextBlocks } from "./lib/render-layers";
+import {
+  createMaterialChip,
+  readDescriptionFrom,
+  renderDescriptionInto,
+} from "./lib/description-editor";
 import { GenerationProgress } from "./views/GenerationProgress";
 import {
   getOriginalSlideVersion as originalVersionOf,
@@ -2310,11 +2315,7 @@ export function PptCanvas({
       const replaceRange = materialPickerReplaceRangeRef.current;
       if (replaceRange) {
         replaceRange.deleteContents();
-        const chip = document.createElement("span");
-        chip.setAttribute("data-material-token", materialName);
-        chip.setAttribute("contenteditable", "false");
-        chip.className = "mx-0.5 inline-flex items-center rounded-md border border-blue-200 bg-blue-50 px-1.5 py-0.5 text-xs font-medium text-blue-700 align-middle";
-        chip.textContent = materialName;
+        const chip = createMaterialChip(materialName);
         replaceRange.insertNode(chip);
         const space = document.createTextNode(" ");
         replaceRange.collapse(false);
@@ -2327,42 +2328,15 @@ export function PptCanvas({
           sel.addRange(next);
         }
       } else {
-        const chip = document.createElement("span");
-        chip.setAttribute("data-material-token", materialName);
-        chip.setAttribute("contenteditable", "false");
-        chip.className = "mx-0.5 inline-flex items-center rounded-md border border-blue-200 bg-blue-50 px-1.5 py-0.5 text-xs font-medium text-blue-700 align-middle";
-        chip.textContent = materialName;
+        const chip = createMaterialChip(materialName);
         editor.appendChild(chip);
       }
 
-      const parseEditorValue = () => {
-        const parts: string[] = [];
-        for (const node of Array.from(editor.childNodes)) {
-          if (node.nodeType === Node.TEXT_NODE) {
-            parts.push(node.textContent || "");
-            continue;
-          }
-          if (node.nodeType !== Node.ELEMENT_NODE) continue;
-          const el = node as HTMLElement;
-          if (el.tagName === "BR") {
-            parts.push("\n");
-            continue;
-          }
-          const tokenName = el.getAttribute("data-material-token");
-          if (tokenName) {
-            parts.push(materialToken(tokenName));
-            continue;
-          }
-          parts.push(el.textContent || "");
-        }
-        return parts.join("");
-      };
-
-      const nextValue = parseEditorValue();
+      const nextValue = readDescriptionFrom(editor);
       descriptionEditorAppliedRef.current[slideId] = nextValue;
-      const newSlides = [...localSlides];
-      newSlides[slideIndex].description = nextValue;
-      setLocalSlides(newSlides);
+      setLocalSlides((prev) =>
+        prev.map((slide, n) => (n === slideIndex ? { ...slide, description: nextValue } : slide)),
+      );
       setMaterialPickerSlideId(null);
       setMaterialPickerPos(null);
       setMaterialPickerActiveIndex(0);
@@ -2371,26 +2345,28 @@ export function PptCanvas({
     }
 
     const textarea = descriptionTextareaRefs.current[slideId];
-    const prev = localSlides[slideIndex]?.description || "";
+    const currentDescription = localSlides[slideIndex]?.description || "";
     if (!textarea) {
-      const newSlides = [...localSlides];
-      newSlides[slideIndex].description = `${prev}${token}`;
-      setLocalSlides(newSlides);
+      setLocalSlides((prev) =>
+        prev.map((slide, n) => (n === slideIndex ? { ...slide, description: `${currentDescription}${token}` } : slide)),
+      );
       setMaterialPickerSlideId(null);
       setMaterialPickerPos(null);
       setMaterialPickerActiveIndex(0);
       return;
     }
 
-    const cursor = textarea.selectionStart ?? prev.length;
-    const before = prev.slice(0, cursor);
+    const cursor = textarea.selectionStart ?? currentDescription.length;
+    const before = currentDescription.slice(0, cursor);
     const slashAt = Math.max(before.lastIndexOf("/"), before.lastIndexOf("／"));
     const nextValue =
-      slashAt >= 0 ? `${prev.slice(0, slashAt)}${token}${prev.slice(cursor)}` : `${before}${token}${prev.slice(cursor)}`;
+      slashAt >= 0
+        ? `${currentDescription.slice(0, slashAt)}${token}${currentDescription.slice(cursor)}`
+        : `${before}${token}${currentDescription.slice(cursor)}`;
     const nextCursor = (slashAt >= 0 ? slashAt : cursor) + token.length;
-    const newSlides = [...localSlides];
-    newSlides[slideIndex].description = nextValue;
-    setLocalSlides(newSlides);
+    setLocalSlides((prev) =>
+      prev.map((slide, n) => (n === slideIndex ? { ...slide, description: nextValue } : slide)),
+    );
     setMaterialPickerSlideId(null);
     setMaterialPickerPos(null);
     setMaterialPickerActiveIndex(0);
@@ -2460,65 +2436,21 @@ export function PptCanvas({
     });
   }, [materialPickerSlideId, slideMaterials]);
 
+
+
+  /** Redraws a slide's editor unless the user is typing in it. */
   const renderDescriptionEditor = (slideId: string, value: string) => {
     const editor = descriptionEditorRefs.current[slideId];
     if (!editor) return;
     if (descriptionEditorFocusedRef.current === slideId) return;
     if (descriptionEditorAppliedRef.current[slideId] === value) return;
     descriptionEditorAppliedRef.current[slideId] = value;
-    editor.innerHTML = "";
-    const text = String(value || "");
-    const re = /\{\{image:([^}]+)\}\}/g;
-    let last = 0;
-    let m: RegExpExecArray | null;
-    const appendText = (s: string) => {
-      const lines = s.split("\n");
-      for (let i = 0; i < lines.length; i += 1) {
-        if (lines[i]) editor.appendChild(document.createTextNode(lines[i]));
-        if (i < lines.length - 1) editor.appendChild(document.createElement("br"));
-      }
-    };
-    while ((m = re.exec(text))) {
-      const before = text.slice(last, m.index);
-      if (before) appendText(before);
-      const name = String(m[1] || "").trim();
-      const chip = document.createElement("span");
-      chip.setAttribute("data-material-token", name);
-      chip.setAttribute("contenteditable", "false");
-      chip.className = "mx-0.5 inline-flex items-center rounded-md border border-blue-200 bg-blue-50 px-1.5 py-0.5 text-xs font-medium text-blue-700 align-middle";
-      chip.textContent = name;
-      editor.appendChild(chip);
-      editor.appendChild(document.createTextNode(" "));
-      last = m.index + m[0].length;
-    }
-    const rest = text.slice(last);
-    if (rest) appendText(rest);
-    if (!editor.lastChild) editor.appendChild(document.createTextNode(""));
+    renderDescriptionInto(editor, value);
   };
 
   const parseDescriptionEditor = (slideId: string) => {
     const editor = descriptionEditorRefs.current[slideId];
-    if (!editor) return "";
-    const out: string[] = [];
-    for (const node of Array.from(editor.childNodes)) {
-      if (node.nodeType === Node.TEXT_NODE) {
-        out.push(node.textContent || "");
-        continue;
-      }
-      if (node.nodeType !== Node.ELEMENT_NODE) continue;
-      const el = node as HTMLElement;
-      if (el.tagName === "BR") {
-        out.push("\n");
-        continue;
-      }
-      const name = el.getAttribute("data-material-token");
-      if (name) {
-        out.push(materialToken(name));
-        continue;
-      }
-      out.push(el.textContent || "");
-    }
-    return out.join("");
+    return editor ? readDescriptionFrom(editor) : "";
   };
 
   const resetGenerationState = () => {
@@ -3840,9 +3772,9 @@ export function PptCanvas({
                                   <input 
                                       value={slide.title}
                                       onChange={(e) => {
-                                          const newSlides = [...localSlides];
-                                          newSlides[i].title = e.target.value;
-                                          setLocalSlides(newSlides);
+                                          setLocalSlides((prev) =>
+                                            prev.map((slide, n) => (n === i ? { ...slide, title: e.target.value } : slide)),
+                                          );
                                       }}
                                       className="w-full font-medium bg-transparent border-none focus:outline-none focus:ring-0 p-0"
                                   />
@@ -3875,9 +3807,9 @@ export function PptCanvas({
                                         .split(/\r?\n/)
                                         .map((x) => x.trim())
                                         .filter((x) => x.length > 0);
-                                      const newSlides = [...localSlides];
-                                      newSlides[i].content = lines;
-                                      setLocalSlides(newSlides);
+                                      setLocalSlides((prev) =>
+                                        prev.map((slide, n) => (n === i ? { ...slide, content: lines } : slide)),
+                                      );
                                     }}
                                     className="w-full h-24 p-3 rounded-md border border-input bg-background text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                                     placeholder={tr("每行一个要点，例如：\n市场现状与挑战\n核心方案与价值\n落地计划与里程碑", "One bullet per line, e.g.:\nMarket status and challenges\nCore solution and value\nExecution plan and milestones")}
@@ -3889,9 +3821,9 @@ export function PptCanvas({
                                     <input
                                       value={slide.layout || ""}
                                       onChange={(e) => {
-                                        const newSlides = [...localSlides];
-                                        newSlides[i].layout = e.target.value;
-                                        setLocalSlides(newSlides);
+                                        setLocalSlides((prev) =>
+                                          prev.map((slide, n) => (n === i ? { ...slide, layout: e.target.value } : slide)),
+                                        );
                                       }}
                                       className="w-full h-9 px-3 rounded-md border border-input bg-background text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                                       placeholder={tr("例如：cover / title+bullets / two-column / left-text-right-image", "e.g. cover / title+bullets / two-column / left-text-right-image")}
@@ -3902,9 +3834,9 @@ export function PptCanvas({
                                     <textarea
                                       value={slide.note || ""}
                                       onChange={(e) => {
-                                        const newSlides = [...localSlides];
-                                        newSlides[i].note = e.target.value;
-                                        setLocalSlides(newSlides);
+                                        setLocalSlides((prev) =>
+                                          prev.map((slide, n) => (n === i ? { ...slide, note: e.target.value } : slide)),
+                                        );
                                       }}
                                       className="w-full h-20 p-3 rounded-md border border-input bg-background text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                                       placeholder={tr("例如：这一页强调三个关键点；讲解时先抛出问题再给答案。", "e.g. Emphasize three key points; start with a question, then answer it.")}
@@ -3926,16 +3858,16 @@ export function PptCanvas({
                                         descriptionEditorFocusedRef.current = null;
                                         const nextValue = parseDescriptionEditor(slide.id);
                                         descriptionEditorAppliedRef.current[slide.id] = nextValue;
-                                        const newSlides = [...localSlides];
-                                        newSlides[i].description = nextValue;
-                                        setLocalSlides(newSlides);
+                                        setLocalSlides((prev) =>
+                                          prev.map((slide, n) => (n === i ? { ...slide, description: nextValue } : slide)),
+                                        );
                                       }}
                                       onInput={() => {
                                         const nextValue = parseDescriptionEditor(slide.id);
                                         descriptionEditorAppliedRef.current[slide.id] = nextValue;
-                                        const newSlides = [...localSlides];
-                                        newSlides[i].description = nextValue;
-                                        setLocalSlides(newSlides);
+                                        setLocalSlides((prev) =>
+                                          prev.map((slide, n) => (n === i ? { ...slide, description: nextValue } : slide)),
+                                        );
                                       }}
                                       onKeyDown={(e) => {
                                         if (materialPickerSlideId === slide.id && (slideMaterials[slide.id] || []).length > 0) {
