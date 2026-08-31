@@ -7,26 +7,26 @@ import { ScrollArea } from "@/shared/ui/scroll-area";
 import { CodeBlock } from "@/workspaces/cad/chat/code-block";
 import { useUiLanguage } from "@/shared/i18n";
 import { cn } from "@/shared/lib/utils";
+import {
+    getMessageTextContent,
+    getUserOriginalText,
+    splitTextIntoFileSections,
+    type MessagePart,
+    type UIMessage,
+} from "@/shared/chat/message-content";
+import {
+    extractImageTags,
+    extractPptSlideTags,
+    extractPptToolPayload,
+    getSlideNumber,
+    slideFieldLabel,
+    slidePatchEntries,
+    splitInlinePptTags,
+} from "@/shared/chat/ppt-message-tags";
+
+export type { MessagePart, UIMessage };
 
 // Types
-export interface MessagePart {
-    type: 'text' | 'reasoning' | 'tool-call' | 'tool-result' | 'file';
-    text?: string;
-    toolName?: string;
-    toolCallId?: string;
-    state?: string;
-    input?: any;
-    output?: string;
-    url?: string; // for images
-}
-
-export interface UIMessage {
-    id: string;
-    role: 'user' | 'assistant' | 'system';
-    content: string; // Fallback
-    parts?: MessagePart[];
-}
-
 interface ChatMessageDisplayProps {
     messages: UIMessage[];
     setInput: (input: string) => void;
@@ -38,24 +38,6 @@ interface ChatMessageDisplayProps {
 }
 
 // Helper to split text content into regular text and file sections
-interface TextSection {
-    type: "text" | "file";
-    content: string;
-    filename?: string;
-    charCount?: number;
-    fileType?: "pdf" | "text";
-}
-
-interface PptEditSlidePatch {
-    id?: string;
-    [key: string]: any;
-}
-
-interface PptToolPayload {
-    type: "ppt_edit";
-    slides: PptEditSlidePatch[];
-}
-
 interface CadPatchEdit {
     search: string;
     replace: string;
@@ -102,131 +84,6 @@ function AutoApplyCodeOnce({
         void onApplyCode(code, language);
     }, [onApplyCode, code, language]);
     return null;
-}
-
-function splitTextIntoFileSections(text: string): TextSection[] {
-    const sections: TextSection[] = [];
-    const filePattern = /\[(PDF|File):\s*([^\]]+)\]\n([\s\S]*?)(?=\n\n\[(PDF|File):|$)/g;
-    let lastIndex = 0;
-    let match;
-
-    while ((match = filePattern.exec(text)) !== null) {
-        const beforeText = text.slice(lastIndex, match.index).trim();
-        if (beforeText) {
-            sections.push({ type: "text", content: beforeText });
-        }
-
-        const fileType = match[1].toLowerCase() === "pdf" ? "pdf" : "text";
-        const filename = match[2].trim();
-        const fileContent = match[3].trim();
-        sections.push({
-            type: "file",
-            content: fileContent,
-            filename,
-            charCount: fileContent.length,
-            fileType,
-        });
-
-        lastIndex = match.index + match[0].length;
-    }
-
-    const remainingText = text.slice(lastIndex).trim();
-    if (remainingText) {
-        sections.push({ type: "text", content: remainingText });
-    }
-
-    if (sections.length === 0) {
-        sections.push({ type: "text", content: text });
-    }
-
-    return sections;
-}
-
-type PptSlideTag = { n: number; title?: string; kind?: "outline" | "slide_image" };
-
-function extractPptSlideTags(text: string): { tags: PptSlideTag[]; rest: string } {
-    const lines = String(text || "").split(/\r?\n/);
-    const tags: PptSlideTag[] = [];
-    const restLines: string[] = [];
-    for (const line of lines) {
-        const m = line.match(/^\[\[PPT_SLIDE\|(\d+)\|([^|]*)\|(outline|slide_image)\]\]$/);
-        if (m) {
-            const n = Number(m[1]);
-            const title = String(m[2] || "").trim();
-            const kind = m[3] as "outline" | "slide_image";
-            if (!Number.isNaN(n)) tags.push({ n, title: title || undefined, kind });
-            continue;
-        }
-        const legacy = line.match(/^\[\[PPT_SLIDE\|(\d+)\|(.*)\]\]$/);
-        if (legacy) {
-            const n = Number(legacy[1]);
-            const title = String(legacy[2] || "").trim();
-            if (!Number.isNaN(n)) tags.push({ n, title: title || undefined, kind: "slide_image" });
-            continue;
-        }
-        restLines.push(line);
-    }
-    const rest = restLines.join("\n").replace(/^\s+|\s+$/g, "");
-    return { tags, rest };
-}
-
-type ImageTag = { name?: string; url: string };
-
-function extractImageTags(text: string): { images: ImageTag[]; rest: string } {
-    const lines = String(text || "").split(/\r?\n/);
-    const images: ImageTag[] = [];
-    const restLines: string[] = [];
-    for (const line of lines) {
-        const m = line.match(/^\[\[IMAGE\|([^|]*)\|([\s\S]+)\]\]$/);
-        if (m) {
-            const name = String(m[1] || "").trim();
-            const url = String(m[2] || "").trim();
-            if (url.startsWith("data:image") || url.startsWith("blob:") || url.startsWith("http://") || url.startsWith("https://")) {
-                images.push({ name: name || undefined, url });
-                continue;
-            }
-        }
-        restLines.push(line);
-    }
-    const rest = restLines.join("\n").replace(/^\s+|\s+$/g, "");
-    return { images, rest };
-}
-
-type InlinePptPart =
-    | { type: "text"; text: string }
-    | { type: "ppt"; n: number; title?: string; kind?: "outline" | "slide_image" };
-
-function splitInlinePptTags(text: string): InlinePptPart[] {
-    const raw = String(text || "");
-    const out: InlinePptPart[] = [];
-    const re = /\[\[PPT_SLIDE\|(\d+)\|([\s\S]*?)\]\]/g;
-    let lastIndex = 0;
-    let m: RegExpExecArray | null;
-    while ((m = re.exec(raw))) {
-        const before = raw.slice(lastIndex, m.index);
-        if (before) out.push({ type: "text", text: before });
-        const n = Number(m[1]);
-        const title = String(m[2] || "").trim();
-        if (!Number.isNaN(n)) {
-            let kind: "outline" | "slide_image" = "slide_image";
-            let normalizedTitle = title;
-            const parts = title.split("|");
-            if (parts.length >= 2) {
-                const maybeKind = parts[parts.length - 1].trim();
-                if (maybeKind === "outline" || maybeKind === "slide_image") {
-                    kind = maybeKind;
-                    normalizedTitle = parts.slice(0, -1).join("|").trim();
-                }
-            }
-            out.push({ type: "ppt", n, title: normalizedTitle || undefined, kind });
-        }
-        else out.push({ type: "text", text: m[0] });
-        lastIndex = m.index + m[0].length;
-    }
-    const rest = raw.slice(lastIndex);
-    if (rest) out.push({ type: "text", text: rest });
-    if (out.length === 0) out.push({ type: "text", text: raw });
-    return out;
 }
 
 type MarkdownSegment =
@@ -289,46 +146,6 @@ function splitMarkdownAndCodeBlocks(text: string): MarkdownSegment[] {
     return segments;
 }
 
-const getMessageTextContent = (message: UIMessage): string => {
-    if (message.parts && message.parts.length > 0) {
-        return message.parts
-            .filter((part) => part.type === "text")
-            .map((part) => part.text || "")
-            .join("\n");
-    }
-    return message.content || "";
-};
-
-const getUserOriginalText = (message: UIMessage): string => {
-    const fullText = getMessageTextContent(message);
-    const filePattern = /\n\n\[(PDF|File):\s*[^\]]+\]\n[\s\S]*$/;
-    return fullText.replace(filePattern, "").trim();
-};
-
-function extractPptToolPayload(text: string): PptToolPayload | null {
-    const raw = String(text || "").trim();
-    if (!raw) return null;
-    const fenced = raw.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
-    const candidate = (fenced?.[1] ?? raw).trim();
-    let parsed: any;
-    try {
-        parsed = JSON.parse(candidate);
-    } catch {
-        return null;
-    }
-    if (Array.isArray(parsed)) {
-        return { type: "ppt_edit", slides: parsed.filter((s: any) => s && typeof s === "object") };
-    }
-    if (!parsed || typeof parsed !== "object") return null;
-    const typeRaw = String((parsed as any).type || "").trim().toLowerCase();
-    if (typeRaw && typeRaw !== "ppt_edit") return null;
-    const type = "ppt_edit" as const;
-    const slides = Array.isArray((parsed as any).slides)
-        ? (parsed as any).slides.filter((s: any) => s && typeof s === "object")
-        : [];
-    return slides.length > 0 ? { type, slides } : null;
-}
-
 function extractCadPatchToolPayload(text: string): CadPatchToolPayload | null {
     const raw = String(text || "").trim();
     if (!raw) return null;
@@ -357,54 +174,6 @@ function extractCadPatchToolPayload(text: string): CadPatchToolPayload | null {
         : [];
     if (edits.length === 0) return null;
     return { type: "cad_patch", target: "2d_svg", mode: "patch", edits };
-}
-
-function getSlideNumber(slide: PptEditSlidePatch, index: number): number {
-    const id = String(slide?.id || "");
-    const m = id.match(/slide-(\d+)/i);
-    if (m) {
-        const n = Number(m[1]);
-        if (!Number.isNaN(n)) return n;
-    }
-    return index + 1;
-}
-
-function slidePatchEntries(slide: PptEditSlidePatch): Array<{ key: string; value: string }> {
-    const keys = ["title", "description", "layout", "note", "content"];
-    const rows: Array<{ key: string; value: string }> = [];
-    for (const key of keys) {
-        if (!(key in slide)) continue;
-        const raw = (slide as any)[key];
-        if (Array.isArray(raw)) {
-            const text = raw.map((x) => String(x || "").trim()).filter(Boolean).join("；");
-            rows.push({ key, value: text || "（空）" });
-            continue;
-        }
-        if (raw && typeof raw === "object") {
-            rows.push({ key, value: JSON.stringify(raw) });
-            continue;
-        }
-        rows.push({ key, value: String(raw ?? "").trim() || "（空）" });
-    }
-    for (const [k, v] of Object.entries(slide)) {
-        if (k === "id" || keys.includes(k)) continue;
-        if (v === undefined) continue;
-        rows.push({ key: k, value: typeof v === "string" ? v : JSON.stringify(v) });
-    }
-    return rows;
-}
-
-function slideFieldLabel(key: string, uiLang: "zh" | "en"): string {
-    const dict: Record<string, { zh: string; en: string }> = {
-        title: { zh: "标题", en: "Title" },
-        description: { zh: "画面描述", en: "Description" },
-        layout: { zh: "布局", en: "Layout" },
-        note: { zh: "备注", en: "Note" },
-        content: { zh: "内容", en: "Content" },
-    };
-    const hit = dict[key];
-    if (hit) return uiLang === "zh" ? hit.zh : hit.en;
-    return key;
 }
 
 function CadPatchEditsDisplay({ edits, uiLang }: { edits: CadPatchEdit[]; uiLang: "zh" | "en" }) {

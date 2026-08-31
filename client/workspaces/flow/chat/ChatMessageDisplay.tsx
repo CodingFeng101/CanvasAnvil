@@ -1,5 +1,12 @@
 "use client"
 
+import {
+    getMessageTextContent,
+    getUserOriginalText,
+    splitTextIntoFileSections,
+    type TextSection,
+} from "@/shared/chat/message-content"
+
 /**
  * A message as the chat hook hands it over. `parts` is deliberately loose:
  * the AI SDK streams tool calls, files and reasoning blocks whose shapes vary
@@ -92,74 +99,6 @@ function OperationsDisplay({ operations }: { operations: DiagramOperation[] }) {
 import { useDiagram } from "@/workspaces/flow/state/diagram-context"
 
 // Helper to split text content into regular text and file sections (PDF or text files)
-interface TextSection {
-    type: "text" | "file"
-    content: string
-    filename?: string
-    charCount?: number
-    fileType?: "pdf" | "text"
-}
-
-function splitTextIntoFileSections(text: string): TextSection[] {
-    const sections: TextSection[] = []
-    // Match [PDF: filename] or [File: filename] patterns
-    const filePattern =
-        /\[(PDF|File):\s*([^\]]+)\]\n([\s\S]*?)(?=\n\n\[(PDF|File):|$)/g
-    let lastIndex = 0
-    let match
-
-    while ((match = filePattern.exec(text)) !== null) {
-        // Add text before this file section
-        const beforeText = text.slice(lastIndex, match.index).trim()
-        if (beforeText) {
-            sections.push({ type: "text", content: beforeText })
-        }
-
-        // Add file section
-        const fileType = match[1].toLowerCase() === "pdf" ? "pdf" : "text"
-        const filename = match[2].trim()
-        const fileContent = match[3].trim()
-        sections.push({
-            type: "file",
-            content: fileContent,
-            filename,
-            charCount: fileContent.length,
-            fileType,
-        })
-
-        lastIndex = match.index + match[0].length
-    }
-
-    // Add remaining text after last file section
-    const remainingText = text.slice(lastIndex).trim()
-    if (remainingText) {
-        sections.push({ type: "text", content: remainingText })
-    }
-
-    // If no file sections found, return original text
-    if (sections.length === 0) {
-        sections.push({ type: "text", content: text })
-    }
-
-    return sections
-}
-
-const getMessageTextContent = (message: UIMessage): string => {
-    if (message.parts && message.parts.length > 0) {
-        return message.parts
-            .filter((part) => part.type === "text")
-            .map((part) => String(part.text ?? ""))
-            .join("\n")
-    }
-    if (Array.isArray(message.content)) {
-        return message.content
-            .filter((part: any) => part?.type === "text")
-            .map((part: any) => String(part?.text || ""))
-            .join("\n")
-    }
-    return message.content || ""
-}
-
 function extractFileSectionsFromText(text: string): TextSection[] {
     return splitTextIntoFileSections(text).filter(
         (s) => s.type === "file",
@@ -174,13 +113,6 @@ function stripFileSectionsFromText(text: string): string {
 }
 
 // Get only the user's original text, excluding appended file content
-const getUserOriginalText = (message: UIMessage): string => {
-    const fullText = getMessageTextContent(message)
-    // Strip out [PDF: ...] and [File: ...] sections that were appended
-    const filePattern = /\n\n\[(PDF|File):\s*[^\]]+\]\n[\s\S]*$/
-    return fullText.replace(filePattern, "").trim()
-}
-
 interface ChatMessageDisplayProps {
     messages: UIMessage[]
     setInput: (input: string) => void
