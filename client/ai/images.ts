@@ -11,7 +11,18 @@ const MAX_DIMENSION = 1536;
 const MAX_DATA_URL_LENGTH = 1_800_000;
 const JPEG_QUALITY = 0.86;
 
+/** Pictures a vision request may carry alongside its prompt. */
 export const MAX_REFERENCE_IMAGES = 3;
+
+/**
+ * Pictures an image-generation request may carry.
+ *
+ * Higher than the vision cap because a slide's references are the deck's
+ * template plus whatever the user attached to that page, and the template
+ * alone used to leave room for two. Each one is downscaled first, so the
+ * ceiling here is roughly 10MB of request body.
+ */
+export const MAX_GENERATION_REFERENCE_IMAGES = 6;
 
 export function cleanUrl(url: string) {
     if (!url) return null;

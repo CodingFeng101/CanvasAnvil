@@ -831,7 +831,7 @@ export function PptCanvas({
             templateImage || undefined,
             [
               ...styleRefRefs.map((x) => ({ url: x.url, label: x.label })),
-              ...materials.getImageRefs(id),
+              ...materials.getImageRefs(id, page.description || ""),
             ],
             [instruction.trim(), styleReferenceInstruction].filter(Boolean).join("\n")
           );
@@ -854,7 +854,7 @@ export function PptCanvas({
             templateImage || undefined,
             [
               ...styleRefRefs.map((x) => ({ url: x.url, label: x.label })),
-              ...materials.getImageRefs(id),
+              ...materials.getImageRefs(id, page.description || ""),
             ],
             [instruction.trim(), styleReferenceInstruction].filter(Boolean).join("\n")
           );
@@ -872,7 +872,7 @@ export function PptCanvas({
             ...styleRefImageUrls,
             ...explicitMaterialImageUrls,
             ...uploadedImages,
-            ...materials.getImageUrls(id),
+            ...materials.getImageUrls(id, page.description || ""),
           ]))
         );
         if (editedUrl) {
@@ -987,7 +987,7 @@ export function PptCanvas({
             templateImage || undefined,
             [
               ...styleRefRefs.map((x) => ({ url: x.url, label: x.label })),
-              ...materials.getImageRefs(id),
+              ...materials.getImageRefs(id, page.description || ""),
             ],
             [
               kind === "both" && instruction.trim() ? instruction : "",
@@ -1046,7 +1046,7 @@ export function PptCanvas({
           ].filter(Boolean).join("\n"),
           currentUrl || undefined,
           templateImage || undefined,
-          Array.from(new Set([...styleRefImageUrls, ...uploadedImages, ...materials.getImageUrls(id)]))
+          Array.from(new Set([...styleRefImageUrls, ...uploadedImages, ...materials.getImageUrls(id, page.description || "")]))
         );
         if (editedUrl) {
           await pushImageVersionAndProcess(slide, editedUrl, "edited", instruction);
@@ -1766,7 +1766,7 @@ export function PptCanvas({
                   pages[i],
                   uiLang as "zh" | "en",
                   templateImage || undefined,
-                 materials.getImageRefs(pages[i].id || `slide-${i + 1}`)
+                 materials.getImageRefs(pages[i].id || `slide-${i + 1}`, pages[i].description || "")
                 );
                  progressTracker.markBaseReady();
                  baseReady = true;
@@ -1822,7 +1822,7 @@ export function PptCanvas({
           pages[pageIndex],
           uiLang as "zh" | "en",
           templateImage || undefined,
-          materials.getImageRefs(currentSlide.id || `slide-${pageIndex + 1}`)
+          materials.getImageRefs(currentSlide.id || `slide-${pageIndex + 1}`, pages[pageIndex]?.description || "")
         );
 
         if (imageUrl) {

@@ -4,6 +4,7 @@ import { getAIConfig } from "@/ai/storage";
 import { applyUiLanguagePolicy } from "@/ai/language-policy";
 import { createLimiter } from "@/ai/limiter";
 import {
+  MAX_GENERATION_REFERENCE_IMAGES,
   MAX_REFERENCE_IMAGES,
   cleanUrl,
   normalizeImageUrlForModel,
@@ -208,7 +209,7 @@ export async function generateImage(request: ImageGenerationRequest, signal?: Ab
       : null;
     const additionalReferenceImageUrls = await normalizeImageUrlsForModel(
       Array.isArray(request.additionalReferenceImageUrls) ? request.additionalReferenceImageUrls : [],
-      Math.max(0, MAX_REFERENCE_IMAGES - (referenceImageUrl ? 1 : 0)),
+      Math.max(0, MAX_GENERATION_REFERENCE_IMAGES - (referenceImageUrl ? 1 : 0)),
     );
 
     try {

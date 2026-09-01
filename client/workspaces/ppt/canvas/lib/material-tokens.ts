@@ -37,6 +37,29 @@ export function removeMaterialToken(description: string, name: string): string {
     .replace(/ *\n */g, "\n");
 }
 
+/**
+ * The materials a description actually asks for, in the order it mentions
+ * them.
+ *
+ * A slide's attachments are not the same thing as its references: the user
+ * can upload a picture and then not use it, or delete the token but keep the
+ * file. Only the referenced ones are worth sending -- the model is told to
+ * place each one, so an unreferenced picture is a reference image nothing in
+ * the prompt accounts for. Ordering by first mention means that if a cap does
+ * bite, what survives is what the description leads with.
+ */
+export function referencedMaterials<T extends { name: string }>(
+  description: string,
+  materials: T[],
+): T[] {
+  const text = String(description || "");
+  return materials
+    .map((material) => ({ material, at: text.indexOf(materialToken(material.name)) }))
+    .filter((entry) => entry.at >= 0)
+    .sort((a, b) => a.at - b.at)
+    .map((entry) => entry.material);
+}
+
 const PLACEMENTS: Record<MaterialLang, string[]> = {
   zh: [
     "放在左侧主视觉区域，约占画面宽度 40%",

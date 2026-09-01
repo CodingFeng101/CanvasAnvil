@@ -8,6 +8,7 @@ import {
   materialLabel,
   materialToken,
   removeMaterialToken,
+  referencedMaterials,
 } from "@/workspaces/ppt/canvas/lib/material-tokens";
 import type { SlideData, SlideMaterialImage } from "@/workspaces/ppt/canvas/types";
 
@@ -123,11 +124,22 @@ export function useSlideMaterials({
     }
   };
 
-  const getImageUrls = (slideId: string) =>
-    (slideMaterials[slideId] || []).map((x) => x.dataUrl).filter(Boolean);
+  /**
+   * The pictures a slide's description asks for.
+   *
+   * Attached is not the same as referenced: a picture the user uploaded and
+   * then did not mention is not sent, because the prompt names and places
+   * each reference image it is given, and one it cannot account for only
+   * confuses the model.
+   */
+  const getReferenced = (slideId: string, description: string) =>
+    referencedMaterials(description, slideMaterials[slideId] || []);
 
-  const getImageRefs = (slideId: string) =>
-    (slideMaterials[slideId] || [])
+  const getImageUrls = (slideId: string, description: string) =>
+    getReferenced(slideId, description).map((x) => x.dataUrl).filter(Boolean);
+
+  const getImageRefs = (slideId: string, description: string) =>
+    getReferenced(slideId, description)
       .map((x) => ({ url: x.dataUrl, label: x.name }))
       .filter((x) => !!x.url);
 

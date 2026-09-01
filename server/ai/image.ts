@@ -16,7 +16,11 @@ import type { ImageRequest } from "../../contracts/ai";
  */
 type Route = (req: ImageRequest) => Promise<string>;
 
-function referenceImageUrls(req: ImageRequest): string[] {
+/**
+ * Every picture a request wants the model to look at: the template first, if
+ * there is one, then whatever the caller attached.
+ */
+export function referenceImageUrls(req: ImageRequest): string[] {
   return [
     ...(req.referenceImageUrl ? [req.referenceImageUrl] : []),
     ...(req.additionalReferenceImageUrls || []).filter(Boolean),
@@ -51,11 +55,29 @@ function readChatImage(content: any): string | null {
   return textPart ? fromText(textPart.text) : null;
 }
 
+/**
+ * Sends every reference image, not just the first.
+ *
+ * A slide carries the deck's template *and* whatever pictures the user
+ * attached to that page, and the prompt names them and tells the model to use
+ * them. Sending one meant the model was told about images it never received,
+ * so it invented something to match the label instead -- which looks like a
+ * picture that is simply wrong rather than one that never arrived.
+ */
 const editRoute: Route = async (req) => {
+  const urls = referenceImageUrls(req);
+  if (urls.length === 0) throw new Error("No reference image to edit.");
+
   const form = new FormData();
   form.append("model", req.channel.model);
   form.append("prompt", req.prompt);
-  form.append("image", await dataUrlToFile(req.referenceImageUrl!, "reference.png"));
+  const files = await Promise.all(
+    urls.map((url, i) => dataUrlToFile(url, i === 0 ? "reference.png" : `material-${i}.png`)),
+  );
+  // Repeated `image[]` is how the images API takes more than one; a gateway
+  // that only understands a single `image` still reads the first.
+  const field = files.length > 1 ? "image[]" : "image";
+  for (const file of files) form.append(field, file);
   if (req.maskImageUrl) {
     form.append("mask", await dataUrlToFile(req.maskImageUrl, "mask.png"));
   }
@@ -92,10 +114,20 @@ const chatRoute: Route = async (req) => {
   return await toDataUrl(url);
 };
 
+/**
+ * The routes to try, in order.
+ *
+ * Chosen by whether there is any picture to send, not by whether a template
+ * was set. The generations route carries no images at all, so a slide with
+ * material pictures and no template used to lose them there.
+ */
+export function routeNamesFor(req: ImageRequest): Array<"edit" | "generation" | "chat"> {
+  return referenceImageUrls(req).length > 0 ? ["edit", "chat"] : ["generation", "chat"];
+}
+
 export async function generateImage(req: ImageRequest): Promise<string> {
-  const routes: Route[] = req.referenceImageUrl
-    ? [editRoute, chatRoute]
-    : [generationRoute, chatRoute];
+  const byName = { edit: editRoute, generation: generationRoute, chat: chatRoute };
+  const routes: Route[] = routeNamesFor(req).map((name) => byName[name]);
 
   let firstError: unknown = null;
   for (const route of routes) {
