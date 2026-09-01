@@ -48,6 +48,7 @@ exist once instead of per workspace.
 - Fixed `ppt-skill` accepting an unsupported image provider through configuration and failing later at the HTTP layer, where `cad-skill` rejects it up front.
 - Fixed text blocks read back from storage reaching the review canvas without their geometry, where they became boxes at undefined coordinates that could be neither seen nor selected.
 - Fixed the chat upload limits applying to one of the three shapes an attachment can arrive in, so a file sent as `image` or in a `content` array skipped both the size cap and the file count.
+- Fixed the Flow composer never growing past three lines. The shared `Textarea` did not forward its ref, so the height it measured on every keystroke was never applied and the box stayed at its minimum, with resizing disabled.
 
 ### Security
 
