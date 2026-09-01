@@ -12,7 +12,6 @@ interface CreationStartProps {
   inputs: ReturnType<typeof useCreationInputs>;
   templateLibrary: ReturnType<typeof useTemplateLibrary>;
   progress: CreationProgress;
-  exportReviewMode: boolean;
   tr: (zh: string, en: string) => string;
   onGenerateOutline: () => void;
   onLoadOutline: () => void;
@@ -29,7 +28,6 @@ export function CreationStart({
   inputs,
   templateLibrary,
   progress,
-  exportReviewMode,
   tr,
   onGenerateOutline,
   onLoadOutline,
@@ -82,7 +80,7 @@ export function CreationStart({
 
                 <div className="space-y-8">
                     {/* Template Selection */}
-                    {creationMode !== "image_transform" && !exportReviewMode ? (
+                    {creationMode !== "image_transform" ? (
                     <div className="space-y-4">
                         <label className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 flex items-center gap-2">
                             <span className="w-6 h-6 rounded-full bg-blue-100 text-blue-600 text-xs flex items-center justify-center font-bold">1</span>

@@ -173,7 +173,11 @@ export const canvasAnvilToEditorSlide = (
     description: slide.description,
     note: slide.note,
     layout: slide.layout,
-    backgroundImageUrl: layer?.backgroundImageUrl || options?.backgroundImageUrl,
+    // An explicitly passed background wins over the layer's own. The layer
+    // carries the text-stripped background the editable export derives, and
+    // a caller asking for a specific image -- the deck view asking for the
+    // slide as rendered -- must not be handed that instead.
+    backgroundImageUrl: options?.backgroundImageUrl || layer?.backgroundImageUrl,
     elements,
   };
 };

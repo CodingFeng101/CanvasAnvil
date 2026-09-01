@@ -8,7 +8,6 @@ import {
   MessageSquarePlus,
   Minimize2,
   Presentation,
-  RefreshCcw,
   Sparkles,
   X,
 } from "lucide-react";
@@ -30,26 +29,21 @@ import {
 import {
   canvasAnvilToEditorSlide,
   PptEditorBridge,
-  PptReviewSidebar,
 } from "@/features/ppt-editor";
 import {
   PPT_REFERENCE_SLIDE_HEIGHT,
   PPT_REFERENCE_SLIDE_WIDTH,
 } from "@/workspaces/ppt/lib/ppt-service";
-import { hasRenderableTextBlocks } from "@/workspaces/ppt/canvas/lib/slide-content";
 import { getSlideshowDimensions } from "@/workspaces/ppt/canvas/lib/slideshow-size";
-import { reviewProgressSummary, type ReviewProgress } from "@/workspaces/ppt/canvas/lib/review-progress";
-import { ReviewSelectionOverlay } from "@/workspaces/ppt/canvas/views/ReviewSelectionOverlay";
 import type {
   CreationMode,
   SlideData,
   SlideImageVersion,
   SlideRenderLayer,
 } from "@/workspaces/ppt/canvas/types";
-import type { PptTextBlock } from "@/workspaces/ppt/lib/ppt-service";
 import type { CreationProgress } from "@/workspaces/ppt/canvas/lib/creation-machine";
 import type { useCreationInputs } from "@/workspaces/ppt/canvas/hooks/use-creation-inputs";
-import type { useExportReview } from "@/workspaces/ppt/canvas/hooks/use-export-review";
+import type { useDeckExport } from "@/workspaces/ppt/canvas/hooks/use-deck-export";
 import type { useSlideMaterials } from "@/workspaces/ppt/canvas/hooks/use-slide-materials";
 import type { useSlideshow } from "@/workspaces/ppt/canvas/hooks/use-slideshow";
 
@@ -75,18 +69,7 @@ export interface DeckViewModel {
 
 interface DeckViewProps {
   deck: DeckViewModel;
-  textBlocks: {
-    update: (slideId: string, blockId: string, nextText: string) => void;
-    updateRect: (
-      slideId: string,
-      blockId: string,
-      rect: Partial<Pick<PptTextBlock, "x" | "y" | "w" | "h">>,
-      versionId?: string,
-    ) => void;
-    remove: (slideId: string, blockId: string) => void;
-  };
-  review: ReturnType<typeof useExportReview>;
-  reviewProgress: ReviewProgress;
+  exporter: ReturnType<typeof useDeckExport>;
   materials: ReturnType<typeof useSlideMaterials>;
   inputs: ReturnType<typeof useCreationInputs>;
   slideshow: ReturnType<typeof useSlideshow>;
@@ -99,7 +82,6 @@ interface DeckViewProps {
     downloadPpt: () => void;
     downloadPdf: () => void;
     downloadEditablePpt: () => void;
-    extractEditableText: (slideId?: string) => void;
     generateAiImage: () => void;
     retryFailedBeautify: () => void;
   };
@@ -130,9 +112,7 @@ interface DeckViewProps {
  */
 export function DeckView({
   deck,
-  textBlocks,
-  review,
-  reviewProgress,
+  exporter,
   materials,
   inputs,
   slideshow,
@@ -165,69 +145,6 @@ export function DeckView({
       />
     );
   };
-  const renderReviewSelectionOverlay = (slide: SlideData) => (
-    <ReviewSelectionOverlay
-      slide={slide}
-      review={review}
-      getLayer={deck.getLayer}
-      getVersionId={deck.getVersionId}
-      canvasRef={layout.canvasRef}
-      tr={tr}
-    />
-  );
-  const renderReviewSidebarBridge = () => (
-    <PptReviewSidebar
-      panelWidth={review.panelWidth}
-      slideNumber={deck.currentSlide ? deck.currentIndex + 1 : null}
-      textBlocks={deck.currentLayer?.textBlocks || []}
-      selectedTextBlockId={review.selectedBlockId}
-      isScanning={!!deck.currentSlide && review.isPreparing(deck.currentSlide.id) && !hasRenderableTextBlocks(deck.currentLayer)}
-      isExtracting={reviewProgress.isExtracting}
-      canExtract={reviewProgress.allLayersPrepared}
-      canStartEditing={reviewProgress.allExtractionsDone}
-      reviewPhase={reviewProgress.phase}
-      extractionSummary={reviewProgressSummary(
-        reviewProgress,
-        deck.slides.length,
-        uiLang as "zh" | "en",
-      )}
-      reviewDrawMode={review.drawMode}
-      tr={tr}
-      onPanelResizeStart={(event) => {
-        event.preventDefault();
-        review.beginPanelResize(event);
-      }}
-      onExtract={() => void actions.extractEditableText()}
-      onStartEditing={() => void actions.downloadEditablePpt()}
-      onToggleDrawMode={() => review.setDrawMode((current) => !current)}
-      onSelectBlock={review.setSelectedBlockId}
-      onDeleteBlock={(blockId) => {
-        if (!deck.currentSlide) return;
-        textBlocks.remove(deck.currentSlide.id, blockId);
-      }}
-      onChangeText={(blockId, nextText) => {
-        if (!deck.currentSlide) return;
-        textBlocks.update(deck.currentSlide.id, blockId, nextText);
-      }}
-      onChangeRectField={(blockId, field, value) => {
-        if (!deck.currentSlide) return;
-        const nextValue = Number.parseFloat(value);
-        if (!Number.isFinite(nextValue)) return;
-        textBlocks.updateRect(
-          deck.currentSlide.id,
-          blockId,
-          field === "x"
-            ? { x: nextValue }
-            : field === "y"
-              ? { y: nextValue }
-              : field === "w"
-                ? { w: nextValue }
-                : { h: nextValue }
-        );
-      }}
-    />
-  );
-
   return (
     <div className="w-full h-full bg-zinc-100 dark:bg-zinc-900 flex flex-col">
       {/* Toolbar */}
@@ -254,17 +171,26 @@ export function DeckView({
                 <Presentation className="w-3.5 h-3.5" />
                 <span>{tr("放映", "Present")}</span>
             </button>
-            <div ref={review.menuRef} className="relative z-[60]">
+            <div ref={exporter.menuRef} className="relative z-[60]">
               <button
-                onClick={() => review.setMenuOpen((open) => !open)}
-                disabled={deck.slides.length === 0 || !!review.isExporting}
+                onClick={() => exporter.setMenuOpen((open) => !open)}
+                disabled={deck.slides.length === 0 || !!exporter.isExporting}
                 title={tr("导出", "Export")}
                 className="flex items-center gap-2 px-3 py-1.5 bg-zinc-100 dark:bg-zinc-700 hover:bg-zinc-200 dark:hover:bg-zinc-600 text-xs rounded transition-colors shadow-sm disabled:opacity-60"
               >
-                {review.isExporting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
-                <span>{review.isExporting ? tr("导出中…", "Exporting...") : tr("导出", "Export")}</span>
+                {exporter.isExporting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
+                <span>
+                  {!exporter.isExporting
+                    ? tr("导出", "Export")
+                    : exporter.progress && exporter.progress.total > 0
+                      ? tr(
+                          `导出中 ${Math.round((exporter.progress.done / exporter.progress.total) * 100)}%`,
+                          `Exporting ${Math.round((exporter.progress.done / exporter.progress.total) * 100)}%`,
+                        )
+                      : tr("导出中…", "Exporting...")}
+                </span>
               </button>
-              {review.menuOpen && !review.isExporting ? (
+              {exporter.menuOpen && !exporter.isExporting ? (
                 <motion.div
                   initial={{ opacity: 0, y: -6 }}
                   animate={{ opacity: 1, y: 0 }}
@@ -275,7 +201,7 @@ export function DeckView({
                     type="button"
                     className="flex w-full items-center rounded-lg px-3 py-2 text-left text-xs text-zinc-700 transition-colors hover:bg-zinc-100 dark:text-zinc-100 dark:hover:bg-zinc-700"
                     onClick={() => {
-                      review.setMenuOpen(false);
+                      exporter.setMenuOpen(false);
                       void actions.downloadPdf();
                     }}
                   >
@@ -285,7 +211,7 @@ export function DeckView({
                     type="button"
                     className="flex w-full items-center rounded-lg px-3 py-2 text-left text-xs text-zinc-700 transition-colors hover:bg-zinc-100 dark:text-zinc-100 dark:hover:bg-zinc-700"
                     onClick={() => {
-                      review.setMenuOpen(false);
+                      exporter.setMenuOpen(false);
                       void actions.downloadPpt();
                     }}
                   >
@@ -295,7 +221,7 @@ export function DeckView({
                     type="button"
                     className="flex w-full items-center rounded-lg px-3 py-2 text-left text-xs text-zinc-700 transition-colors hover:bg-zinc-100 dark:text-zinc-100 dark:hover:bg-zinc-700"
                     onClick={() => {
-                      review.setMenuOpen(false);
+                      exporter.setMenuOpen(false);
                       void actions.downloadEditablePpt();
                     }}
                   >
@@ -350,7 +276,7 @@ export function DeckView({
                         : 'border-transparent hover:border-zinc-300 dark:hover:border-zinc-700 bg-white dark:bg-zinc-800 shadow-sm'
                     }`}
                     >
-                    {creationMode !== "image_transform" && !review.isActive ? (
+                    {creationMode !== "image_transform" ? (
                       <div
                         className="absolute top-1 left-1 z-20"
                         onClick={(e) => e.stopPropagation()}
@@ -386,22 +312,6 @@ export function DeckView({
                     <div className="absolute bottom-1 right-1 bg-black/60 text-white text-[10px] px-1.5 rounded-sm backdrop-blur-sm">
                         {index + 1}
                     </div>
-                    {review.isActive && review.getExtractionStatus(slide.id) === "done" ? (
-                      <Button
-                        size="sm"
-                        variant="secondary"
-                        className="absolute left-1 top-1 z-20 h-6 gap-1 px-2 text-[10px] shadow-sm"
-                        disabled={reviewProgress.isExtracting}
-                        onClick={(event) => {
-                          event.preventDefault();
-                          event.stopPropagation();
-                          void actions.extractEditableText(slide.id);
-                        }}
-                      >
-                        <RefreshCcw className="h-3 w-3" />
-                        {tr("重新提取", "Re-extract")}
-                      </Button>
-                    ) : null}
                     {slideFailure ? (
                       <div
                         className="absolute top-1 right-1 bg-red-600/90 text-white text-[10px] px-1.5 py-0.5 rounded-sm max-w-[85%] truncate"
@@ -410,22 +320,9 @@ export function DeckView({
                         {creationMode === "image_transform" ? tr("转化失败", "Transform failed") : tr("美化失败", "Beautify failed")}
                       </div>
                     ) : null}
-                    {review.isActive ? (
-                      <div className="absolute bottom-1 left-1 rounded-sm bg-black/60 px-1.5 py-0.5 text-[10px] text-white backdrop-blur-sm">
-                        {review.getExtractionStatus(slide.id) === "done"
-                          ? tr("文字已提取", "Text extracted")
-                          : review.getExtractionStatus(slide.id) === "extracting"
-                            ? tr("文字提取中", "Extracting text")
-                            : review.isPreparing(slide.id)
-                              ? tr("文本框识别中", "Preparing text boxes")
-                              : deck.getLayer(slide.id)?.status === "ready"
-                                ? tr("文本框已就绪", "Text boxes ready")
-                                : tr("待准备", "Pending")}
-                      </div>
-                    ) : null}
                     </div>
                 </ContextMenuTrigger>
-                {creationMode !== "image_transform" && !review.isActive ? (
+                {creationMode !== "image_transform" ? (
                   <ContextMenuContent>
                       <ContextMenuItem onClick={() => actions.addSlideToChat(slide)} className="gap-2">
                           <MessageSquarePlus className="w-4 h-4" />
@@ -453,17 +350,15 @@ export function DeckView({
         {/* Preview */}
         <div className="flex-1 p-4 flex items-center justify-center bg-zinc-200/50 dark:bg-zinc-950/50 overflow-auto relative">
           <div className="absolute top-4 left-4 z-30 flex items-center gap-2 bg-white/80 dark:bg-zinc-900/70 backdrop-blur rounded-xl border border-border/50 px-3 py-2 shadow-sm">
-            {!review.isActive ? (
-              <Button
-                size="sm"
-                className="h-7 px-2 text-xs"
-                onClick={actions.generateAiImage}
-                disabled={!deck.currentSlide || status.isGeneratingImage}
-              >
-                {status.isGeneratingImage ? <Loader2 className="w-3 h-3 mr-1 animate-spin" /> : null}
-                {tr("重新渲染本页", "Regenerate this slide")}
-              </Button>
-            ) : null}
+            <Button
+              size="sm"
+              className="h-7 px-2 text-xs"
+              onClick={actions.generateAiImage}
+              disabled={!deck.currentSlide || status.isGeneratingImage}
+            >
+              {status.isGeneratingImage ? <Loader2 className="w-3 h-3 mr-1 animate-spin" /> : null}
+              {tr("重新渲染本页", "Regenerate this slide")}
+            </Button>
             {deck.currentSlide && deck.getVisibleVersions(deck.currentSlide.id).length > 0 && (
               <select
                 className="h-7 text-xs rounded-md border border-input bg-background px-2"
@@ -509,7 +404,7 @@ export function DeckView({
                           }) : null}
                           canvasWidth={layout.canvasSize.width}
                           canvasHeight={layout.canvasSize.height}
-                          showElements={review.isActive}
+                          showElements={false}
                           showTextElements={false}
                           showImageElements
                           showShapeElements
@@ -539,7 +434,6 @@ export function DeckView({
                             </div>
                           }
                         >
-                          {review.isActive && deck.currentSlideImage ? renderReviewSelectionOverlay(deck.currentSlide) : null}
                         </PptEditorBridge>
                         
                         {/* Overlay Label if Generated */}
@@ -553,7 +447,7 @@ export function DeckView({
                         )}
                     </div>
                 </ContextMenuTrigger>
-                {creationMode !== "image_transform" && !review.isActive ? (
+                {creationMode !== "image_transform" ? (
                   <ContextMenuContent>
                       <ContextMenuItem onClick={() => deck.currentSlide && actions.addSlideToChat(deck.currentSlide)} className="gap-2">
                           <MessageSquarePlus className="w-4 h-4" />
@@ -569,7 +463,6 @@ export function DeckView({
             </div>
           )}
         </div>
-        {review.isActive ? renderReviewSidebarBridge() : null}
       </div>
 
       <Dialog open={slideshow.isOpen} onOpenChange={(open) => { if (!open) slideshow.close(); }}>

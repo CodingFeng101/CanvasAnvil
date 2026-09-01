@@ -21,7 +21,6 @@ export type SlideRenderLayer = {
 
 export type SlideImageVersionType = "generated" | "edited" | "derived_textless";
 
-export type EditableExtractionStatus = "idle" | "extracting" | "done" | "failed";
 
 export type SlideImageVersion = {
   id: string;
@@ -69,12 +68,3 @@ export type UploadTemplate = { id: string; name: string; dataUrl: string };
 export type TemplateItem =
   | { id: string; name: string; kind: "preset"; previewSrc: string; presetPath: string }
   | { id: string; name: string; kind: "upload"; previewSrc: string; dataUrl: string };
-
-export type ReviewDraftRect = {
-  startX: number;
-  startY: number;
-  currentX: number;
-  currentY: number;
-};
-
-export type ReviewResizeHandle = "n" | "s" | "e" | "w" | "ne" | "nw" | "se" | "sw";

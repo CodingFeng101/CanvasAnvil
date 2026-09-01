@@ -62,15 +62,31 @@ test("a render layer's text blocks become editor elements", () => {
   );
 });
 
-test("the layer's background wins over the fallback", () => {
+test("an explicitly passed background wins over the layer's own", () => {
+  // This used to be the other way round, on the assumption that a layer's
+  // background is always the better one. It is not: the layer carries the
+  // text-stripped background the editable export derives, and the deck view
+  // passes the slide as rendered. With the layer winning, every slide showed
+  // its text erased once the deck had been exported.
   const editorSlide = canvasAnvilToEditorSlide(slide, {
     renderLayer,
-    backgroundImageUrl: "fallback.png",
+    backgroundImageUrl: "rendered.png",
   });
-  assert.equal(editorSlide.backgroundImageUrl, "data:image/png;base64,bg");
+  assert.equal(editorSlide.backgroundImageUrl, "rendered.png");
 });
 
-test("the fallback background is used when the layer has none", () => {
+test("the caller still gets the layer's elements alongside its own background", () => {
+  // The main canvas needs both: the layer's image and shape elements, drawn
+  // over the slide as it was rendered.
+  const editorSlide = canvasAnvilToEditorSlide(slide, {
+    renderLayer,
+    backgroundImageUrl: "rendered.png",
+  });
+  assert.equal(editorSlide.backgroundImageUrl, "rendered.png");
+  assert.equal(editorSlide.elements.length, 2);
+});
+
+test("the layer's background is used when the caller passes none", () => {
   const editorSlide = canvasAnvilToEditorSlide(slide, {
     renderLayer: { ...renderLayer, backgroundImageUrl: "" },
     backgroundImageUrl: "fallback.png",
