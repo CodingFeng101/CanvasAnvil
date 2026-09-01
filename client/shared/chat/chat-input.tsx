@@ -23,6 +23,8 @@ interface ChatInputProps {
     files?: File[]; // Controlled files
     placeholder?: string;
     topChips?: React.ReactNode;
+    /** Workspace-specific controls, shown beside the toolbar's own buttons. */
+    toolbarExtras?: React.ReactNode;
     bottomChips?: React.ReactNode;
     focusKey?: string | number;
     richSegments?: RichInputSegment[];
@@ -53,6 +55,7 @@ export function ChatInput({
     files: controlledFiles,
     placeholder,
     topChips,
+    toolbarExtras,
     bottomChips,
     focusKey,
     richSegments,
@@ -566,6 +569,7 @@ export function ChatInput({
 
             <div className="flex items-center justify-between px-3 py-2 border-t border-border/50">
                 <div className="flex items-center gap-1">
+                    {toolbarExtras}
                     {onClearChat && (
                         <ButtonWithTooltip
                             tooltipContent={t(uiLang, "chat.clearChatTitle")}

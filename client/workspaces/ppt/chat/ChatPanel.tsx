@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { PanelRightClose, PanelRightOpen } from 'lucide-react';
+import { PanelRightClose, PanelRightOpen, Pencil, RefreshCw } from 'lucide-react';
 import { cn } from '@/shared/lib/utils';
 import { streamChatMessage, generatePptProxyChatMessage, ChatMessage, getAIConfig } from '@/ai/client';
 
@@ -110,6 +110,17 @@ export function ChatPanel({
   const pptInsertBusyRef = useRef(false);
   const [pptClearTick, setPptClearTick] = useState(0);
   const lastUploadedImagesRef = useRef<string[]>([]);
+  /**
+   * Which image call the next message should take.
+   *
+   * "auto" leaves it to the router, which is right most of the time and wrong
+   * in the two ways a user notices: a wording tweak that redraws the whole
+   * slide and loses a picture they liked, and a request to change the picture
+   * that edits the old one instead of drawing a new one.
+   */
+  const [imageMode, setImageMode] = useState<"auto" | "edit" | "regenerate">("auto");
+  const imageModeRef = useRef(imageMode);
+  imageModeRef.current = imageMode;
 
 const getPptLabel = (slideId: string, title: string) => {
   const m = String(slideId || "").match(/(\d+)/);
@@ -223,12 +234,16 @@ const getPptTag = (slideId: string, title: string, kind: "outline" | "slide_imag
       // any {{image:...}} references the model emitted.
       try {
         const parsed = JSON.parse(jsonText);
+        let changed = false;
         if (lastUploadedImagesRef.current.length > 0) {
           parsed.uploadedImages = lastUploadedImagesRef.current;
-          await runCodeAction(JSON.stringify(parsed), 'ppt');
-        } else {
-          await runCodeAction(jsonText, 'ppt');
+          changed = true;
         }
+        if (imageModeRef.current !== 'auto') {
+          parsed.imageMode = imageModeRef.current;
+          changed = true;
+        }
+        await runCodeAction(changed ? JSON.stringify(parsed) : jsonText, 'ppt');
       } catch {
         await runCodeAction(jsonText, 'ppt');
       }
@@ -682,6 +697,44 @@ const getPptTag = (slideId: string, title: string, kind: "outline" | "slide_imag
             historyDisabled={history.length === 0}
             onFilesChange={setFiles}
             files={files}
+            toolbarExtras={
+              <>
+                <ButtonWithTooltip
+                  tooltipContent={trText(
+                    "改图：在当前这版画面上修改，保留原有构图",
+                    "Edit: change the current image, keeping its composition",
+                  )}
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setImageMode((m) => (m === "edit" ? "auto" : "edit"))}
+                  className={cn(
+                    "h-8 w-8 p-0",
+                    imageMode === "edit"
+                      ? "bg-primary/10 text-primary hover:bg-primary/15"
+                      : "text-muted-foreground hover:text-foreground",
+                  )}
+                >
+                  <Pencil className="h-4 w-4" />
+                </ButtonWithTooltip>
+                <ButtonWithTooltip
+                  tooltipContent={trText(
+                    "重画：整页重新生成，构图可以大改",
+                    "Redraw: generate the slide again from scratch",
+                  )}
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setImageMode((m) => (m === "regenerate" ? "auto" : "regenerate"))}
+                  className={cn(
+                    "h-8 w-8 p-0",
+                    imageMode === "regenerate"
+                      ? "bg-primary/10 text-primary hover:bg-primary/15"
+                      : "text-muted-foreground hover:text-foreground",
+                  )}
+                >
+                  <RefreshCw className="h-4 w-4" />
+                </ButtonWithTooltip>
+              </>
+            }
             uploadMode="imagesOnly"
             placeholder={inputPlaceholder}
             focusKey={pptInputFocusTick}

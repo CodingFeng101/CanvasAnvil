@@ -668,6 +668,21 @@ export function PptCanvas({
       url,
       label: uploadedImageLabel(i + 1, uiLang as MaterialLang),
     }));
+    /**
+     * Which image call a slide takes.
+     *
+     * The router picks by itself unless the user pinned a mode in the chat
+     * panel. Editing needs something to edit, so a pinned "edit" still redraws
+     * a slide that has no image yet -- otherwise the message would silently do
+     * nothing.
+     */
+    const pinnedImageMode: "auto" | "edit" | "regenerate" =
+      parsed?.imageMode === "edit" || parsed?.imageMode === "regenerate" ? parsed.imageMode : "auto";
+    const shouldRedraw = (routerWantsRedraw: boolean, currentUrl: string) => {
+      if (pinnedImageMode === "regenerate") return true;
+      if (pinnedImageMode === "edit") return !String(currentUrl || "").trim();
+      return routerWantsRedraw;
+    };
     const uploadedImageInstruction = uploadedImageRefs.length > 0
       ? tr(
           `用户在对话中上传了这些参考图：${uploadedImageRefs.map((x) => x.label).join("、")}。请把它们放进画面并保持原貌，不要重画、改色或替换。`,
@@ -846,7 +861,7 @@ export function PptCanvas({
         continue;
       }
 
-      if (editType === "text_only" || editType === "text_relayout") {
+      if ((editType === "text_only" || editType === "text_relayout") && pinnedImageMode !== "edit") {
         routedEditTasks.push(async () => {
           const rendered = await pptService.generatePageImage(
             page,
@@ -870,7 +885,10 @@ export function PptCanvas({
         const versions = imageVersions[id] || [];
         const currentVersion = currentImageVersionId[id];
         const currentUrl = currentVersion ? versions.find((v) => v.id === currentVersion)?.url : generatedImages[id];
-        const shouldRegenerate = isNewSlide || !currentUrl || changedByPatch;
+        const shouldRegenerate = shouldRedraw(
+          isNewSlide || !currentUrl || changedByPatch,
+          currentUrl || "",
+        );
         if (shouldRegenerate) {
           const rendered = await pptService.generatePageImage(
             page,
@@ -996,7 +1014,16 @@ export function PptCanvas({
         );
       const isNewSlide = !before;
 
-      if (kind === "content" || kind === "both" || (!kind && (changedByPatch || isNewSlide))) {
+      // The same pin applies on the fallback path, which decides by `kind`.
+      const fallbackWantsRedraw = kind === "content" || kind === "both" || (!kind && (changedByPatch || isNewSlide));
+      const fallbackCurrentUrl = (() => {
+        const versions = imageVersions[id] || [];
+        const currentVersion = currentImageVersionId[id];
+        return String(
+          (currentVersion ? versions.find((v) => v.id === currentVersion)?.url : generatedImages[id]) || "",
+        );
+      })();
+      if (shouldRedraw(fallbackWantsRedraw, fallbackCurrentUrl)) {
         editTasks.push(async () => {
           const page: PptPage = {
             id,
@@ -1037,7 +1064,7 @@ export function PptCanvas({
             await pushImageVersionAndProcess(slide, rendered, "generated", kind === "both" ? instruction : undefined);
           }
         });
-        if (kind === "content" || kind === "both") continue;
+        if (pinnedImageMode === "regenerate" || kind === "content" || kind === "both") continue;
       }
 
       if (!instruction.trim()) continue;
