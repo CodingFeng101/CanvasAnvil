@@ -970,29 +970,62 @@ const downloadBlob = (data: Uint8Array | ArrayBuffer, mime: string, filename: st
     setTimeout(() => URL.revokeObjectURL(link.href), 5000);
 };
 
+/**
+ * What the planner is told about the deck's template.
+ *
+ * The template is the only picture of the finished deck that exists at
+ * planning time, and the plan's per-slide `description` is what drives image
+ * generation later. Without seeing it the planner invents a look of its own --
+ * "white minimal background", "flat vector" -- and that concrete prose then
+ * outweighs the template reference at render time, so the deck ignores the
+ * template it was built on. Handed the image, it describes scenes that
+ * already belong to it.
+ */
+const outlineTemplateStep = (hasTemplate: boolean) =>
+    hasTemplate
+        ? "3. Write a concrete visual description for each slide. The attached image is the deck's template: match its palette, lighting, materials and art style so every slide looks like part of that deck."
+        : "3. Write a concrete visual description for each slide.";
+
+const outlineTemplateRule = (hasTemplate: boolean) =>
+    hasTemplate
+        ? "\n5. description must stay inside the template image's colour scheme and art style, and must never describe a look that contradicts it."
+        : "";
+
 export const pptService = {
     // A1. PlanFromIdeaAgent
+
     generateOutline: async (
         topic: string,
         uiLanguage: "zh" | "en" = "zh",
         referenceFiles?: ReferenceFileInput[],
-        referenceImageAssets?: ReferenceImageAssetInput[]
+        referenceImageAssets?: ReferenceImageAssetInput[],
+        templateImageUrl?: string,
     ): Promise<PptPage[]> => {
+        const templateImage = String(templateImageUrl || "").trim();
+        const hasTemplate = Boolean(templateImage);
         const refText = formatReferenceFiles(referenceFiles);
         const imageAssetText = formatReferenceImageAssets(referenceImageAssets);
         const prompt = buildRisenPrompt({
             role: "You are PlanFromIdeaAgent for PPT planning.",
             instructions: "Generate a complete PptPlan from the idea prompt and return JSON only.",
             input: `idea_prompt: ${topic}\nui_language: ${uiLanguage}\n\nreference_files_content:\n${refText || "(none)"}\n\nreference_image_assets:\n${imageAssetText || "(none)"}`,
-            steps: "1. Convert the idea into a coherent slide sequence.\n2. Write 4-6 specific bullets per slide.\n3. Write a concrete visual description of the subject and composition for each slide -- what is depicted and how it is arranged. Do not name colours, backgrounds, lighting or art style: a template the planner cannot see decides those.\n4. Write a coherent speaker note paragraph for each slide.\n5. Assign materialLabels only when truly relevant.",
+            steps: "1. Convert the idea into a coherent slide sequence.\n2. Write 4-6 specific bullets per slide.\n" + outlineTemplateStep(hasTemplate) + "\n4. Write a coherent speaker note paragraph for each slide.\n5. Assign materialLabels only when truly relevant.",
             endGoal: "Produce a complete render-ready PptPlan with stable slide ids and usable materialLabels.",
-            narrowing: "1. Return JSON only; markdown JSON block is allowed.\n2. Every slide must include id, title, content, description, layout, note, materialLabels.\n3. materialLabels must come only from reference_image_assets and can be [].\n4. All fields must follow ui_language; zh means Simplified Chinese.\n5. description must not specify a colour scheme, background colour, or art style.",
+            narrowing: "1. Return JSON only; markdown JSON block is allowed.\n2. Every slide must include id, title, content, description, layout, note, materialLabels.\n3. materialLabels must come only from reference_image_assets and can be [].\n4. All fields must follow ui_language; zh means Simplified Chinese." + outlineTemplateRule(hasTemplate),
         });
 
-        const response = await generateChatMessage([
-            { role: "system", content: PPT_OUTLINE_SYSTEM },
-            { role: "user", content: prompt }
-        ], undefined, { timeoutMs: 120000 });
+        const response = hasTemplate
+            ? await generateVisionChatMessage(PPT_OUTLINE_SYSTEM, prompt, [templateImage], undefined, {
+                  timeoutMs: 120000,
+              })
+            : await generateChatMessage(
+                  [
+                      { role: "system", content: PPT_OUTLINE_SYSTEM },
+                      { role: "user", content: prompt },
+                  ],
+                  undefined,
+                  { timeoutMs: 120000 },
+              );
 
         try {
             const parsed = parseJsonLoose(response);
@@ -1016,22 +1049,33 @@ export const pptService = {
         outlineText: string,
         uiLanguage: "zh" | "en" = "zh",
         referenceFiles?: ReferenceFileInput[],
-        referenceImageAssets?: ReferenceImageAssetInput[]
+        referenceImageAssets?: ReferenceImageAssetInput[],
+        templateImageUrl?: string,
     ): Promise<PptPage[]> => {
+        const templateImage = String(templateImageUrl || "").trim();
+        const hasTemplate = Boolean(templateImage);
         const refText = formatReferenceFiles(referenceFiles);
         const imageAssetText = formatReferenceImageAssets(referenceImageAssets);
         const prompt = buildRisenPrompt({
             role: "You are PlanFromOutlineAgent for PPT planning.",
             instructions: "Generate a complete PptPlan from the outline and return JSON only.",
             input: `outline_text:\n${outlineText}\n\nui_language: ${uiLanguage}\n\nreference_files_content:\n${refText || "(none)"}\n\nreference_image_assets:\n${imageAssetText || "(none)"}`,
-            steps: "1. Expand the outline into a coherent slide sequence.\n2. Write 4-6 specific bullets per slide.\n3. Write a concrete visual description of the subject and composition for each slide -- what is depicted and how it is arranged. Do not name colours, backgrounds, lighting or art style: a template the planner cannot see decides those.\n4. Write a coherent speaker note paragraph for each slide.\n5. Assign materialLabels only when truly relevant.",
+            steps: "1. Expand the outline into a coherent slide sequence.\n2. Write 4-6 specific bullets per slide.\n" + outlineTemplateStep(hasTemplate) + "\n4. Write a coherent speaker note paragraph for each slide.\n5. Assign materialLabels only when truly relevant.",
             endGoal: "Produce a complete render-ready PptPlan derived from the outline.",
-            narrowing: "1. Return JSON only; markdown JSON block is allowed.\n2. Every slide must include id, title, content, description, layout, note, materialLabels.\n3. materialLabels must come only from reference_image_assets and can be [].\n4. All fields must follow ui_language; zh means Simplified Chinese.\n5. description must not specify a colour scheme, background colour, or art style.",
+            narrowing: "1. Return JSON only; markdown JSON block is allowed.\n2. Every slide must include id, title, content, description, layout, note, materialLabels.\n3. materialLabels must come only from reference_image_assets and can be [].\n4. All fields must follow ui_language; zh means Simplified Chinese." + outlineTemplateRule(hasTemplate),
         });
-        const response = await generateChatMessage([
-            { role: "system", content: PPT_OUTLINE_SYSTEM },
-            { role: "user", content: prompt }
-        ], undefined, { timeoutMs: 120000 });
+        const response = hasTemplate
+            ? await generateVisionChatMessage(PPT_OUTLINE_SYSTEM, prompt, [templateImage], undefined, {
+                  timeoutMs: 120000,
+              })
+            : await generateChatMessage(
+                  [
+                      { role: "system", content: PPT_OUTLINE_SYSTEM },
+                      { role: "user", content: prompt },
+                  ],
+                  undefined,
+                  { timeoutMs: 120000 },
+              );
         try {
             const parsed = parseJsonLoose(response);
             const pages = normalizePages(parsed).map((p, i) => ({
