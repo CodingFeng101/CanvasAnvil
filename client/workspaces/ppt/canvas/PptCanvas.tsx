@@ -669,12 +669,13 @@ export function PptCanvas({
       label: uploadedImageLabel(i + 1, uiLang as MaterialLang),
     }));
     /**
-     * Which image call a slide takes.
+     * Which image call a slide takes: the user's choice from the chat toolbar,
+     * not the router's guess.
      *
-     * The router picks by itself unless the user pinned a mode in the chat
-     * panel. Editing needs something to edit, so a pinned "edit" still redraws
-     * a slide that has no image yet -- otherwise the message would silently do
-     * nothing.
+     * A payload without the field predates the toolbar, so it falls back to
+     * what the router wanted. Editing needs something to edit, and a message
+     * can add a slide that has no picture yet -- that one still gets drawn,
+     * or it would come out blank.
      */
     const pinnedImageMode: "auto" | "edit" | "regenerate" =
       parsed?.imageMode === "edit" || parsed?.imageMode === "regenerate" ? parsed.imageMode : "auto";

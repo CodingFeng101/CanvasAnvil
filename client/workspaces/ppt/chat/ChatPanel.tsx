@@ -111,14 +111,16 @@ export function ChatPanel({
   const [pptClearTick, setPptClearTick] = useState(0);
   const lastUploadedImagesRef = useRef<string[]>([]);
   /**
-   * Which image call the next message should take.
+   * Which image call the next message takes.
    *
-   * "auto" leaves it to the router, which is right most of the time and wrong
-   * in the two ways a user notices: a wording tweak that redraws the whole
-   * slide and loses a picture they liked, and a request to change the picture
-   * that edits the old one instead of drawing a new one.
+   * Always one of the two, never the router's guess: by the time there is a
+   * conversation there is a slide on screen with a picture in it, so editing
+   * is the safe default and redrawing is the deliberate choice. Leaving it to
+   * the router was wrong in the two ways a user notices -- a wording tweak
+   * redrawing the whole slide and losing a picture they liked, and a request
+   * to change the picture editing the old one instead.
    */
-  const [imageMode, setImageMode] = useState<"auto" | "edit" | "regenerate">("auto");
+  const [imageMode, setImageMode] = useState<"edit" | "regenerate">("edit");
   const imageModeRef = useRef(imageMode);
   imageModeRef.current = imageMode;
 
@@ -234,16 +236,11 @@ const getPptTag = (slideId: string, title: string, kind: "outline" | "slide_imag
       // any {{image:...}} references the model emitted.
       try {
         const parsed = JSON.parse(jsonText);
-        let changed = false;
         if (lastUploadedImagesRef.current.length > 0) {
           parsed.uploadedImages = lastUploadedImagesRef.current;
-          changed = true;
         }
-        if (imageModeRef.current !== 'auto') {
-          parsed.imageMode = imageModeRef.current;
-          changed = true;
-        }
-        await runCodeAction(changed ? JSON.stringify(parsed) : jsonText, 'ppt');
+        parsed.imageMode = imageModeRef.current;
+        await runCodeAction(JSON.stringify(parsed), 'ppt');
       } catch {
         await runCodeAction(jsonText, 'ppt');
       }
@@ -706,7 +703,7 @@ const getPptTag = (slideId: string, title: string, kind: "outline" | "slide_imag
                   )}
                   variant="ghost"
                   size="sm"
-                  onClick={() => setImageMode((m) => (m === "edit" ? "auto" : "edit"))}
+                  onClick={() => setImageMode("edit")}
                   className={cn(
                     "h-8 w-8 p-0",
                     imageMode === "edit"
@@ -723,7 +720,7 @@ const getPptTag = (slideId: string, title: string, kind: "outline" | "slide_imag
                   )}
                   variant="ghost"
                   size="sm"
-                  onClick={() => setImageMode((m) => (m === "regenerate" ? "auto" : "regenerate"))}
+                  onClick={() => setImageMode("regenerate")}
                   className={cn(
                     "h-8 w-8 p-0",
                     imageMode === "regenerate"
