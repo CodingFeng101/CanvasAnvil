@@ -20,18 +20,3 @@ services:
       start_period: 15s
     restart: unless-stopped
 
-  pptist-lab:
-    image: canvasanvil/pptist-lab:latest
-    container_name: canvasanvil-pptist-lab
-    build:
-      context: ../..
-      dockerfile: deploy/docker/Dockerfile.pptist-lab
-    ports:
-      - "127.0.0.1:18003:80"
-    healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1/ >/dev/null || exit 1"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 15s
-    restart: unless-stopped

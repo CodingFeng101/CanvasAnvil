@@ -5,7 +5,7 @@
 <h1 align="center">CanvasAnvil</h1>
 
 <p align="center">
-  <strong>面向流程绘制、室内设计、PPT、海报、信息图与产品介绍的 AI 多画布创作平台。</strong>
+  <strong>面向流程绘制、室内设计与 PPT 的 AI 多画布创作平台。</strong>
 </p>
 
 <p align="center">
@@ -14,7 +14,7 @@
   <img alt="React" src="https://img.shields.io/badge/React-18.3-61dafb?logo=react&logoColor=white" />
   <img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-5.8-3178c6?logo=typescript&logoColor=white" />
   <img alt="Vite" src="https://img.shields.io/badge/Vite-6.3-646cff?logo=vite&logoColor=white" />
-  <img alt="workspaces" src="https://img.shields.io/badge/workspaces-6-orange" />
+  <img alt="workspaces" src="https://img.shields.io/badge/workspaces-3-orange" />
   <img alt="PRs welcome" src="https://img.shields.io/badge/PRs-welcome-brightgreen" />
 </p>
 
@@ -31,7 +31,7 @@
   <strong>⭐ 如果 CanvasAnvil 对你有帮助，欢迎给仓库点个 Star，也可以 Fork 一份继续扩展你自己的画布工作流。</strong>
 </p>
 
-> CanvasAnvil 将流程图、室内设计工作流、PPT 制作、海报、信息图和产品介绍整合到一个统一工作区中。
+> CanvasAnvil 将流程图、室内设计工作流和 PPT 制作整合到一个统一工作区中。
 
 ## 🔷 流程绘制画布
 
@@ -103,57 +103,6 @@
   </tr>
 </table>
 
-## 📣 海报画布
-
-适合快速完成高冲击力的单页视觉表达，重点处理版式、字体层次和海报级构图。
-
-### 成品实例
-
-<table>
-  <tr>
-    <td width="50%" align="center"><img src="public/examples/poster/01.png" alt="海报示例：青年设计论坛 2026" width="100%" /><br/><strong>青年设计论坛 2026</strong></td>
-    <td width="50%" align="center"><img src="public/examples/poster/02.png" alt="海报示例：江南国潮文化艺术节" width="100%" /><br/><strong>江南国潮文化艺术节</strong></td>
-  </tr>
-  <tr>
-    <td width="50%" align="center"><img src="public/examples/poster/03.png" alt="海报示例：城市夏日独立音乐节" width="100%" /><br/><strong>城市夏日独立音乐节</strong></td>
-    <td width="50%" align="center"><img src="public/examples/poster/04.png" alt="海报示例：未来智能科技峰会 2026" width="100%" /><br/><strong>未来智能科技峰会 2026</strong></td>
-  </tr>
-</table>
-
-## 📊 信息图画布
-
-将信息密度较高的内容整理成清晰的视觉讲解版面，兼顾可读性、结构性与展示效果。
-
-### 成品实例
-
-<table>
-  <tr>
-    <td width="50%" align="center"><img src="public/examples/infographic/01.png" alt="信息图示例：AI 算力增长趋势" width="100%" /><br/><strong>AI 算力增长趋势</strong></td>
-    <td width="50%" align="center"><img src="public/examples/infographic/02.png" alt="信息图示例：智能汽车用户关注点" width="100%" /><br/><strong>智能汽车用户关注点</strong></td>
-  </tr>
-  <tr>
-    <td width="50%" align="center"><img src="public/examples/infographic/03.png" alt="信息图示例：健康作息指南" width="100%" /><br/><strong>健康作息指南</strong></td>
-    <td width="50%" align="center"><img src="public/examples/infographic/04.png" alt="信息图示例：低碳生活方式" width="100%" /><br/><strong>低碳生活方式</strong></td>
-  </tr>
-</table>
-
-## 🛍️ 产品介绍画布
-
-围绕产品主视觉、卖点和叙事结构组织信息，适合输出产品介绍页、上线宣传页和展示视觉。
-
-### 成品实例
-
-<table>
-  <tr>
-    <td width="50%" align="center"><img src="public/examples/product/01.png" alt="产品示例：无线降噪耳机" width="100%" /><br/><strong>无线降噪耳机</strong></td>
-    <td width="50%" align="center"><img src="public/examples/product/02.png" alt="产品示例：旗舰游戏本" width="100%" /><br/><strong>旗舰游戏本</strong></td>
-  </tr>
-  <tr>
-    <td width="50%" align="center"><img src="public/examples/product/03.png" alt="产品示例：焕亮精华液" width="100%" /><br/><strong>焕亮精华液</strong></td>
-    <td width="50%" align="center"><img src="public/examples/product/04.png" alt="产品示例：智能纯电 SUV" width="100%" /><br/><strong>智能纯电 SUV</strong></td>
-  </tr>
-</table>
-
 ## 🎨 创作画布
 
 | 画布 | 核心能力 | 常见输出 |
@@ -161,27 +110,45 @@
 | `流程绘制` | 结构化图表生成与局部编辑 | 流程图、架构图、逻辑图 |
 | `室内设计` | 室内方案规划、图纸协同与交付打包 | 概念板、二维图纸、渲染任务单、材料清单 |
 | `PPT 演示` | 结构化演示文稿生成与多种导出 | 演示文稿、汇报幻灯片、可编辑演示稿、提案稿 |
-| `海报` | 单张视觉传达与版式表达 | 活动海报、宣传海报、主视觉物料 |
-| `信息图` | 信息设计与可视化讲解 | 讲解型信息图、主题信息板、对比图表 |
-| `产品介绍` | 产品叙事与卖点表达 | 产品展示页、卖点视觉页、上线宣传页 |
 
 ## 🌈 版本发布
 
 当前版本：`v2.1.0`
 
-- 更新 CanvasAnvil 门户界面，优化入口体验与产品导航结构
-- 新增 `pptist-lab` 独立部署方式，支持 PPT 编辑器作为独立服务运行
-- 统一主应用与独立 PPT 编辑器服务的本地和部署端口规划
-- 更新并同步在线访问地址为 `https://canvasanvil.codingfgd.asia`
-- 优化 PPT 编辑器在域名、HTTPS 与反向代理生产环境下的嵌入兼容性
+本分支未发布内容 —— 整个项目的结构性重构，以及重构过程中发现并修复的问题。完整列表见 [CHANGELOG.md](CHANGELOG.md)。
+
+**做减法**
+
+- 只保留三个画布：流程绘制、室内设计、PPT 演示。海报、产品、信息图画布已移除。
+- 移除内嵌的 `pptist-lab` 编辑器；可编辑演示稿直接导出 `.pptx`。
+- 统一为一条 OpenAI 兼容请求路径。厂商列表不仅从应用中移除，也从 `cad-skill` 和 `ppt-skill` 两个 skill 包中移除 —— 它们各自还带着一份九厂商的图像注册表，其中八个根本没有可用的接口地址。
+- 移除与 Vite 客户端重复的 Next.js 移植版本，以及旧 `PptWorkspace` 藏着的约 900 行不可达代码。
+
+**做结构**
+
+- 仓库拆分为 `client/`、`server/`、`contracts/`、`resources/`；每个工作区都是同样的三层：纯函数模块、按功能划分的 hook、一个界面一个文件。规范写在 [docs/architecture.md](docs/architecture.md)。
+- `PptCanvas.tsx` 从 5,300 行降到约 2,250 行，并且自身不再渲染任何界面。
+- 共享 UI 组件、存储层、文件处理链路、聊天基础设施和多语言各自只存在一份，不再每个工作区一套。
+- 开启 TypeScript 严格模式并做了分包：首屏加载从 2.89 MB 降到约 700 KB（未压缩）。
+- 260 个测试（`npm test`，node:test）覆盖重构必须保持不变的纯逻辑。
+
+**PPT 工作流**
+
+- 可编辑导出改为即时完成。此前会先进入文本框校对界面，再为每页跑三次模型调用；两页的演示稿要五分钟以上，现在约一秒。
+- 大纲规划智能体现在能看到模板，并据此撰写每页画面描述。此前它凭空发明配色，生图时又压过模板 —— 用深色模板做出来的演示稿是白底的。
+- 挂在某一页上的素材图、以及在交互区上传的图片，现在能真正送达生图模型。此前它们都在调用接口前被丢弃。
+- 交互区工具栏新增两个开关，可指定本次消息是「改图」还是「重画」；两个都不选则仍由模型自行判断。
+- 放映功能重新有了入口 —— 它一直是完整的，只是没有任何地方能进去。
+
+**修复**
+
+沿途发现并修复 21 处缺陷，包括每个聊天面板都存在的无限渲染循环、CAD 中四处吞掉补丁失败的 catch 块，以及会把整段对话写进控制台的服务端调试日志。
 
 ## 🌐 在线使用
 
 当前在线访问地址：
 
 - 🔗 CanvasAnvil：[https://canvasanvil.codingfgd.asia](https://canvasanvil.codingfgd.asia)
-
-PPT 编辑器已改为独立 `pptist-lab` 服务部署，并通过 CanvasAnvil 的 PPT 工作区嵌入使用。
 
 ## 🎬 视频教程
 
@@ -197,12 +164,6 @@ CanvasAnvil 为每个画布都提供了专用本地 skill，用来保证工作�
   导出图纸打包结果与 CSV 材料清单，便于后续交付。
 - `ppt-skill` · 完整演示稿生产
   强制先确认大纲，再生成整套演示稿，并导出可编辑 PPT、PDF 或图片版 PPT。
-- `poster-skill` · 单张海报视觉生成
-  强调海报级构图、字体层次和成品表达。
-- `infographic-skill` · 信息图组织与讲解
-  负责高密度信息整理、视觉讲解和信息图版式。
-- `product-skill` · 产品卖点展示物料
-  围绕产品定位、卖点和展示视觉组织内容。
 
 所有 skill 默认使用宿主文本模型。只有生图能力需要单独配置图片生成供应商。
 
@@ -216,23 +177,13 @@ npm install
 
 2. 启动本地开发
 
-CanvasAnvil 统一使用两个本地端口：主应用运行在 `8001`，PPTist Lab 运行在 `8003`。使用组合命令可以同时启动两个服务。
-
 ```bash
-npm run dev:full
+npm run dev
 ```
 
-默认访问地址：
+默认访问地址：`http://127.0.0.1:8001`
 
-- 主应用：`http://127.0.0.1:8001`
-- PPTist Lab：`http://127.0.0.1:8003`
-
-生产部署时，CanvasAnvil 采用双服务部署：
-
-- 🧩 主应用：CanvasAnvil Web App
-- 📑 PPT 编辑器：独立 `pptist-lab` 静态服务
-
-Docker 和传统部署方式都需要同时启动这两个服务。详细配置见 [deploy/README.zh-CN.md](deploy/README.zh-CN.md)。
+CanvasAnvil 以单服务部署，详细配置见 [deploy/README.zh-CN.md](deploy/README.zh-CN.md)。
 
 3. 运行类型检查
 
@@ -248,19 +199,22 @@ npm run build
 
 ## 🧪 常用命令
 
-- `npm run dev:full`：启动 `8001` 端口的主应用和 `8003` 端口的 PPTist Lab
-- `cd pptist-lab && npm run dev`：在 `8003` 端口启动 PPTist Lab
+- `npm run dev`：在 `8001` 端口启动应用
 - `npm run check`：执行 TypeScript 检查
 - `npm run build`：构建生产版本
 
 ## 📝 开发说明
 
-- AI 配置读取本地应用设置；生图工作流使用已配置的图片生成供应商
-- 本地开发依赖 API 服务提供 `/api/ppt-ai` 等接口
-- 修改 `vite.config.ts` 中的本地 API 路由后，需要重启开发服务
+- 所有模型调用都走 OpenAI 的 HTTP 协议。想换厂商，只要在设置里把 Base URL 指向它的 OpenAI 兼容端点即可，没有厂商列表可选。
+- AI 配置读取本地应用设置；文本通道和生图通道分别配置。
+- 本地开发依赖 API 服务提供 `/api/chat` 和 `/api/ppt-ai`。
+- 修改 `vite.config.ts` 中的本地 API 路由后，需要重启开发服务。
+- `server/**` 使用相对路径导入：`vite.config.ts` 会 import 开发中间件（这样 `npm run dev` 一条命令就带 API），而 Vite 用纯 Node 加载自己的配置文件，不认 `@/` 别名。
+- 设置 `PROMPT_LOG_DIR` 可把拼装好的提示词写入磁盘；默认关闭，因为日志里含有用户内容。
 
 ## 📚 文档
 
+- 架构说明：[docs/architecture.md](docs/architecture.md)
 - 部署说明：[deploy/README.md](deploy/README.md)
 
 ## ⚖️ 许可证
@@ -276,4 +230,4 @@ CanvasAnvil 采用 GNU Affero General Public License v3.0（AGPL-3.0）协议发
 
 欢迎加入「智构开源社」群聊，一起交流 CanvasAnvil 及开源项目相关内容。
 
-![智构开源社微信群二维码](public/community/wechat-group.png)
+![智构开源社微信群二维码](docs/assets/wechat-group.png)

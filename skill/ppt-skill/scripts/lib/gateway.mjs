@@ -1,4 +1,4 @@
-import { resolveImageRoute } from "./provider-registry.mjs";
+import { resolveImageRoute } from "./image-route.mjs";
 
 function joinUrl(baseUrl, endpoint) {
   const base = String(baseUrl || "").trim().replace(/\/+$/, "");
@@ -7,39 +7,6 @@ function joinUrl(baseUrl, endpoint) {
   if (/^https?:\/\//i.test(path)) return path;
   if (!base) return path;
   return `${base}/${path.replace(/^\/+/, "")}`;
-}
-
-function extractByPath(input, path) {
-  const normalized = String(path || "").trim();
-  if (!normalized) return input;
-  const tokens = normalized
-    .replace(/\[(\d+)\]/g, ".$1")
-    .split(".")
-    .map((token) => token.trim())
-    .filter(Boolean);
-  let current = input;
-  for (const token of tokens) {
-    if (current == null) return undefined;
-    current = current[token];
-  }
-  return current;
-}
-
-function applyTemplate(value, context) {
-  if (typeof value === "string") {
-    if (value.startsWith("$")) return context[value.slice(1)];
-    return value.replace(/\$([a-zA-Z0-9_]+)/g, (_, key) => {
-      const resolved = context[key];
-      return resolved == null ? "" : typeof resolved === "string" ? resolved : JSON.stringify(resolved);
-    });
-  }
-  if (Array.isArray(value)) return value.map((item) => applyTemplate(item, context));
-  if (value && typeof value === "object") {
-    const out = {};
-    for (const [key, item] of Object.entries(value)) out[key] = applyTemplate(item, context);
-    return out;
-  }
-  return value;
 }
 
 async function convertRemoteImageToDataUrl(url) {

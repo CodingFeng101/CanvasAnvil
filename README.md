@@ -5,7 +5,7 @@
 <h1 align="center">CanvasAnvil</h1>
 
 <p align="center">
-  <strong>AI-powered multi-canvas creation for Flow, CAD, PPT, Poster, Infographic, and Product storytelling.</strong>
+  <strong>AI-powered multi-canvas creation for Flow, CAD, and PPT.</strong>
 </p>
 
 <p align="center">
@@ -14,7 +14,7 @@
   <img alt="React" src="https://img.shields.io/badge/React-18.3-61dafb?logo=react&logoColor=white" />
   <img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-5.8-3178c6?logo=typescript&logoColor=white" />
   <img alt="Vite" src="https://img.shields.io/badge/Vite-6.3-646cff?logo=vite&logoColor=white" />
-  <img alt="workspaces" src="https://img.shields.io/badge/workspaces-6-orange" />
+  <img alt="workspaces" src="https://img.shields.io/badge/workspaces-3-orange" />
   <img alt="PRs welcome" src="https://img.shields.io/badge/PRs-welcome-brightgreen" />
 </p>
 
@@ -31,7 +31,7 @@
   <strong>⭐ If CanvasAnvil helps your workflow, please star the repo and fork it for your own canvas experiments.</strong>
 </p>
 
-> CanvasAnvil brings diagramming, interior design workflows, presentation production, poster creation, infographic composition, and product storytelling into one unified workspace.
+> CanvasAnvil brings diagramming, interior design workflows, and presentation production into one unified workspace.
 
 ## 🔷 Flow Canvas
 
@@ -103,57 +103,6 @@ Generate full presentations through a controlled pipeline: outline first, visual
   </tr>
 </table>
 
-## 📣 Poster Canvas
-
-Create high-impact single-frame visuals built for announcements, campaigns, events, and brand moments where composition has to carry fast.
-
-### Showcase
-
-<table>
-  <tr>
-    <td width="50%" align="center"><img src="public/examples/poster/01.png" alt="Poster example: Youth Design Forum 2026" width="100%" /><br/><strong>Youth Design Forum 2026</strong></td>
-    <td width="50%" align="center"><img src="public/examples/poster/02.png" alt="Poster example: Jiangnan Guochao Culture Festival" width="100%" /><br/><strong>Jiangnan Guochao Culture Festival</strong></td>
-  </tr>
-  <tr>
-    <td width="50%" align="center"><img src="public/examples/poster/03.png" alt="Poster example: Urban Summer Indie Music Festival" width="100%" /><br/><strong>Urban Summer Indie Music Festival</strong></td>
-    <td width="50%" align="center"><img src="public/examples/poster/04.png" alt="Poster example: Future Intelligent Technology Summit 2026" width="100%" /><br/><strong>Future Intelligent Technology Summit 2026</strong></td>
-  </tr>
-</table>
-
-## 📊 Infographic Canvas
-
-Translate dense information into visual explanation boards that stay readable, structured, and presentation-ready.
-
-### Showcase
-
-<table>
-  <tr>
-    <td width="50%" align="center"><img src="public/examples/infographic/01.png" alt="Infographic example: AI computing power growth trend" width="100%" /><br/><strong>AI Computing Power Growth Trend</strong></td>
-    <td width="50%" align="center"><img src="public/examples/infographic/02.png" alt="Infographic example: smart car user priorities" width="100%" /><br/><strong>Smart Car User Priorities</strong></td>
-  </tr>
-  <tr>
-    <td width="50%" align="center"><img src="public/examples/infographic/03.png" alt="Infographic example: healthy daily routine guide" width="100%" /><br/><strong>Healthy Daily Routine Guide</strong></td>
-    <td width="50%" align="center"><img src="public/examples/infographic/04.png" alt="Infographic example: low-carbon lifestyle guide" width="100%" /><br/><strong>Low-Carbon Lifestyle Guide</strong></td>
-  </tr>
-</table>
-
-## 🛍️ Product Canvas
-
-Present products through feature-led layouts that combine hero imagery, selling points, and narrative structure for launch and showcase use.
-
-### Showcase
-
-<table>
-  <tr>
-    <td width="50%" align="center"><img src="public/examples/product/01.png" alt="Product example: wireless noise-cancelling earbuds" width="100%" /><br/><strong>Wireless Noise-Cancelling Earbuds</strong></td>
-    <td width="50%" align="center"><img src="public/examples/product/02.png" alt="Product example: flagship gaming laptop" width="100%" /><br/><strong>Flagship Gaming Laptop</strong></td>
-  </tr>
-  <tr>
-    <td width="50%" align="center"><img src="public/examples/product/03.png" alt="Product example: brightening essence skincare" width="100%" /><br/><strong>Brightening Essence Skincare</strong></td>
-    <td width="50%" align="center"><img src="public/examples/product/04.png" alt="Product example: intelligent electric SUV" width="100%" /><br/><strong>Intelligent Electric SUV</strong></td>
-  </tr>
-</table>
-
 ## 🎨 Creative Canvases
 
 | Workspace | Focus | Typical output |
@@ -161,27 +110,46 @@ Present products through feature-led layouts that combine hero imagery, selling 
 | `Flow` | structured diagram generation and partial editing | flowcharts, architecture diagrams, logic diagrams |
 | `CAD` | interior planning, drawing coordination, and delivery packaging | concept boards, 2D drawings, render briefs, material lists |
 | `PPT` | structured presentation generation and mixed export workflows | presentations, pitch decks, editable decks, report slides |
-| `Poster` | single-frame visual communication | event posters, promotional posters, campaign key visuals |
-| `Infographic` | information design and visual explanation | explainer graphics, thematic information boards, comparison charts |
-| `Product` | product storytelling and feature communication | product showcase pages, selling-point visuals, launch pages |
 
 ## 🌈 Release
 
 Current release: `v2.1.0`
 
-- Refreshed the CanvasAnvil portal interface with clearer product navigation.
-- Added standalone `pptist-lab` deployment for the editable PPT editor.
-- Standardized local and deployment ports around the main app and the dedicated PPT editor service.
-- Updated the online access URL to `https://canvasanvil.codingfgd.asia`.
-- Improved PPT editor embedding compatibility for domain, HTTPS, and reverse-proxy deployments.
+Unreleased on this branch — a structural refactor of the whole project, plus the
+fixes that came out of it. See [CHANGELOG.md](CHANGELOG.md) for the full list.
+
+**Narrowed**
+
+- Three canvases only: Flow, Interior Design and PPT. The poster, product and infographic canvases are gone.
+- The embedded `pptist-lab` editor is gone; editable decks export directly as `.pptx`.
+- One OpenAI-compatible request path. The provider list is gone from the app *and* from the `cad-skill` and `ppt-skill` bundles, which had carried a nine-vendor image registry of their own — eight of them with no reachable endpoint.
+- The Next.js port that shadowed the Vite client is gone, along with roughly 900 lines of unreachable code the old `PptWorkspace` was hiding.
+
+**Restructured**
+
+- The repository now separates `client/`, `server/`, `contracts/` and `resources/`, and every workspace has the same three layers: pure modules, per-feature hooks, one file per screen. Written down in [docs/architecture.md](docs/architecture.md).
+- `PptCanvas.tsx` went from 5,300 lines to roughly 2,250 and renders no UI of its own.
+- The shared UI kit, storage layer, file pipeline, chat plumbing and i18n each exist once instead of per workspace.
+- TypeScript strict mode is on and the bundle is split: initial load dropped from 2.89 MB to roughly 700 KB raw.
+- 260 tests (`npm test`, node:test) cover the pure logic the refactor had to preserve.
+
+**PPT workflow**
+
+- Editable export is immediate. It used to open a text-box review and then spend three model calls per slide; a two-slide deck took over five minutes, and now takes about a second.
+- The planner is given the deck template and writes slide descriptions that match it. It used to invent its own palette, which then outvoted the template at render time — a deck built on a dark template came out white.
+- Material images attached to a slide, and pictures attached in the chat panel, now actually reach the image model. Both were being dropped before the API call.
+- The chat toolbar has two toggles for pinning whether a message edits the current slide image or redraws it; leaving both off keeps the router in charge.
+- The slideshow has a way in again — it was complete but had no entry point.
+
+**Fixed**
+
+Twenty-one defects found along the way, including an infinite render loop in every chat panel, four CAD catch blocks that swallowed a failed patch apply, and server-side debug logging that wrote entire conversations to the console.
 
 ## 🌐 Online Access
 
 Current online access URL:
 
 - 🔗 CanvasAnvil: [https://canvasanvil.codingfgd.asia](https://canvasanvil.codingfgd.asia)
-
-The editable PPT editor is deployed as a standalone `pptist-lab` service and is embedded through the CanvasAnvil PPT workspace.
 
 ## Video Tutorial
 
@@ -197,12 +165,6 @@ CanvasAnvil includes dedicated local skills for each canvas so workflows stay op
   Exports drawing bundles and a CSV material list for downstream delivery.
 - `ppt-skill` · Full presentation production
   Enforces outline review before generation and supports editable PPT, PDF, and image-based PPT output.
-- `poster-skill` · Single-frame campaign visuals
-  Focuses on strong composition, typography, and poster-ready output.
-- `infographic-skill` · Information-to-visual translation
-  Organizes dense content into readable infographic layouts.
-- `product-skill` · Feature-led product storytelling
-  Builds showcase visuals around positioning, selling points, and launch messaging.
 
 All skills use the host text model by default. Only image generation requires explicit provider configuration.
 
@@ -216,23 +178,13 @@ npm install
 
 2. Start local development
 
-CanvasAnvil uses two local ports: the main app runs on `8001`, and PPTist Lab runs on `8003`. Use the combined dev command to start both.
-
 ```bash
-npm run dev:full
+npm run dev
 ```
 
-Default URLs:
+Default URL: `http://127.0.0.1:8001`
 
-- Main app: `http://127.0.0.1:8001`
-- PPTist Lab: `http://127.0.0.1:8003`
-
-For production deployment, CanvasAnvil now uses a dual-service setup:
-
-- 🧩 Main app: CanvasAnvil Web App
-- 📑 PPT editor: standalone `pptist-lab` static service
-
-Docker and traditional deployments must run both services. See [deploy/README.md](deploy/README.md) for detailed deployment configuration.
+CanvasAnvil deploys as a single service. See [deploy/README.md](deploy/README.md) for detailed deployment configuration.
 
 3. Run type checks
 
@@ -248,19 +200,22 @@ npm run build
 
 ## 🧪 Common Commands
 
-- `npm run dev:full`: start the main app on `8001` and PPTist Lab on `8003`
-- `cd pptist-lab && npm run dev`: start PPTist Lab on port `8003`
+- `npm run dev`: start the app on `8001`
 - `npm run check`: run TypeScript checks
 - `npm run build`: build the production bundle
 
 ## 📝 Development Notes
 
-- AI configuration is read from local app settings; image-generation workflows use the configured image provider
-- Local development depends on the API service for routes such as `/api/ppt-ai`
-- After changing local API route wiring in `vite.config.ts`, restart the dev server
+- Every model call uses the OpenAI HTTP protocol. To use another vendor, point the base URL in Settings at their OpenAI-compatible endpoint — there is no provider list to pick from.
+- AI configuration is read from local app settings; the text and image channels are configured separately.
+- Local development depends on the API service for `/api/chat` and `/api/ppt-ai`.
+- After changing local API route wiring in `vite.config.ts`, restart the dev server.
+- `server/**` uses relative imports: `vite.config.ts` imports the dev middleware so `npm run dev` serves the API in-process, and Vite loads its own config through plain Node, which does not know the `@/` alias.
+- Set `PROMPT_LOG_DIR` to write assembled prompts to disk; it is off by default because the log contains the user's content.
 
 ## 📚 Docs
 
+- Architecture overview: [docs/architecture.md](docs/architecture.md)
 - Deployment guide: [deploy/README.md](deploy/README.md)
 
 ## ⚖️ License
@@ -276,4 +231,4 @@ See [LICENSE](LICENSE) for the full license text.
 
 欢迎加入「智构开源社」群聊，一起交流 CanvasAnvil 及开源项目相关内容。
 
-![智构开源社微信群二维码](public/community/wechat-group.png)
+![智构开源社微信群二维码](docs/assets/wechat-group.png)

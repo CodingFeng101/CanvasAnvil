@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import { getDefaultBaseUrl as getDefaultImageBaseUrl } from "./provider-registry.mjs";
+import { OPENAI_DEFAULT_BASE_URL } from "./image-route.mjs";
 
 export function fail(message) {
   console.error(message);
@@ -24,26 +24,21 @@ export function resolveFromCwd(inputPath) {
   return path.resolve(process.cwd(), inputPath);
 }
 
-export function loadImageProviderConfig(configFile) {
+export function loadImageConfig(configFile) {
   const target = configFile
     ? resolveFromCwd(configFile)
     : resolveFromCwd(path.join("config", "image-provider.json"));
   if (!fs.existsSync(target)) {
-    fail(`Missing provider config file: ${target}`);
+    fail(`Missing image config file: ${target}`);
   }
   const raw = readJson(target);
-  const provider = String(raw.provider || "").trim().toLowerCase();
   const apiKey = String(raw.apiKey || "").trim();
   const model = String(raw.model || "").trim();
-  const baseUrl = String(raw.baseUrl || getDefaultImageBaseUrl(provider) || "").trim();
-  if (!provider || !apiKey || !model) {
-    fail("Missing image provider configuration. Required: provider, apiKey, model.");
-  }
-  if (provider === "custom") {
-    fail("Custom image providers are not supported in ppt-skill.");
+  const baseUrl = String(raw.baseUrl || OPENAI_DEFAULT_BASE_URL).trim();
+  if (!apiKey || !model) {
+    fail("Missing image configuration. Required: apiKey, model.");
   }
   return {
-    provider,
     apiKey,
     model,
     baseUrl,

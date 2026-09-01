@@ -7,7 +7,7 @@ import {
   decodeDataUrl,
   ensureDir,
   imageExtensionFromMime,
-  loadImageProviderConfig,
+  loadImageConfig,
   readJson,
   resolveFromCwd,
   safeSlug,
@@ -61,7 +61,7 @@ async function main() {
   const prompts = normalizePromptPayload(payload).filter((item) => item && typeof item === "object");
   if (prompts.length === 0) fail("No slide prompts found in prompts file.");
 
-  const channel = loadImageProviderConfig(args.configFile);
+  const channel = loadImageConfig(args.configFile);
   const outDir = resolveFromCwd(args.outDir);
   ensureDir(outDir);
   const slidesDir = path.join(outDir, "slides");
@@ -102,7 +102,6 @@ async function main() {
     type: "ppt_slide_manifest",
     name: args.name,
     generatedAt: new Date().toISOString(),
-    provider: channel.provider,
     model: channel.model,
     promptsFile: path.relative(outDir, promptsPath).replace(/\\/g, "/"),
     slides,

@@ -4,6 +4,64 @@ All notable changes to this project will be documented in this file.
 
 The format is based on Keep a Changelog, and the project aims to follow Semantic Versioning.
 
+## [Unreleased]
+
+A structural refactor of the whole project. The repository now separates
+`client/`, `server/`, `contracts/` and `resources/`, every workspace has the
+same shape, and the shared UI kit, storage layer, file pipeline and i18n each
+exist once instead of per workspace.
+
+### Removed
+
+- Removed the `pptist-lab` editor integration. The PPT canvas stays; editable decks export directly as `.pptx`.
+- Removed the poster, product and infographic canvases, narrowing the product to Flow, Interior Design and PPT.
+- Removed the multi-provider model layer and the vendor picker. All model access goes through one OpenAI-compatible transport.
+- Removed the Next.js port that shadowed the Vite client, and roughly 900 lines of unreachable code the old `PptWorkspace` was hiding.
+- Removed the editable-export review and the pipeline behind it. Asking for an editable `.pptx` used to open a text-box confirmation pass and then spend three model calls per slide; it now writes the file from what the deck already has, in about a second. A deck that went through the old review still exports with its text editable, but new decks export as images -- which makes the editable and image exports the same thing.
+- Removed the nine-vendor image registry the `cad-skill` and `ppt-skill` packages still carried, along with the `provider` config key it read. Eight of those vendors had no base URL to reach and each skill shipped its own byte-identical copy of the table. The endpoint now follows from the model's name -- `gpt-image-*` and `dall-e-*` use the images endpoint, everything else answers through chat -- and `baseUrl` points at whichever OpenAI-compatible gateway serves it.
+
+### Added
+
+- Added a **Present** button to the deck toolbar. The slideshow was complete but had no entry point, so full-screen presentation, arrow-key paging and Escape had all been unreachable.
+- Added a test suite (`npm test`, node:test) covering the pure logic the refactor had to preserve: AI request shaping, draw.io XML repair, chat storage, PPT persistence and editor adapters, the deck state machine, slide-version resolution, render-layer edits, material tokens and the chat message readers.
+
+### Changed
+
+- Turned on TypeScript strict mode and split the bundle; initial load dropped from 2.89 MB to roughly 700 KB raw.
+- Replaced the deck's 25 scattered step assignments with a state machine, so the creation step and its progress bar can no longer drift apart.
+- Consolidated the CAD and PPT chat panels, chat inputs and transcript message readers, which had been forks of one another.
+- Split the PPT canvas from one 5,300-line component into pure modules, per-feature hooks and one file per screen, and wrote that shape down in `docs/architecture.md` so it is a convention rather than one worked example.
+- Gave the CAD workspace one way to read SVG out of a model reply, and one ladder for applying a patch, replacing three drifted copies of the first and two identical copies of the second.
+
+### Fixed
+
+- Fixed an infinite render loop in every workspace's chat panel. Two file-sync effects running one step apart traded two equal-but-distinct arrays back and forth on every render.
+- Fixed the theme and dark-mode switches in the Flow chat panel, which received their handlers as props and used none of them.
+- Fixed CAD patch failures being swallowed: an exception while applying a patch left no error and no retry, so the patch appeared to do nothing.
+- Fixed the SVG load-failure toast keeping the previous language after a language switch.
+- Fixed the export-review selection pointing at a text block from an image version no longer on screen.
+- Fixed attachment chips in the CAD and PPT transcripts showing an empty character count.
+- Fixed messages whose content is a multimodal part array reading as empty text in the CAD and PPT transcripts.
+- Fixed a Docker image that copied directories which no longer exist and omitted `resources/`, which the server reads at request time.
+- Fixed SVG arriving HTML-escaped being read as "no drawing here" by the CAD canvas, which silently dropped it. The three copies of that reader had drifted; only two decoded entities.
+- Fixed the CAD workspace preferring bare `<svg>` text over a declared patch payload, which returned markup with the JSON escaping still in it.
+- Fixed the recent-history context dropping the newest turns when over budget and keeping the oldest -- backwards for something the intent router reads for continuity.
+- Fixed nine slide edits in the outline editor mutating the state they were replacing, by copying the array but not the slide inside it.
+- Fixed `ppt-skill` accepting an unsupported image provider through configuration and failing later at the HTTP layer, where `cad-skill` rejects it up front.
+- Fixed text blocks read back from storage reaching the review canvas without their geometry, where they became boxes at undefined coordinates that could be neither seen nor selected.
+- Fixed the chat upload limits applying to one of the three shapes an attachment can arrive in, so a file sent as `image` or in a `content` array skipped both the size cap and the file count.
+- Fixed the Flow composer never growing past three lines. The shared `Textarea` did not forward its ref, so the height it measured on every keystroke was never applied and the box stayed at its minimum, with resizing disabled.
+- Fixed pictures attached in the chat panel reaching only the branch that edits an existing slide image. Every branch that redraws the slide dropped them -- which is the branch a request to add a picture takes, so the attachment was lost exactly when it was the point of the message. They now travel with all five generation and edit paths, named so the prompt can say where each one goes.
+- Fixed a slide's material images never reaching the image model. The picture was read from the description, collected and sent, then dropped by the server: the edits route attached only the first reference image, which the template had taken, and the generations route sends no images at all. Because the prompt still named each material and told the model to place it, the slide came back with an invented picture rather than a visible gap. Only the materials a description actually refers to are sent now, and image generation carries up to six references instead of sharing the vision cap of three.
+- Fixed the chosen template being outvoted by the outline. The planner had no parameter for a template and had never seen one, yet it wrote a background colour and art style into every slide's visual description; that concrete text then beat the template reference at render time, so a deck built on the dark navy template came out white and flat. The planner is now given the template image and writes descriptions that match its palette and art style, and the template still outranks a description that disagrees with it at render time.
+- Fixed a slide displaying with its text erased after an editable export, from the adapter preferring a render layer's background -- the text-stripped derivative -- over the one the deck view passed.
+- Fixed the Flow composer never growing past three lines. The shared `Textarea` did not forward its ref, so the height it measured on every keystroke was never applied and the box stayed at its minimum, with resizing disabled.
+
+### Security
+
+- Removed server-side debug logging that wrote entire conversations, including inline base64 images and everything the user typed, to the console on every request.
+- Prompt logging now writes only when `PROMPT_LOG_DIR` is set, instead of dropping a file containing the full prompt into the working directory by default.
+
 ## [2.1.0] - 2026-04-25
 
 ### Added

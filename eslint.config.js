@@ -20,7 +20,16 @@ export default tseslint.config(
     rules: {
       ...reactHooks.configs.recommended.rules,
       '@typescript-eslint/no-explicit-any': 'warn',
-      '@typescript-eslint/no-unused-vars': 'warn',
+      // A leading underscore marks something deliberately unused —
+      // a positional parameter that has to exist, a discarded capture.
+      '@typescript-eslint/no-unused-vars': [
+        'warn',
+        {
+          argsIgnorePattern: '^_',
+          varsIgnorePattern: '^_',
+          caughtErrorsIgnorePattern: '^_',
+        },
+      ],
       'no-empty': 'warn',
       'prefer-const': 'warn',
       'react-refresh/only-export-components': [
