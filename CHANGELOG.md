@@ -17,11 +17,13 @@ exist once instead of per workspace.
 - Removed the poster, product and infographic canvases, narrowing the product to Flow, Interior Design and PPT.
 - Removed the multi-provider model layer and the vendor picker. All model access goes through one OpenAI-compatible transport.
 - Removed the Next.js port that shadowed the Vite client, and roughly 900 lines of unreachable code the old `PptWorkspace` was hiding.
+- Removed the editable-export review. Asking for an editable `.pptx` no longer opens a text-box confirmation pass first: the boxes are extracted the same way and the file is written straight out. The three export choices are unchanged.
 - Removed the nine-vendor image registry the `cad-skill` and `ppt-skill` packages still carried, along with the `provider` config key it read. Eight of those vendors had no base URL to reach and each skill shipped its own byte-identical copy of the table. The endpoint now follows from the model's name -- `gpt-image-*` and `dall-e-*` use the images endpoint, everything else answers through chat -- and `baseUrl` points at whichever OpenAI-compatible gateway serves it.
 
 ### Added
 
 - Added a **Present** button to the deck toolbar. The slideshow was complete but had no entry point, so full-screen presentation, arrow-key paging and Escape had all been unreachable.
+- Added a progress percentage to the export button, counted in model calls rather than slides -- a slide costs three, and a short deck that ticks per slide shows nothing for minutes.
 - Added a test suite (`npm test`, node:test) covering the pure logic the refactor had to preserve: AI request shaping, draw.io XML repair, chat storage, PPT persistence and editor adapters, the deck state machine, slide-version resolution, render-layer edits, material tokens and the chat message readers.
 
 ### Changed
@@ -49,6 +51,9 @@ exist once instead of per workspace.
 - Fixed `ppt-skill` accepting an unsupported image provider through configuration and failing later at the HTTP layer, where `cad-skill` rejects it up front.
 - Fixed text blocks read back from storage reaching the review canvas without their geometry, where they became boxes at undefined coordinates that could be neither seen nor selected.
 - Fixed the chat upload limits applying to one of the three shapes an attachment can arrive in, so a file sent as `image` or in a `content` array skipped both the size cap and the file count.
+- Fixed the Flow composer never growing past three lines. The shared `Textarea` did not forward its ref, so the height it measured on every keystroke was never applied and the box stayed at its minimum, with resizing disabled.
+- Fixed the chosen template being outvoted by the outline. The planner runs before a template is applied and cannot see one, yet it wrote a background colour and art style into every slide's visual description; that concrete text then beat the template reference at render time, so a deck built on a dark template came out white. The planner now describes subject and composition only, and the template governs palette, typography and mood.
+- Fixed a slide displaying with its text erased after an editable export, from the adapter preferring a render layer's background -- the text-stripped derivative -- over the one the deck view passed.
 - Fixed the Flow composer never growing past three lines. The shared `Textarea` did not forward its ref, so the height it measured on every keystroke was never applied and the box stayed at its minimum, with resizing disabled.
 
 ### Security
