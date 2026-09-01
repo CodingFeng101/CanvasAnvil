@@ -1,8 +1,10 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
+  materialLabel,
   materialToken,
   referencedMaterials,
+  uploadedImageLabel,
 } from "../client/workspaces/ppt/canvas/lib/material-tokens";
 
 /**
@@ -53,4 +55,34 @@ test("a name that only appears as bare text is not a reference", () => {
 
 test("no attachments means nothing to send", () => {
   assert.deepEqual(referencedMaterials(`看 ${materialToken("第1张")}`, []), []);
+});
+
+/**
+ * Pictures attached in the chat panel are named separately from a slide's own
+ * materials, because both can ride along with one slide and the prompt has to
+ * be able to say which is which.
+ */
+
+test("chat pictures and slide materials never share a name", () => {
+  const slideNames = [1, 2, 3].map((n) => materialLabel(n, "zh"));
+  const chatNames = [1, 2, 3].map((n) => uploadedImageLabel(n, "zh"));
+  assert.equal(new Set([...slideNames, ...chatNames]).size, 6);
+
+  const slideEn = [1, 2, 3].map((n) => materialLabel(n, "en"));
+  const chatEn = [1, 2, 3].map((n) => uploadedImageLabel(n, "en"));
+  assert.equal(new Set([...slideEn, ...chatEn]).size, 6);
+});
+
+test("a chat picture's name is stable and numbered from one", () => {
+  assert.equal(uploadedImageLabel(1, "zh"), "对话图1");
+  assert.equal(uploadedImageLabel(2, "en"), "Chat image 2");
+});
+
+test("a chat picture's name is not mistaken for a description reference", () => {
+  // The token syntax belongs to slide materials; a chat picture is passed by
+  // label alone, so naming one in a description must not pull it in here.
+  const picked = referencedMaterials(`看 ${materialToken(uploadedImageLabel(1, "zh"))}`, [
+    { name: materialLabel(1, "zh") },
+  ]);
+  assert.deepEqual(picked, []);
 });

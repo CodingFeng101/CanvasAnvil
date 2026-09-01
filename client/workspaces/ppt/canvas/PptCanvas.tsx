@@ -16,6 +16,8 @@ import {
 } from "./lib/slide-versions";
 import {
   buildSlideMaterialsFromAutoLabels,
+  uploadedImageLabel,
+  type MaterialLang,
 } from "./lib/material-tokens";
 import {
   creationReducer,
@@ -43,6 +45,7 @@ import {
   BEAUTIFY_RETRY_BASE_DELAY_MS,
   BEAUTIFY_RETRY_MAX_ATTEMPTS,
   MODEL_CONCURRENCY,
+  UPLOADED_IMAGE_LIMIT,
 } from "@/workspaces/ppt/canvas/lib/constants";
 import {
   deriveTextElementsFromBlocks,
@@ -649,8 +652,28 @@ export function PptCanvas({
     if (incomingSlidesRaw.length === 0) return;
 
     const uploadedImages: string[] = Array.isArray(parsed?.uploadedImages)
-      ? Array.from(new Set((parsed.uploadedImages as any[]).map((x: any) => String(x || "").trim()).filter(Boolean))).slice(0, 2)
+      ? Array.from(
+          new Set((parsed.uploadedImages as any[]).map((x: any) => String(x || "").trim()).filter(Boolean)),
+        ).slice(0, UPLOADED_IMAGE_LIMIT)
       : [];
+    /**
+     * The chat panel's pictures, named so the prompt can place them.
+     *
+     * They used to reach only the "edit the existing image" path, which is the
+     * one branch that does not redraw the slide -- so a user who attached a
+     * picture and asked for it to appear got the redraw branch instead, and
+     * the picture went nowhere.
+     */
+    const uploadedImageRefs = uploadedImages.map((url, i) => ({
+      url,
+      label: uploadedImageLabel(i + 1, uiLang as MaterialLang),
+    }));
+    const uploadedImageInstruction = uploadedImageRefs.length > 0
+      ? tr(
+          `用户在对话中上传了这些参考图：${uploadedImageRefs.map((x) => x.label).join("、")}。请把它们放进画面并保持原貌，不要重画、改色或替换。`,
+          `The user attached these reference images in chat: ${uploadedImageRefs.map((x) => x.label).join(", ")}. Place them in the slide as they are; do not redraw, recolour or replace them.`,
+        )
+      : "";
     const existingById = new Map(localSlides.map((s) => [s.id, s] as const));
     const getCurrentSlideImageUrlById = (slideId: string) => {
       const versions = imageVersions[slideId] || [];
@@ -832,8 +855,9 @@ export function PptCanvas({
             [
               ...styleRefRefs.map((x) => ({ url: x.url, label: x.label })),
               ...materials.getImageRefs(id, page.description || ""),
+              ...uploadedImageRefs,
             ],
-            [instruction.trim(), styleReferenceInstruction].filter(Boolean).join("\n")
+            [instruction.trim(), styleReferenceInstruction, uploadedImageInstruction].filter(Boolean).join("\n")
           );
           if (rendered) {
             await pushImageVersionAndProcess(slide, rendered, "generated", instruction.trim() || undefined);
@@ -855,8 +879,9 @@ export function PptCanvas({
             [
               ...styleRefRefs.map((x) => ({ url: x.url, label: x.label })),
               ...materials.getImageRefs(id, page.description || ""),
+              ...uploadedImageRefs,
             ],
-            [instruction.trim(), styleReferenceInstruction].filter(Boolean).join("\n")
+            [instruction.trim(), styleReferenceInstruction, uploadedImageInstruction].filter(Boolean).join("\n")
           );
           if (rendered) {
             await pushImageVersionAndProcess(slide, rendered, "generated", instruction.trim() || undefined);
@@ -865,7 +890,7 @@ export function PptCanvas({
         }
         const editedUrl = await pptService.editPageImage(
           page,
-          [instruction.trim(), styleReferenceInstruction].filter(Boolean).join("\n"),
+          [instruction.trim(), styleReferenceInstruction, uploadedImageInstruction].filter(Boolean).join("\n"),
           currentUrl || undefined,
           templateImage || undefined,
           Array.from(new Set([
@@ -988,6 +1013,7 @@ export function PptCanvas({
             [
               ...styleRefRefs.map((x) => ({ url: x.url, label: x.label })),
               ...materials.getImageRefs(id, page.description || ""),
+              ...uploadedImageRefs,
             ],
             [
               kind === "both" && instruction.trim() ? instruction : "",
@@ -1004,6 +1030,7 @@ export function PptCanvas({
                         )
                   )
                 : "",
+              uploadedImageInstruction,
             ].filter(Boolean).join("\n")
           );
           if (rendered) {
@@ -1043,6 +1070,7 @@ export function PptCanvas({
                       )
                 )
               : "",
+            uploadedImageInstruction,
           ].filter(Boolean).join("\n"),
           currentUrl || undefined,
           templateImage || undefined,

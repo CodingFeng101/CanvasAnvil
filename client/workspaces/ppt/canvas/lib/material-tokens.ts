@@ -21,6 +21,17 @@ export function materialLabel(index: number, lang: MaterialLang): string {
   return lang === "zh" ? `第${index}张` : `Image ${index}`;
 }
 
+/**
+ * The name a picture uploaded in the chat panel goes by.
+ *
+ * Deliberately different from a slide material's label: both kinds can ride
+ * along with one slide, and a model told about "Image 1" twice has no way to
+ * tell which picture the instruction is about.
+ */
+export function uploadedImageLabel(index: number, lang: MaterialLang): string {
+  return lang === "zh" ? `对话图${index}` : `Chat image ${index}`;
+}
+
 export function materialToken(name: string): string {
   return `{{image:${name}}}`;
 }

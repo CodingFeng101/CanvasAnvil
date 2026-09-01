@@ -25,6 +25,13 @@ export const PRESET_TEMPLATES: PresetTemplate[] = [
 export const MODEL_CONCURRENCY = 5;
 export const BEAUTIFY_CONCURRENCY = 5;
 export const EDITABLE_EXPORT_CONCURRENCY = 3;
+/**
+ * Pictures one chat message may carry into slide generation.
+ *
+ * Kept below the generation ceiling so a slide's own materials and the deck
+ * template still fit alongside them.
+ */
+export const UPLOADED_IMAGE_LIMIT = 3;
 export const EDITABLE_REVIEW_CONCURRENCY = 4;
 export const BEAUTIFY_RETRY_MAX_ATTEMPTS = 3;
 export const BEAUTIFY_RETRY_BASE_DELAY_MS = 1200;
