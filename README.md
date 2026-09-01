@@ -115,13 +115,35 @@ Generate full presentations through a controlled pipeline: outline first, visual
 
 Current release: `v2.1.0`
 
-Unreleased on `main`:
+Unreleased on this branch — a structural refactor of the whole project, plus the
+fixes that came out of it. See [CHANGELOG.md](CHANGELOG.md) for the full list.
 
-- Narrowed the product to three canvases: Flow, Interior Design, and PPT.
-- Removed the embedded `pptist-lab` editor; editable decks now export directly as `.pptx`.
-- Consolidated model access on a single OpenAI-compatible request path.
+**Narrowed**
 
-See [CHANGELOG.md](CHANGELOG.md) for the full list.
+- Three canvases only: Flow, Interior Design and PPT. The poster, product and infographic canvases are gone.
+- The embedded `pptist-lab` editor is gone; editable decks export directly as `.pptx`.
+- One OpenAI-compatible request path. The provider list is gone from the app *and* from the `cad-skill` and `ppt-skill` bundles, which had carried a nine-vendor image registry of their own — eight of them with no reachable endpoint.
+- The Next.js port that shadowed the Vite client is gone, along with roughly 900 lines of unreachable code the old `PptWorkspace` was hiding.
+
+**Restructured**
+
+- The repository now separates `client/`, `server/`, `contracts/` and `resources/`, and every workspace has the same three layers: pure modules, per-feature hooks, one file per screen. Written down in [docs/architecture.md](docs/architecture.md).
+- `PptCanvas.tsx` went from 5,300 lines to roughly 2,250 and renders no UI of its own.
+- The shared UI kit, storage layer, file pipeline, chat plumbing and i18n each exist once instead of per workspace.
+- TypeScript strict mode is on and the bundle is split: initial load dropped from 2.89 MB to roughly 700 KB raw.
+- 260 tests (`npm test`, node:test) cover the pure logic the refactor had to preserve.
+
+**PPT workflow**
+
+- Editable export is immediate. It used to open a text-box review and then spend three model calls per slide; a two-slide deck took over five minutes, and now takes about a second.
+- The planner is given the deck template and writes slide descriptions that match it. It used to invent its own palette, which then outvoted the template at render time — a deck built on a dark template came out white.
+- Material images attached to a slide, and pictures attached in the chat panel, now actually reach the image model. Both were being dropped before the API call.
+- The chat toolbar has two toggles for pinning whether a message edits the current slide image or redraws it; leaving both off keeps the router in charge.
+- The slideshow has a way in again — it was complete but had no entry point.
+
+**Fixed**
+
+Twenty-one defects found along the way, including an infinite render loop in every chat panel, four CAD catch blocks that swallowed a failed patch apply, and server-side debug logging that wrote entire conversations to the console.
 
 ## 🌐 Online Access
 
