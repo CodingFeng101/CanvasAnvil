@@ -167,35 +167,64 @@ export function validateUploadedFiles(uploadedFiles: UploadedFilePayload[]): {
     return { valid: true }
 }
 
-// Helper function to validate file parts in messages
-export function validateFileParts(messages: any[]): {
+/**
+ * The payload each attachment on a turn carries, from whichever shape it
+ * arrived in.
+ *
+ * `/api/chat` accepts three, because the AI SDK sends whichever the client
+ * used: a `parts` entry with `url`, one with `image`, and a `content` entry
+ * with `image_url.url`. The limits below have to see all three -- one that
+ * only sees `url` is not a limit, it is a limit on well-behaved clients.
+ */
+function attachmentUrls(message: unknown): string[] {
+    const record = message as { parts?: unknown; content?: unknown } | null
+    const entries = [
+        ...(Array.isArray(record?.parts) ? record.parts : []),
+        ...(Array.isArray(record?.content) ? record.content : []),
+    ]
+
+    return entries
+        .map((entry) => {
+            const part = entry as {
+                type?: unknown
+                url?: unknown
+                image?: unknown
+                image_url?: { url?: unknown }
+            } | null
+            if (!part || typeof part !== "object") return ""
+            const type = String(part.type || "")
+            if (type !== "file" && type !== "image" && type !== "image_url") return ""
+            const url = part.url ?? part.image ?? part.image_url?.url
+            return typeof url === "string" ? url : ""
+        })
+        .filter(Boolean)
+}
+
+/** Rejects a turn carrying more attachments, or larger ones, than allowed. */
+export function validateFileParts(messages: unknown[]): {
     valid: boolean
     error?: string
 } {
-    const lastMessage = messages[messages.length - 1]
-    const fileParts =
-        lastMessage?.parts?.filter((p: any) => p.type === "file") || []
+    const urls = attachmentUrls(messages[messages.length - 1])
 
-    if (fileParts.length > MAX_FILES) {
+    if (urls.length > MAX_FILES) {
         return {
             valid: false,
             error: `Too many files. Maximum ${MAX_FILES} allowed.`,
         }
     }
 
-    for (const filePart of fileParts) {
-        // Data URLs format: data:image/png;base64,<data>
-        // Base64 increases size by ~33%, so we check the decoded size
-        if (filePart.url?.startsWith("data:")) {
-            const base64Data = filePart.url.split(",")[1]
-            if (base64Data) {
-                const sizeInBytes = Math.ceil((base64Data.length * 3) / 4)
-                if (sizeInBytes > MAX_FILE_SIZE) {
-                    return {
-                        valid: false,
-                        error: `File exceeds ${MAX_FILE_SIZE / 1024 / 1024}MB limit.`,
-                    }
-                }
+    for (const url of urls) {
+        // Only an inline payload has a size we are carrying; a remote URL is
+        // a reference, and weighing it here would measure the wrong thing.
+        if (!url.startsWith("data:")) continue
+        const base64 = url.split(",")[1]
+        if (!base64) continue
+        // Base64 costs about a third in size, so the decoded length is what counts.
+        if (Math.ceil((base64.length * 3) / 4) > MAX_FILE_SIZE) {
+            return {
+                valid: false,
+                error: `File exceeds ${MAX_FILE_SIZE / 1024 / 1024}MB limit.`,
             }
         }
     }
