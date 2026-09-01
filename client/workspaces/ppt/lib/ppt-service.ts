@@ -984,9 +984,9 @@ export const pptService = {
             role: "You are PlanFromIdeaAgent for PPT planning.",
             instructions: "Generate a complete PptPlan from the idea prompt and return JSON only.",
             input: `idea_prompt: ${topic}\nui_language: ${uiLanguage}\n\nreference_files_content:\n${refText || "(none)"}\n\nreference_image_assets:\n${imageAssetText || "(none)"}`,
-            steps: "1. Convert the idea into a coherent slide sequence.\n2. Write 4-6 specific bullets per slide.\n3. Write a concrete visual description for each slide.\n4. Write a coherent speaker note paragraph for each slide.\n5. Assign materialLabels only when truly relevant.",
+            steps: "1. Convert the idea into a coherent slide sequence.\n2. Write 4-6 specific bullets per slide.\n3. Write a concrete visual description of the subject and composition for each slide -- what is depicted and how it is arranged. Do not name colours, backgrounds, lighting or art style: a template the planner cannot see decides those.\n4. Write a coherent speaker note paragraph for each slide.\n5. Assign materialLabels only when truly relevant.",
             endGoal: "Produce a complete render-ready PptPlan with stable slide ids and usable materialLabels.",
-            narrowing: "1. Return JSON only; markdown JSON block is allowed.\n2. Every slide must include id, title, content, description, layout, note, materialLabels.\n3. materialLabels must come only from reference_image_assets and can be [].\n4. All fields must follow ui_language; zh means Simplified Chinese.",
+            narrowing: "1. Return JSON only; markdown JSON block is allowed.\n2. Every slide must include id, title, content, description, layout, note, materialLabels.\n3. materialLabels must come only from reference_image_assets and can be [].\n4. All fields must follow ui_language; zh means Simplified Chinese.\n5. description must not specify a colour scheme, background colour, or art style.",
         });
 
         const response = await generateChatMessage([
@@ -1024,9 +1024,9 @@ export const pptService = {
             role: "You are PlanFromOutlineAgent for PPT planning.",
             instructions: "Generate a complete PptPlan from the outline and return JSON only.",
             input: `outline_text:\n${outlineText}\n\nui_language: ${uiLanguage}\n\nreference_files_content:\n${refText || "(none)"}\n\nreference_image_assets:\n${imageAssetText || "(none)"}`,
-            steps: "1. Expand the outline into a coherent slide sequence.\n2. Write 4-6 specific bullets per slide.\n3. Write a concrete visual description for each slide.\n4. Write a coherent speaker note paragraph for each slide.\n5. Assign materialLabels only when truly relevant.",
+            steps: "1. Expand the outline into a coherent slide sequence.\n2. Write 4-6 specific bullets per slide.\n3. Write a concrete visual description of the subject and composition for each slide -- what is depicted and how it is arranged. Do not name colours, backgrounds, lighting or art style: a template the planner cannot see decides those.\n4. Write a coherent speaker note paragraph for each slide.\n5. Assign materialLabels only when truly relevant.",
             endGoal: "Produce a complete render-ready PptPlan derived from the outline.",
-            narrowing: "1. Return JSON only; markdown JSON block is allowed.\n2. Every slide must include id, title, content, description, layout, note, materialLabels.\n3. materialLabels must come only from reference_image_assets and can be [].\n4. All fields must follow ui_language; zh means Simplified Chinese.",
+            narrowing: "1. Return JSON only; markdown JSON block is allowed.\n2. Every slide must include id, title, content, description, layout, note, materialLabels.\n3. materialLabels must come only from reference_image_assets and can be [].\n4. All fields must follow ui_language; zh means Simplified Chinese.\n5. description must not specify a colour scheme, background colour, or art style.",
         });
         const response = await generateChatMessage([
             { role: "system", content: PPT_OUTLINE_SYSTEM },
@@ -1135,10 +1135,10 @@ export const pptService = {
         const prompt = buildRisenPrompt({
             role: "You are a PPT slide image generation agent.",
             instructions: "Generate one modern, professional slide image in 16:9.",
-            input: `Title: ${page.title}\nBullets: ${(page.content || []).join(" | ")}\nLanguage: ${uiLanguage}\nScene/subject: ${page.description || page.title}\nTemplate style reference: ${templateImageUrl ? "provided" : "not provided"}\nUploaded material labels:\n${additionalLabelText}${extraRequirements ? `\n\nExtra requirements:\n${extraRequirements}` : ""}`,
-            steps: "1. Design the slide composition from the title, bullets, and description.\n2. Follow the template reference style consistently.\n3. Use referenced material images only when required or clearly helpful.\n4. Preserve the identity and aspect ratio of referenced material images.",
+            input: `Title: ${page.title}\nBullets: ${(page.content || []).join(" | ")}\nLanguage: ${uiLanguage}\nScene/subject: ${page.description || page.title}\nTemplate style reference: ${templateImageUrl ? "provided as a reference image -- it decides palette, typography and mood" : "not provided -- take the style from the scene description"}\nUploaded material labels:\n${additionalLabelText}${extraRequirements ? `\n\nExtra requirements:\n${extraRequirements}` : ""}`,
+            steps: "1. Design the slide composition from the title, bullets, and description.\n2. Take palette, typography, lighting and overall visual language from the template reference image, not from the scene description.\n3. Use referenced material images only when required or clearly helpful.\n4. Preserve the identity and aspect ratio of referenced material images.",
             endGoal: "Produce one sharp, readable, presentation-ready slide image with accurate content coverage.",
-            narrowing: "1. Avoid large paragraphs of text.\n2. Prefer diagrammatic or illustrative composition that matches the bullets.\n3. If the description contains {{image:Name}}, you must use the material image whose label is Name.\n4. Do not redraw, restyle, recolor, or replace referenced material images.\n5. Do not add watermarks.",
+            narrowing: "1. Avoid large paragraphs of text.\n2. Prefer diagrammatic or illustrative composition that matches the bullets.\n3. When a template is provided and the scene description names a colour, background or art style that disagrees with it, follow the template and keep only the description's subject and composition.\n4. If the description contains {{image:Name}}, you must use the material image whose label is Name.\n5. Do not redraw, restyle, recolor, or replace referenced material images.\n6. Do not add watermarks.",
         });
         const additionalReferenceImageUrls = Array.isArray(normalizedAdditional)
             ? normalizedAdditional.map((x) => String(x?.url || "")).filter(Boolean)
@@ -1304,8 +1304,8 @@ export const pptService = {
         const prompt = buildRisenPrompt({
             role: "You are a slide image editing agent.",
             instructions: "Edit the current slide image as the base image rather than regenerating from scratch.",
-            input: `Slide title: ${page.title}\nBullets: ${(page.content || []).join(" | ")}\nOriginal visual description: ${page.description || ""}\nInstruction: ${instruction}\nTemplate/style reference: ${templateImageUrl ? "provided" : "not provided"}\nAdditional references: ${Array.isArray(additionalImages) && additionalImages.length > 0 ? "provided" : "none"}`,
-            steps: "1. Start from the current slide image.\n2. Apply the requested visual edit.\n3. Keep the overall visual style consistent with the template and references.\n4. Preserve readability.",
+            input: `Slide title: ${page.title}\nBullets: ${(page.content || []).join(" | ")}\nOriginal visual description: ${page.description || ""}\nInstruction: ${instruction}\nTemplate/style reference: ${templateImageUrl ? "provided -- it decides palette, typography and mood" : "not provided"}\nAdditional references: ${Array.isArray(additionalImages) && additionalImages.length > 0 ? "provided" : "none"}`,
+            steps: "1. Start from the current slide image.\n2. Apply the requested visual edit.\n3. Keep the overall visual style consistent with the template, which outranks any style named in the description.\n4. Preserve readability.",
             endGoal: "Produce one edited 16:9 slide image that reflects the instruction while staying visually consistent.",
             narrowing: "1. Treat the current slide image as the base image.\n2. Keep layout readable.\n3. Do not add a watermark.",
         });
