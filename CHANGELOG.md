@@ -17,6 +17,7 @@ exist once instead of per workspace.
 - Removed the poster, product and infographic canvases, narrowing the product to Flow, Interior Design and PPT.
 - Removed the multi-provider model layer and the vendor picker. All model access goes through one OpenAI-compatible transport.
 - Removed the Next.js port that shadowed the Vite client, and roughly 900 lines of unreachable code the old `PptWorkspace` was hiding.
+- Removed the nine-vendor image registry the `cad-skill` and `ppt-skill` packages still carried, along with the `provider` config key it read. Eight of those vendors had no base URL to reach and each skill shipped its own byte-identical copy of the table. The endpoint now follows from the model's name -- `gpt-image-*` and `dall-e-*` use the images endpoint, everything else answers through chat -- and `baseUrl` points at whichever OpenAI-compatible gateway serves it.
 
 ### Added
 

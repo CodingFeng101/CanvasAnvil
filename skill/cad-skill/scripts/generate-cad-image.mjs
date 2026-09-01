@@ -3,7 +3,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { generateImageThroughGateway } from "./lib/gateway.mjs";
-import { getDefaultBaseUrl } from "./lib/provider-registry.mjs";
+import { OPENAI_DEFAULT_BASE_URL } from "./lib/image-route.mjs";
 
 function parseArgs(argv) {
   const args = {
@@ -72,18 +72,16 @@ async function main() {
   if (!String(prompt || "").trim()) fail("Missing prompt. Use --prompt or --prompt-file.");
 
   const rawConfig = loadConfig(args.configFile);
-  const provider = String(rawConfig.provider || "").trim().toLowerCase();
   const apiKey = String(rawConfig.apiKey || "").trim();
   const model = String(rawConfig.model || "").trim();
-  const baseUrl = String(rawConfig.baseUrl || getDefaultBaseUrl(provider) || "").trim();
+  const baseUrl = String(rawConfig.baseUrl || OPENAI_DEFAULT_BASE_URL).trim();
 
-  if (!provider || !apiKey || !model) {
-    fail("Missing image provider configuration. Required: provider, apiKey, model. Fill config/image-provider.json.");
+  if (!apiKey || !model) {
+    fail("Missing image configuration. Required: apiKey, model. Fill config/image-provider.json.");
   }
 
   const dataUrl = await generateImageThroughGateway({
     channel: {
-      provider,
       apiKey,
       baseUrl,
       model,

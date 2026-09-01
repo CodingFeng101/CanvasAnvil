@@ -16,19 +16,8 @@ Use when the task requires:
 
 ## First-Use Reminder
 
-On the first use of this skill in a conversation, remind the user that image generation is configurable.
-
-Image-model vendors supported in `config/image-provider.json`:
-
-- `openai`
-- `aliyun`
-- `tencent`
-- `bytedance`
-- `zhipu`
-- `google`
-- `xai`
-- `bfl`
-- `adobe`
+On the first use of this skill in a conversation, remind the user that image generation reads
+`config/image-provider.json`, and that it must be filled in before any image can be produced.
 
 ## Order
 
@@ -89,11 +78,11 @@ Supported delivery modes:
 
 If the user does not specify an export mode, recommend `pdf` and `image_ppt` first.
 
-## Provider Contract
+## Image Contract
 
 - Image generation uses `config/image-provider.json`.
-- Template generation and slide generation use the same image-provider config unless the user explicitly defines a split configuration.
-- Require `provider`, `apiKey`, and `model`.
+- Template generation and slide generation use the same image config unless the user explicitly defines a split configuration.
+- Require `apiKey` and `model`.
 - Do not ask the user to paste API keys into chat.
 - If image generation is requested and config is missing or incomplete, stop and tell the user to fill the config file.
 

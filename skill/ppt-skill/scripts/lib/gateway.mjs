@@ -1,4 +1,4 @@
-import { resolveImageRoute } from "./provider-registry.mjs";
+import { resolveImageRoute } from "./image-route.mjs";
 
 function joinUrl(baseUrl, endpoint) {
   const base = String(baseUrl || "").trim().replace(/\/+$/, "");

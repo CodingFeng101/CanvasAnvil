@@ -7,7 +7,7 @@ import {
   decodeDataUrl,
   ensureDir,
   imageExtensionFromMime,
-  loadImageProviderConfig,
+  loadImageConfig,
   readJson,
   resolveFromCwd,
   safeSlug,
@@ -88,7 +88,7 @@ async function main() {
 
   if (!prompt) fail("Resolved template prompt is empty.");
 
-  const channel = loadImageProviderConfig(args.configFile);
+  const channel = loadImageConfig(args.configFile);
   const dataUrl = await generateImageThroughGateway({
     channel,
     prompt,
@@ -123,7 +123,6 @@ async function main() {
           imageFile: path.basename(outputPath),
           promptSource: promptSource || null,
           generatedAt: new Date().toISOString(),
-          provider: channel.provider,
           model: channel.model,
         },
         null,

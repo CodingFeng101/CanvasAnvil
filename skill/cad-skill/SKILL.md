@@ -11,19 +11,7 @@ Use when the task requires one step in an interior-design workflow.
 
 ## First-Use Reminder
 
-On the first use of this skill in a conversation, remind the user that image generation is configurable and tell them which model vendors are supported in `config/image-provider.json`.
-
-Supported vendors:
-
-- `openai`
-- `aliyun`
-- `tencent`
-- `bytedance`
-- `zhipu`
-- `google`
-- `xai`
-- `bfl`
-- `adobe`
+On the first use of this skill in a conversation, remind the user that image generation reads `config/image-provider.json`, and that it must be filled in before any image can be produced.
 
 ## Order
 
@@ -120,10 +108,10 @@ Supported vendors:
   - `prompts/elevation-index-and-interior-elevations.md`
   - `prompts/detail-drawings.md`
 - Do not reuse one prompt for all seven outputs.
-- For every analysis board or sheet, first produce a dedicated image prompt with the host model, then pass that image prompt to the configured image provider.
+- For every analysis board or sheet, first produce a dedicated image prompt with the host model, then pass that image prompt to the configured image model.
 - Require `config/image-provider.json` before image generation.
 - Do not ask the user to paste API keys into chat.
-- Stop and tell the user to fill `config/image-provider.json` when provider, apiKey, or model is missing.
+- Stop and tell the user to fill `config/image-provider.json` when apiKey or model is missing.
 
 ## Scripts
 

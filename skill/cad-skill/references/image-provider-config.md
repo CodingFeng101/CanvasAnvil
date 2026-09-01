@@ -1,16 +1,18 @@
-# Image Provider Config
+# Image Config
 
 Image generation uses `config/image-provider.json`.
 
+Only OpenAI-compatible endpoints are supported. There is no vendor field:
+point `baseUrl` at whichever compatible gateway serves the model.
+
 ## Required keys
 
-- `provider`
 - `apiKey`
 - `model`
 
 ## Optional keys
 
-- `baseUrl`
+- `baseUrl` -- defaults to `https://api.openai.com/v1`
 
 ## File Path
 
@@ -20,27 +22,20 @@ Image generation uses `config/image-provider.json`.
 
 ```json
 {
-  "provider": "openai",
   "apiKey": "YOUR_KEY",
   "baseUrl": "https://api.openai.com/v1",
   "model": "gpt-image-1"
 }
 ```
 
-## Supported providers
+## Endpoint
 
-- `openai`
-- `aliyun`
-- `tencent`
-- `bytedance`
-- `zhipu`
-- `google`
-- `xai`
-- `bfl`
-- `adobe`
+Chosen from the model name, not from configuration:
+
+- `gpt-image-*` and `dall-e-*` use the images endpoint
+- every other model returns its image through chat completions
 
 ## Rule
 
-Do not ask the user to paste API keys into chat.
-
-If image generation is requested and `config/image-provider.json` is missing or incomplete, stop and tell the user to fill that file.
+- do not ask the user to paste API keys into chat
+- if `apiKey` or `model` is missing, stop and tell the user to fill the config file
