@@ -42,8 +42,6 @@ import {
   BEAUTIFY_CONCURRENCY,
   BEAUTIFY_RETRY_BASE_DELAY_MS,
   BEAUTIFY_RETRY_MAX_ATTEMPTS,
-  EDITABLE_EXPORT_CONCURRENCY,
-  EXPORT_PHASES_PER_SLIDE,
   MODEL_CONCURRENCY,
 } from "@/workspaces/ppt/canvas/lib/constants";
 import {
@@ -1189,121 +1187,8 @@ export function PptCanvas({
 
 
 
-  const setRenderLayerState = (slideId: string, versionId: string, layer: SlideRenderLayer) => {
-      const normalizedLayer: SlideRenderLayer = {
-        ...layer,
-        textBlocks: Array.isArray(layer.textBlocks) ? layer.textBlocks : [],
-        elements: Array.isArray(layer.elements) && layer.elements.length > 0
-          ? layer.elements
-          : deriveTextElementsFromBlocks(layer.textBlocks || []),
-      };
-      setRenderLayers((prev) => ({
-          ...prev,
-          [slideId]: {
-              ...(prev[slideId] || {}),
-              [versionId]: normalizedLayer,
-          },
-      }));
-  };
 
-  const processRenderedSlideVersion = async (
-    slide: SlideData,
-    slideImageUrl: string,
-    versionId: string,
-    onPhase?: (phase: "extract" | "background" | "review") => void,
-  ) => {
-      try {
-          const existingLayer = renderLayers[slide.id]?.[versionId];
-          const persistedSlideImageUrl = await persistImageUrlIfNeeded(slideImageUrl);
-          const page: PptPage = {
-            id: slide.id,
-            title: slide.title,
-            content: slide.content,
-            description: slide.description,
-            note: slide.note,
-            layout: slide.layout,
-          };
-          onPhase?.("extract");
-          const textBlocks = await pptService.extractSlideTextBlocks(
-            page,
-            persistedSlideImageUrl,
-            uiLang as "zh" | "en"
-          );
-          onPhase?.("background");
-          const backgroundImageUrlRaw = await pptService.generateTextlessPageImage(
-            page,
-            persistedSlideImageUrl,
-            textBlocks,
-            uiLang as "zh" | "en"
-          );
-          const backgroundImageUrl = await persistImageUrlIfNeeded(backgroundImageUrlRaw || persistedSlideImageUrl);
-          onPhase?.("review");
-          const reviewedTextBlocks = await pptService.reviewSlideTextBlocks(
-            page,
-            persistedSlideImageUrl,
-            backgroundImageUrl || persistedSlideImageUrl,
-            textBlocks,
-            uiLang as "zh" | "en"
-          );
-          return {
-              backgroundImageUrl: backgroundImageUrl || persistedSlideImageUrl,
-              textBlocks: reviewedTextBlocks,
-              elements: mergeTextBlocksIntoElements(reviewedTextBlocks, existingLayer?.elements || []),
-              status: "ready",
-          } satisfies SlideRenderLayer;
-      } catch (error) {
-          console.error("Failed to build PPT render layer", error);
-          const persistedSlideImageUrl = await persistImageUrlIfNeeded(slideImageUrl);
-          const failedLayer = {
-              backgroundImageUrl: persistedSlideImageUrl,
-              textBlocks: [],
-              elements: [],
-              status: "failed",
-              error: error instanceof Error ? error.message : "Failed to process slide",
-          } satisfies SlideRenderLayer;
-          setRenderLayerState(slide.id, versionId, failedLayer);
-          return failedLayer;
-      }
-  };
 
-  const upsertTextlessBackgroundVersion = async (
-    slideId: string,
-    sourceVersionId: string,
-    backgroundImageUrl: string,
-  ) => {
-    const persistedUrl = await persistImageUrlIfNeeded(backgroundImageUrl);
-    const nextTimestamp = Date.now();
-    setImageVersions((prev) => {
-      const current = prev[slideId] || [];
-      const existing = current.find(
-        (version) => version.type === "derived_textless" && version.sourceVersionId === sourceVersionId,
-      );
-      if (existing) {
-        return {
-          ...prev,
-          [slideId]: current.map((version) =>
-            version.id === existing.id
-              ? { ...version, url: persistedUrl, timestamp: nextTimestamp }
-              : version
-          ),
-        };
-      }
-      return {
-        ...prev,
-        [slideId]: [
-          ...current,
-          {
-            id: `v-textless-${nextTimestamp}-${Math.random().toString(16).slice(2)}`,
-            url: persistedUrl,
-            timestamp: nextTimestamp,
-            type: "derived_textless",
-            sourceVersionId,
-          },
-        ],
-      };
-    });
-    return persistedUrl;
-  };
 
 
   const pushImageVersion = (
@@ -1333,47 +1218,6 @@ export function PptCanvas({
       return pushImageVersion(slide.id, persistedUrl, type, instruction);
   };
 
-  const ensurePrimaryImageVersions = async (slides: SlideData[]) => {
-    const ensuredEntries = await Promise.all(
-      slides.map(async (slide) => {
-        const existingVersions = imageVersions[slide.id] || [];
-        if (existingVersions.some((version) => version.type !== "derived_textless")) {
-          return null;
-        }
-        const fallbackUrl = generatedImages[slide.id];
-        if (!fallbackUrl) return null;
-        const persistedUrl = await persistImageUrlIfNeeded(fallbackUrl);
-        return {
-          slideId: slide.id,
-          version: {
-            id: `v-${Date.now()}-${Math.random().toString(16).slice(2)}`,
-            url: persistedUrl,
-            timestamp: Date.now(),
-            type: "generated" as const,
-            instruction: tr("原始版本", "Original version"),
-          },
-        };
-      })
-    );
-
-    const validEntries = ensuredEntries.filter((item): item is NonNullable<typeof item> => !!item);
-    if (validEntries.length === 0) return;
-
-    setImageVersions((prev) => {
-      const next = { ...prev };
-      for (const entry of validEntries) {
-        next[entry.slideId] = [...(next[entry.slideId] || []), entry.version];
-      }
-      return next;
-    });
-    setCurrentImageVersionId((prev) => {
-      const next = { ...prev };
-      for (const entry of validEntries) {
-        if (!next[entry.slideId]) next[entry.slideId] = entry.version.id;
-      }
-      return next;
-    });
-  };
 
   const createTwoStageSlideProgressTracker = (
     slideCount: number,
@@ -1541,42 +1385,6 @@ export function PptCanvas({
     });
     return versionId;
 
-    /* const reconstructedVersionId = pushImageVersion(
-      slide.id,
-      persistedSourceUrl,
-      "edited",
-      tr("图片PPT转化结果", "Image PPT reconstruction"),
-      { sourceVersionId: originalVersionId }
-    );
-    setRenderLayerState(slide.id, reconstructedVersionId, {
-      backgroundImageUrl: persistedSourceUrl,
-      textBlocks: [],
-      elements: [],
-      status: "pending",
-    });
-
-    try {
-      const derived = await processRenderedSlideVersion(slide, persistedSourceUrl, reconstructedVersionId);
-      setRenderLayerState(slide.id, reconstructedVersionId, derived);
-      if (derived.status === "failed") {
-        setImageTransformFailures((prev) => ({
-          ...prev,
-          [slide.id]: derived.error || tr("图片PPT转化失败", "Image PPT transform failed"),
-        }));
-      } else {
-        setImageTransformFailures((prev) => {
-          if (!prev[slide.id]) return prev;
-          const next = { ...prev };
-          delete next[slide.id];
-          return next;
-        });
-      }
-      return reconstructedVersionId;
-    } catch (error) {
-      const message = getErrorMessage(error);
-      setImageTransformFailures((prev) => ({ ...prev, [slide.id]: message }));
-      return reconstructedVersionId;
-    } */
   };
 
   const handleStartImageTransform = async () => {
@@ -1854,7 +1662,8 @@ export function PptCanvas({
             caption: x.caption,
             sourceFile: x.sourceFileName,
             sourcePage: x.sourcePage,
-          }))
+          })),
+          templateImage || undefined,
         );
         const slides: SlideData[] = pages.map((p, i) => ({
             id: p.id || `slide-${i + 1}`,
@@ -1894,7 +1703,8 @@ export function PptCanvas({
             caption: x.caption,
             sourceFile: x.sourceFileName,
             sourcePage: x.sourcePage,
-          }))
+          })),
+          templateImage || undefined,
         );
         if (!Array.isArray(pages) || pages.length === 0) {
             throw new Error("Invalid outline response");
@@ -2044,10 +1854,17 @@ export function PptCanvas({
    * A slide whose layer and textless background both survive from an earlier
    * export is reused as it stands, so exporting twice costs one run.
    */
-  const buildEditableExportPage = async (
-    slide: SlideData,
-    onPhase?: (phase: "extract" | "background" | "review") => void,
-  ): Promise<PptPage> => {
+  /**
+   * One slide, ready to be written into an editable .pptx.
+   *
+   * Nothing is generated here. Real text boxes need a background with that
+   * text painted out, and deriving one costs several model calls per slide --
+   * export does not pay them. A slide that already has both, from an earlier
+   * run or from the image-transform path, is exported with its text editable;
+   * every other slide goes out as the rendered image, which is what a text
+   * layer over the original would look like anyway, only doubled.
+   */
+  const buildEditableExportPage = (slide: SlideData): PptPage => {
     const { versionId, imageUrl } = getSlideVersionMeta(slide.id);
     const basePage: PptPage = {
       id: slide.id,
@@ -2063,32 +1880,14 @@ export function PptCanvas({
     };
     if (!versionId || !imageUrl) return basePage;
 
-    const cachedLayer = renderLayers[slide.id]?.[versionId];
-    const cachedTextless = getTextlessBackgroundVersion(slide.id);
-    let layer: SlideRenderLayer | undefined =
-      hasRenderableTextBlocks(cachedLayer) && cachedTextless ? cachedLayer : undefined;
+    const layer = renderLayers[slide.id]?.[versionId];
+    const textless = getTextlessBackgroundVersion(slide.id);
+    if (!hasRenderableTextBlocks(layer) || !textless?.url) return basePage;
 
-    if (!layer) {
-      setRenderLayerState(slide.id, versionId, {
-        backgroundImageUrl: imageUrl,
-        textBlocks: [],
-        elements: [],
-        status: "pending",
-        error: undefined,
-      });
-      layer = await processRenderedSlideVersion(slide, imageUrl, versionId, onPhase);
-      setRenderLayerState(slide.id, versionId, layer);
-      if (layer.status === "failed") return basePage;
-      await upsertTextlessBackgroundVersion(slide.id, versionId, layer.backgroundImageUrl || imageUrl);
-    }
-
-    if (!hasRenderableTextBlocks(layer)) return basePage;
     const exportTextBlocks = layer.textBlocks.filter((block) => block.text.trim().length > 0);
     if (exportTextBlocks.length === 0) return basePage;
 
-    // The pipeline's own result is authoritative: the version it was just
-    // recorded under is not readable from this closure yet.
-    const backgroundImageUrl = layer.backgroundImageUrl || cachedTextless?.url || imageUrl;
+    const backgroundImageUrl = textless.url;
     return {
       ...editorSlideToExportPayload(
         canvasAnvilToEditorSlide(slide, {
@@ -2170,53 +1969,18 @@ export function PptCanvas({
   };
 
 
-  /**
-   * Exports the deck as an editable .pptx, doing the work rather than asking.
-   *
-   * Each slide needs its text lifted off the rendered image and a background
-   * with that text painted out, which is several model calls per slide. The
-   * deck used to walk the user through confirming every box first; it now
-   * just runs, and reports how far it has got because the wait is long enough
-   * that silence reads as a hang.
-   */
+  /** Exports the deck as a .pptx, with editable text on any slide that has it. */
   const handleDownloadEditablePpt = async () => {
     if (activeSlides.length === 0 || exporter.isExporting) return;
     exporter.setIsExporting("pptx_editable");
-    exporter.setProgress({ done: 0, total: activeSlides.length * EXPORT_PHASES_PER_SLIDE });
     try {
-      await ensurePrimaryImageVersions(activeSlides);
-      const pages = new Array<PptPage | null>(activeSlides.length).fill(null);
-      // Counted in model calls, not slides: a two-slide deck that only ticks
-      // per slide sits at zero for minutes while the images are generated.
-      const total = activeSlides.length * EXPORT_PHASES_PER_SLIDE;
-      let done = 0;
-      const step = () => {
-        done = Math.min(done + 1, total);
-        exporter.setProgress({ done, total });
-      };
-      const tasks = activeSlides.map((slide, index) => async () => {
-        let phases = 0;
-        try {
-          pages[index] = await buildEditableExportPage(slide, () => {
-            phases += 1;
-            step();
-          });
-        } finally {
-          // A slide reused from an earlier export reports no phases at all.
-          for (let i = phases; i < EXPORT_PHASES_PER_SLIDE; i += 1) step();
-        }
-      });
-      await runInParallel(tasks, EDITABLE_EXPORT_CONCURRENCY);
-      if (pages.some((page) => !page)) {
-        throw new Error("Missing editable export page");
-      }
-      await pptService.exportPptx(pages as PptPage[], {}, `presentation-editable-${Date.now()}`);
+      const pages = activeSlides.map((slide) => buildEditableExportPage(slide));
+      await pptService.exportPptx(pages, buildCurrentSlideImagesMap(), `presentation-editable-${Date.now()}`);
     } catch (e) {
       console.error("Editable export failed", e);
       alert(tr("导出可编辑 PPTX 失败", "Failed to export editable PPTX"));
     } finally {
       exporter.setIsExporting(null);
-      exporter.setProgress(null);
     }
   };
 

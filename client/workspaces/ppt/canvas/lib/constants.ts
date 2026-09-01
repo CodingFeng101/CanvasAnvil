@@ -25,8 +25,6 @@ export const PRESET_TEMPLATES: PresetTemplate[] = [
 export const MODEL_CONCURRENCY = 5;
 export const BEAUTIFY_CONCURRENCY = 5;
 export const EDITABLE_EXPORT_CONCURRENCY = 3;
-/** Model calls one slide costs on the editable-export path. */
-export const EXPORT_PHASES_PER_SLIDE = 3;
 export const EDITABLE_REVIEW_CONCURRENCY = 4;
 export const BEAUTIFY_RETRY_MAX_ATTEMPTS = 3;
 export const BEAUTIFY_RETRY_BASE_DELAY_MS = 1200;

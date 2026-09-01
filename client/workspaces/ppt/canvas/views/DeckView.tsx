@@ -179,16 +179,7 @@ export function DeckView({
                 className="flex items-center gap-2 px-3 py-1.5 bg-zinc-100 dark:bg-zinc-700 hover:bg-zinc-200 dark:hover:bg-zinc-600 text-xs rounded transition-colors shadow-sm disabled:opacity-60"
               >
                 {exporter.isExporting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
-                <span>
-                  {!exporter.isExporting
-                    ? tr("导出", "Export")
-                    : exporter.progress && exporter.progress.total > 0
-                      ? tr(
-                          `导出中 ${Math.round((exporter.progress.done / exporter.progress.total) * 100)}%`,
-                          `Exporting ${Math.round((exporter.progress.done / exporter.progress.total) * 100)}%`,
-                        )
-                      : tr("导出中…", "Exporting...")}
-                </span>
+                <span>{exporter.isExporting ? tr("导出中…", "Exporting...") : tr("导出", "Export")}</span>
               </button>
               {exporter.menuOpen && !exporter.isExporting ? (
                 <motion.div
