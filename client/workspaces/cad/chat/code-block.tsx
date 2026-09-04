@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { Check, ChevronDown, ChevronUp, Copy, Cpu, Play, X } from "lucide-react";
-import { Highlight, themes, type Language } from "prism-react-renderer";
+import { Highlight, type Language } from "prism-react-renderer";
+import { syntaxTheme } from "@/shared/chat/syntax-theme";
 import { useUiLanguage } from "@/shared/i18n";
 
 interface CodeBlockProps {
@@ -148,7 +149,7 @@ export function CodeBlock({
             <div className="flex items-center justify-between px-4 py-3 bg-muted/50">
                 <div className="flex items-center gap-2">
                     <div className="w-6 h-6 rounded-md bg-primary/10 flex items-center justify-center">
-                        <Cpu className="w-3.5 h-3.5 text-primary" />
+                        <Cpu className="w-3.5 h-3.5 text-primary-strong" />
                     </div>
                     <span className="text-sm font-medium text-foreground/80">{tr("生成 CAD", "Generate CAD")}</span>
                 </div>
@@ -221,7 +222,7 @@ export function CodeBlock({
                             <span>{copied ? tr("已复制", "Copied") : tr("复制", "Copy")}</span>
                         </button>
                     </div>
-                    <Highlight theme={themes.github} code={displayCode} language={prismLanguage}>
+                    <Highlight theme={syntaxTheme} code={displayCode} language={prismLanguage}>
                         {({
                             className: _className,
                             style,

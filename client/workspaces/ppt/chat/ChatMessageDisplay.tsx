@@ -1,8 +1,8 @@
 import React, { useRef, useEffect, useState, useCallback } from 'react';
-import { Check, ChevronDown, ChevronUp, Copy, FileCode, FileText, Loader2, Pencil, RotateCcw } from "lucide-react";
+import { Check, ChevronDown, ChevronUp, Copy, FileCode, FileText, Pencil, RotateCcw } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from 'remark-gfm';
-import { Reasoning, ReasoningContent, ReasoningTrigger } from "@/shared/chat";
+import { Reasoning, ReasoningContent, ReasoningTrigger, Shimmer } from "@/shared/chat";
 import { ScrollArea } from "@/shared/ui/scroll-area";
 import { CodeBlock } from "@/workspaces/ppt/chat/code-block";
 import { useUiLanguage } from "@/shared/i18n";
@@ -10,6 +10,7 @@ import { cn } from "@/shared/lib/utils";
 import {
     getMessageTextContent,
     getUserOriginalText,
+    isFencedCode,
     splitTextIntoFileSections,
     type MessagePart,
     type UIMessage,
@@ -348,7 +349,7 @@ export function ChatMessageDisplay({
                                                                         className={cn(
                                                                             "mx-0.5 inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-xs font-medium align-middle",
                                                                             kind === "outline"
-                                                                                ? "border-primary/25 bg-primary/[0.08] text-primary"
+                                                                                ? "border-primary/25 bg-primary/[0.08] text-primary-strong"
                                                                                 : "border-border bg-muted text-foreground/80"
                                                                         )}
                                                                     >
@@ -425,7 +426,7 @@ export function ChatMessageDisplay({
                                                                     "inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] leading-4",
                                                                     message.role === "user"
                                                                         ? t.kind === "outline"
-                                                                            ? "border-primary/25 bg-primary/[0.08] text-primary"
+                                                                            ? "border-primary/25 bg-primary/[0.08] text-primary-strong"
                                                                             : "border-border bg-muted text-foreground/80"
                                                                         : "border-border bg-muted/40 text-foreground"
                                                                 )}
@@ -458,7 +459,7 @@ export function ChatMessageDisplay({
                                                                         {section.fileType === 'pdf' ? (
                                                                             <FileText className="h-4 w-4 text-destructive" />
                                                                         ) : (
-                                                                            <FileCode className="h-4 w-4 text-primary" />
+                                                                            <FileCode className="h-4 w-4 text-primary-strong" />
                                                                         )}
                                                                         <span className="text-xs font-medium truncate max-w-[150px] text-foreground">{section.filename}</span>
                                                                         <span className="text-[10px] text-muted-foreground">({section.charCount} chars)</span>
@@ -494,7 +495,7 @@ export function ChatMessageDisplay({
                                                                             className={cn(
                                                                                 "mx-1 inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-xs font-medium align-middle",
                                                                                 kind === "outline"
-                                                                                    ? "border-primary/25 bg-primary/[0.08] text-primary"
+                                                                                    ? "border-primary/25 bg-primary/[0.08] text-primary-strong"
                                                                                     : "border-border bg-muted text-foreground/80"
                                                                             )}
                                                                             title={tr(`幻灯片 · ${label}`, `Slide · ${label}`)}
@@ -563,8 +564,7 @@ export function ChatMessageDisplay({
                                                     }
                                                     return (
                                                         <div key={idx} className={cn(
-                                                            "prose prose-sm max-w-none break-words",
-                                                            "dark:prose-invert"
+                                                            "prose prose-sm max-w-none break-words"
                                                         )}>
                                                             <ReactMarkdown
                                                                 remarkPlugins={[remarkGfm]}
@@ -599,11 +599,11 @@ export function ChatMessageDisplay({
                                                                     pre({ children }: any) {
                                                                         return <>{children}</>;
                                                                     },
-                                                                    code({ node: _node, inline, className, children, ...props }: any) {
+                                                                    code({ node: _node, className, children, ...props }: any) {
                                                                         const match = /language-(\w+)/.exec(className || "");
                                                                         const isStreaming = status === "streaming" && isLastAssistantMessage;
                                                                         const language = match?.[1] || "text";
-                                                                        if (!inline) {
+                                                                        if (isFencedCode(className, children)) {
                                                                             const ordinal = codeBlockOrdinal++;
                                                                             return (
                                                                                 <CodeBlock
@@ -693,10 +693,9 @@ export function ChatMessageDisplay({
                         {showPendingIndicator && (
                             <div className="flex w-full justify-start animate-message-in mt-3">
                                 <div className="max-w-[85%] min-w-0">
-                                    <div className="flex items-center gap-2 px-3 py-2 text-xs text-muted-foreground bg-muted/40 rounded-2xl rounded-bl-md">
-                                        <Loader2 className="h-3 w-3 animate-spin" />
-                                        <span>{tr("思考中...", "Thinking...")}</span>
-                                    </div>
+                                    <Shimmer as="span" className="py-1 text-sm" duration={1.6}>
+                                        {tr("思考中...", "Thinking...")}
+                                    </Shimmer>
                                 </div>
                             </div>
                         )}

@@ -39,7 +39,7 @@ export function GenerationProgress({ step, progress, tr }: GenerationProgressPro
                 fill="transparent"
               />
               <circle
-                className="text-primary stroke-current transition-all duration-300 ease-in-out origin-center -rotate-90"
+                className="text-primary-strong stroke-current transition-all duration-300 ease-in-out origin-center -rotate-90"
                 strokeWidth="8"
                 strokeLinecap="round"
                 cx="50"
@@ -60,7 +60,7 @@ export function GenerationProgress({ step, progress, tr }: GenerationProgressPro
           </div>
 
           <div className="flex justify-center gap-2 text-xs text-muted-foreground">
-            <div className={`flex items-center gap-1 ${isRendering ? "text-primary" : ""}`}>
+            <div className={`flex items-center gap-1 ${isRendering ? "text-primary-strong" : ""}`}>
               {isRendering ? <Loader2 className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />}
               <span>{tr("渲染图片", "Render images")}</span>
             </div>

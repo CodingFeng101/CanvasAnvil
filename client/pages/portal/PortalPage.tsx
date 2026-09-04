@@ -339,7 +339,7 @@ function Header({
                     "relative whitespace-normal px-2.5 pb-2.5 pt-2 text-center font-medium leading-tight 2xl:max-w-none",
                     "transition-colors duration-fast ease-out-soft",
                     isChinese ? "max-w-[118px] text-[15px] 2xl:text-[16px]" : "max-w-[112px] text-[13px] 2xl:text-[14px]",
-                    isActive ? "text-primary" : "text-foreground/70 hover:text-foreground",
+                    isActive ? "text-primary-strong" : "text-foreground/70 hover:text-foreground",
                   )}
                   onMouseEnter={() => id !== "home" && setActiveCanvas(id)}
                   onFocus={() => id !== "home" && setActiveCanvas(id)}
@@ -434,7 +434,7 @@ function SimpleCanvasDetailPage({
             <h1 className={cn("font-display font-semibold text-foreground", isEnglish ? "text-[clamp(34px,3.5vw,50px)] leading-[1.05]" : "text-[clamp(40px,4.4vw,62px)] leading-[1.08]")}>{config.title}</h1>
           </StaggerItem>
           <StaggerItem>
-            <h2 className={cn("font-display font-semibold leading-tight text-primary", isEnglish ? "mt-2 text-[clamp(18px,1.75vw,23px)]" : "mt-2.5 text-[clamp(22px,2.2vw,30px)]")}>{config.subtitle}</h2>
+            <h2 className={cn("font-display font-semibold leading-tight text-primary-strong", isEnglish ? "mt-2 text-[clamp(18px,1.75vw,23px)]" : "mt-2.5 text-[clamp(22px,2.2vw,30px)]")}>{config.subtitle}</h2>
           </StaggerItem>
           <StaggerItem>
             <p className={cn("max-w-[620px] text-muted-foreground", isEnglish ? "mt-4 text-[clamp(15px,1.2vw,16px)] leading-7" : "mt-5 text-[17px] leading-8")}>{config.intro}</p>
@@ -450,7 +450,7 @@ function SimpleCanvasDetailPage({
                   isEnglish ? "px-4 py-2.5 text-[14px]" : "px-4 py-2.5 text-[15px]",
                 )}
               >
-                <Icon className="h-4 w-4 text-primary" />
+                <Icon className="h-4 w-4 text-primary-strong" />
                 <span className="whitespace-normal">{tag}</span>
               </span>
             ))}
@@ -459,14 +459,14 @@ function SimpleCanvasDetailPage({
           <StaggerItem className={cn(isEnglish ? "mt-5 space-y-2.5" : "mt-6 space-y-3")}>
             {config.bullets.map((bullet) => (
               <div key={bullet} className={cn("flex items-start gap-3 text-muted-foreground", isEnglish ? "text-[15px] leading-6" : "text-[16px] leading-7")}>
-                <CheckCircle2 className="mt-1 h-[18px] w-[18px] shrink-0 text-primary" />
+                <CheckCircle2 className="mt-1 h-[18px] w-[18px] shrink-0 text-primary-strong" />
                 <span>{bullet}</span>
               </div>
             ))}
           </StaggerItem>
 
           <StaggerItem className={cn(isEnglish ? "mt-6" : "mt-7")}>
-            <div className={cn("max-w-[540px] font-display font-semibold text-primary", isEnglish ? "mb-2 text-[16px] leading-6" : "mb-2.5 text-[19px] leading-7")}>{config.slogan}</div>
+            <div className={cn("max-w-[540px] font-display font-semibold text-primary-strong", isEnglish ? "mb-2 text-[16px] leading-6" : "mb-2.5 text-[19px] leading-7")}>{config.slogan}</div>
             {/* The brush-stroke plate stays — a hand-made mark suits the brand.
                 Only the palette moves from blueprint blue to clay. */}
             <button
@@ -686,7 +686,7 @@ export function PortalPage({ onEnterWorkspace }: PortalPageProps) {
                   <span className="block">{copy.titleA}</span>
                   <span className="block">
                     <span>{copy.titleB}</span>
-                    <span className="text-primary">{copy.titleAccent}</span>
+                    <span className="text-primary-strong">{copy.titleAccent}</span>
                   </span>
                 </h1>
               </StaggerItem>
@@ -794,7 +794,7 @@ export function PortalPage({ onEnterWorkspace }: PortalPageProps) {
           </section>
 
           <section className="xl:hidden">
-            <div className="mb-3 text-sm font-medium text-primary">{copy.mobileHint}</div>
+            <div className="mb-3 text-sm font-medium text-primary-strong">{copy.mobileHint}</div>
             <div className="grid gap-3 sm:grid-cols-2">
               {portalCanvasItems.map((item) => (
                 <button

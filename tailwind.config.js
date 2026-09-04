@@ -30,6 +30,7 @@ export default {
         primary: {
           DEFAULT: "hsl(var(--primary))",
           foreground: "hsl(var(--primary-foreground))",
+          strong: "hsl(var(--primary-strong))",
         },
         secondary: {
           DEFAULT: "hsl(var(--secondary))",
@@ -75,6 +76,76 @@ export default {
         // `shadow-xs` shipped in shadcn's Tailwind-v4 templates but was never
         // defined here, so seven call sites rendered no shadow at all.
         xs: "0 1px 2px hsl(var(--shadow-hue) / 0.05)",
+      },
+      /**
+       * The assistant's every reply renders through `prose`, and the stock
+       * plugin theme is its own grey ramp -- so the longest-lived text in the
+       * product was the one surface still ignoring the tokens. Driving the
+       * `--tw-prose-*` variables from them makes it follow the palette, and
+       * makes `dark:prose-invert` unnecessary: the tokens already flip.
+       */
+      typography: {
+        DEFAULT: {
+          css: {
+            "--tw-prose-body": "hsl(var(--foreground) / 0.88)",
+            "--tw-prose-headings": "hsl(var(--foreground))",
+            "--tw-prose-lead": "hsl(var(--muted-foreground))",
+            "--tw-prose-links": "hsl(var(--primary-strong))",
+            "--tw-prose-bold": "hsl(var(--foreground))",
+            "--tw-prose-counters": "hsl(var(--muted-foreground))",
+            "--tw-prose-bullets": "hsl(var(--muted-foreground) / 0.6)",
+            "--tw-prose-hr": "hsl(var(--border))",
+            "--tw-prose-quotes": "hsl(var(--foreground) / 0.9)",
+            "--tw-prose-quote-borders": "hsl(var(--primary) / 0.4)",
+            "--tw-prose-captions": "hsl(var(--muted-foreground))",
+            "--tw-prose-code": "hsl(var(--foreground))",
+            "--tw-prose-pre-code": "hsl(var(--foreground))",
+            "--tw-prose-pre-bg": "hsl(var(--sunken))",
+            "--tw-prose-th-borders": "hsl(var(--border))",
+            "--tw-prose-td-borders": "hsl(var(--border) / 0.6)",
+
+            maxWidth: "none",
+            lineHeight: "1.72",
+
+            "h1, h2, h3, h4": {
+              fontFamily: 'theme("fontFamily.display")',
+              letterSpacing: "-0.015em",
+              fontWeight: "600",
+            },
+
+            // The plugin wraps inline code in literal backticks; a tinted chip
+            // says the same thing without the punctuation.
+            "code::before": { content: '""' },
+            "code::after": { content: '""' },
+            ":not(pre) > code": {
+              backgroundColor: "hsl(var(--muted))",
+              border: "1px solid hsl(var(--border) / 0.6)",
+              borderRadius: "0.3rem",
+              padding: "0.1em 0.35em",
+              fontWeight: "500",
+            },
+
+            // A rule, not a box, and upright rather than italic.
+            blockquote: {
+              fontStyle: "normal",
+              fontWeight: "400",
+              borderLeftWidth: "2px",
+              paddingLeft: "1.1em",
+            },
+            "blockquote p:first-of-type::before": { content: '""' },
+            "blockquote p:last-of-type::after": { content: '""' },
+
+            a: {
+              fontWeight: "500",
+              textDecorationThickness: "1px",
+              textUnderlineOffset: "2px",
+            },
+
+            // Hairlines only; the plugin's default header rule is heavy.
+            "thead th": { fontWeight: "600", borderBottomWidth: "1px" },
+            hr: { borderTopWidth: "1px" },
+          },
+        },
       },
       transitionTimingFunction: {
         "out-soft": "cubic-bezier(0.22, 1, 0.36, 1)",

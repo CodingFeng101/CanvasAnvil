@@ -242,8 +242,8 @@ export function OutlineReview({
                                         title={tr(`插入第 ${idx + 1} 张素材`, `Insert material ${idx + 1}`)}
                                         className={`flex w-full items-center gap-2 rounded-md border px-2 py-1.5 text-left text-xs ${
                                           materials.picker.activeIndex === idx
-                                            ? "border-primary/40 bg-primary/12 text-primary ring-1 ring-primary/40"
-                                              : "border-primary/30 bg-primary/[0.08] text-primary hover:bg-primary/15"
+                                            ? "border-primary/40 bg-primary/12 text-primary-strong ring-1 ring-primary/40"
+                                              : "border-primary/30 bg-primary/[0.08] text-primary-strong hover:bg-primary/15"
                                           }`}
                                         >
                                           <img src={img.dataUrl} alt={img.name} className="h-8 w-8 rounded object-cover" />
@@ -323,7 +323,7 @@ export function OutlineReview({
                                         <button
                                           type="button"
                                           onClick={() => materials.setPreview({ open: true, slideTitle: slide.title, item: img })}
-                                          className="mt-1 w-full truncate text-center text-xs text-foreground hover:text-primary"
+                                          className="mt-1 w-full truncate text-center text-xs text-foreground hover:text-primary-strong"
                                           title={tr("点击查看素材", "Click to preview material")}
                                         >
                                           {img.name}

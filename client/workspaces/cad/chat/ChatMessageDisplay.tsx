@@ -1,8 +1,8 @@
 import React, { useRef, useEffect, useState, useCallback } from 'react';
-import { Check, ChevronDown, ChevronUp, Copy, Cpu, FileCode, FileText, Loader2, Minus, Pencil, Plus, Play, RotateCcw } from "lucide-react";
+import { Check, ChevronDown, ChevronUp, Copy, Cpu, FileCode, FileText, Minus, Pencil, Plus, Play, RotateCcw } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from 'remark-gfm';
-import { Reasoning, ReasoningContent, ReasoningTrigger } from "@/shared/chat";
+import { Reasoning, ReasoningContent, ReasoningTrigger, Shimmer } from "@/shared/chat";
 import { ScrollArea } from "@/shared/ui/scroll-area";
 import { CodeBlock } from "@/workspaces/cad/chat/code-block";
 import { useUiLanguage } from "@/shared/i18n";
@@ -533,7 +533,7 @@ export function ChatMessageDisplay({
                                                                         className={cn(
                                                                             "mx-0.5 inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-xs font-medium align-middle",
                                                                             kind === "outline"
-                                                                                ? "border-primary/25 bg-primary/[0.08] text-primary"
+                                                                                ? "border-primary/25 bg-primary/[0.08] text-primary-strong"
                                                                                 : "border-border bg-muted text-foreground/80"
                                                                         )}
                                                                     >
@@ -610,7 +610,7 @@ export function ChatMessageDisplay({
                                                                     "inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] leading-4",
                                                                     message.role === "user"
                                                                         ? t.kind === "outline"
-                                                                            ? "border-primary/25 bg-primary/[0.08] text-primary"
+                                                                            ? "border-primary/25 bg-primary/[0.08] text-primary-strong"
                                                                             : "border-border bg-muted text-foreground/80"
                                                                         : "border-border bg-muted/40 text-foreground"
                                                                 )}
@@ -643,7 +643,7 @@ export function ChatMessageDisplay({
                                                                         {section.fileType === 'pdf' ? (
                                                                             <FileText className="h-4 w-4 text-destructive" />
                                                                         ) : (
-                                                                            <FileCode className="h-4 w-4 text-primary" />
+                                                                            <FileCode className="h-4 w-4 text-primary-strong" />
                                                                         )}
                                                                         <span className="text-xs font-medium truncate max-w-[150px] text-foreground">{section.filename}</span>
                                                                         <span className="text-[10px] text-muted-foreground">({section.charCount} chars)</span>
@@ -679,7 +679,7 @@ export function ChatMessageDisplay({
                                                                             className={cn(
                                                                                 "mx-1 inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-xs font-medium align-middle",
                                                                                 kind === "outline"
-                                                                                    ? "border-primary/25 bg-primary/[0.08] text-primary"
+                                                                                    ? "border-primary/25 bg-primary/[0.08] text-primary-strong"
                                                                                     : "border-border bg-muted text-foreground/80"
                                                                             )}
                                                                             title={tr(`幻灯片 · ${label}`, `Slide · ${label}`)}
@@ -748,8 +748,10 @@ export function ChatMessageDisplay({
                                                     }
                                                     const renderMarkdown = (key: string, content: string) => (
                                                         <div key={key} className={cn(
-                                                            "prose prose-sm max-w-none break-words [overflow-wrap:anywhere] [&>*:first-child]:mt-0 [&>*:last-child]:mb-0",
-                                                            "dark:prose-invert"
+                                                            // No `dark:prose-invert`: the prose variables are driven
+                                                            // from the tokens now, and invert would overwrite them
+                                                            // with the plugin's own greys.
+                                                            "prose prose-sm max-w-none break-words [overflow-wrap:anywhere] [&>*:first-child]:mt-0 [&>*:last-child]:mb-0"
                                                         )}>
                                                             <ReactMarkdown
                                                                 remarkPlugins={[remarkGfm]}
@@ -827,8 +829,10 @@ export function ChatMessageDisplay({
 
                                                     return (
                                                         <div key={`${message.id}-assistant-seg-${idx}`} className="w-full min-w-0 max-w-full overflow-hidden space-y-2">
+                                                            {/* No inner bubble here: the outer row already drops the card
+                                                                for the assistant, and this was quietly putting it back. */}
                                                             {textSegments.length > 0 && (
-                                                                <div className="w-full min-w-0 max-w-full overflow-hidden break-words [overflow-wrap:anywhere] px-4 py-3 text-sm leading-relaxed bg-muted/60 text-foreground rounded-2xl rounded-bl-md">
+                                                                <div className="w-full min-w-0 max-w-full overflow-hidden break-words [overflow-wrap:anywhere] py-1 text-sm leading-relaxed text-foreground">
                                                                     <div className="space-y-3">
                                                                         {textSegments.map((seg, segIdx) =>
                                                                             renderMarkdown(`${message.id}-assistant-markdown-${idx}-${segIdx}`, seg.content)
@@ -873,7 +877,7 @@ export function ChatMessageDisplay({
                                                                             <div className="flex items-center justify-between px-4 py-3 bg-muted/50">
                                                                                 <div className="flex items-center gap-2">
                                                                                     <div className="w-6 h-6 rounded-md bg-primary/10 flex items-center justify-center">
-                                                                                        <Cpu className="w-3.5 h-3.5 text-primary" />
+                                                                                        <Cpu className="w-3.5 h-3.5 text-primary-strong" />
                                                                                     </div>
                                                                                     <span className="text-sm font-medium text-foreground/80">
                                                                                         {tr("编辑图纸", "Edit Diagram")}
@@ -1031,10 +1035,9 @@ export function ChatMessageDisplay({
                         {showPendingIndicator && (
                             <div className="flex w-full justify-start animate-message-in mt-3">
                                 <div className="max-w-[85%] min-w-0">
-                                    <div className="flex items-center gap-2 px-3 py-2 text-xs text-muted-foreground bg-muted/40 rounded-2xl rounded-bl-md">
-                                        <Loader2 className="h-3 w-3 animate-spin" />
-                                        <span>{tr("思考中...", "Thinking...")}</span>
-                                    </div>
+                                    <Shimmer as="span" className="py-1 text-sm" duration={1.6}>
+                                        {tr("思考中...", "Thinking...")}
+                                    </Shimmer>
                                 </div>
                             </div>
                         )}

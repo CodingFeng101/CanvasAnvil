@@ -1,5 +1,6 @@
 import { useMemo, useRef, useState } from 'react';
-import { Highlight, themes, type Language } from "prism-react-renderer";
+import { Highlight, type Language } from "prism-react-renderer";
+import { syntaxTheme } from "@/shared/chat/syntax-theme";
 import { ChevronRight, Loader2 } from 'lucide-react';
 import { cn } from '@/shared/lib/utils';
 
@@ -66,8 +67,8 @@ export function CodeBlock({ code, language = "xml", isStreaming = false, blockId
                 
                 {isStreaming ? (
                     <div className="flex items-center gap-2 ml-auto">
-                         <span className="text-[10px] text-primary animate-pulse">Generating code...</span>
-                         <Loader2 className="w-3.5 h-3.5 animate-spin text-primary" />
+                         <span className="text-[10px] text-primary-strong animate-pulse">Generating code...</span>
+                         <Loader2 className="w-3.5 h-3.5 animate-spin text-primary-strong" />
                     </div>
                 ) : (
                     <span className="ml-auto text-[10px] opacity-70 font-mono">{normalizedCode.length} chars</span>
@@ -77,7 +78,7 @@ export function CodeBlock({ code, language = "xml", isStreaming = false, blockId
             {isOpen && (
                 <div className="p-0 border-t border-border/50">
                      <div className="overflow-hidden w-full bg-sunken">
-                        <Highlight theme={themes.github} code={normalizedCode} language={prismLanguage}>
+                        <Highlight theme={syntaxTheme} code={normalizedCode} language={prismLanguage}>
                             {({
                                 style,
                                 tokens,

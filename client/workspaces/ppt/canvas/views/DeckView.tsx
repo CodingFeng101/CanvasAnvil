@@ -413,7 +413,7 @@ export function DeckView({
                                 <div className="flex-1 space-y-6">
                                   {(deck.currentSlide.content || []).map((point, i) => (
                                     <div key={i} className="flex items-start gap-4 text-2xl leading-relaxed text-[#3B3833]">
-                                      <span className="mt-2 text-primary">•</span>
+                                      <span className="mt-2 text-primary-strong">•</span>
                                       <span>{point}</span>
                                     </div>
                                   ))}
@@ -432,7 +432,7 @@ export function DeckView({
                         {(status.isApplyingEdits || status.isGeneratingImage) && (
                             <div className="absolute inset-0 z-50 flex items-center justify-center bg-background/60 backdrop-blur-[2px]">
                                 <div className="flex flex-col items-center gap-3 bg-card shadow-soft-lg px-6 py-4 rounded-xl border border-primary/25">
-                                    <Loader2 className="w-6 h-6 text-primary animate-spin" />
+                                    <Loader2 className="w-6 h-6 text-primary-strong animate-spin" />
                                     <span className="text-sm font-medium text-foreground/80">{tr("幻灯片正在生成中...", "Generating slides...")}</span>
                                 </div>
                             </div>
@@ -518,7 +518,7 @@ export function DeckView({
                       <div className="flex-1 space-y-8">
                         {(deck.slides[slideshow.index].content || []).map((point, i) => (
                           <div key={i} className="flex gap-6 text-3xl text-[#3B3833] leading-relaxed items-start">
-                            <span className="text-primary mt-2">•</span>
+                            <span className="text-primary-strong mt-2">•</span>
                             <span>{point}</span>
                           </div>
                         ))}

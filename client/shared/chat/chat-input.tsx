@@ -194,7 +194,7 @@ export function ChatInput({
         el.setAttribute("data-token-kind", segment.tokenKind);
         el.setAttribute("contenteditable", "false");
         el.className = isOutline
-            ? "inline-flex items-center gap-1.5 rounded-full border border-primary/30 bg-primary/[0.08] px-2 py-0.5 text-xs font-medium text-primary align-middle"
+            ? "inline-flex items-center gap-1.5 rounded-full border border-primary/30 bg-primary/[0.08] px-2 py-0.5 text-xs font-medium text-primary-strong align-middle"
             : "inline-flex items-center gap-1.5 rounded-full border border-destructive/25 bg-destructive/[0.08] px-2 py-0.5 text-xs font-medium text-destructive align-middle";
         const icon = document.createElement("span");
         icon.className = isOutline

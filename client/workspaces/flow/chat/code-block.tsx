@@ -1,7 +1,8 @@
 "use client"
 
 import { Check, Copy, Play, X } from "lucide-react"
-import { Highlight, themes } from "prism-react-renderer"
+import { Highlight } from "prism-react-renderer"
+import { syntaxTheme } from "@/shared/chat/syntax-theme"
 import { useState } from "react"
 
 interface CodeBlockProps {
@@ -98,7 +99,7 @@ export function CodeBlock({ code, language = "xml", onApply }: CodeBlockProps) {
                     <span>{copied ? "Copied" : "Copy"}</span>
                 </button>
             </div>
-            <Highlight theme={themes.github} code={code} language={language}>
+            <Highlight theme={syntaxTheme} code={code} language={language}>
                 {({
                     className: _className,
                     style,

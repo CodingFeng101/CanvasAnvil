@@ -1,8 +1,10 @@
 "use client"
 
+import remarkGfm from "remark-gfm"
 import {
     getMessageTextContent,
     getUserOriginalText,
+    isFencedCode,
     splitTextIntoFileSections,
     type TextSection,
 } from "@/shared/chat/message-content"
@@ -33,7 +35,6 @@ import {
     Cpu,
     FileCode,
     FileText,
-    Loader2,
     Pencil,
     Play,
     RotateCcw,
@@ -47,6 +48,7 @@ import {
     Reasoning,
     ReasoningContent,
     ReasoningTrigger,
+    Shimmer,
 } from "@/shared/chat"
 import { ScrollArea } from "@/shared/ui/scroll-area"
 import { useFlowT } from "@/workspaces/flow/lib/translations"
@@ -350,7 +352,7 @@ export function ChatMessageDisplay({
                 <div className="flex items-center justify-between px-4 py-3 bg-muted/50">
                     <div className="flex items-center gap-2">
                         <div className="w-6 h-6 rounded-md bg-primary/10 flex items-center justify-center">
-                            <Cpu className="w-3.5 h-3.5 text-primary" />
+                            <Cpu className="w-3.5 h-3.5 text-primary-strong" />
                         </div>
                         <span className="text-sm font-medium text-foreground/80">
                             {getToolDisplayName(toolName)}
@@ -854,7 +856,7 @@ export function ChatMessageDisplay({
                                                                                             "pdf" ? (
                                                                                                 <FileText className="h-4 w-4 text-destructive" />
                                                                                             ) : (
-                                                                                                <FileCode className="h-4 w-4 text-primary" />
+                                                                                                <FileCode className="h-4 w-4 text-primary-strong" />
                                                                                             )}
                                                                                             <span className="text-xs font-medium leading-none">
                                                                                                 {
@@ -1063,18 +1065,18 @@ export function ChatMessageDisplay({
                                                                                         ) : (
                                                                                             <div
                                                                                                 key={`${message.id}-textsection-${partIndex}-${sectionIndex}`}
-                                                                                                className="prose prose-sm max-w-none break-words [&>*:first-child]:mt-0 [&>*:last-child]:mb-0 dark:prose-invert"
+                                                                                                className="prose prose-sm max-w-none break-words [&>*:first-child]:mt-0 [&>*:last-child]:mb-0"
                                                                                             >
                                                                                                 <ReactMarkdown
+                                                                                                    remarkPlugins={[remarkGfm]}
                                                                                                     components={{
                                                                                                         code({
-                                                                                                            inline,
                                                                                                             className,
                                                                                                             children,
                                                                                                             ...props
                                                                                                         }: any) {
                                                                                                             if (
-                                                                                                                inline
+                                                                                                                !isFencedCode(className, children)
                                                                                                             ) {
                                                                                                                 return (
                                                                                                                     <code
@@ -1233,14 +1235,11 @@ export function ChatMessageDisplay({
                                 {showPendingIndicator && (
                                     <div className="flex w-full justify-start animate-message-in mt-3">
                                         <div className="max-w-[85%] min-w-0">
-                                            <div className="flex items-center gap-2 px-3 py-2 text-xs text-muted-foreground bg-muted/40 rounded-2xl rounded-bl-md">
-                                                <Loader2 className="h-3 w-3 animate-spin" />
-                                                <span>
-                                                    {isParsingFiles
-                                                        ? t("message.parsing_files")
-                                                        : t("message.thinking")}
-                                                </span>
-                                            </div>
+                                            <Shimmer as="span" className="py-1 text-sm" duration={1.6}>
+                                                {isParsingFiles
+                                                    ? t("message.parsing_files")
+                                                    : t("message.thinking")}
+                                            </Shimmer>
                                         </div>
                                     </div>
                                 )}

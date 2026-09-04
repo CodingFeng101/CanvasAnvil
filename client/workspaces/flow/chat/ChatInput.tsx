@@ -434,7 +434,7 @@ export function ChatInput({
                             <Brain
                                 className={`h-3.5 w-3.5 ${
                                     deepThinkingEnabled
-                                        ? "text-primary"
+                                        ? "text-primary-strong"
                                         : "text-muted-foreground"
                                 }`}
                             />

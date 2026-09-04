@@ -100,3 +100,20 @@ export function getUserOriginalText(message: UIMessage): string {
     .replace(/\n\n\[(PDF|File):\s*[^\]]+\]\n[\s\S]*$/, "")
     .trim();
 }
+
+/**
+ * Whether a markdown `code` node is a fenced block rather than an inline span.
+ *
+ * react-markdown stopped passing an `inline` prop in v9, but the chat panels
+ * were still branching on it against v10. It is always `undefined` there, so
+ * `if (!inline)` matched everything and every inline `code` span rendered as a
+ * full-width code block.
+ *
+ * A tagged fence carries `language-*`; an untagged one still spans lines. A
+ * single-line untagged fence is the one case this reads as inline, which costs
+ * a chip instead of a block.
+ */
+export function isFencedCode(className?: string, children?: unknown): boolean {
+  if (/\blanguage-\w+/.test(String(className || ""))) return true;
+  return String(children ?? "").includes("\n");
+}

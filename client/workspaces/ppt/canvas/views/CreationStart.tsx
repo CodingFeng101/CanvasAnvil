@@ -84,13 +84,13 @@ export function CreationStart({
                     {creationMode !== "image_transform" ? (
                     <div className="space-y-4">
                         <label className="text-sm font-semibold text-foreground flex items-center gap-2">
-                            <span className="w-6 h-6 rounded-full bg-primary/12 text-primary text-xs flex items-center justify-center font-bold">1</span>
+                            <span className="w-6 h-6 rounded-full bg-primary/12 text-primary-strong text-xs flex items-center justify-center font-bold">1</span>
                             {tr("选择或上传参考模板", "Choose or upload a reference template")}
                         </label>
                         
                         <div className="grid gap-4 grid-cols-[repeat(auto-fill,minmax(180px,1fr))]">
                             <label className="cursor-pointer border-2 border-dashed rounded-xl transition-all duration-200 overflow-hidden relative aspect-video flex flex-col items-center justify-center group border-border hover:border-primary hover:bg-primary/[0.08]">
-                                <div className="flex flex-col items-center text-muted-foreground/70 group-hover:text-primary transition-colors">
+                                <div className="flex flex-col items-center text-muted-foreground/70 group-hover:text-primary-strong transition-colors">
                                     <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center mb-2 group-hover:bg-primary/12 transition-colors">
                                         <Upload className="w-5 h-5" />
                                     </div>
@@ -104,7 +104,7 @@ export function CreationStart({
                               title={tr("AI生成模板", "AI generate template")}
                               className="cursor-pointer border-2 border-dashed rounded-xl transition-all duration-200 overflow-hidden relative aspect-video flex flex-col items-center justify-center group border-border hover:border-primary hover:bg-primary/[0.08]"
                             >
-                                <div className="flex flex-col items-center text-muted-foreground/70 group-hover:text-primary transition-colors">
+                                <div className="flex flex-col items-center text-muted-foreground/70 group-hover:text-primary-strong transition-colors">
                                     <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center mb-2 group-hover:bg-primary/12 transition-colors">
                                         <Sparkles className="w-5 h-5" />
                                     </div>
@@ -151,7 +151,7 @@ export function CreationStart({
                     {/* Mode Selection & Input */}
                     <div className="space-y-4">
                         <label className="text-sm font-semibold text-foreground flex items-center gap-2">
-                            <span className="w-6 h-6 rounded-full bg-primary/12 text-primary text-xs flex items-center justify-center font-bold">{creationMode === "image_transform" ? "1" : "2"}</span>
+                            <span className="w-6 h-6 rounded-full bg-primary/12 text-primary-strong text-xs flex items-center justify-center font-bold">{creationMode === "image_transform" ? "1" : "2"}</span>
                             {tr("输入内容", "Input")}
                         </label>
 
@@ -198,7 +198,7 @@ export function CreationStart({
                             className="space-y-3"
                         >
                             <div className="flex items-center gap-2 text-sm text-foreground/80">
-                                {creationMode === "beautify" ? <Sparkles className="w-4 h-4 text-primary" /> : creationMode === "image_transform" ? <Presentation className="w-4 h-4 text-primary" /> : <Lightbulb className="w-4 h-4 text-primary" />}
+                                {creationMode === "beautify" ? <Sparkles className="w-4 h-4 text-primary-strong" /> : creationMode === "image_transform" ? <Presentation className="w-4 h-4 text-primary-strong" /> : <Lightbulb className="w-4 h-4 text-primary-strong" />}
                                 <span>{modeCopy.hint}</span>
                             </div>
 
@@ -241,7 +241,7 @@ export function CreationStart({
                                     type="checkbox"
                                     checked={inputs.beautify.useTemplate}
                                     onChange={(e) => inputs.beautify.setUseTemplate(e.target.checked)}
-                                    className="h-4 w-4 rounded border-input text-primary focus:ring-ring"
+                                    className="h-4 w-4 rounded border-input text-primary-strong focus:ring-ring"
                                   />
                                 </label>
 

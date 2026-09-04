@@ -74,7 +74,7 @@ export function HistoryDialog({
                                     <div key={item.id} className="p-3 rounded-lg border border-border/50 bg-muted/20 hover:bg-muted/40 transition-colors flex items-center justify-between group">
                                         <div className="flex flex-col gap-1 overflow-hidden">
                                             <div className="flex items-center gap-2 text-sm font-medium">
-                                                <span className="w-6 h-6 rounded-full bg-primary/12 text-primary flex items-center justify-center text-xs">
+                                                <span className="w-6 h-6 rounded-full bg-primary/12 text-primary-strong flex items-center justify-center text-xs">
                                                     {history.length - index}
                                                 </span>
                                                 <span>{formatDate(item.timestamp)}</span>

@@ -23,9 +23,15 @@
     --popover: 0 0% 100%;
     --popover-foreground: 30 4% 10%;
 
-    /* Clay — the one saturated colour in the system. Used sparingly. */
+    /* Clay — the one saturated colour in the system. Used sparingly.
+
+       Two values, because clay does two jobs. `--primary` is a fill, judged
+       against the near-white text sitting on it. As body text on a light
+       ground it only reaches 3.07:1, under AA, so anything clay-coloured and
+       small uses `--primary-strong` instead (5.6:1). */
     --primary: 15 63% 60%;
     --primary-foreground: 48 33% 98%;
+    --primary-strong: 15 58% 42%;
 
     --secondary: 45 20% 93%;
     --secondary-foreground: 30 6% 20%;
@@ -84,6 +90,8 @@
 
     --primary: 15 63% 62%;
     --primary-foreground: 30 5% 10%;
+    /* On the dark ground the fill value already clears AA as text (5.2:1). */
+    --primary-strong: 15 63% 62%;
 
     --secondary: 48 3% 21%;
     --secondary-foreground: 45 12% 90%;
