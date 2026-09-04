@@ -39,6 +39,15 @@
     --destructive: 5 58% 50%;
     --destructive-foreground: 48 33% 98%;
 
+    /* Status colours. Clay is the accent, not a status, so "added" and
+       "warning" need their own hues -- folding them into the accent would
+       lose the meaning. Both are pulled well down in chroma to sit beside it. */
+    --success: 145 30% 34%;
+    --success-foreground: 48 33% 98%;
+
+    --warning: 38 58% 40%;
+    --warning-foreground: 48 33% 98%;
+
     --border: 42 15% 88%;
     --input: 42 15% 86%;
     --ring: 15 63% 60%;
@@ -87,6 +96,12 @@
 
     --destructive: 5 52% 52%;
     --destructive-foreground: 45 15% 94%;
+
+    --success: 145 32% 55%;
+    --success-foreground: 30 5% 10%;
+
+    --warning: 38 60% 58%;
+    --warning-foreground: 30 5% 10%;
 
     --border: 45 4% 24%;
     --input: 45 4% 26%;

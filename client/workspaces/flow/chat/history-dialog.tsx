@@ -47,7 +47,7 @@ export function HistoryDialog({
                 </DialogHeader>
 
                 {diagramHistory.length === 0 ? (
-                    <div className="text-center p-4 text-gray-500">
+                    <div className="text-center p-4 text-muted-foreground">
                         {t("history.empty")}
                     </div>
                 ) : (
@@ -71,7 +71,7 @@ export function HistoryDialog({
                                         className="object-contain w-full h-full p-1"
                                     />
                                 </div>
-                                <div className="text-xs text-center mt-1 text-gray-500">
+                                <div className="text-xs text-center mt-1 text-muted-foreground">
                                     {t("history.version")} {index + 1}
                                 </div>
                             </div>

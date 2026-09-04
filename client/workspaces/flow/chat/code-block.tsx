@@ -67,9 +67,9 @@ export function CodeBlock({ code, language = "xml", onApply }: CodeBlockProps) {
                         {applying ? (
                             <div className="h-3 w-3 border-2 border-primary border-t-transparent rounded-full animate-spin" />
                         ) : applied ? (
-                            <Check className="h-3 w-3 text-green-500" />
+                            <Check className="h-3 w-3 text-success" />
                         ) : applyFailed ? (
-                            <X className="h-3 w-3 text-red-500" />
+                            <X className="h-3 w-3 text-destructive" />
                         ) : (
                             <Play className="h-3 w-3" />
                         )}
@@ -89,9 +89,9 @@ export function CodeBlock({ code, language = "xml", onApply }: CodeBlockProps) {
                     }
                 >
                     {copied ? (
-                        <Check className="h-3 w-3 text-green-500" />
+                        <Check className="h-3 w-3 text-success" />
                     ) : copyFailed ? (
-                        <X className="h-3 w-3 text-red-500" />
+                        <X className="h-3 w-3 text-destructive" />
                     ) : (
                         <Copy className="h-3 w-3" />
                     )}

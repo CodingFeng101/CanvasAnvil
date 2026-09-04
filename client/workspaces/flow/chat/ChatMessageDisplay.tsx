@@ -361,12 +361,12 @@ export function ChatMessageDisplay({
                             <div className="h-4 w-4 border-2 border-primary border-t-transparent rounded-full animate-spin" />
                         )}
                         {state === "output-available" && (
-                            <span className="text-xs font-medium text-green-600 bg-green-50 px-2 py-0.5 rounded-full">
+                            <span className="text-xs font-medium text-success bg-success/[0.08] px-2 py-0.5 rounded-full">
                                 Complete
                             </span>
                         )}
                         {state === "output-error" && (
-                            <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${((toolName === "display_diagram" || toolName === "append_diagram") && !isMxCellXmlComplete(String(input?.xml || ""))) ? "text-yellow-700 bg-yellow-50" : "text-red-600 bg-red-50"}`}>
+                            <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${((toolName === "display_diagram" || toolName === "append_diagram") && !isMxCellXmlComplete(String(input?.xml || ""))) ? "text-yellow-700 bg-yellow-50" : "text-destructive bg-destructive/[0.08]"}`}>
                                 {((toolName === "display_diagram" || toolName === "append_diagram") && !isMxCellXmlComplete(String(input?.xml || ""))) ? "Truncated" : "Error"}
                             </span>
                         )}
@@ -435,7 +435,7 @@ export function ChatMessageDisplay({
                     </div>
                 )}
                 {output && state === "output-error" && (
-                    <div className="px-4 py-3 border-t border-border/40 text-sm text-red-600">
+                    <div className="px-4 py-3 border-t border-border/40 text-sm text-destructive">
                         {output}
                     </div>
                 )}
@@ -492,7 +492,10 @@ export function ChatMessageDisplay({
                                             : "justify-start"
                                     } animate-message-in`}
                                     style={{
-                                        animationDelay: `${messageIndex * 50}ms`,
+                                        // Capped: uncapped, the fortieth message
+                                        // in a thread waited two seconds before
+                                        // it appeared at all.
+                                        animationDelay: `${Math.min(messageIndex, 6) * 45}ms`,
                                     }}
                                 >
                                 <div className="max-w-[95%] min-w-0">
@@ -826,7 +829,7 @@ export function ChatMessageDisplay({
                                                                                         width={96}
                                                                                         height={96}
                                                                                         alt="Uploaded image"
-                                                                                        className="rounded-md border border-white/20"
+                                                                                        className="rounded-md border border-border"
                                                                                         style={{ objectFit: "cover" }}
                                                                                     />
                                                                                 )
@@ -849,9 +852,9 @@ export function ChatMessageDisplay({
                                                                                         >
                                                                                             {section.fileType ===
                                                                                             "pdf" ? (
-                                                                                                <FileText className="h-4 w-4 text-red-500" />
+                                                                                                <FileText className="h-4 w-4 text-destructive" />
                                                                                             ) : (
-                                                                                                <FileCode className="h-4 w-4 text-blue-500" />
+                                                                                                <FileCode className="h-4 w-4 text-primary" />
                                                                                             )}
                                                                                             <span className="text-xs font-medium leading-none">
                                                                                                 {
@@ -931,10 +934,10 @@ export function ChatMessageDisplay({
                                                                         >
                                                                             {copiedMessageId ===
                                                                             message.id ? (
-                                                                                <Check className="h-3.5 w-3.5 text-green-500" />
+                                                                                <Check className="h-3.5 w-3.5 text-success" />
                                                                             ) : copyFailedMessageId ===
                                                                               message.id ? (
-                                                                                <X className="h-3.5 w-3.5 text-red-500" />
+                                                                                <X className="h-3.5 w-3.5 text-destructive" />
                                                                             ) : (
                                                                                 <Copy className="h-3.5 w-3.5" />
                                                                             )}
@@ -942,15 +945,19 @@ export function ChatMessageDisplay({
                                                                     </div>
                                                                 )}
                                                             <div
-                                                                className={`order-1 w-full px-4 py-3 text-sm leading-relaxed ${
+                                                                // Same split as the other two panels: only the user's
+                                                                // turn is a card. This had it backwards -- the assistant
+                                                                // carried the bubble while the user's `bg-background`
+                                                                // matched the page ground and read as no bubble at all.
+                                                                className={`order-1 w-full text-sm leading-relaxed ${
                                                                 message.role ===
                                                                 "user"
-                                                                    ? "bg-background text-foreground rounded-2xl rounded-br-md border border-border/50 shadow-sm"
+                                                                    ? "px-4 py-3 bg-muted text-foreground rounded-2xl rounded-br-md border border-border/60 transition-[background-color] duration-fast ease-out-soft"
                                                                     : message.role ===
                                                                         "system"
-                                                                      ? "bg-destructive/10 text-destructive border border-destructive/20 rounded-2xl rounded-bl-md"
-                                                                      : "bg-muted/60 text-foreground rounded-2xl rounded-bl-md"
-                                                            } ${message.role === "user" && isLastUserMessage && onEditMessage ? "cursor-pointer hover:opacity-90 transition-opacity" : ""}`}
+                                                                      ? "px-4 py-3 bg-destructive/10 text-destructive border border-destructive/20 rounded-2xl rounded-bl-md"
+                                                                      : "py-1 text-foreground"
+                                                            } ${message.role === "user" && isLastUserMessage && onEditMessage ? "cursor-pointer hover:bg-accent" : ""}`}
                                                             role={
                                                                 message.role ===
                                                                     "user" &&
@@ -1181,7 +1188,7 @@ export function ChatMessageDisplay({
                                                 className={`p-1.5 rounded-lg transition-colors ${
                                                     copiedMessageId ===
                                                     message.id
-                                                        ? "text-green-600 bg-green-100"
+                                                        ? "text-success bg-success/15"
                                                         : "text-muted-foreground/60 hover:text-foreground hover:bg-muted"
                                                 }`}
                                                 title={

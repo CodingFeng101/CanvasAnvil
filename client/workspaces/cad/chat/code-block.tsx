@@ -156,7 +156,7 @@ export function CodeBlock({
                     {_isStreaming ? (
                         <div className="h-4 w-4 border-2 border-primary border-t-transparent rounded-full animate-spin" />
                     ) : (
-                        <span className="text-xs font-medium text-green-600 bg-green-50 px-2 py-0.5 rounded-full">
+                        <span className="text-xs font-medium text-success bg-success/[0.08] px-2 py-0.5 rounded-full">
                             {tr("完成", "Complete")}
                         </span>
                     )}
@@ -172,9 +172,9 @@ export function CodeBlock({
                                 {applying ? (
                                     <div className="h-3 w-3 border-2 border-primary border-t-transparent rounded-full animate-spin" />
                                 ) : applied ? (
-                                    <Check className="h-3 w-3 text-green-500" />
+                                    <Check className="h-3 w-3 text-success" />
                                 ) : applyFailed ? (
-                                    <X className="h-3 w-3 text-red-500" />
+                                    <X className="h-3 w-3 text-destructive" />
                                 ) : (
                                     <Play className="h-3 w-3" />
                                 )}
@@ -212,9 +212,9 @@ export function CodeBlock({
                             }
                         >
                             {copied ? (
-                                <Check className="h-3 w-3 text-green-500" />
+                                <Check className="h-3 w-3 text-success" />
                             ) : copyFailed ? (
-                                <X className="h-3 w-3 text-red-500" />
+                                <X className="h-3 w-3 text-destructive" />
                             ) : (
                                 <Copy className="h-3 w-3" />
                             )}

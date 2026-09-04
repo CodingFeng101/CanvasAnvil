@@ -39,6 +39,14 @@ export default {
           DEFAULT: "hsl(var(--destructive))",
           foreground: "hsl(var(--destructive-foreground))",
         },
+        success: {
+          DEFAULT: "hsl(var(--success))",
+          foreground: "hsl(var(--success-foreground))",
+        },
+        warning: {
+          DEFAULT: "hsl(var(--warning))",
+          foreground: "hsl(var(--warning-foreground))",
+        },
         muted: {
           DEFAULT: "hsl(var(--muted))",
           foreground: "hsl(var(--muted-foreground))",
@@ -100,6 +108,17 @@ export default {
           "0%, 100%": { opacity: "0.55" },
           "50%": { opacity: "1" },
         },
+        // Both of these were already referenced from the chat components but
+        // had never been defined anywhere, so the panels and their messages
+        // arrived with no animation at all.
+        "message-in": {
+          from: { opacity: "0", transform: "translateY(6px)" },
+          to: { opacity: "1", transform: "none" },
+        },
+        "slide-in-right": {
+          from: { opacity: "0", transform: "translateX(14px)" },
+          to: { opacity: "1", transform: "none" },
+        },
       },
       animation: {
         "rise-in": "rise-in var(--dur-base) var(--ease-out-soft) both",
@@ -107,6 +126,8 @@ export default {
         "scale-in": "scale-in var(--dur-base) var(--ease-out-soft) both",
         sheen: "sheen 2.2s linear infinite",
         breathe: "breathe 4s var(--ease-in-out-soft) infinite",
+        "message-in": "message-in var(--dur-base) var(--ease-out-soft) both",
+        "slide-in-right": "slide-in-right var(--dur-slow) var(--ease-out-soft) both",
       },
     },
   },

@@ -54,20 +54,20 @@ export function CodeBlock({ code, language = "xml", isStreaming = false, blockId
     };
 
     return (
-        <div className="w-full my-2 border border-border/50 rounded-lg bg-zinc-50 dark:bg-zinc-900/40 overflow-hidden shadow-sm">
+        <div className="w-full my-2 border border-border/50 rounded-lg bg-sunken overflow-hidden shadow-sm">
             <button
                 type="button"
                 onClick={() => setOpen(!isOpen)}
-                className="flex items-center gap-2 w-full p-2.5 cursor-pointer hover:bg-zinc-100 dark:hover:bg-zinc-800/40 transition-colors text-xs font-medium text-zinc-600 dark:text-zinc-300 select-none bg-zinc-100/70 dark:bg-zinc-900/60"
+                className="flex items-center gap-2 w-full p-2.5 cursor-pointer hover:bg-accent transition-colors text-xs font-medium text-muted-foreground select-none bg-muted/70"
             >
-                <ChevronRight className={cn("w-4 h-4 transition-transform duration-200 text-zinc-600 dark:text-zinc-300", isOpen && "rotate-90")} />
+                <ChevronRight className={cn("w-4 h-4 transition-transform duration-200 text-muted-foreground", isOpen && "rotate-90")} />
                 
-                <span className="uppercase font-semibold tracking-wider text-zinc-700 dark:text-zinc-200">{normalizedLanguage}</span>
+                <span className="uppercase font-semibold tracking-wider text-foreground/80">{normalizedLanguage}</span>
                 
                 {isStreaming ? (
                     <div className="flex items-center gap-2 ml-auto">
-                         <span className="text-[10px] text-blue-600 animate-pulse">Generating code...</span>
-                         <Loader2 className="w-3.5 h-3.5 animate-spin text-blue-600" />
+                         <span className="text-[10px] text-primary animate-pulse">Generating code...</span>
+                         <Loader2 className="w-3.5 h-3.5 animate-spin text-primary" />
                     </div>
                 ) : (
                     <span className="ml-auto text-[10px] opacity-70 font-mono">{normalizedCode.length} chars</span>
@@ -76,7 +76,7 @@ export function CodeBlock({ code, language = "xml", isStreaming = false, blockId
             
             {isOpen && (
                 <div className="p-0 border-t border-border/50">
-                     <div className="overflow-hidden w-full bg-zinc-50 dark:bg-zinc-900/40">
+                     <div className="overflow-hidden w-full bg-sunken">
                         <Highlight theme={themes.github} code={normalizedCode} language={prismLanguage}>
                             {({
                                 style,
@@ -111,7 +111,7 @@ export function CodeBlock({ code, language = "xml", isStreaming = false, blockId
                                                 {...lineProps}
                                                 className={cn("grid grid-cols-[3.25rem_1fr] gap-0", lineProps?.className)}
                                             >
-                                                <span className="select-none text-zinc-400 text-right pr-4">{i + 1}</span>
+                                                <span className="select-none text-muted-foreground/70 text-right pr-4">{i + 1}</span>
                                                 <span className="min-w-0 whitespace-pre-wrap break-words">
                                                     {line.map((token, key) => (
                                                         <span key={key} {...getTokenProps({ token })} />

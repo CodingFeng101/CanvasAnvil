@@ -258,20 +258,26 @@ export function ChatMessageDisplay({
                     return (
                         <React.Fragment key={message.id}>
                         <div
-                            className={`flex w-full ${message.role === "user" ? "justify-end" : "justify-start"}`}
+                            className={`flex w-full animate-message-in ${message.role === "user" ? "justify-end" : "justify-start"}`}
                         >
                             <div
                                 className={cn(
                                     "min-w-0 flex flex-col",
-                                    message.role === "assistant" ? "w-full max-w-[95%] items-start" : "max-w-[95%] items-end"
+                                    message.role === "assistant" ? "w-full max-w-full items-start" : "max-w-[85%] items-end"
                                 )}
                             >
-                                {/* Content Bubble */}
+                                {/* Content Bubble.
+
+                                    The assistant speaks onto the page: no card,
+                                    no border, full width. Only what the user
+                                    said is bounded. Giving both roles the same
+                                    bubble made the thread read as one
+                                    undifferentiated wall. */}
                                 <div className={cn(
-                                    "relative px-4 py-3 text-sm leading-relaxed break-words overflow-hidden border border-border/50 bg-background/70 backdrop-blur-md shadow-sm transition-shadow hover:shadow-md",
-                                    message.role === "user" 
-                                        ? "text-foreground rounded-2xl rounded-tr-sm w-full cursor-pointer"
-                                        : "text-foreground rounded-2xl rounded-tl-sm w-full"
+                                    "relative text-sm leading-relaxed break-words overflow-hidden w-full text-foreground",
+                                    message.role === "user"
+                                        ? "px-4 py-3 rounded-2xl rounded-tr-md border border-border/60 bg-muted cursor-pointer transition-[background-color,box-shadow] duration-fast ease-out-soft hover:bg-accent"
+                                        : "py-1"
                                 )}
                                 role={message.role === "user" && isLastUserMessage && onEditMessage ? "button" : undefined}
                                 tabIndex={message.role === "user" && isLastUserMessage && onEditMessage ? 0 : undefined}
@@ -342,14 +348,14 @@ export function ChatMessageDisplay({
                                                                         className={cn(
                                                                             "mx-0.5 inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-xs font-medium align-middle",
                                                                             kind === "outline"
-                                                                                ? "border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-400/30 dark:bg-blue-950/40 dark:text-blue-200"
-                                                                                : "border-red-200 bg-red-50 text-red-700 dark:border-red-400/30 dark:bg-red-950/40 dark:text-red-200"
+                                                                                ? "border-primary/25 bg-primary/[0.08] text-primary"
+                                                                                : "border-border bg-muted text-foreground/80"
                                                                         )}
                                                                     >
                                                                         <span
                                                                             className={cn(
-                                                                                "inline-flex h-4 w-4 items-center justify-center rounded-full text-[10px] font-semibold text-white",
-                                                                                kind === "outline" ? "bg-blue-600" : "bg-red-600"
+                                                                                "inline-flex h-4 w-4 items-center justify-center rounded-full text-[10px] font-semibold",
+                                                                                kind === "outline" ? "bg-primary text-primary-foreground" : "bg-foreground/70 text-background"
                                                                             )}
                                                                         >
                                                                             {kind === "outline" ? "T" : "P"}
@@ -397,14 +403,14 @@ export function ChatMessageDisplay({
                                                             <div
                                                                 key={`${message.id}-img-${i}`}
                                                                 className={cn(
-                                                                    "overflow-hidden rounded-lg border border-border/60 bg-black/5 dark:bg-white/5",
+                                                                    "overflow-hidden rounded-lg border border-border/60 bg-muted",
                                                                     "max-w-[420px] mx-auto"
                                                                 )}
                                                             >
                                                                 <img
                                                                     src={img.url}
                                                                     alt={img.name || "image"}
-                                                                    className="w-full max-h-[240px] object-contain bg-black/5"
+                                                                    className="w-full max-h-[240px] object-contain bg-muted"
                                                                 />
                                                             </div>
                                                         ))}
@@ -419,15 +425,15 @@ export function ChatMessageDisplay({
                                                                     "inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] leading-4",
                                                                     message.role === "user"
                                                                         ? t.kind === "outline"
-                                                                            ? "border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-400/30 dark:bg-blue-950/40 dark:text-blue-200"
-                                                                            : "border-red-200 bg-red-50 text-red-700 dark:border-red-400/30 dark:bg-red-950/40 dark:text-red-200"
+                                                                            ? "border-primary/25 bg-primary/[0.08] text-primary"
+                                                                            : "border-border bg-muted text-foreground/80"
                                                                         : "border-border bg-muted/40 text-foreground"
                                                                 )}
                                                             >
                                                                 <span
                                                                     className={cn(
-                                                                        "mr-1 inline-flex h-4 w-4 items-center justify-center rounded-full text-[10px] font-semibold text-white",
-                                                                        t.kind === "outline" ? "bg-blue-600" : "bg-red-600"
+                                                                        "mr-1 inline-flex h-4 w-4 items-center justify-center rounded-full text-[10px] font-semibold",
+                                                                        t.kind === "outline" ? "bg-primary text-primary-foreground" : "bg-foreground/70 text-background"
                                                                     )}
                                                                 >
                                                                     {t.kind === "outline" ? "T" : "P"}
@@ -450,9 +456,9 @@ export function ChatMessageDisplay({
                                                                 >
                                                                     <div className="flex items-center gap-2">
                                                                         {section.fileType === 'pdf' ? (
-                                                                            <FileText className="h-4 w-4 text-red-500" />
+                                                                            <FileText className="h-4 w-4 text-destructive" />
                                                                         ) : (
-                                                                            <FileCode className="h-4 w-4 text-blue-500" />
+                                                                            <FileCode className="h-4 w-4 text-primary" />
                                                                         )}
                                                                         <span className="text-xs font-medium truncate max-w-[150px] text-foreground">{section.filename}</span>
                                                                         <span className="text-[10px] text-muted-foreground">({section.charCount} chars)</span>
@@ -488,15 +494,15 @@ export function ChatMessageDisplay({
                                                                             className={cn(
                                                                                 "mx-1 inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-xs font-medium align-middle",
                                                                                 kind === "outline"
-                                                                                    ? "border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-400/30 dark:bg-blue-950/40 dark:text-blue-200"
-                                                                                    : "border-red-200 bg-red-50 text-red-700 dark:border-red-400/30 dark:bg-red-950/40 dark:text-red-200"
+                                                                                    ? "border-primary/25 bg-primary/[0.08] text-primary"
+                                                                                    : "border-border bg-muted text-foreground/80"
                                                                             )}
                                                                             title={tr(`幻灯片 · ${label}`, `Slide · ${label}`)}
                                                                         >
                                                                             <span
                                                                                 className={cn(
-                                                                                    "inline-flex h-4 w-4 items-center justify-center rounded-full text-[10px] font-semibold text-white",
-                                                                                    kind === "outline" ? "bg-blue-600" : "bg-red-600"
+                                                                                    "inline-flex h-4 w-4 items-center justify-center rounded-full text-[10px] font-semibold",
+                                                                                    kind === "outline" ? "bg-primary text-primary-foreground" : "bg-foreground/70 text-background"
                                                                                 )}
                                                                             >
                                                                                 {kind === "outline" ? "T" : "P"}
@@ -530,7 +536,7 @@ export function ChatMessageDisplay({
                                                                                 className="flex w-full items-center justify-between px-3 py-2 text-left hover:bg-muted/40"
                                                                             >
                                                                                 <span className="inline-flex items-center gap-2 text-sm font-medium text-foreground">
-                                                                                    <span className="h-2.5 w-2.5 rounded-full bg-emerald-500" />
+                                                                                    <span className="h-2.5 w-2.5 rounded-full bg-success" />
                                                                                     {tr(`第 ${slideNumber} 张幻灯片`, `Slide ${slideNumber}`)}
                                                                                 </span>
                                                                                 {expanded ? <ChevronUp className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
@@ -651,7 +657,7 @@ export function ChatMessageDisplay({
                                                 className="p-1.5 rounded-lg text-muted-foreground/60 hover:text-foreground hover:bg-muted transition-colors"
                                                 title={tr("复制", "Copy")}
                                             >
-                                                {copiedMessageId === message.id ? <Check className="h-3.5 w-3.5 text-green-500" /> : <Copy className="h-3.5 w-3.5" />}
+                                                {copiedMessageId === message.id ? <Check className="h-3.5 w-3.5 text-success" /> : <Copy className="h-3.5 w-3.5" />}
                                             </button>
                                         </>
                                     )}
@@ -662,7 +668,7 @@ export function ChatMessageDisplay({
                                                 onClick={() => copyMessageToClipboard(message.id, getMessageTextContent(message))}
                                                 className={`p-1.5 rounded-lg transition-colors ${
                                                     copiedMessageId === message.id
-                                                        ? "text-green-600 bg-green-100 dark:bg-green-950/30"
+                                                        ? "text-success bg-success/15"
                                                         : "text-muted-foreground/60 hover:text-foreground hover:bg-muted"
                                                 }`}
                                                 title={tr("复制", "Copy")}
