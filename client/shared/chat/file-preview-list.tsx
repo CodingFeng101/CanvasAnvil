@@ -121,11 +121,11 @@ export function FilePreviewList({
                                     ) : (
                                         <>
                                             {pdfInfo?.isExtracting ? (
-                                                <Loader2 className="h-5 w-5 text-blue-500 animate-spin" />
+                                                <Loader2 className="h-5 w-5 text-primary animate-spin" />
                                             ) : isPdf ? (
-                                                <FileText className="h-5 w-5 text-red-500" />
+                                                <FileText className="h-5 w-5 text-destructive" />
                                             ) : (
-                                                <FileCode className="h-5 w-5 text-blue-500" />
+                                                <FileCode className="h-5 w-5 text-primary" />
                                             )}
                                         </>
                                     )}
@@ -161,7 +161,7 @@ export function FilePreviewList({
                     onClick={() => setSelectedImage(null)}
                 >
                     <button
-                        className="absolute top-4 right-4 z-10 bg-white rounded-full p-2 hover:bg-gray-200 transition-colors"
+                        className="absolute top-4 right-4 z-10 bg-white text-black rounded-full p-2 hover:bg-white/85 transition-colors"
                         onClick={() => setSelectedImage(null)}
                         aria-label={trText("关闭", "Close")}
                     >

@@ -1,4 +1,4 @@
-import { motion } from "motion/react"
+import { motion, useReducedMotion } from "motion/react"
 import {
     type CSSProperties,
     type ElementType,
@@ -16,6 +16,16 @@ export type TextShimmerProps = {
     spread?: number
 }
 
+/**
+ * A travelling highlight for text that is still being produced.
+ *
+ * The colours come from the project's own tokens. The previous version
+ * referenced `--color-background` / `--color-muted-foreground`, which Tailwind
+ * only generates in v4; against this v3 build both resolved to nothing, so the
+ * whole `background-image` was invalid and the element -- which is
+ * `color: transparent` by design -- rendered as blank space. "Thinking..." was
+ * literally invisible the entire time it was on screen.
+ */
 const ShimmerComponent = ({
     children,
     as: Component = "p",
@@ -23,8 +33,13 @@ const ShimmerComponent = ({
     duration = 2,
     spread = 2,
 }: TextShimmerProps) => {
-    const MotionComponent = motion.create(
-        Component as keyof JSX.IntrinsicElements,
+    const reduceMotion = useReducedMotion()
+
+    // Recreating this on every render would hand React a new component type
+    // each time and remount the subtree.
+    const MotionComponent = useMemo(
+        () => motion.create(Component as keyof JSX.IntrinsicElements),
+        [Component],
     )
 
     const dynamicSpread = useMemo(
@@ -34,10 +49,11 @@ const ShimmerComponent = ({
 
     return (
         <MotionComponent
-            animate={{ backgroundPosition: "0% center" }}
+            animate={reduceMotion ? undefined : { backgroundPosition: "0% center" }}
             className={cn(
                 "relative inline-block bg-[length:250%_100%,auto] bg-clip-text text-transparent",
-                "[--bg:linear-gradient(90deg,#0000_calc(50%-var(--spread)),var(--color-background),#0000_calc(50%+var(--spread)))] [background-repeat:no-repeat,padding-box]",
+                "[--shimmer-base:hsl(var(--muted-foreground))] [--shimmer-peak:hsl(var(--foreground))]",
+                "[--bg:linear-gradient(90deg,#0000_calc(50%-var(--spread)),var(--shimmer-peak),#0000_calc(50%+var(--spread)))] [background-repeat:no-repeat,padding-box]",
                 className,
             )}
             initial={{ backgroundPosition: "100% center" }}
@@ -45,14 +61,18 @@ const ShimmerComponent = ({
                 {
                     "--spread": `${dynamicSpread}px`,
                     backgroundImage:
-                        "var(--bg), linear-gradient(var(--color-muted-foreground), var(--color-muted-foreground))",
+                        "var(--bg), linear-gradient(var(--shimmer-base), var(--shimmer-base))",
                 } as CSSProperties
             }
-            transition={{
-                repeat: Number.POSITIVE_INFINITY,
-                duration,
-                ease: "linear",
-            }}
+            transition={
+                reduceMotion
+                    ? undefined
+                    : {
+                          repeat: Number.POSITIVE_INFINITY,
+                          duration,
+                          ease: "linear",
+                      }
+            }
         >
             {children}
         </MotionComponent>

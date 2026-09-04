@@ -25,13 +25,13 @@ export function GenerationProgress({ step, progress, tr }: GenerationProgressPro
   const isRendering = step === "generating_images";
 
   return (
-    <div className="w-full h-full bg-zinc-50 dark:bg-zinc-900 flex flex-col overflow-hidden">
+    <div className="w-full h-full bg-sunken flex flex-col overflow-hidden">
       <div className="flex-1 flex items-center justify-center p-6">
-        <div className="w-full max-w-md bg-white dark:bg-zinc-800 p-8 rounded-xl shadow-lg text-center space-y-6">
+        <div className="w-full max-w-md bg-card p-8 rounded-2xl shadow-soft-lg text-center space-y-6">
           <div className="relative w-20 h-20 mx-auto">
             <svg className="w-full h-full" viewBox="0 0 100 100">
               <circle
-                className="text-zinc-200 dark:text-zinc-700 stroke-current"
+                className="text-foreground/80 stroke-current"
                 strokeWidth="8"
                 cx="50"
                 cy="50"
@@ -39,7 +39,7 @@ export function GenerationProgress({ step, progress, tr }: GenerationProgressPro
                 fill="transparent"
               />
               <circle
-                className="text-blue-600 stroke-current transition-all duration-300 ease-in-out origin-center -rotate-90"
+                className="text-primary stroke-current transition-all duration-300 ease-in-out origin-center -rotate-90"
                 strokeWidth="8"
                 strokeLinecap="round"
                 cx="50"
@@ -60,7 +60,7 @@ export function GenerationProgress({ step, progress, tr }: GenerationProgressPro
           </div>
 
           <div className="flex justify-center gap-2 text-xs text-muted-foreground">
-            <div className={`flex items-center gap-1 ${isRendering ? "text-blue-600" : ""}`}>
+            <div className={`flex items-center gap-1 ${isRendering ? "text-primary" : ""}`}>
               {isRendering ? <Loader2 className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />}
               <span>{tr("渲染图片", "Render images")}</span>
             </div>

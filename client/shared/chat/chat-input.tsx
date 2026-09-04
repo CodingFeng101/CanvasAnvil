@@ -194,12 +194,12 @@ export function ChatInput({
         el.setAttribute("data-token-kind", segment.tokenKind);
         el.setAttribute("contenteditable", "false");
         el.className = isOutline
-            ? "inline-flex items-center gap-1.5 rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-xs font-medium text-blue-700 dark:border-blue-400/30 dark:bg-blue-950/40 dark:text-blue-200 align-middle"
-            : "inline-flex items-center gap-1.5 rounded-full border border-red-200 bg-red-50 px-2 py-0.5 text-xs font-medium text-red-700 dark:border-red-400/30 dark:bg-red-950/40 dark:text-red-200 align-middle";
+            ? "inline-flex items-center gap-1.5 rounded-full border border-primary/30 bg-primary/[0.08] px-2 py-0.5 text-xs font-medium text-primary align-middle"
+            : "inline-flex items-center gap-1.5 rounded-full border border-destructive/25 bg-destructive/[0.08] px-2 py-0.5 text-xs font-medium text-destructive align-middle";
         const icon = document.createElement("span");
         icon.className = isOutline
-            ? "inline-flex h-4 w-4 items-center justify-center rounded-full bg-blue-600 text-[10px] font-semibold text-white"
-            : "inline-flex h-4 w-4 items-center justify-center rounded-full bg-red-600 text-[10px] font-semibold text-white";
+            ? "inline-flex h-4 w-4 items-center justify-center rounded-full bg-primary text-[10px] font-semibold text-primary-foreground"
+            : "inline-flex h-4 w-4 items-center justify-center rounded-full bg-destructive text-[10px] font-semibold text-destructive-foreground";
         icon.textContent = isOutline ? "T" : "P";
         const text = document.createElement("span");
         text.textContent = segment.label;
@@ -394,7 +394,7 @@ export function ChatInput({
 
     return (
         <div 
-            className="relative rounded-2xl border border-border bg-background shadow-sm focus-within:ring-2 focus-within:ring-primary/20 focus-within:border-primary/50 transition-all duration-200"
+            className="relative rounded-2xl border border-border bg-card shadow-soft focus-within:ring-[3px] focus-within:ring-ring/25 focus-within:border-ring focus-within:shadow-soft-lg transition-[border-color,box-shadow] duration-base ease-out-soft"
             onDragOver={(e) => e.preventDefault()}
             onDrop={handleDrop}
         >
@@ -576,7 +576,7 @@ export function ChatInput({
                             variant="ghost"
                             size="sm"
                             onClick={onClearChat}
-                            className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                            className="h-8 w-8 p-0 text-muted-foreground transition-[color,background-color,transform] duration-fast ease-out-soft hover:text-destructive hover:bg-destructive/10 active:scale-90"
                         >
                             <Trash2 className="h-4 w-4" />
                         </ButtonWithTooltip>
@@ -591,7 +591,7 @@ export function ChatInput({
                             size="sm"
                             onClick={onToggleHistory}
                             disabled={historyDisabled}
-                            className="h-8 w-8 p-0 text-muted-foreground hover:text-foreground"
+                            className="h-8 w-8 p-0 text-muted-foreground transition-[color,background-color,transform] duration-fast ease-out-soft hover:text-foreground active:scale-90"
                         >
                             <History className="h-4 w-4" />
                         </ButtonWithTooltip>
@@ -603,7 +603,7 @@ export function ChatInput({
                             variant="ghost"
                             size="sm"
                             onClick={handleImageUpload}
-                            className="h-8 w-8 p-0 text-muted-foreground hover:text-foreground"
+                            className="h-8 w-8 p-0 text-muted-foreground transition-[color,background-color,transform] duration-fast ease-out-soft hover:text-foreground active:scale-90"
                         >
                             <ImageIcon className="h-4 w-4" />
                         </ButtonWithTooltip>
@@ -615,7 +615,7 @@ export function ChatInput({
                             variant="ghost"
                             size="sm"
                             onClick={handleFileUpload}
-                            className="h-8 w-8 p-0 text-muted-foreground hover:text-foreground"
+                            className="h-8 w-8 p-0 text-muted-foreground transition-[color,background-color,transform] duration-fast ease-out-soft hover:text-foreground active:scale-90"
                         >
                             <FileText className="h-4 w-4" />
                         </ButtonWithTooltip>
@@ -653,8 +653,8 @@ export function ChatInput({
                                 variant="default"
                                 size="sm"
                                 className={cn(
-                                    "h-8 w-8 p-0 rounded-xl shadow-sm",
-                                    (!hasText && !hasFiles) ? "opacity-60" : ""
+                                    "h-8 w-8 p-0 rounded-xl shadow-xs transition-[transform,opacity,background-color] duration-fast ease-out-soft active:scale-90",
+                                    (!hasText && !hasFiles) ? "opacity-50" : ""
                                 )}
                                 aria-label={t(uiLang, "chat.send")}
                             >

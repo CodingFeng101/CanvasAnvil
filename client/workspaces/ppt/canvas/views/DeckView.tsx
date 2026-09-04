@@ -146,16 +146,16 @@ export function DeckView({
     );
   };
   return (
-    <div className="w-full h-full bg-zinc-100 dark:bg-zinc-900 flex flex-col">
+    <div className="w-full h-full bg-muted flex flex-col">
       {/* Toolbar */}
-      <div className="relative z-50 h-14 px-4 bg-white dark:bg-zinc-800 border-b border-zinc-200 dark:border-zinc-700 flex justify-between items-center shadow-sm">
+      <div className="relative z-50 h-14 px-4 bg-card border-b border-border flex justify-between items-center shadow-sm">
         <div className="flex items-center gap-4 [&>h2]:hidden">
             <h2 className="hidden font-semibold text-sm text-foreground">{tr("PPT 演示文稿", "PPT Deck")}</h2>
             <div className="font-semibold text-sm text-foreground">{tr("PPT \u6f14\u793a\u6587\u7a3f", "PPT Deck")}</div>
             <button
                 onClick={actions.backToStart}
                 title={tr("返回开始", "Back to start")}
-                className="flex items-center gap-2 px-3 py-1.5 bg-zinc-100 dark:bg-zinc-700 hover:bg-zinc-200 dark:hover:bg-zinc-600 text-xs rounded transition-colors shadow-sm"
+                className="flex items-center gap-2 px-3 py-1.5 bg-muted hover:bg-accent text-xs rounded transition-colors shadow-sm"
             >
                 <ArrowLeft className="w-3.5 h-3.5" />
                 <span>{tr("返回", "Back")}</span>
@@ -166,7 +166,7 @@ export function DeckView({
                 onClick={() => slideshow.open(deck.currentIndex)}
                 disabled={deck.slides.length === 0}
                 title={tr("从当前页开始放映", "Present from the current slide")}
-                className="flex items-center gap-2 px-3 py-1.5 bg-zinc-100 dark:bg-zinc-700 hover:bg-zinc-200 dark:hover:bg-zinc-600 text-foreground rounded-md text-xs font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                className="flex items-center gap-2 px-3 py-1.5 bg-muted hover:bg-accent text-foreground rounded-md text-xs font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
                 <Presentation className="w-3.5 h-3.5" />
                 <span>{tr("放映", "Present")}</span>
@@ -176,7 +176,7 @@ export function DeckView({
                 onClick={() => exporter.setMenuOpen((open) => !open)}
                 disabled={deck.slides.length === 0 || !!exporter.isExporting}
                 title={tr("导出", "Export")}
-                className="flex items-center gap-2 px-3 py-1.5 bg-zinc-100 dark:bg-zinc-700 hover:bg-zinc-200 dark:hover:bg-zinc-600 text-xs rounded transition-colors shadow-sm disabled:opacity-60"
+                className="flex items-center gap-2 px-3 py-1.5 bg-muted hover:bg-accent text-xs rounded transition-colors shadow-sm disabled:opacity-60"
               >
                 {exporter.isExporting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
                 <span>{exporter.isExporting ? tr("导出中…", "Exporting...") : tr("导出", "Export")}</span>
@@ -186,11 +186,11 @@ export function DeckView({
                   initial={{ opacity: 0, y: -6 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ duration: 0.16, ease: "easeOut" }}
-                  className="absolute left-0 top-full z-[70] mt-2 min-w-[190px] rounded-xl border border-zinc-200 bg-white p-2 shadow-xl dark:border-zinc-700 dark:bg-zinc-800"
+                  className="absolute left-0 top-full z-[70] mt-2 min-w-[190px] rounded-xl border border-border bg-popover p-2 shadow-soft-lg"
                 >
                   <button
                     type="button"
-                    className="flex w-full items-center rounded-lg px-3 py-2 text-left text-xs text-zinc-700 transition-colors hover:bg-zinc-100 dark:text-zinc-100 dark:hover:bg-zinc-700"
+                    className="flex w-full items-center rounded-lg px-3 py-2 text-left text-xs text-foreground/80 transition-colors hover:bg-accent"
                     onClick={() => {
                       exporter.setMenuOpen(false);
                       void actions.downloadPdf();
@@ -200,7 +200,7 @@ export function DeckView({
                   </button>
                   <button
                     type="button"
-                    className="flex w-full items-center rounded-lg px-3 py-2 text-left text-xs text-zinc-700 transition-colors hover:bg-zinc-100 dark:text-zinc-100 dark:hover:bg-zinc-700"
+                    className="flex w-full items-center rounded-lg px-3 py-2 text-left text-xs text-foreground/80 transition-colors hover:bg-accent"
                     onClick={() => {
                       exporter.setMenuOpen(false);
                       void actions.downloadPpt();
@@ -210,7 +210,7 @@ export function DeckView({
                   </button>
                   <button
                     type="button"
-                    className="flex w-full items-center rounded-lg px-3 py-2 text-left text-xs text-zinc-700 transition-colors hover:bg-zinc-100 dark:text-zinc-100 dark:hover:bg-zinc-700"
+                    className="flex w-full items-center rounded-lg px-3 py-2 text-left text-xs text-foreground/80 transition-colors hover:bg-accent"
                     onClick={() => {
                       exporter.setMenuOpen(false);
                       void actions.downloadEditablePpt();
@@ -226,22 +226,22 @@ export function DeckView({
                 onClick={actions.retryFailedBeautify}
                 disabled={status.failedBeautifyCount === 0 || Boolean(progress.message)}
                 title={tr("重试失败页", "Retry failed slides")}
-                className="flex items-center gap-2 px-3 py-1.5 bg-zinc-100 dark:bg-zinc-700 hover:bg-zinc-200 dark:hover:bg-zinc-600 text-xs rounded transition-colors shadow-sm disabled:opacity-60"
+                className="flex items-center gap-2 px-3 py-1.5 bg-muted hover:bg-accent text-xs rounded transition-colors shadow-sm disabled:opacity-60"
               >
                 <Sparkles className="w-3.5 h-3.5" />
                 <span>{tr("重试失败页", "Retry failed")}</span>
-                {status.failedBeautifyCount > 0 ? <span className="rounded bg-red-100 px-1.5 py-0.5 text-[10px] text-red-700">{status.failedBeautifyCount}</span> : null}
+                {status.failedBeautifyCount > 0 ? <span className="rounded bg-destructive/12 px-1.5 py-0.5 text-[10px] text-destructive">{status.failedBeautifyCount}</span> : null}
               </button>
             )}
         </div>
         <div className="flex items-center gap-3 text-xs text-muted-foreground">
             {creationMode === "beautify" && status.failedBeautifyCount > 0 ? (
-              <span className="rounded border border-red-200 bg-red-50 px-2 py-1 text-red-700">
+              <span className="rounded border border-destructive/25 bg-destructive/[0.08] px-2 py-1 text-destructive">
                 {tr(`失败 ${status.failedBeautifyCount} 页`, `${status.failedBeautifyCount} failed`)}
               </span>
             ) : null}
             {creationMode === "image_transform" && status.failedImageTransformCount > 0 ? (
-              <span className="rounded border border-red-200 bg-red-50 px-2 py-1 text-red-700">
+              <span className="rounded border border-destructive/25 bg-destructive/[0.08] px-2 py-1 text-destructive">
                 {tr(`转化失败 ${status.failedImageTransformCount} 页`, `${status.failedImageTransformCount} failed`)}
               </span>
             ) : null}
@@ -252,7 +252,7 @@ export function DeckView({
       {/* Main View */}
       <div className="flex-1 flex overflow-hidden">
         {/* Thumbnails */}
-        <div className="w-64 bg-zinc-50 dark:bg-zinc-900 border-r border-border overflow-y-auto p-4 space-y-4">
+        <div className="w-64 bg-sunken border-r border-border overflow-y-auto p-4 space-y-4">
           {deck.slides.map((slide, index) => {
             const hasGeneratedImage = deck.getBackgroundUrl(slide.id);
             const slideFailure = creationMode === "image_transform" ? inputs.imageTransform.failures[slide.id] : inputs.beautify.failures[slide.id];
@@ -261,10 +261,11 @@ export function DeckView({
                 <ContextMenuTrigger asChild>
                     <div 
                     onClick={() => deck.setCurrentIndex(index)}
-                    className={`cursor-pointer border-2 rounded-lg overflow-hidden relative aspect-[16/9] group transition-all duration-200 ${
-                        deck.currentIndex === index 
-                        ? 'border-blue-600 shadow-md scale-[1.02]' 
-                        : 'border-transparent hover:border-zinc-300 dark:hover:border-zinc-700 bg-white dark:bg-zinc-800 shadow-sm'
+                    style={{ animationDelay: `${Math.min(index, 8) * 35}ms` }}
+                    className={`animate-rise-in cursor-pointer border-2 rounded-lg overflow-hidden relative aspect-[16/9] group transition-[border-color,box-shadow,transform] duration-base ease-out-soft ${
+                        deck.currentIndex === index
+                        ? 'border-primary shadow-soft scale-[1.02]'
+                        : 'border-transparent hover:border-border hover:-translate-y-0.5 bg-card shadow-xs'
                     }`}
                     >
                     {creationMode !== "image_transform" ? (
@@ -287,14 +288,14 @@ export function DeckView({
                     {hasGeneratedImage ? (
                         renderScaledSlideScene(slide, false, 240, 135)
                     ) : (
-                        <div className="w-full h-full p-2 flex flex-col bg-white overflow-hidden text-[6px]">
+                        <div className="w-full h-full p-2 flex flex-col bg-white text-[#141413] overflow-hidden text-[6px]">
                             {deck.templateImage && (
                                 <img src={deck.templateImage} className="absolute inset-0 w-full h-full object-cover opacity-20 pointer-events-none" alt="" />
                             )}
                             <div className="font-bold mb-1 truncate z-10 relative">{slide.title}</div>
                             <div className="flex-1 space-y-0.5 z-10 relative">
                                 {(slide.content || []).slice(0, 3).map((line, i) => (
-                                    <div key={i} className="truncate text-zinc-500">• {line}</div>
+                                    <div key={i} className="truncate text-[#5B5751]">• {line}</div>
                                 ))}
                             </div>
                         </div>
@@ -305,7 +306,7 @@ export function DeckView({
                     </div>
                     {slideFailure ? (
                       <div
-                        className="absolute top-1 right-1 bg-red-600/90 text-white text-[10px] px-1.5 py-0.5 rounded-sm max-w-[85%] truncate"
+                        className="absolute top-1 right-1 bg-destructive/90 text-destructive-foreground text-[10px] px-1.5 py-0.5 rounded-sm max-w-[85%] truncate"
                         title={slideFailure}
                       >
                         {creationMode === "image_transform" ? tr("转化失败", "Transform failed") : tr("美化失败", "Beautify failed")}
@@ -339,8 +340,8 @@ export function DeckView({
         </div>
 
         {/* Preview */}
-        <div className="flex-1 p-4 flex items-center justify-center bg-zinc-200/50 dark:bg-zinc-950/50 overflow-auto relative">
-          <div className="absolute top-4 left-4 z-30 flex items-center gap-2 bg-white/80 dark:bg-zinc-900/70 backdrop-blur rounded-xl border border-border/50 px-3 py-2 shadow-sm">
+        <div className="flex-1 p-4 flex items-center justify-center bg-accent/50 overflow-auto relative">
+          <div className="absolute top-4 left-4 z-30 flex items-center gap-2 bg-card/80 backdrop-blur rounded-xl border border-border/50 px-3 py-2 shadow-sm">
             <Button
               size="sm"
               className="h-7 px-2 text-xs"
@@ -375,7 +376,7 @@ export function DeckView({
             )}
           </div>
           {status.currentSlideFailure ? (
-            <div className="absolute top-16 left-4 z-30 max-w-[520px] rounded-lg border border-red-200 bg-red-50/95 px-3 py-2 text-xs text-red-700 shadow-sm">
+            <div className="absolute top-16 left-4 z-30 max-w-[520px] rounded-lg border border-destructive/25 bg-destructive/[0.08] px-3 py-2 text-xs text-destructive shadow-sm">
               <span className="font-medium mr-1">{creationMode === "image_transform" ? tr("本页转化失败：", "Slide transform failed:") : tr("本页美化失败：", "Slide beautify failed:")}</span>
               <span>{status.currentSlideFailure}</span>
             </div>
@@ -406,18 +407,18 @@ export function DeckView({
                               )}
 
                               <div className="relative z-10 h-full flex flex-col">
-                                <h1 className="mb-8 w-fit border-b-4 border-blue-600 pb-4 pr-12 text-4xl font-bold text-zinc-900">
+                                <h1 className="mb-8 w-fit border-b-4 border-[#C96442] pb-4 pr-12 text-4xl font-bold text-[#141413]">
                                   {deck.currentSlide.title}
                                 </h1>
                                 <div className="flex-1 space-y-6">
                                   {(deck.currentSlide.content || []).map((point, i) => (
-                                    <div key={i} className="flex items-start gap-4 text-2xl leading-relaxed text-zinc-700">
-                                      <span className="mt-2 text-blue-600">•</span>
+                                    <div key={i} className="flex items-start gap-4 text-2xl leading-relaxed text-[#3B3833]">
+                                      <span className="mt-2 text-primary">•</span>
                                       <span>{point}</span>
                                     </div>
                                   ))}
                                 </div>
-                                <div className="mt-auto flex justify-between border-t border-zinc-100 pt-8 text-sm text-zinc-400">
+                                <div className="mt-auto flex justify-between border-t border-[#E3DFD7] pt-8 text-sm text-[#6E6A62]">
                                   <span>Generated by Unified AI Workspace</span>
                                   <span>{deck.currentIndex + 1}</span>
                                 </div>
@@ -429,10 +430,10 @@ export function DeckView({
                         
                         {/* Overlay Label if Generated */}
                         {(status.isApplyingEdits || status.isGeneratingImage) && (
-                            <div className="absolute inset-0 z-50 flex items-center justify-center bg-white/50 backdrop-blur-[2px]">
-                                <div className="flex flex-col items-center gap-3 bg-white shadow-xl px-6 py-4 rounded-xl border border-blue-100">
-                                    <Loader2 className="w-6 h-6 text-blue-600 animate-spin" />
-                                    <span className="text-sm font-medium text-zinc-700">{tr("幻灯片正在生成中...", "Generating slides...")}</span>
+                            <div className="absolute inset-0 z-50 flex items-center justify-center bg-background/60 backdrop-blur-[2px]">
+                                <div className="flex flex-col items-center gap-3 bg-card shadow-soft-lg px-6 py-4 rounded-xl border border-primary/25">
+                                    <Loader2 className="w-6 h-6 text-primary animate-spin" />
+                                    <span className="text-sm font-medium text-foreground/80">{tr("幻灯片正在生成中...", "Generating slides...")}</span>
                                 </div>
                             </div>
                         )}
@@ -511,18 +512,18 @@ export function DeckView({
                     renderScaledSlideScene(deck.slides[slideshow.index], false, slideWidth, slideHeight)
                   ) : (
                     <div className="w-full h-full p-16 flex flex-col">
-                      <h1 className="text-5xl font-bold mb-12 text-zinc-900 border-b-4 border-blue-600 pb-6 w-fit pr-16">
+                      <h1 className="text-5xl font-bold mb-12 text-[#141413] border-b-4 border-[#C96442] pb-6 w-fit pr-16">
                         {deck.slides[slideshow.index].title}
                       </h1>
                       <div className="flex-1 space-y-8">
                         {(deck.slides[slideshow.index].content || []).map((point, i) => (
-                          <div key={i} className="flex gap-6 text-3xl text-zinc-700 leading-relaxed items-start">
-                            <span className="text-blue-600 mt-2">•</span>
+                          <div key={i} className="flex gap-6 text-3xl text-[#3B3833] leading-relaxed items-start">
+                            <span className="text-primary mt-2">•</span>
                             <span>{point}</span>
                           </div>
                         ))}
                       </div>
-                      <div className="mt-auto pt-8 flex justify-between text-lg text-zinc-400 border-t border-zinc-100">
+                      <div className="mt-auto pt-8 flex justify-between text-lg text-[#6E6A62] border-t border-[#E3DFD7]">
                         <span>Generated by Unified AI Workspace</span>
                         <span>{slideshow.index + 1}</span>
                       </div>
