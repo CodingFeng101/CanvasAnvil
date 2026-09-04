@@ -9,6 +9,7 @@ import {
     type PanelImperativeHandle,
 } from "@/shared/ui/resizable"
 import { DiagramProvider, useDiagram } from "@/workspaces/flow/state/diagram-context"
+import { useTheme } from "@/shared/theme"
 
 const drawioBaseUrl =
     (typeof import.meta !== "undefined" &&
@@ -23,7 +24,8 @@ function FlowCanvas() {
     const [isMobile, setIsMobile] = useState(false)
     const [isChatVisible, setIsChatVisible] = useState(true)
     const [drawioUi, setDrawioUi] = useState<"min" | "sketch">("min")
-    const [darkMode, setDarkMode] = useState(false)
+    // Theme is app-wide now; this canvas only mirrors it into the draw.io embed.
+    const { isDark: darkMode, resolved, setTheme } = useTheme()
     const [isLoaded, setIsLoaded] = useState(false)
     const [closeProtection, setCloseProtection] = useState(false)
 
@@ -34,21 +36,6 @@ function FlowCanvas() {
         const savedUi = localStorage.getItem("drawio-theme")
         if (savedUi === "min" || savedUi === "sketch") {
             setDrawioUi(savedUi)
-        }
-
-        const savedDarkMode = localStorage.getItem("next-ai-draw-io-dark-mode")
-        if (savedDarkMode !== null) {
-            // Use saved preference
-            const isDark = savedDarkMode === "true"
-            setDarkMode(isDark)
-            document.documentElement.classList.toggle("dark", isDark)
-        } else {
-            // First visit: match browser preference
-            const prefersDark = window.matchMedia(
-                "(prefers-color-scheme: dark)",
-            ).matches
-            setDarkMode(prefersDark)
-            document.documentElement.classList.toggle("dark", prefersDark)
         }
 
         const savedCloseProtection = localStorage.getItem(
@@ -62,13 +49,16 @@ function FlowCanvas() {
     }, [])
 
     const toggleDarkMode = () => {
-        const newValue = !darkMode
-        setDarkMode(newValue)
-        localStorage.setItem("next-ai-draw-io-dark-mode", String(newValue))
-        document.documentElement.classList.toggle("dark", newValue)
-        // Reset so onDrawioLoad fires again after remount
-        resetDrawioReady()
+        setTheme(darkMode ? "light" : "dark")
     }
+
+    // The embed is keyed on the theme, so a change from anywhere -- this
+    // canvas's own button, the app header, or the OS while set to "system" --
+    // remounts it. Reset first so onDrawioLoad fires again afterwards.
+    useEffect(() => {
+        resetDrawioReady()
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [resolved])
 
     // Check mobile
     useEffect(() => {

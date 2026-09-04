@@ -20,7 +20,7 @@ export const portalCanvasItems: PortalCanvasItem[] = [
     enSummary: "Structured flow diagrams with node-level edits",
     image: "/examples/flow/01.png",
     angle: -90,
-    accent: "#236CFF",
+    accent: "#C96442",
   },
   {
     id: "cad",
@@ -30,7 +30,7 @@ export const portalCanvasItems: PortalCanvasItem[] = [
     enSummary: "Layouts, renders, and material lists in one flow",
     image: "/examples/cad/01.png",
     angle: 30,
-    accent: "#8B5CF6",
+    accent: "#7C8B6E",
   },
   {
     id: "ppt",
@@ -40,6 +40,6 @@ export const portalCanvasItems: PortalCanvasItem[] = [
     enSummary: "Outline-first decks with editable, PDF, and image exports",
     image: "/examples/ppt/ppt1/01.png",
     angle: 150,
-    accent: "#1F63F3",
+    accent: "#A8825C",
   },
 ];

@@ -2,91 +2,177 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ---------------------------------------------------------------------------
+   Design tokens.
+
+   Everything visual resolves through these variables. Components must never
+   hardcode a colour: a literal hex bypasses this layer, and that is exactly
+   why dark mode used to be half-broken. If a shade is missing here, add it
+   here rather than inlining it at the call site.
+   --------------------------------------------------------------------------- */
+
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 222.2 84% 4.9%;
+    /* Warm ivory ground with white cards floating on top of it. */
+    --background: 48 33% 97%;
+    --foreground: 30 4% 10%;
 
     --card: 0 0% 100%;
-    --card-foreground: 222.2 84% 4.9%;
+    --card-foreground: 30 4% 10%;
 
     --popover: 0 0% 100%;
-    --popover-foreground: 222.2 84% 4.9%;
+    --popover-foreground: 30 4% 10%;
 
-    --primary: 222.2 47.4% 11.2%;
-    --primary-foreground: 210 40% 98%;
+    /* Clay — the one saturated colour in the system. Used sparingly. */
+    --primary: 15 63% 60%;
+    --primary-foreground: 48 33% 98%;
 
-    --secondary: 210 40% 96.1%;
-    --secondary-foreground: 222.2 47.4% 11.2%;
+    --secondary: 45 20% 93%;
+    --secondary-foreground: 30 6% 20%;
 
-    --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 46.9%;
+    --muted: 45 20% 94%;
+    --muted-foreground: 35 6% 42%;
 
-    --accent: 210 40% 96.1%;
-    --accent-foreground: 222.2 47.4% 11.2%;
+    --accent: 45 24% 91%;
+    --accent-foreground: 30 6% 18%;
 
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 210 40% 98%;
+    --destructive: 5 58% 50%;
+    --destructive-foreground: 48 33% 98%;
 
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
-    --ring: 222.2 84% 4.9%;
- 
-    --radius: 0.5rem;
+    --border: 42 15% 88%;
+    --input: 42 15% 86%;
+    --ring: 15 63% 60%;
+
+    /* Surfaces beyond shadcn's set. */
+    --elevated: 0 0% 100%;
+    --sunken: 45 24% 95%;
+    --overlay: 30 8% 8%;
+
+    /* Warm shadow base. The old shadows were cool slate-blue, which reads as
+       grey haze against an ivory ground. */
+    --shadow-hue: 30 20% 12%;
+
+    --radius: 0.75rem;
+
+    /* Motion. Shared by CSS utilities and the JS motion system so a tween
+       written in either place lands on the same curve. */
+    --ease-out-soft: cubic-bezier(0.22, 1, 0.36, 1);
+    --ease-in-out-soft: cubic-bezier(0.65, 0, 0.35, 1);
+    --dur-fast: 150ms;
+    --dur-base: 220ms;
+    --dur-slow: 340ms;
   }
- 
+
   .dark {
-    --background: 222.2 84% 4.9%;
-    --foreground: 210 40% 98%;
- 
-    --card: 222.2 84% 4.9%;
-    --card-foreground: 210 40% 98%;
- 
-    --popover: 222.2 84% 4.9%;
-    --popover-foreground: 210 40% 98%;
- 
-    --primary: 210 40% 98%;
-    --primary-foreground: 222.2 47.4% 11.2%;
- 
-    --secondary: 217.2 32.6% 17.5%;
-    --secondary-foreground: 210 40% 98%;
- 
-    --muted: 217.2 32.6% 17.5%;
-    --muted-foreground: 215 20.2% 65.1%;
- 
-    --accent: 217.2 32.6% 17.5%;
-    --accent-foreground: 210 40% 98%;
- 
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 210 40% 98%;
- 
-    --border: 217.2 32.6% 17.5%;
-    --input: 217.2 32.6% 17.5%;
-    --ring: 212.7 26.8% 83.9%;
+    --background: 30 3% 12%;
+    --foreground: 45 15% 92%;
+
+    --card: 60 3% 15%;
+    --card-foreground: 45 15% 92%;
+
+    --popover: 50 3% 17%;
+    --popover-foreground: 45 15% 92%;
+
+    --primary: 15 63% 62%;
+    --primary-foreground: 30 5% 10%;
+
+    --secondary: 48 3% 21%;
+    --secondary-foreground: 45 12% 90%;
+
+    --muted: 48 3% 20%;
+    --muted-foreground: 42 8% 62%;
+
+    --accent: 48 4% 24%;
+    --accent-foreground: 45 12% 92%;
+
+    --destructive: 5 52% 52%;
+    --destructive-foreground: 45 15% 94%;
+
+    --border: 45 4% 24%;
+    --input: 45 4% 26%;
+    --ring: 15 63% 62%;
+
+    --elevated: 50 3% 18%;
+    --sunken: 30 3% 10%;
+    --overlay: 30 6% 4%;
+
+    --shadow-hue: 30 30% 2%;
   }
 }
- 
+
 @layer base {
   * {
     @apply border-border;
   }
+
   body {
     @apply bg-background text-foreground;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  /* Display face carries headings; UI text stays on the sans. */
+  h1, h2, h3 {
+    font-family: theme("fontFamily.display");
+    letter-spacing: -0.015em;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   Reduced motion.
+
+   One global gate rather than per-component checks. Transforms still resolve
+   to their final position — animations collapse to ~0 rather than being
+   cancelled, so nothing gets stranded mid-tween.
+   --------------------------------------------------------------------------- */
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
 }
 
 @layer utilities {
+  /* Warm, layered shadows. Three stops so the falloff reads as depth rather
+     than a single grey band. */
   .shadow-soft {
     box-shadow:
-      0 1px 2px rgba(15, 23, 42, 0.05),
-      0 4px 12px rgba(15, 23, 42, 0.08),
-      0 8px 24px rgba(15, 23, 42, 0.06);
+      0 1px 2px hsl(var(--shadow-hue) / 0.04),
+      0 4px 12px hsl(var(--shadow-hue) / 0.06),
+      0 8px 24px hsl(var(--shadow-hue) / 0.05);
   }
 
   .shadow-soft-lg {
     box-shadow:
-      0 2px 4px rgba(15, 23, 42, 0.06),
-      0 8px 20px rgba(15, 23, 42, 0.1),
-      0 16px 40px rgba(15, 23, 42, 0.08);
+      0 2px 4px hsl(var(--shadow-hue) / 0.05),
+      0 8px 20px hsl(var(--shadow-hue) / 0.08),
+      0 16px 40px hsl(var(--shadow-hue) / 0.07);
+  }
+
+  .shadow-soft-xl {
+    box-shadow:
+      0 4px 8px hsl(var(--shadow-hue) / 0.06),
+      0 16px 36px hsl(var(--shadow-hue) / 0.10),
+      0 32px 72px hsl(var(--shadow-hue) / 0.09);
+  }
+
+  /* Hairline that survives both themes without going invisible. */
+  .ring-hairline {
+    box-shadow: inset 0 0 0 1px hsl(var(--border) / 0.7);
+  }
+
+  /* Paper grain for the landing ground. Cheap: one repeating gradient pair,
+     no image request. */
+  .bg-paper {
+    background-image:
+      radial-gradient(circle at 1px 1px, hsl(var(--foreground) / 0.035) 1px, transparent 0);
+    background-size: 22px 22px;
   }
 }
