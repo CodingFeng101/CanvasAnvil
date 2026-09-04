@@ -1,5 +1,5 @@
 import React, { useRef, useEffect, useMemo, useState, useCallback } from 'react';
-import { Send, FileText, ImageIcon, History, Square, Trash2 } from 'lucide-react';
+import { Send, FileText, ImageIcon, History, Square, Trash2, Upload } from 'lucide-react';
 import { cn } from '@/shared/lib/utils';
 import { ButtonWithTooltip } from '@/shared/chat';
 import { FilePreviewList } from '@/shared/chat';
@@ -68,6 +68,7 @@ export function ChatInput({
 }: ChatInputProps) {
     const uiLang = useUiLanguage();
     const trText = (zhText: string, enText: string) => (uiLang === "zh" ? zhText : enText);
+    const [isDragOver, setIsDragOver] = useState(false);
     const textareaRef = useRef<HTMLTextAreaElement>(null);
     const richRef = useRef<HTMLDivElement>(null);
     const richSavedRangeRef = useRef<Range | null>(null);
@@ -368,12 +369,30 @@ export function ChatInput({
 
     const handleDrop = (e: React.DragEvent) => {
         e.preventDefault();
+        setIsDragOver(false);
         if (uploadMode === "none") return;
         const droppedFiles = Array.from(e.dataTransfer.files);
         const filtered = filterByUploadMode(droppedFiles);
         if (filtered.length > 0) {
             handleFileChange([...files, ...filtered]);
         }
+    };
+
+    /**
+     * `dragenter`/`dragleave` fire for every child the pointer crosses, so a
+     * plain boolean flickers. Counting entries against leaves is what keeps the
+     * highlight steady while the pointer moves across the toolbar.
+     */
+    const dragDepth = useRef(0);
+    const handleDragEnter = (e: React.DragEvent) => {
+        if (uploadMode === "none") return;
+        if (!Array.from(e.dataTransfer?.types || []).includes("Files")) return;
+        dragDepth.current += 1;
+        setIsDragOver(true);
+    };
+    const handleDragLeave = () => {
+        dragDepth.current = Math.max(0, dragDepth.current - 1);
+        if (dragDepth.current === 0) setIsDragOver(false);
     };
 
     const handleImageUpload = () => imageInputRef.current?.click();
@@ -393,11 +412,27 @@ export function ChatInput({
     };
 
     return (
-        <div 
-            className="relative rounded-2xl border border-border bg-card shadow-soft focus-within:ring-[3px] focus-within:ring-ring/25 focus-within:border-ring focus-within:shadow-soft-lg transition-[border-color,box-shadow] duration-base ease-out-soft"
+        <div
+            className={cn(
+                "relative rounded-2xl border bg-card shadow-soft transition-[border-color,box-shadow,background-color] duration-base ease-out-soft",
+                "focus-within:ring-[3px] focus-within:ring-ring/25 focus-within:border-ring focus-within:shadow-soft-lg",
+                isDragOver
+                    ? "border-primary border-dashed bg-primary/[0.06] shadow-soft-lg"
+                    : "border-border",
+            )}
             onDragOver={(e) => e.preventDefault()}
+            onDragEnter={handleDragEnter}
+            onDragLeave={handleDragLeave}
             onDrop={handleDrop}
         >
+            {isDragOver && uploadMode !== "none" && (
+                <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center rounded-2xl bg-card/70 backdrop-blur-[1px] animate-fade-in">
+                    <span className="flex items-center gap-2 text-sm font-medium text-primary-strong">
+                        <Upload className="h-4 w-4" />
+                        {trText("松开以添加文件", "Drop to attach")}
+                    </span>
+                </div>
+            )}
             {(uploadMode === "all" || uploadMode === "imagesOnly") && (
                 <input
                     type="file"

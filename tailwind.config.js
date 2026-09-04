@@ -191,14 +191,24 @@ export default {
           to: { opacity: "1", transform: "none" },
         },
       },
+      /**
+       * `backwards`, not `both`, for anything that animates a transform.
+       * `forwards` retains the final keyframe, which leaves an identity matrix
+       * on the element -- and any transform, identity or not, makes it the
+       * containing block for `position: fixed` descendants. With `both` on the
+       * chat panel and its message rows, every full-screen overlay inside the
+       * chat was clipped to the panel instead of covering the viewport.
+       * These all end at the element's natural state, so reverting to its own
+       * styles looks identical.
+       */
       animation: {
-        "rise-in": "rise-in var(--dur-base) var(--ease-out-soft) both",
-        "fade-in": "fade-in var(--dur-base) var(--ease-out-soft) both",
-        "scale-in": "scale-in var(--dur-base) var(--ease-out-soft) both",
+        "rise-in": "rise-in var(--dur-base) var(--ease-out-soft) backwards",
+        "fade-in": "fade-in var(--dur-base) var(--ease-out-soft) backwards",
+        "scale-in": "scale-in var(--dur-base) var(--ease-out-soft) backwards",
         sheen: "sheen 2.2s linear infinite",
         breathe: "breathe 4s var(--ease-in-out-soft) infinite",
-        "message-in": "message-in var(--dur-base) var(--ease-out-soft) both",
-        "slide-in-right": "slide-in-right var(--dur-slow) var(--ease-out-soft) both",
+        "message-in": "message-in var(--dur-base) var(--ease-out-soft) backwards",
+        "slide-in-right": "slide-in-right var(--dur-slow) var(--ease-out-soft) backwards",
       },
     },
   },

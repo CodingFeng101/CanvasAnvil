@@ -30,6 +30,7 @@ const messages = {
   "message.sending": { zh: "正在发送消息...", en: "Sending message..." },
   "message.parsing_files": { zh: "正在解析文件...", en: "Parsing files..." },
   "message.thinking": { zh: "AI 正在思考并生成结果...", en: "AI is thinking and generating response..." },
+  "chat.drop_to_attach": { zh: "松开以添加文件", en: "Drop to attach" },
   "message.copy": { zh: "复制消息", en: "Copy message" },
   "message.copied": { zh: "已复制", en: "Copied!" },
   "message.copy.failed": { zh: "复制失败", en: "Failed to copy" },

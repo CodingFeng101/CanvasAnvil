@@ -125,12 +125,11 @@ function FlowCanvas() {
                     defaultSize={isMobile ? "50%" : "67%"}
                     minSize="20%"
                 >
-                    <div
-                        className={`h-full relative ${
-                            isMobile ? "p-1" : "p-2"
-                        }`}
-                    >
-                        <div className="h-full rounded-xl overflow-hidden shadow-soft-lg border border-border/30">
+                    {/* Flush, to match the chat panel: the resize handle is the
+                        only divider, so insets and rounding just leak the page
+                        ground through at the seams. */}
+                    <div className="h-full relative">
+                        <div className="h-full overflow-hidden">
                             {isLoaded ? (
                                 <DrawIoEmbed
                                     key={`${drawioUi}-${darkMode}`}
@@ -169,7 +168,7 @@ function FlowCanvas() {
                     collapsedSize={isMobile ? "0%" : "3%"}
                     onResize={(panelSize) => setIsChatVisible(panelSize.inPixels > 80)}
                 >
-                    <div className={`h-full ${isMobile ? "p-1" : "py-2 pr-2"}`}>
+                    <div className="h-full">
                         <ChatPanel
                             isVisible={isChatVisible}
                             onToggleVisibility={toggleChatPanel}

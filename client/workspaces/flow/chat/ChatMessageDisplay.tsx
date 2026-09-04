@@ -898,7 +898,7 @@ export function ChatMessageDisplay({
                                                                                             ),
                                                                                         )
                                                                                     }}
-                                                                                    className="p-1.5 rounded-lg text-muted-foreground/60 hover:text-muted-foreground hover:bg-muted transition-colors"
+                                                                                    className="p-1.5 rounded-lg transition-[color,background-color,opacity,transform] duration-fast ease-out-soft active:scale-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/30 text-muted-foreground/70 hover:text-foreground hover:bg-accent"
                                                                                     title={t(
                                                                                         "message.edit",
                                                                                     )}
@@ -917,7 +917,7 @@ export function ChatMessageDisplay({
                                                                                         ),
                                                                                 )
                                                                             }
-                                                                            className="p-1.5 rounded-lg text-muted-foreground/60 hover:text-muted-foreground hover:bg-muted transition-colors"
+                                                                            className="p-1.5 rounded-lg transition-[color,background-color,opacity,transform] duration-fast ease-out-soft active:scale-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/30 text-muted-foreground/70 hover:text-foreground hover:bg-accent"
                                                                             title={
                                                                                 copiedMessageId ===
                                                                                 message.id
@@ -1187,7 +1187,7 @@ export function ChatMessageDisplay({
                                                         ),
                                                     )
                                                 }
-                                                className={`p-1.5 rounded-lg transition-colors ${
+                                                className={`p-1.5 rounded-lg transition-[color,background-color,opacity,transform] duration-fast ease-out-soft active:scale-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/30 ${
                                                     copiedMessageId ===
                                                     message.id
                                                         ? "text-success bg-success/15"
@@ -1222,7 +1222,7 @@ export function ChatMessageDisplay({
                                                             e.stopPropagation()
                                                             onRegenerate(messageIndex)
                                                         }}
-                                                        className="p-1.5 rounded-lg text-muted-foreground/60 hover:text-foreground hover:bg-muted transition-colors cursor-pointer relative z-10"
+                                                        className="p-1.5 rounded-lg transition-[color,background-color,opacity,transform] duration-fast ease-out-soft active:scale-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/30 text-muted-foreground/70 hover:text-foreground hover:bg-accent cursor-pointer relative z-10"
                                                         title={t("message.regenerate")}
                                                     >
                                                         <RotateCcw className="h-3.5 w-3.5" />

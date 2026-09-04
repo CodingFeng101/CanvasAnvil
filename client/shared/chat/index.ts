@@ -1,4 +1,5 @@
 export * from "@/shared/chat/shimmer";
+export * from "@/shared/chat/message-image";
 export * from "@/shared/chat/reasoning";
 export * from "@/shared/chat/button-with-tooltip";
 export * from "@/shared/chat/reset-warning-modal";

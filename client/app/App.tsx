@@ -184,10 +184,15 @@ export default function App() {
                 reusing its state under a different workspace. Entrance only —
                 an exit animation would hold two heavy canvases alive at once. */}
             <Suspense fallback={<WorkspaceFallback />}>
+              {/* Opacity only, deliberately. A `y` here left a residual inline
+                  transform on the wrapper, which makes it the containing block
+                  for every `position: fixed` descendant -- so any modal or
+                  lightbox opened inside a workspace was clipped to below the
+                  header instead of covering the viewport. */}
               <motion.div
                 key={active.id}
-                initial={{ opacity: 0, y: 6 }}
-                animate={{ opacity: 1, y: 0 }}
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
                 transition={TWEEN.base}
                 className="h-full w-full"
               >
