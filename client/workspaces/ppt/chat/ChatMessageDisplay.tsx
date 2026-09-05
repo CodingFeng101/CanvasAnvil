@@ -557,7 +557,12 @@ export function ChatMessageDisplay({
                                                     }
                                                     return (
                                                         <div key={idx} className={cn(
-                                                            "prose prose-sm max-w-none break-words"
+                                                            "prose prose-sm max-w-none break-words",
+                                                            // Only the tail of the message being written gets the caret.
+                                                            status === "streaming" &&
+                                                                isLastAssistantMessage &&
+                                                                idx === sections.length - 1 &&
+                                                                "streaming-caret",
                                                         )}>
                                                             <ReactMarkdown
                                                                 remarkPlugins={[remarkGfm]}
@@ -569,6 +574,15 @@ export function ChatMessageDisplay({
                                                                     return "";
                                                                 }}
                                                                 components={{
+                                                                    table({ children, ...props }: any) {
+                                                                        return (
+                                                                            <div className="prose-scroll-x my-4">
+                                                                                <table {...props} className={cn("my-0", props?.className)}>
+                                                                                    {children}
+                                                                                </table>
+                                                                            </div>
+                                                                        );
+                                                                    },
                                                                     th({ children, ...props }: any) {
                                                                         return (
                                                                             <th

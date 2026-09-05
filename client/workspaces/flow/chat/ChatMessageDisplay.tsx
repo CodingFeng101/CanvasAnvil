@@ -1,6 +1,7 @@
 "use client"
 
 import remarkGfm from "remark-gfm"
+import { cn } from "@/shared/lib/utils"
 import {
     getMessageTextContent,
     getUserOriginalText,
@@ -1065,11 +1066,33 @@ export function ChatMessageDisplay({
                                                                                         ) : (
                                                                                             <div
                                                                                                 key={`${message.id}-textsection-${partIndex}-${sectionIndex}`}
-                                                                                                className="prose prose-sm max-w-none break-words [&>*:first-child]:mt-0 [&>*:last-child]:mb-0"
+                                                                                                className={cn(
+                                                                                                    "prose prose-sm max-w-none break-words [&>*:first-child]:mt-0 [&>*:last-child]:mb-0",
+                                                                                                    // Caret only on the tail of the message still being written.
+                                                                                                    status === "streaming" &&
+                                                                                                        isLastAssistantMessage &&
+                                                                                                        sectionIndex === sections.length - 1 &&
+                                                                                                        "streaming-caret",
+                                                                                                )}
                                                                                             >
                                                                                                 <ReactMarkdown
                                                                                                     remarkPlugins={[remarkGfm]}
                                                                                                     components={{
+                                                                                                        table({
+                                                                                                            children,
+                                                                                                            ...props
+                                                                                                        }: any) {
+                                                                                                            return (
+                                                                                                                <div className="prose-scroll-x my-4">
+                                                                                                                    <table
+                                                                                                                        {...props}
+                                                                                                                        className={cn("my-0", props?.className)}
+                                                                                                                    >
+                                                                                                                        {children}
+                                                                                                                    </table>
+                                                                                                                </div>
+                                                                                                            )
+                                                                                                        },
                                                                                                         code({
                                                                                                             className,
                                                                                                             children,

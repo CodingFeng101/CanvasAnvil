@@ -1,7 +1,9 @@
 import { useMemo, useRef, useState } from 'react';
 import { Highlight, type Language } from "prism-react-renderer";
 import { syntaxTheme } from "@/shared/chat/syntax-theme";
-import { ChevronRight, Loader2 } from 'lucide-react';
+import { Shimmer } from "@/shared/chat/shimmer";
+import { useUiLanguage } from "@/shared/i18n";
+import { ChevronRight } from 'lucide-react';
 import { cn } from '@/shared/lib/utils';
 
 interface CodeBlockProps {
@@ -14,6 +16,7 @@ interface CodeBlockProps {
 const openStateById = new Map<string, boolean>();
 
 export function CodeBlock({ code, language = "xml", isStreaming = false, blockId }: CodeBlockProps) {
+    const uiLang = useUiLanguage();
     const [isOpen, setIsOpen] = useState(() => {
         if (blockId && openStateById.has(blockId)) return Boolean(openStateById.get(blockId));
         return false;
@@ -66,10 +69,14 @@ export function CodeBlock({ code, language = "xml", isStreaming = false, blockId
                 <span className="uppercase font-semibold tracking-wider text-foreground/80">{normalizedLanguage}</span>
                 
                 {isStreaming ? (
-                    <div className="flex items-center gap-2 ml-auto">
-                         <span className="text-[10px] text-primary-strong animate-pulse">Generating code...</span>
-                         <Loader2 className="w-3.5 h-3.5 animate-spin text-primary-strong" />
-                    </div>
+                    // Same in-progress idiom as the chat's "thinking" line, and
+                    // translated -- this was the one hardcoded English string
+                    // left in the panel.
+                    <span className="ml-auto">
+                        <Shimmer as="span" className="text-[10px]" duration={1.6}>
+                            {uiLang === "zh" ? "正在生成代码..." : "Generating code..."}
+                        </Shimmer>
+                    </span>
                 ) : (
                     <span className="ml-auto text-[10px] opacity-70 font-mono">{normalizedCode.length} chars</span>
                 )}

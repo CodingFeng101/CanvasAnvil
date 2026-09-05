@@ -739,12 +739,13 @@ export function ChatMessageDisplay({
                                                             </div>
                                                         );
                                                     }
-                                                    const renderMarkdown = (key: string, content: string) => (
+                                                    const renderMarkdown = (key: string, content: string, withCaret = false) => (
                                                         <div key={key} className={cn(
                                                             // No `dark:prose-invert`: the prose variables are driven
                                                             // from the tokens now, and invert would overwrite them
                                                             // with the plugin's own greys.
-                                                            "prose prose-sm max-w-none break-words [overflow-wrap:anywhere] [&>*:first-child]:mt-0 [&>*:last-child]:mb-0"
+                                                            "prose prose-sm max-w-none break-words [overflow-wrap:anywhere] [&>*:first-child]:mt-0 [&>*:last-child]:mb-0",
+                                                            withCaret && "streaming-caret"
                                                         )}>
                                                             <ReactMarkdown
                                                                 remarkPlugins={[remarkGfm]}
@@ -756,6 +757,15 @@ export function ChatMessageDisplay({
                                                                     return "";
                                                                 }}
                                                                 components={{
+                                                                    table({ children, ...props }: any) {
+                                                                        return (
+                                                                            <div className="prose-scroll-x my-4">
+                                                                                <table {...props} className={cn("my-0", props?.className)}>
+                                                                                    {children}
+                                                                                </table>
+                                                                            </div>
+                                                                        );
+                                                                    },
                                                                     th({ children, ...props }: any) {
                                                                         return (
                                                                             <th
@@ -828,7 +838,14 @@ export function ChatMessageDisplay({
                                                                 <div className="w-full min-w-0 max-w-full overflow-hidden break-words [overflow-wrap:anywhere] py-1 text-sm leading-relaxed text-foreground">
                                                                     <div className="space-y-3">
                                                                         {textSegments.map((seg, segIdx) =>
-                                                                            renderMarkdown(`${message.id}-assistant-markdown-${idx}-${segIdx}`, seg.content)
+                                                                            renderMarkdown(
+                                                                                `${message.id}-assistant-markdown-${idx}-${segIdx}`,
+                                                                                seg.content,
+                                                                                status === "streaming" &&
+                                                                                    isLastAssistantMessage &&
+                                                                                    codeSegments.length === 0 &&
+                                                                                    segIdx === textSegments.length - 1,
+                                                                            )
                                                                         )}
                                                                     </div>
                                                                 </div>
