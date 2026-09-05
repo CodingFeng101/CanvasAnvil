@@ -3,18 +3,18 @@ import { createTranslator, type Dict } from "@/shared/i18n/translator";
 /** Strings owned by the Flow workspace. */
 const messages = {
   // ChatPanel
-  "app.title": { zh: "流程图助手", en: "Next AI Drawio" },
-  "welcome.title": { zh: "用 AI 创建流程图", en: "Create diagrams with AI" },
+  "app.title": { zh: "图标助手", en: "Next AI Drawio" },
+  "welcome.title": { zh: "用 AI 创建图标", en: "Create diagrams with AI" },
   "welcome.desc": { zh: "描述你想创建的内容，或上传图片进行复刻", en: "Describe what you want to create or upload an image to replicate" },
   "app.about": { zh: "关于", en: "About" },
   "chat.panel.show": { zh: "展开交互区 (Ctrl+B)", en: "Show chat panel (Ctrl+B)" },
   "chat.panel.hide": { zh: "收起交互区 (Ctrl+B)", en: "Hide chat panel (Ctrl+B)" },
-  "chat.panel.title": { zh: "流程图交互区", en: "Flowchart Assistant" },
+  "chat.panel.title": { zh: "图标交互区", en: "Flowchart Assistant" },
   "chat.settings": { zh: "设置", en: "Settings" },
   "chat.vertical.title": { zh: "AI 对话", en: "AI Chat" },
 
   // ChatInput
-  "input.placeholder": { zh: "描述你的流程图需求，或上传文件...", en: "Describe your diagram or upload a file..." },
+  "input.placeholder": { zh: "描述你的图标需求，或上传文件...", en: "Describe your diagram or upload a file..." },
   "input.clear": { zh: "清空对话", en: "Clear conversation" },
   "input.upload": { zh: "上传文件（图片、PDF、文本）", en: "Upload file (image, PDF, text)" },
   "input.upload_image": { zh: "上传图片", en: "Upload image" },
@@ -82,12 +82,12 @@ const messages = {
 
   // ResetWarningModal
   "reset.title": { zh: "确认清空？", en: "Clear Everything?" },
-  "reset.desc": { zh: "这会清空当前对话并重置流程图，且无法撤销。", en: "This will clear the current conversation and reset the diagram. This action cannot be undone." },
+  "reset.desc": { zh: "这会清空当前对话并重置图标，且无法撤销。", en: "This will clear the current conversation and reset the diagram. This action cannot be undone." },
   "reset.confirm": { zh: "确认清空", en: "Clear Everything" },
   "reset.cancel": { zh: "取消", en: "Cancel" },
 
   // SaveDialog
-  "save.title": { zh: "保存流程图", en: "Save Diagram" },
+  "save.title": { zh: "保存图标", en: "Save Diagram" },
   "save.desc": { zh: "选择保存格式。", en: "Choose a format to save your diagram." },
   "save.format": { zh: "格式", en: "Format" },
   "save.filename": { zh: "文件名", en: "Filename" },
@@ -97,23 +97,23 @@ const messages = {
   // ExamplePanel
   "example.aws.title": { zh: "AWS 架构图", en: "AWS Architecture" },
   "example.aws.desc": { zh: "用 AWS 图标生成云架构图", en: "Create a cloud architecture diagram with AWS icons" },
-  "example.flowchart.title": { zh: "复刻流程图", en: "Replicate Flowchart" },
-  "example.flowchart.desc": { zh: "上传并复刻已有流程图", en: "Upload and replicate an existing flowchart" },
+  "example.flowchart.title": { zh: "复刻图标", en: "Replicate Flowchart" },
+  "example.flowchart.desc": { zh: "上传并复刻已有图标", en: "Upload and replicate an existing flowchart" },
   "example.creative.title": { zh: "创意绘图", en: "Creative Drawing" },
   "example.creative.desc": { zh: "生成有趣的创意图形", en: "Draw something fun and creative" },
   "example.cached": { zh: "示例已缓存，可快速响应", en: "Examples are cached for instant response" },
   "example.new": { zh: "新", en: "NEW" },
   "examples.title": { zh: "快速示例", en: "Quick Examples" },
-  "examples.paper.title": { zh: "论文转流程图", en: "Paper to Diagram" },
+  "examples.paper.title": { zh: "论文转图标", en: "Paper to Diagram" },
   "examples.paper.desc": { zh: "支持上传 .pdf、.txt、.md、.json、.csv、.py、.js、.ts 等文件", en: "Upload .pdf, .txt, .md, .json, .csv, .py, .js, .ts and more" },
-  "examples.animated.title": { zh: "动画流程图", en: "Animated Diagram" },
+  "examples.animated.title": { zh: "动画图标", en: "Animated Diagram" },
   "examples.animated.desc": { zh: "绘制带动画连线的 Transformer 架构图", en: "Draw a transformer architecture with animated connectors" },
-  "tooltip.history": { zh: "流程图历史", en: "Diagram history" },
-  "tooltip.save": { zh: "保存流程图", en: "Save diagram" },
+  "tooltip.history": { zh: "图标历史", en: "Diagram history" },
+  "tooltip.save": { zh: "保存图标", en: "Save diagram" },
   "tooltip.deep_thinking": { zh: "深度思考", en: "Deep Think" },
 
   // HistoryDialog
-  "history.title": { zh: "流程图历史记录", en: "Diagram History" },
+  "history.title": { zh: "图标历史记录", en: "Diagram History" },
   "history.empty": { zh: "暂无历史记录，发送消息后会生成历史版本。", en: "No history available yet. Send messages to create diagram history." },
   "history.version": { zh: "版本", en: "Version" },
   "history.restore": { zh: "恢复到版本", en: "Restore to Version" },
@@ -126,6 +126,16 @@ const messages = {
   "global_constraints.description": { zh: "填写会应用到每次 AI 回复的约束指令。", en: "Enter instructions that will be applied to every AI response." },
   "global_constraints.placeholder": { zh: "例如：决策节点统一使用蓝色...", en: "e.g., Always use blue for decision nodes..." },
   "tooltip.global_constraints": { zh: "全局约束", en: "Global Constraints" },
+
+  // Tool call cards. These were the last hardcoded English in the panel: the
+  // card sat directly above a fully translated code block.
+  "tool.display_diagram": { zh: "生成图标", en: "Generate Diagram" },
+  "tool.edit_diagram": { zh: "编辑图标", en: "Edit Diagram" },
+  "tool.append_diagram": { zh: "追加图标", en: "Append Diagram" },
+  "tool.get_shape_library": { zh: "读取图形库", en: "Get Shape Library" },
+  "tool.status.complete": { zh: "完成", en: "Complete" },
+  "tool.status.truncated": { zh: "已截断", en: "Truncated" },
+  "tool.status.error": { zh: "错误", en: "Error" },
 
   // Common
   "common.error": { zh: "错误", en: "Error" },

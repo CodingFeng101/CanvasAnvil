@@ -372,9 +372,12 @@ export function CreationStart({
                         // The blue-to-indigo gradient was the loudest element on
                         // the screen; the solid variant carries the same weight
                         // without introducing a second hue.
-                        className="w-full h-auto py-5 text-base font-medium rounded-xl shadow-soft hover:shadow-soft-lg"
+                        className="w-full h-auto py-5 text-lg font-semibold tracking-[-0.01em] rounded-xl shadow-soft hover:shadow-soft-lg"
                     >
-                        {progress.message ? <Loader2 className="w-5 h-5 mr-2 animate-spin" /> : <Sparkles className="w-5 h-5 mr-2" />}
+                        {/* `size-5`, not `w-5 h-5`: the button's own
+                            `[&_svg:not([class*='size-'])]:size-4` rule outranks a
+                            plain width/height pair, so these icons were 16px. */}
+                        {progress.message ? <Loader2 className="size-5 mr-2 animate-spin" /> : <Sparkles className="size-5 mr-2" />}
                         {progress.message || (creationMode === "beautify" ? tr("开始渲染", "Start rendering") : creationMode === "image_transform" ? tr("开始转化", "Start transform") : creationMode === "idea" ? tr("开始生成大纲", "Generate outline") : tr("载入大纲", "Load outline"))}
                     </Button>
                 </div>

@@ -21,6 +21,13 @@ import {
 } from "@/shared/ui/context-menu";
 import { Button } from "@/shared/ui/button";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/shared/ui/select";
+import {
   Dialog,
   DialogContent,
   DialogFooter,
@@ -357,28 +364,42 @@ export function DeckView({
               {status.isGeneratingImage ? <Loader2 className="w-3 h-3 mr-1 animate-spin" /> : null}
               {tr("重新渲染本页", "Regenerate this slide")}
             </Button>
+            {/* A bare <select> here rendered the OS widget -- system font, system
+                chevron, system dropdown -- inside a card that is otherwise all
+                tokens. The styled primitive already existed and had no callers. */}
             {deck.currentSlide && deck.getVisibleVersions(deck.currentSlide.id).length > 0 && (
-              <select
-                className="h-7 text-xs rounded-md border border-input bg-background px-2"
-                value={deck.currentVersionId}
-                onChange={(e) => {
+              <Select
+                value={deck.currentVersionId || undefined}
+                onValueChange={(versionId) => {
                   const slideId = deck.currentSlide!.id;
-                  const versionId = e.target.value;
                   const versions = deck.getVisibleVersions(slideId);
-                  const v = versions.find(x => x.id === versionId);
-                  if (v) {
+                  if (versions.some((x) => x.id === versionId)) {
                     deck.setVersionIdBySlide(prev => ({ ...prev, [slideId]: versionId }));
                   }
                 }}
               >
-                {deck.getVisibleVersions(deck.currentSlide.id).map((v, idx) => (
-                  <option key={v.id} value={v.id}>
-                    {v.type === "derived_textless"
-                      ? deck.formatVersionLabel(v, idx)
-                      : `${deck.formatVersionLabel(v, idx)} · ${new Date(v.timestamp).toLocaleString()}`}
-                  </option>
-                ))}
-              </select>
+                <SelectTrigger
+                  size="sm"
+                  aria-label={tr("选择版本", "Select version")}
+                  className="h-7 max-w-[260px] gap-1.5 rounded-md border-border/70 px-2 text-xs shadow-none"
+                >
+                  <SelectValue placeholder={tr("选择版本", "Select version")} />
+                </SelectTrigger>
+                <SelectContent align="start" className="max-w-[320px]">
+                  {deck.getVisibleVersions(deck.currentSlide.id).map((v, idx) => (
+                    <SelectItem key={v.id} value={v.id} className="text-xs">
+                      <span className="flex min-w-0 items-baseline gap-2">
+                        <span className="shrink-0 font-medium">{deck.formatVersionLabel(v, idx)}</span>
+                        {v.type !== "derived_textless" && (
+                          <span className="truncate text-[11px] text-muted-foreground tabular-nums">
+                            {new Date(v.timestamp).toLocaleString()}
+                          </span>
+                        )}
+                      </span>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             )}
           </div>
           {status.currentSlideFailure ? (

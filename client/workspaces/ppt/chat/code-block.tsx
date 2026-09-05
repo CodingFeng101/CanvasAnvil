@@ -1,6 +1,7 @@
 import { useMemo, useRef, useState } from 'react';
-import { Highlight, type Language } from "prism-react-renderer";
+import { Highlight } from "prism-react-renderer";
 import { syntaxTheme } from "@/shared/chat/syntax-theme";
+import { toPrismLanguage } from "@/shared/chat/code-format";
 import { Shimmer } from "@/shared/chat/shimmer";
 import { useUiLanguage } from "@/shared/i18n";
 import { ChevronRight } from 'lucide-react';
@@ -24,33 +25,7 @@ export function CodeBlock({ code, language = "xml", isStreaming = false, blockId
     const preRef = useRef<HTMLPreElement | null>(null);
     const normalizedLanguage = useMemo(() => (language || "text").toLowerCase(), [language]);
     const normalizedCode = useMemo(() => String(code ?? ""), [code]);
-    const prismLanguage = useMemo<Language>(() => {
-        const lang = normalizedLanguage;
-        if (lang === "svg") return "xml";
-        if (lang === "yml") return "yaml";
-        if (lang === "shell" || lang === "sh" || lang === "zsh") return "bash";
-        if (lang === "ts") return "typescript";
-        if (lang === "tsx") return "tsx";
-        if (lang === "js") return "javascript";
-        if (lang === "md") return "markdown";
-        const allowed = new Set([
-            "text",
-            "xml",
-            "json",
-            "javascript",
-            "typescript",
-            "tsx",
-            "jsx",
-            "python",
-            "bash",
-            "yaml",
-            "markdown",
-            "css",
-            "html",
-        ]);
-        if (allowed.has(lang)) return lang as Language;
-        return "text";
-    }, [normalizedLanguage]);
+    const prismLanguage = useMemo(() => toPrismLanguage(normalizedLanguage), [normalizedLanguage]);
     
     const setOpen = (open: boolean) => {
         setIsOpen(open);
@@ -94,10 +69,9 @@ export function CodeBlock({ code, language = "xml", isStreaming = false, blockId
                             }) => (
                                 <pre
                                     ref={preRef}
-                                    className="text-[11px] leading-relaxed overflow-x-hidden overflow-y-auto overscroll-contain max-h-[500px] scrollbar-thin p-3 whitespace-pre-wrap break-words"
+                                    className="text-[11px] leading-relaxed overflow-x-hidden overflow-y-auto overscroll-contain max-h-[500px] scrollbar-thin p-3 whitespace-pre-wrap break-words font-mono"
                                     style={{
                                         ...style,
-                                        fontFamily: "var(--font-mono), ui-monospace, monospace",
                                         backgroundColor: "transparent",
                                         margin: 0,
                                     }}

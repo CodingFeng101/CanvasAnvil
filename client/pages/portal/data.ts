@@ -14,9 +14,9 @@ export type PortalCanvasItem = {
 export const portalCanvasItems: PortalCanvasItem[] = [
   {
     id: "flow",
-    zhTitle: "\u6d41\u7a0b\u753b\u5e03",
+    zhTitle: "\u56fe\u6807\u753b\u5e03",
     enTitle: "Flow Canvas",
-    zhSummary: "\u7ed3\u6784\u5316\u6d41\u7a0b\u56fe\u4e0e\u8282\u70b9\u7ea7\u5c40\u90e8\u4fee\u6539",
+    zhSummary: "\u7ed3\u6784\u5316\u56fe\u6807\u4e0e\u8282\u70b9\u7ea7\u5c40\u90e8\u4fee\u6539",
     enSummary: "Structured flow diagrams with node-level edits",
     image: "/examples/flow/01.png",
     angle: -90,

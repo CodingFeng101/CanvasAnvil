@@ -37,7 +37,6 @@ import {
     FileCode,
     FileText,
     Pencil,
-    Play,
     RotateCcw,
     X,
 } from "lucide-react"
@@ -46,6 +45,7 @@ import type { MutableRefObject } from "react"
 import { Fragment, useCallback, useEffect, useRef, useState } from "react"
 import ReactMarkdown from "react-markdown"
 import {
+    ApplyCodeButton,
     Reasoning,
     ReasoningContent,
     ReasoningTrigger,
@@ -333,17 +333,23 @@ export function ChatMessageDisplay({
         const getToolDisplayName = (name: string) => {
             switch (name) {
                 case "display_diagram":
-                    return "Generate Diagram"
+                    return t("tool.display_diagram")
                 case "edit_diagram":
-                    return "Edit Diagram"
+                    return t("tool.edit_diagram")
                 case "append_diagram":
-                    return "Append Diagram"
+                    return t("tool.append_diagram")
                 case "get_shape_library":
-                    return "Get Shape Library"
+                    return t("tool.get_shape_library")
                 default:
                     return name
             }
         }
+
+        /** A truncated diagram is a warning, not a failure: the XML arrived
+            incomplete but what did arrive is still shown. */
+        const isTruncated =
+            (toolName === "display_diagram" || toolName === "append_diagram") &&
+            !isMxCellXmlComplete(String(input?.xml || ""))
 
         return (
             <div
@@ -365,12 +371,18 @@ export function ChatMessageDisplay({
                         )}
                         {state === "output-available" && (
                             <span className="text-xs font-medium text-success bg-success/[0.08] px-2 py-0.5 rounded-full">
-                                Complete
+                                {t("tool.status.complete")}
                             </span>
                         )}
                         {state === "output-error" && (
-                            <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${((toolName === "display_diagram" || toolName === "append_diagram") && !isMxCellXmlComplete(String(input?.xml || ""))) ? "text-yellow-700 bg-yellow-50" : "text-destructive bg-destructive/[0.08]"}`}>
-                                {((toolName === "display_diagram" || toolName === "append_diagram") && !isMxCellXmlComplete(String(input?.xml || ""))) ? "Truncated" : "Error"}
+                            // `text-yellow-700 bg-yellow-50` was raw Tailwind
+                            // palette in a token-driven interface: it stayed a
+                            // light-mode chip on a dark card.
+                            <span className={cn(
+                                "text-xs font-medium px-2 py-0.5 rounded-full",
+                                isTruncated ? "text-warning bg-warning/[0.10]" : "text-destructive bg-destructive/[0.08]",
+                            )}>
+                                {isTruncated ? t("tool.status.truncated") : t("tool.status.error")}
                             </span>
                         )}
                         {input && Object.keys(input).length > 0 && (
@@ -391,34 +403,27 @@ export function ChatMessageDisplay({
                 {input && isExpanded && (
                     <div className="px-4 py-3 border-t border-border/40 bg-muted/20">
                         {typeof input === "object" && input.xml ? (
-                            <CodeBlock code={input.xml} language="xml" onApply={applyCodeToDiagram} />
+                            <CodeBlock code={input.xml} language="xml" onApply={applyCodeToDiagram} framed={false} />
                         ) : typeof input === "object" &&
                           input.operations &&
                           Array.isArray(input.operations) ? (
                             <div className="space-y-2">
                                 <div className="flex justify-end">
-                                    <button
-                                        type="button"
-                                        onClick={() =>
-                                            void applyCodeToDiagram(
-                                                JSON.stringify(
-                                                    {
-                                                        type: "flow_patch",
-                                                        mode: "patch",
-                                                        operations: input.operations,
-                                                    },
-                                                    null,
-                                                    2,
-                                                ),
-                                                "json",
-                                            )
-                                        }
-                                        className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[10px] text-muted-foreground hover:bg-muted transition-colors"
-                                        title="Apply to canvas"
-                                    >
-                                        <Play className="h-3 w-3" />
-                                        <span>Apply</span>
-                                    </button>
+                                    {/* The same apply button the code blocks use,
+                                        rather than a third hand-rolled copy. */}
+                                    <ApplyCodeButton
+                                        code={JSON.stringify(
+                                            {
+                                                type: "flow_patch",
+                                                mode: "patch",
+                                                operations: input.operations,
+                                            },
+                                            null,
+                                            2,
+                                        )}
+                                        language="json"
+                                        onApply={(code) => applyCodeToDiagram(code, "json")}
+                                    />
                                 </div>
                                 <OperationsDisplay operations={input.operations} />
                             </div>
@@ -433,6 +438,7 @@ export function ChatMessageDisplay({
                                 code={JSON.stringify(input, null, 2)}
                                 language="json"
                                 onApply={applyCodeToDiagram}
+                                framed={false}
                             />
                         ) : null}
                     </div>
@@ -1073,6 +1079,16 @@ export function ChatMessageDisplay({
                                                                                                 <ReactMarkdown
                                                                                                     remarkPlugins={[remarkGfm]}
                                                                                                     components={{
+                                                                                                        // A fenced block arrives as
+                                                                                                        // `<pre><code>`, and the `code`
+                                                                                                        // override below returns a card --
+                                                                                                        // which was then sitting inside
+                                                                                                        // prose's own `<pre>`, box in box.
+                                                                                                        // The card and the plain fallback
+                                                                                                        // both bring their own container.
+                                                                                                        pre({ children }: any) {
+                                                                                                            return <>{children}</>
+                                                                                                        },
                                                                                                         table({
                                                                                                             children,
                                                                                                             ...props
