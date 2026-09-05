@@ -431,10 +431,10 @@ function SimpleCanvasDetailPage({
       >
         <Stagger className="self-center" stagger={0.055}>
           <StaggerItem>
-            <h1 className={cn("font-display font-semibold text-foreground", isEnglish ? "text-[clamp(34px,3.5vw,50px)] leading-[1.05]" : "text-[clamp(40px,4.4vw,62px)] leading-[1.08]")}>{config.title}</h1>
+            <h1 className={cn("font-semibold text-foreground", isEnglish ? "text-[clamp(34px,3.5vw,50px)] leading-[1.05]" : "text-[clamp(40px,4.4vw,62px)] leading-[1.08]")}>{config.title}</h1>
           </StaggerItem>
           <StaggerItem>
-            <h2 className={cn("font-display font-semibold leading-tight text-primary-strong", isEnglish ? "mt-2 text-[clamp(18px,1.75vw,23px)]" : "mt-2.5 text-[clamp(22px,2.2vw,30px)]")}>{config.subtitle}</h2>
+            <h2 className={cn("font-semibold leading-tight text-primary-strong", isEnglish ? "mt-2 text-[clamp(18px,1.75vw,23px)]" : "mt-2.5 text-[clamp(22px,2.2vw,30px)]")}>{config.subtitle}</h2>
           </StaggerItem>
           <StaggerItem>
             <p className={cn("max-w-[620px] text-muted-foreground", isEnglish ? "mt-4 text-[clamp(15px,1.2vw,16px)] leading-7" : "mt-5 text-[17px] leading-8")}>{config.intro}</p>
@@ -466,7 +466,7 @@ function SimpleCanvasDetailPage({
           </StaggerItem>
 
           <StaggerItem className={cn(isEnglish ? "mt-6" : "mt-7")}>
-            <div className={cn("max-w-[540px] font-display font-semibold text-primary-strong", isEnglish ? "mb-2 text-[16px] leading-6" : "mb-2.5 text-[19px] leading-7")}>{config.slogan}</div>
+            <div className={cn("max-w-[540px] font-semibold text-primary-strong", isEnglish ? "mb-2 text-[16px] leading-6" : "mb-2.5 text-[19px] leading-7")}>{config.slogan}</div>
             {/* The brush-stroke plate stays — a hand-made mark suits the brand.
                 Only the palette moves from blueprint blue to clay. */}
             <button
@@ -682,7 +682,7 @@ export function PortalPage({ onEnterWorkspace }: PortalPageProps) {
           <section className="max-w-[650px] px-2">
             <Stagger stagger={0.07}>
               <StaggerItem>
-                <h1 className="font-display text-[clamp(34px,4vw,58px)] font-semibold leading-[1.1] tracking-[-0.02em] text-foreground">
+                <h1 className="text-[clamp(34px,4vw,58px)] font-semibold leading-[1.1] tracking-[-0.02em] text-foreground">
                   <span className="block">{copy.titleA}</span>
                   <span className="block">
                     <span>{copy.titleB}</span>
@@ -786,7 +786,7 @@ export function PortalPage({ onEnterWorkspace }: PortalPageProps) {
                 <div className="absolute inset-8 rounded-full bg-[radial-gradient(circle,hsl(var(--card))_0%,hsl(var(--sunken))_100%)] shadow-[inset_0_0_0_8px_hsl(var(--primary)/0.05),0_0_0_2px_hsl(var(--primary)/0.07)]" />
                 <div className="absolute inset-0 flex flex-col items-center justify-center">
                   <BrandIcon className="h-20 w-20" />
-                  <div className="mt-3 font-display text-2xl font-semibold text-foreground">{copy.hub}</div>
+                  <div className="mt-3 text-2xl font-semibold text-foreground">{copy.hub}</div>
                   <div className="mt-1.5 text-sm text-muted-foreground">{copy.hubSub}</div>
                 </div>
               </motion.div>
@@ -851,7 +851,7 @@ export function PortalPage({ onEnterWorkspace }: PortalPageProps) {
                 onClick={(event) => event.stopPropagation()}
               >
                 <div className="mb-4 flex items-center justify-between gap-4">
-                  <div className="font-display text-[22px] font-semibold text-foreground">{previewImage.title}</div>
+                  <div className="text-[22px] font-semibold text-foreground">{previewImage.title}</div>
                   <button
                     className="flex h-10 w-10 items-center justify-center rounded-full border border-border/70 bg-sunken text-muted-foreground transition-[background-color,color,transform] duration-fast ease-out-soft hover:bg-accent hover:text-foreground active:scale-95"
                     onClick={() => setPreviewImage(null)}

@@ -107,8 +107,9 @@ export default {
             maxWidth: "none",
             lineHeight: "1.72",
 
+            // Assistant headings stay on the UI stack: the display serif has
+            // no CJK coverage, so Chinese headings dropped to a system serif.
             "h1, h2, h3, h4": {
-              fontFamily: 'theme("fontFamily.display")',
               letterSpacing: "-0.015em",
               fontWeight: "600",
             },

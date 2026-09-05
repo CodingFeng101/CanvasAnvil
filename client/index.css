@@ -136,9 +136,13 @@
     -moz-osx-font-smoothing: grayscale;
   }
 
-  /* Display face carries headings; UI text stays on the sans. */
+  /* Headings keep the UI stack and only tighten their tracking.
+
+     The display serif has no CJK glyphs, so a Chinese heading fell through to
+     a system serif (SimSun) while everything around it stayed on the sans --
+     visibly two typefaces in one interface, and it hit generated markdown
+     headings too, not just chrome. One family, one texture. */
   h1, h2, h3 {
-    font-family: theme("fontFamily.display");
     letter-spacing: -0.015em;
   }
 }
@@ -189,37 +193,6 @@
   /* Hairline that survives both themes without going invisible. */
   .ring-hairline {
     box-shadow: inset 0 0 0 1px hsl(var(--border) / 0.7);
-  }
-
-  /* ---------------------------------------------------------------------
-     Streaming caret.
-
-     Sits at the end of the text the model is still writing. Attached with
-     ::after rather than by splicing a node into the markdown output, so the
-     renderer stays untouched and the caret lands on whatever the last block
-     happens to be.
-
-     Lists get it on their final item instead -- an ::after on the <ul> itself
-     would break to its own line. `pre` and `table` are excluded: a blinking
-     block inside a code fence or a table cell reads as content.
-     --------------------------------------------------------------------- */
-  .streaming-caret > :last-child:not(ul):not(ol):not(pre):not(table)::after,
-  .streaming-caret > ul:last-child > li:last-child::after,
-  .streaming-caret > ol:last-child > li:last-child::after {
-    content: "";
-    display: inline-block;
-    width: 0.42em;
-    height: 1.05em;
-    margin-left: 0.1em;
-    vertical-align: -0.19em;
-    border-radius: 1px;
-    background: hsl(var(--primary));
-    animation: caret-blink 1.05s steps(1, end) infinite;
-  }
-
-  @keyframes caret-blink {
-    0%, 45% { opacity: 1; }
-    55%, 100% { opacity: 0; }
   }
 
   /* Wide tables scroll inside the message instead of stretching the panel. */

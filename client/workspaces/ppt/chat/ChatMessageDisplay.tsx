@@ -2,7 +2,7 @@ import React, { useRef, useEffect, useState, useCallback } from 'react';
 import { Check, ChevronDown, ChevronUp, Copy, FileCode, FileText, Pencil, RotateCcw } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from 'remark-gfm';
-import { MessageImage, Reasoning, ReasoningContent, ReasoningTrigger, Shimmer } from "@/shared/chat";
+import { MessageAttachments, MessageImage, Reasoning, ReasoningContent, ReasoningTrigger, Shimmer } from "@/shared/chat";
 import { ScrollArea } from "@/shared/ui/scroll-area";
 import { CodeBlock } from "@/workspaces/ppt/chat/code-block";
 import { useUiLanguage } from "@/shared/i18n";
@@ -267,6 +267,19 @@ export function ChatMessageDisplay({
                                     message.role === "assistant" ? "w-full max-w-full items-start" : "max-w-[85%] items-end"
                                 )}
                             >
+                                {/* What the user attached sits above the bubble, the way
+                                    it does on claude.ai -- inside, a one-line question
+                                    with a screenshot became a mostly-empty card. */}
+                                {message.role === "user" && (
+                                    <MessageAttachments
+                                        images={probeImages}
+                                        files={probeSections
+                                            .filter((s) => s.type === "file")
+                                            .map((s) => ({ filename: s.filename, fileType: s.fileType }))}
+                                        className="mb-1.5"
+                                    />
+                                )}
+
                                 {/* Content Bubble.
 
                                     The assistant speaks onto the page: no card,
@@ -398,7 +411,7 @@ export function ChatMessageDisplay({
                                         const sections = splitTextIntoFileSections(text);
                                         return (
                                             <div className="space-y-3">
-                                                {images.length > 0 && (
+                                                {message.role !== "user" && images.length > 0 && (
                                                     <div className="space-y-2">
                                                         {images.map((img, i) => (
                                                             <MessageImage
@@ -558,11 +571,6 @@ export function ChatMessageDisplay({
                                                     return (
                                                         <div key={idx} className={cn(
                                                             "prose prose-sm max-w-none break-words",
-                                                            // Only the tail of the message being written gets the caret.
-                                                            status === "streaming" &&
-                                                                isLastAssistantMessage &&
-                                                                idx === sections.length - 1 &&
-                                                                "streaming-caret",
                                                         )}>
                                                             <ReactMarkdown
                                                                 remarkPlugins={[remarkGfm]}
@@ -645,6 +653,14 @@ export function ChatMessageDisplay({
                                 <div className="flex items-center gap-1 mt-2 px-1">
                                     {message.role === "user" && !isEditing && userMessageText && (
                                         <>
+                                            <button
+                                                type="button"
+                                                onClick={() => copyMessageToClipboard(message.id, getUserOriginalText(message))}
+                                                className="p-1.5 rounded-lg transition-[color,background-color,opacity,transform] duration-fast ease-out-soft active:scale-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/30 text-muted-foreground/70 hover:text-foreground hover:bg-accent"
+                                                title={tr("复制", "Copy")}
+                                            >
+                                                {copiedMessageId === message.id ? <Check className="h-3.5 w-3.5 text-success" /> : <Copy className="h-3.5 w-3.5" />}
+                                            </button>
                                             {onEditMessage && isLastUserMessage && (
                                                 <button
                                                     type="button"
@@ -658,14 +674,6 @@ export function ChatMessageDisplay({
                                                     <Pencil className="h-3.5 w-3.5" />
                                                 </button>
                                             )}
-                                            <button
-                                                type="button"
-                                                onClick={() => copyMessageToClipboard(message.id, getUserOriginalText(message))}
-                                                className="p-1.5 rounded-lg transition-[color,background-color,opacity,transform] duration-fast ease-out-soft active:scale-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/30 text-muted-foreground/70 hover:text-foreground hover:bg-accent"
-                                                title={tr("复制", "Copy")}
-                                            >
-                                                {copiedMessageId === message.id ? <Check className="h-3.5 w-3.5 text-success" /> : <Copy className="h-3.5 w-3.5" />}
-                                            </button>
                                         </>
                                     )}
                                     {message.role === "assistant" && (

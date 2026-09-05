@@ -2,7 +2,7 @@ import React, { useRef, useEffect, useState, useCallback } from 'react';
 import { Check, ChevronDown, ChevronUp, Copy, Cpu, FileCode, FileText, Minus, Pencil, Plus, Play, RotateCcw } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from 'remark-gfm';
-import { MessageImage, Reasoning, ReasoningContent, ReasoningTrigger, Shimmer } from "@/shared/chat";
+import { MessageAttachments, MessageImage, Reasoning, ReasoningContent, ReasoningTrigger, Shimmer } from "@/shared/chat";
 import { ScrollArea } from "@/shared/ui/scroll-area";
 import { CodeBlock } from "@/workspaces/cad/chat/code-block";
 import { useUiLanguage } from "@/shared/i18n";
@@ -452,6 +452,19 @@ export function ChatMessageDisplay({
                                     message.role === "user" ? "items-end" : "items-start"
                                 )}
                             >
+                                {/* What the user attached sits above the bubble, the way
+                                    it does on claude.ai -- inside, a one-line question
+                                    with a screenshot became a mostly-empty card. */}
+                                {message.role === "user" && (
+                                    <MessageAttachments
+                                        images={probeImages}
+                                        files={probeSections
+                                            .filter((s) => s.type === "file")
+                                            .map((s) => ({ filename: s.filename, fileType: s.fileType }))}
+                                        className="order-0 mb-1.5"
+                                    />
+                                )}
+
                                 {/* Content Bubble */}
                                 <div className={cn(
                                     "order-1 w-full min-w-0 max-w-full overflow-hidden text-sm leading-relaxed",
@@ -582,7 +595,7 @@ export function ChatMessageDisplay({
                                         const sections = splitTextIntoFileSections(text);
                                         return (
                                             <div className="w-full min-w-0 space-y-3">
-                                                {images.length > 0 && (
+                                                {message.role !== "user" && images.length > 0 && (
                                                     <div className="space-y-2">
                                                         {images.map((img, i) => (
                                                             <MessageImage
@@ -739,13 +752,12 @@ export function ChatMessageDisplay({
                                                             </div>
                                                         );
                                                     }
-                                                    const renderMarkdown = (key: string, content: string, withCaret = false) => (
+                                                    const renderMarkdown = (key: string, content: string) => (
                                                         <div key={key} className={cn(
                                                             // No `dark:prose-invert`: the prose variables are driven
                                                             // from the tokens now, and invert would overwrite them
                                                             // with the plugin's own greys.
-                                                            "prose prose-sm max-w-none break-words [overflow-wrap:anywhere] [&>*:first-child]:mt-0 [&>*:last-child]:mb-0",
-                                                            withCaret && "streaming-caret"
+                                                            "prose prose-sm max-w-none break-words [overflow-wrap:anywhere] [&>*:first-child]:mt-0 [&>*:last-child]:mb-0"
                                                         )}>
                                                             <ReactMarkdown
                                                                 remarkPlugins={[remarkGfm]}
@@ -838,14 +850,7 @@ export function ChatMessageDisplay({
                                                                 <div className="w-full min-w-0 max-w-full overflow-hidden break-words [overflow-wrap:anywhere] py-1 text-sm leading-relaxed text-foreground">
                                                                     <div className="space-y-3">
                                                                         {textSegments.map((seg, segIdx) =>
-                                                                            renderMarkdown(
-                                                                                `${message.id}-assistant-markdown-${idx}-${segIdx}`,
-                                                                                seg.content,
-                                                                                status === "streaming" &&
-                                                                                    isLastAssistantMessage &&
-                                                                                    codeSegments.length === 0 &&
-                                                                                    segIdx === textSegments.length - 1,
-                                                                            )
+                                                                            renderMarkdown(`${message.id}-assistant-markdown-${idx}-${segIdx}`, seg.content)
                                                                         )}
                                                                     </div>
                                                                 </div>
@@ -990,6 +995,14 @@ export function ChatMessageDisplay({
                                 <div className="order-2 flex items-center gap-1 mt-2 px-1">
                                     {message.role === "user" && !isEditing && userMessageText && (
                                         <>
+                                            <button
+                                                type="button"
+                                                onClick={() => copyMessageToClipboard(message.id, getUserOriginalText(message))}
+                                                className="p-1.5 rounded-lg transition-[color,background-color,opacity,transform] duration-fast ease-out-soft active:scale-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/30 text-muted-foreground/70 hover:text-foreground hover:bg-accent"
+                                                title={tr("复制", "Copy")}
+                                            >
+                                                {copiedMessageId === message.id ? <Check className="h-3.5 w-3.5 text-success" /> : <Copy className="h-3.5 w-3.5" />}
+                                            </button>
                                             {onEditMessage && isLastUserMessage && (
                                                 <button
                                                     type="button"
@@ -1003,14 +1016,6 @@ export function ChatMessageDisplay({
                                                     <Pencil className="h-3.5 w-3.5" />
                                                 </button>
                                             )}
-                                            <button
-                                                type="button"
-                                                onClick={() => copyMessageToClipboard(message.id, getUserOriginalText(message))}
-                                                className="p-1.5 rounded-lg transition-[color,background-color,opacity,transform] duration-fast ease-out-soft active:scale-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/30 text-muted-foreground/70 hover:text-foreground hover:bg-accent"
-                                                title={tr("复制", "Copy")}
-                                            >
-                                                {copiedMessageId === message.id ? <Check className="h-3.5 w-3.5 text-success" /> : <Copy className="h-3.5 w-3.5" />}
-                                            </button>
                                         </>
                                     )}
                                     {message.role === "assistant" && (

@@ -12,6 +12,7 @@ import {
   X,
 } from "lucide-react";
 import { motion } from "motion/react";
+import { ScaleToFit } from "@/shared/ui/scale-to-fit";
 import {
   ContextMenu,
   ContextMenuContent,
@@ -286,7 +287,12 @@ export function DeckView({
                     ) : null}
                     {/* Thumbnail Preview */}
                     {hasGeneratedImage ? (
-                        renderScaledSlideScene(slide, false, 240, 135)
+                        // The scene lays out at a fixed 240x135 while this slot is
+                        // whatever the rail leaves it -- so it used to overflow by
+                        // ~7% and have its right and bottom edges clipped.
+                        <ScaleToFit width={240} height={135}>
+                            {renderScaledSlideScene(slide, false, 240, 135)}
+                        </ScaleToFit>
                     ) : (
                         <div className="w-full h-full p-2 flex flex-col bg-white text-[#141413] overflow-hidden text-[6px]">
                             {deck.templateImage && (
