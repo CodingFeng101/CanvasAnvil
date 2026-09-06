@@ -99,13 +99,17 @@ export function useTemplateLibrary({ initialSelectedTemplateId, uiLang, tr }: Te
         kind: "preset" as const,
         previewSrc: t.path,
         presetPath: t.path,
+        categories: t.categories,
       })),
+      // Uploads carry no category: the picker files them under "mine", which
+      // is where someone looks for a template they added themselves.
       ...uploadedTemplates.map((t) => ({
         id: t.id,
         name: t.name,
         kind: "upload" as const,
         previewSrc: t.dataUrl,
         dataUrl: t.dataUrl,
+        categories: [] as string[],
       })),
     ],
     [hiddenPresetTemplateIds, uploadedTemplates, uiLang],

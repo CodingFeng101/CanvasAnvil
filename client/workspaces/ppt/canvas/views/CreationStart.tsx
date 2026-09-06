@@ -1,6 +1,6 @@
 import { motion } from "motion/react";
 import { SPRING } from "@/shared/motion";
-import { FileText, Lightbulb, Loader2, Presentation, Sparkles, Upload, X } from "lucide-react";
+import { FileText, Lightbulb, Loader2, Presentation, Sparkles, Upload } from "lucide-react";
 import { Button } from "@/shared/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/shared/ui/dialog";
 import { Textarea } from "@/shared/ui/textarea";
@@ -8,6 +8,7 @@ import { isPdfFile } from "@/workspaces/ppt/canvas/lib/deck-source";
 import type { CreationProgress } from "@/workspaces/ppt/canvas/lib/creation-machine";
 import type { useCreationInputs } from "@/workspaces/ppt/canvas/hooks/use-creation-inputs";
 import type { useTemplateLibrary } from "@/workspaces/ppt/canvas/hooks/use-template-library";
+import { TemplatePicker } from "@/workspaces/ppt/canvas/views/TemplatePicker";
 
 interface CreationStartProps {
   inputs: ReturnType<typeof useCreationInputs>;
@@ -80,78 +81,10 @@ export function CreationStart({
               <div className="max-w-4xl mx-auto space-y-8 bg-card p-8 rounded-2xl shadow-soft border border-border/60">
 
                 <div className="space-y-8">
-                    {/* Template Selection */}
-                    {creationMode !== "image_transform" ? (
-                    <div className="space-y-4">
-                        <label className="text-sm font-semibold text-foreground flex items-center gap-2">
-                            <span className="w-6 h-6 rounded-full bg-primary/12 text-primary-strong text-xs flex items-center justify-center font-bold">1</span>
-                            {tr("选择或上传参考模板", "Choose or upload a reference template")}
-                        </label>
-                        
-                        <div className="grid gap-4 grid-cols-[repeat(auto-fill,minmax(180px,1fr))]">
-                            <label className="cursor-pointer border-2 border-dashed rounded-xl transition-all duration-200 overflow-hidden relative aspect-video flex flex-col items-center justify-center group border-border hover:border-primary hover:bg-primary/[0.08]">
-                                <div className="flex flex-col items-center text-muted-foreground/70 group-hover:text-primary-strong transition-colors">
-                                    <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center mb-2 group-hover:bg-primary/12 transition-colors">
-                                        <Upload className="w-5 h-5" />
-                                    </div>
-                                    <span className="text-xs font-medium">{tr("添加模板", "Add template")}</span>
-                                </div>
-                                <input type="file" accept="image/*" multiple className="hidden" onChange={templateLibrary.handleUploadInputChange} />
-                            </label>
-                            <button
-                              type="button"
-                              onClick={() => templateLibrary.generator.setOpen(true)}
-                              title={tr("AI生成模板", "AI generate template")}
-                              className="cursor-pointer border-2 border-dashed rounded-xl transition-all duration-200 overflow-hidden relative aspect-video flex flex-col items-center justify-center group border-border hover:border-primary hover:bg-primary/[0.08]"
-                            >
-                                <div className="flex flex-col items-center text-muted-foreground/70 group-hover:text-primary-strong transition-colors">
-                                    <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center mb-2 group-hover:bg-primary/12 transition-colors">
-                                        <Sparkles className="w-5 h-5" />
-                                    </div>
-                                    <span className="text-xs font-medium">{tr("AI生成模板", "AI generate")}</span>
-                                </div>
-                            </button>
-                            {templateLibrary.templates.map((t, i) => (
-                                <div
-                                    key={t.id}
-                                    onClick={() => void templateLibrary.selectTemplate(t)}
-                                    style={{ animationDelay: `${Math.min(i, 8) * 40}ms` }}
-                                    className={`animate-rise-in cursor-pointer border rounded-xl overflow-hidden relative aspect-video group transition-all duration-base ease-out-soft bg-muted ${
-                                        templateLibrary.selectedTemplateId === t.id
-                                            ? "border-primary ring-2 ring-primary shadow-md"
-                                            : "border-border hover:ring-2 hover:ring-primary hover:shadow-md"
-                                    }`}
-                                >
-                                    <img src={t.previewSrc} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" alt={t.name} />
-                                    {templateLibrary.selectedTemplateId === t.id && (
-                                        <div className="absolute top-2 left-2 rounded-full bg-primary px-2 py-0.5 text-[10px] font-medium text-primary-foreground shadow-xs">
-                                            {tr("已选择", "Selected")}
-                                        </div>
-                                    )}
-                                    <button
-                                        type="button"
-                                        onClick={(e) => {
-                                            e.stopPropagation();
-                                            templateLibrary.deleteTemplate(t);
-                                        }}
-                                        className="absolute top-2 right-2 rounded-full bg-black/50 text-white p-1 opacity-0 group-hover:opacity-100 transition-opacity"
-                                        title={tr("删除模板", "Delete template")}
-                                    >
-                                        <X className="w-3.5 h-3.5" />
-                                    </button>
-                                    <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 to-transparent p-3 pt-8 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
-                                        <div className="text-white text-xs font-medium text-center">{t.name}</div>
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
-                    </div>
-                    ) : null}
-
                     {/* Mode Selection & Input */}
                     <div className="space-y-4">
                         <label className="text-sm font-semibold text-foreground flex items-center gap-2">
-                            <span className="w-6 h-6 rounded-full bg-primary/12 text-primary-strong text-xs flex items-center justify-center font-bold">{creationMode === "image_transform" ? "1" : "2"}</span>
+                            <span className="w-6 h-6 rounded-full bg-primary/12 text-primary-strong text-xs flex items-center justify-center font-bold">1</span>
                             {tr("输入内容", "Input")}
                         </label>
 
@@ -380,6 +313,22 @@ export function CreationStart({
                         {progress.message ? <Loader2 className="size-5 mr-2 animate-spin" /> : <Sparkles className="size-5 mr-2" />}
                         {progress.message || (creationMode === "beautify" ? tr("开始渲染", "Start rendering") : creationMode === "image_transform" ? tr("开始转化", "Start transform") : creationMode === "idea" ? tr("开始生成大纲", "Generate outline") : tr("载入大纲", "Load outline"))}
                     </Button>
+
+                    {/* Below the button, at the user's request: the template is
+                        a refinement, not the first decision. The header carries
+                        the current selection so it stays visible from up there. */}
+                    {creationMode !== "image_transform" ? (
+                      <TemplatePicker
+                        templateLibrary={templateLibrary}
+                        tr={tr}
+                        heading={
+                          <label className="text-sm font-semibold text-foreground flex items-center gap-2">
+                            <span className="w-6 h-6 rounded-full bg-primary/12 text-primary-strong text-xs flex items-center justify-center font-bold">2</span>
+                            {tr("选择或上传参考模板", "Choose or upload a reference template")}
+                          </label>
+                        }
+                      />
+                    ) : null}
                 </div>
 
                 <Dialog open={inputs.reference.previewOpen} onOpenChange={inputs.reference.setPreviewOpen}>

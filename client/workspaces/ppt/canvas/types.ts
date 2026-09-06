@@ -62,9 +62,26 @@ export type ReferenceVisualAsset = {
   textHint: string;
 };
 
-export type PresetTemplate = { id: string; zhName: string; enName: string; path: string };
+/**
+ * A bucket in the template picker. The set is deliberately wider than the
+ * presets that exist today: adding a template is then a matter of dropping a
+ * file in and naming its categories, with no UI change.
+ */
+export type TemplateCategory = { id: string; zhName: string; enName: string };
+
+/**
+ * A template can sit in more than one bucket -- a frosted-glass deck is both
+ * "tech" and "minimal" -- so listing it twice is not a mistake.
+ */
+export type PresetTemplate = {
+  id: string;
+  zhName: string;
+  enName: string;
+  path: string;
+  categories: string[];
+};
 export type UploadTemplate = { id: string; name: string; dataUrl: string };
 
 export type TemplateItem =
-  | { id: string; name: string; kind: "preset"; previewSrc: string; presetPath: string }
-  | { id: string; name: string; kind: "upload"; previewSrc: string; dataUrl: string };
+  | { id: string; name: string; kind: "preset"; previewSrc: string; presetPath: string; categories: string[] }
+  | { id: string; name: string; kind: "upload"; previewSrc: string; dataUrl: string; categories: string[] };
