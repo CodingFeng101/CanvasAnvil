@@ -169,9 +169,9 @@ const detailConfigs: Record<PortalWorkspace, DetailConfig> = {
 
 const detailConfigsEn: Record<PortalWorkspace, DetailConfig> = {
   flow: {
-    title: "Flow Canvas",
-    subtitle: "Turn a short requirement into a structured flowchart",
-    intro: "Flow Canvas converts natural-language process descriptions into editable diagrams. It supports node and connector edits, local revisions, and draw.io XML export.",
+    title: "Diagram Canvas",
+    subtitle: "Turn a short requirement into a structured diagram",
+    intro: "Diagram Canvas converts natural-language process descriptions into editable diagrams. It supports node and connector edits, local revisions, and draw.io XML export.",
     tags: ["Structured diagrams", "Local edits", "draw.io XML"],
     bullets: ["Parse requirements into nodes and relationships", "Edit nodes and connectors directly", "Revise selected parts without regenerating the whole diagram", "Export draw.io XML for collaboration and reuse"],
     previews: detailConfigs.flow.previews,
@@ -184,7 +184,7 @@ const detailConfigsEn: Record<PortalWorkspace, DetailConfig> = {
       { title: "Export", text: "Export XML for reuse and collaboration.", icon: Upload },
     ],
     cta: "Start Drawing",
-    slogan: "Create flowcharts with the freedom of a canvas",
+    slogan: "Create diagrams with the freedom of a canvas",
   },
   cad: {
     title: "Interior Design Canvas",
@@ -580,7 +580,7 @@ export function PortalPage({ onEnterWorkspace }: PortalPageProps) {
         titleB: "for multi-canvas",
         titleAccent: "creation",
         intro:
-          "CanvasAnvil supports three canvases: flow, interior, and PPT. It combines structured generation with local Patch / Replace editing so visual creation stays fast and controllable.",
+          "CanvasAnvil supports three canvases: diagram, interior, and PPT. It combines structured generation with local Patch / Replace editing so visual creation stays fast and controllable.",
         tagA: "Three Canvases",
         tagB: "Structured Output",
         tagC: "Patch and Replace",

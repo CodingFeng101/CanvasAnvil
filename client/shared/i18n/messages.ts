@@ -40,7 +40,7 @@ const messages = {
   "chat.collapseLocked": { zh: "PPT 生成完成前不能收起聊天", en: "Chat cannot be collapsed while PPT is generating" },
   "chat.collapse": { zh: "收起聊天", en: "Collapse chat" },
 
-  "nav.flow": { zh: "图表绘制", en: "Flow" },
+  "nav.flow": { zh: "图表绘制", en: "Diagram" },
   "nav.cad": { zh: "室内设计", en: "CAD" },
   "nav.ppt": { zh: "PPT演示", en: "PPT" },
 

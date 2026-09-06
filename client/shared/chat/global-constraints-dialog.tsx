@@ -21,7 +21,7 @@ import { t, useUiLanguage } from "@/shared/i18n"
 export const STORAGE_GLOBAL_CONSTRAINTS_KEY = "CanvasAnvil-global-constraints"
 
 const WORKSPACE_LABELS: Record<string, string> = {
-    flow: "Flow",
+    flow: "Diagram",
     cad: "CAD",
     ppt: "PPT",
 }

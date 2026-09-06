@@ -9,7 +9,7 @@ const messages = {
   "app.about": { zh: "关于", en: "About" },
   "chat.panel.show": { zh: "展开交互区 (Ctrl+B)", en: "Show chat panel (Ctrl+B)" },
   "chat.panel.hide": { zh: "收起交互区 (Ctrl+B)", en: "Hide chat panel (Ctrl+B)" },
-  "chat.panel.title": { zh: "图表交互区", en: "Flowchart Assistant" },
+  "chat.panel.title": { zh: "图表交互区", en: "Diagram Assistant" },
   "chat.settings": { zh: "设置", en: "Settings" },
   "chat.vertical.title": { zh: "AI 对话", en: "AI Chat" },
 
@@ -97,8 +97,8 @@ const messages = {
   // ExamplePanel
   "example.aws.title": { zh: "AWS 架构图", en: "AWS Architecture" },
   "example.aws.desc": { zh: "用 AWS 图标生成云架构图", en: "Create a cloud architecture diagram with AWS icons" },
-  "example.flowchart.title": { zh: "复刻图表", en: "Replicate Flowchart" },
-  "example.flowchart.desc": { zh: "上传并复刻已有图表", en: "Upload and replicate an existing flowchart" },
+  "example.flowchart.title": { zh: "复刻图表", en: "Replicate Diagram" },
+  "example.flowchart.desc": { zh: "上传并复刻已有图表", en: "Upload and replicate an existing diagram" },
   "example.creative.title": { zh: "创意绘图", en: "Creative Drawing" },
   "example.creative.desc": { zh: "生成有趣的创意图形", en: "Draw something fun and creative" },
   "example.cached": { zh: "示例已缓存，可快速响应", en: "Examples are cached for instant response" },
