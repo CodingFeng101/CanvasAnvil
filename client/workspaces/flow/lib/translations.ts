@@ -9,7 +9,9 @@ const messages = {
   "app.about": { zh: "关于", en: "About" },
   "chat.panel.show": { zh: "展开交互区 (Ctrl+B)", en: "Show chat panel (Ctrl+B)" },
   "chat.panel.hide": { zh: "收起交互区 (Ctrl+B)", en: "Hide chat panel (Ctrl+B)" },
-  "chat.panel.title": { zh: "图表交互区", en: "Diagram Assistant" },
+  // Matches "CAD 助手" and "PPT 助手" in the shell dictionary, so the
+  // three panels are named the same way.
+  "chat.panel.title": { zh: "图表助手", en: "Diagram Assistant" },
   "chat.settings": { zh: "设置", en: "Settings" },
   "chat.vertical.title": { zh: "AI 对话", en: "AI Chat" },
 
