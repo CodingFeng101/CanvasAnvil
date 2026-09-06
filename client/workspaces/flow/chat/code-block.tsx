@@ -37,7 +37,7 @@ export function CodeBlock({
             framed={framed}
             onApply={onApply as ApplyCode | undefined}
             icon={<Workflow className="h-3.5 w-3.5" />}
-            title={uiLang === "zh" ? "生成图标" : "Generate diagram"}
+            title={uiLang === "zh" ? "生成图表" : "Generate diagram"}
         />
     )
 }
