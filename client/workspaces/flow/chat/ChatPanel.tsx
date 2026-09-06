@@ -1293,7 +1293,7 @@ Please fix the XML issues. Ensure cell_id values exist in the current XML and th
 
     // Full view
     return (
-        <div className="h-full flex flex-col bg-card shadow-soft animate-slide-in-right rounded-xl border border-border/30 relative">
+        <div className="h-full flex flex-col bg-card animate-slide-in-right relative">
             <Toaster
                 position="top-center"
                 richColors

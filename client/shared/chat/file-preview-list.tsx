@@ -83,7 +83,7 @@ export function FilePreviewList({
 
     return (
         <>
-            <div className="flex flex-wrap gap-2 mt-2 p-2 bg-muted/50 rounded-md">
+            <div className="flex flex-wrap gap-2 mt-2">
                 {files.map((file, index) => {
                     const imageUrl = imageUrls.get(file) || null
                     const pdfInfo = pdfData.get(file)
@@ -100,13 +100,13 @@ export function FilePreviewList({
                                     ? trText("文本", "Text")
                                     : ""
                     return (
-                        <div key={file.name + index} className="group">
+                        <div key={file.name + index} className="group animate-rise-in" style={{ animationDelay: `${Math.min(index, 6) * 40}ms` }}>
                             <div
-                                className="flex items-center gap-2.5 w-[260px] max-w-full border rounded-lg overflow-hidden bg-background/70 px-3 py-2"
+                                className="flex items-center gap-2.5 w-[260px] max-w-full rounded-xl border border-border/70 bg-card px-3 py-2 shadow-xs transition-[border-color,box-shadow,transform] duration-fast ease-out-soft hover:-translate-y-px hover:border-border hover:shadow-soft"
                             >
                                 <div
-                                    className={`h-11 w-11 rounded-md overflow-hidden bg-muted flex items-center justify-center ${
-                                        isImage && imageUrl ? "cursor-pointer" : ""
+                                    className={`h-11 w-11 shrink-0 overflow-hidden rounded-lg bg-muted ring-1 ring-inset ring-border/60 flex items-center justify-center ${
+                                        isImage && imageUrl ? "cursor-pointer transition-transform duration-base ease-out-soft hover:scale-[1.04]" : ""
                                     }`}
                                     onClick={() => {
                                         if (isImage && imageUrl) setSelectedImage(imageUrl)
@@ -121,18 +121,18 @@ export function FilePreviewList({
                                     ) : (
                                         <>
                                             {pdfInfo?.isExtracting ? (
-                                                <Loader2 className="h-5 w-5 text-blue-500 animate-spin" />
+                                                <Loader2 className="h-5 w-5 text-primary-strong animate-spin" />
                                             ) : isPdf ? (
-                                                <FileText className="h-5 w-5 text-red-500" />
+                                                <FileText className="h-5 w-5 text-muted-foreground" />
                                             ) : (
-                                                <FileCode className="h-5 w-5 text-blue-500" />
+                                                <FileCode className="h-5 w-5 text-muted-foreground" />
                                             )}
                                         </>
                                     )}
                                 </div>
 
                                 <div className="min-w-0 flex-1">
-                                    <div className="text-xs font-medium truncate">{file.name}</div>
+                                    <div className="truncate text-xs font-medium text-foreground">{file.name}</div>
                                     {secondary ? (
                                         <div className="text-[10px] text-muted-foreground truncate">
                                             {secondary}
@@ -143,7 +143,7 @@ export function FilePreviewList({
                                 <button
                                     type="button"
                                     onClick={() => onRemoveFile(file)}
-                                    className="shrink-0 rounded-md p-1 text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                                    className="shrink-0 rounded-md p-1 text-muted-foreground opacity-0 transition-[opacity,color,background-color,transform] duration-fast ease-out-soft hover:bg-destructive/10 hover:text-destructive active:scale-90 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/30 group-hover:opacity-100"
                                     aria-label={trText("移除文件", "Remove file")}
                                 >
                                     <X className="h-4 w-4" />
@@ -161,7 +161,7 @@ export function FilePreviewList({
                     onClick={() => setSelectedImage(null)}
                 >
                     <button
-                        className="absolute top-4 right-4 z-10 bg-white rounded-full p-2 hover:bg-gray-200 transition-colors"
+                        className="absolute top-4 right-4 z-10 bg-white text-black rounded-full p-2 hover:bg-white/85 transition-colors"
                         onClick={() => setSelectedImage(null)}
                         aria-label={trText("关闭", "Close")}
                     >

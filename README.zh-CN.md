@@ -5,7 +5,7 @@
 <h1 align="center">CanvasAnvil</h1>
 
 <p align="center">
-  <strong>面向流程绘制、室内设计与 PPT 的 AI 多画布创作平台。</strong>
+  <strong>面向图表绘制、室内设计与 PPT 的 AI 多画布创作平台。</strong>
 </p>
 
 <p align="center">
@@ -31,9 +31,9 @@
   <strong>⭐ 如果 CanvasAnvil 对你有帮助，欢迎给仓库点个 Star，也可以 Fork 一份继续扩展你自己的画布工作流。</strong>
 </p>
 
-> CanvasAnvil 将流程图、室内设计工作流和 PPT 制作整合到一个统一工作区中。
+> CanvasAnvil 将图表、室内设计工作流和 PPT 制作整合到一个统一工作区中。
 
-## 🔷 流程绘制画布
+## 🔷 图表绘制画布
 
 将结构化提示快速转成清晰图表，适合学术框架、系统架构、实施路线和课程导图，并在同一画布中持续迭代布局、节点关系与说明文案。
 
@@ -41,12 +41,12 @@
 
 <table>
   <tr>
-    <td width="50%" align="center"><img src="public/examples/readme-previews/flow/01.png" alt="流程图示例：学术研究框架图" width="100%" /><br/><strong>学术研究框架图</strong></td>
-    <td width="50%" align="center"><img src="public/examples/readme-previews/flow/02.png" alt="流程图示例：智能问答系统架构图" width="100%" /><br/><strong>智能问答系统架构图</strong></td>
+    <td width="50%" align="center"><img src="public/examples/readme-previews/flow/01.png" alt="图表示例：学术研究框架图" width="100%" /><br/><strong>学术研究框架图</strong></td>
+    <td width="50%" align="center"><img src="public/examples/readme-previews/flow/02.png" alt="图表示例：智能问答系统架构图" width="100%" /><br/><strong>智能问答系统架构图</strong></td>
   </tr>
   <tr>
-    <td width="50%" align="center"><img src="public/examples/readme-previews/flow/03.png" alt="流程图示例：项目实施路线图" width="100%" /><br/><strong>项目实施路线图</strong></td>
-    <td width="50%" align="center"><img src="public/examples/readme-previews/flow/04.png" alt="流程图示例：课程设计思维导图" width="100%" /><br/><strong>课程设计思维导图</strong></td>
+    <td width="50%" align="center"><img src="public/examples/readme-previews/flow/03.png" alt="图表示例：项目实施路线图" width="100%" /><br/><strong>项目实施路线图</strong></td>
+    <td width="50%" align="center"><img src="public/examples/readme-previews/flow/04.png" alt="图表示例：课程设计思维导图" width="100%" /><br/><strong>课程设计思维导图</strong></td>
   </tr>
 </table>
 
@@ -107,7 +107,7 @@
 
 | 画布 | 核心能力 | 常见输出 |
 | --- | --- | --- |
-| `流程绘制` | 结构化图表生成与局部编辑 | 流程图、架构图、逻辑图 |
+| `图表绘制` | 结构化图表生成与局部编辑 | 流程图、架构图、逻辑图 |
 | `室内设计` | 室内方案规划、图纸协同与交付打包 | 概念板、二维图纸、渲染任务单、材料清单 |
 | `PPT 演示` | 结构化演示文稿生成与多种导出 | 演示文稿、汇报幻灯片、可编辑演示稿、提案稿 |
 
@@ -119,7 +119,7 @@
 
 **做减法**
 
-- 只保留三个画布：流程绘制、室内设计、PPT 演示。海报、产品、信息图画布已移除。
+- 只保留三个画布：图表绘制、室内设计、PPT 演示。海报、产品、信息图画布已移除。
 - 移除内嵌的 `pptist-lab` 编辑器；可编辑演示稿直接导出 `.pptx`。
 - 统一为一条 OpenAI 兼容请求路径。厂商列表不仅从应用中移除，也从 `cad-skill` 和 `ppt-skill` 两个 skill 包中移除 —— 它们各自还带着一份九厂商的图像注册表，其中八个根本没有可用的接口地址。
 - 移除与 Vite 客户端重复的 Next.js 移植版本，以及旧 `PptWorkspace` 藏着的约 900 行不可达代码。
@@ -158,7 +158,7 @@
 
 CanvasAnvil 为每个画布都提供了专用本地 skill，用来保证工作流稳定、输出一致，而不是把所有任务都塞进同一条通用提示链。
 
-- `flow-skill` · 流程图生成与打包
+- `flow-skill` · 图表生成与打包
   输出整洁的图表资源，并默认跳过独立 HTML 预览。
 - `cad-skill` · 室内设计交付流程
   导出图纸打包结果与 CSV 材料清单，便于后续交付。

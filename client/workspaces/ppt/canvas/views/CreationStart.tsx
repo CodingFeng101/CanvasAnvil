@@ -1,5 +1,6 @@
 import { motion } from "motion/react";
-import { FileText, Lightbulb, Loader2, Presentation, Sparkles, Upload, X } from "lucide-react";
+import { SPRING } from "@/shared/motion";
+import { FileText, Lightbulb, Loader2, Presentation, Sparkles, Upload } from "lucide-react";
 import { Button } from "@/shared/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/shared/ui/dialog";
 import { Textarea } from "@/shared/ui/textarea";
@@ -7,6 +8,7 @@ import { isPdfFile } from "@/workspaces/ppt/canvas/lib/deck-source";
 import type { CreationProgress } from "@/workspaces/ppt/canvas/lib/creation-machine";
 import type { useCreationInputs } from "@/workspaces/ppt/canvas/hooks/use-creation-inputs";
 import type { useTemplateLibrary } from "@/workspaces/ppt/canvas/hooks/use-template-library";
+import { TemplatePicker } from "@/workspaces/ppt/canvas/views/TemplatePicker";
 
 interface CreationStartProps {
   inputs: ReturnType<typeof useCreationInputs>;
@@ -74,87 +76,20 @@ export function CreationStart({
 
 
   return (
-        <div className="w-full h-full bg-zinc-50/50 dark:bg-zinc-900 flex flex-col overflow-hidden">
+        <div className="w-full h-full bg-sunken/50 flex flex-col overflow-hidden">
             <div className="flex-1 overflow-auto p-8">
-              <div className="max-w-4xl mx-auto space-y-8 bg-white dark:bg-zinc-800 p-8 rounded-2xl shadow-sm border border-zinc-100 dark:border-zinc-700/50">
+              <div className="max-w-4xl mx-auto space-y-8 bg-card p-8 rounded-2xl shadow-soft border border-border/60">
 
                 <div className="space-y-8">
-                    {/* Template Selection */}
-                    {creationMode !== "image_transform" ? (
-                    <div className="space-y-4">
-                        <label className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 flex items-center gap-2">
-                            <span className="w-6 h-6 rounded-full bg-blue-100 text-blue-600 text-xs flex items-center justify-center font-bold">1</span>
-                            {tr("选择或上传参考模板", "Choose or upload a reference template")}
-                        </label>
-                        
-                        <div className="grid gap-4 grid-cols-[repeat(auto-fill,minmax(180px,1fr))]">
-                            <label className="cursor-pointer border-2 border-dashed rounded-xl transition-all duration-200 overflow-hidden relative aspect-video flex flex-col items-center justify-center group border-zinc-200 dark:border-zinc-700 hover:border-blue-500 hover:bg-blue-50/30 dark:hover:bg-zinc-800/50">
-                                <div className="flex flex-col items-center text-zinc-400 group-hover:text-blue-500 transition-colors">
-                                    <div className="w-10 h-10 rounded-full bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center mb-2 group-hover:bg-blue-100 dark:group-hover:bg-blue-900/30 transition-colors">
-                                        <Upload className="w-5 h-5" />
-                                    </div>
-                                    <span className="text-xs font-medium">{tr("添加模板", "Add template")}</span>
-                                </div>
-                                <input type="file" accept="image/*" multiple className="hidden" onChange={templateLibrary.handleUploadInputChange} />
-                            </label>
-                            <button
-                              type="button"
-                              onClick={() => templateLibrary.generator.setOpen(true)}
-                              title={tr("AI生成模板", "AI generate template")}
-                              className="cursor-pointer border-2 border-dashed rounded-xl transition-all duration-200 overflow-hidden relative aspect-video flex flex-col items-center justify-center group border-zinc-200 dark:border-zinc-700 hover:border-blue-500 hover:bg-blue-50/30 dark:hover:bg-zinc-800/50"
-                            >
-                                <div className="flex flex-col items-center text-zinc-400 group-hover:text-blue-500 transition-colors">
-                                    <div className="w-10 h-10 rounded-full bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center mb-2 group-hover:bg-blue-100 dark:group-hover:bg-blue-900/30 transition-colors">
-                                        <Sparkles className="w-5 h-5" />
-                                    </div>
-                                    <span className="text-xs font-medium">{tr("AI生成模板", "AI generate")}</span>
-                                </div>
-                            </button>
-                            {templateLibrary.templates.map((t) => (
-                                <div
-                                    key={t.id}
-                                    onClick={() => void templateLibrary.selectTemplate(t)}
-                                    className={`cursor-pointer border rounded-xl overflow-hidden relative aspect-video group transition-all duration-200 bg-zinc-100 dark:bg-zinc-900 ${
-                                        templateLibrary.selectedTemplateId === t.id
-                                            ? "border-blue-500 ring-2 ring-blue-500 shadow-md"
-                                            : "border-zinc-200 dark:border-zinc-700 hover:ring-2 hover:ring-blue-500 hover:shadow-md"
-                                    }`}
-                                >
-                                    <img src={t.previewSrc} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" alt={t.name} />
-                                    {templateLibrary.selectedTemplateId === t.id && (
-                                        <div className="absolute top-2 left-2 rounded-full bg-blue-600 px-2 py-0.5 text-[10px] font-medium text-white shadow">
-                                            {tr("已选择", "Selected")}
-                                        </div>
-                                    )}
-                                    <button
-                                        type="button"
-                                        onClick={(e) => {
-                                            e.stopPropagation();
-                                            templateLibrary.deleteTemplate(t);
-                                        }}
-                                        className="absolute top-2 right-2 rounded-full bg-black/50 text-white p-1 opacity-0 group-hover:opacity-100 transition-opacity"
-                                        title={tr("删除模板", "Delete template")}
-                                    >
-                                        <X className="w-3.5 h-3.5" />
-                                    </button>
-                                    <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 to-transparent p-3 pt-8 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
-                                        <div className="text-white text-xs font-medium text-center">{t.name}</div>
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
-                    </div>
-                    ) : null}
-
                     {/* Mode Selection & Input */}
                     <div className="space-y-4">
-                        <label className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 flex items-center gap-2">
-                            <span className="w-6 h-6 rounded-full bg-blue-100 text-blue-600 text-xs flex items-center justify-center font-bold">{creationMode === "image_transform" ? "1" : "2"}</span>
+                        <label className="text-sm font-semibold text-foreground flex items-center gap-2">
+                            <span className="w-6 h-6 rounded-full bg-primary/12 text-primary-strong text-xs flex items-center justify-center font-bold">1</span>
                             {tr("输入内容", "Input")}
                         </label>
 
                         {/* Segmented Control */}
-                        <div className="bg-zinc-100 dark:bg-zinc-900/50 p-1 rounded-lg inline-flex w-full sm:w-auto">
+                        <div className="bg-muted p-1 rounded-lg inline-flex w-full sm:w-auto">
                             {tabs.map((tab) => (
                                 <button
                                     key={tab.id}
@@ -162,15 +97,15 @@ export function CreationStart({
                                     title={tab.label}
                                     className={`relative flex-1 sm:flex-none px-6 py-2 text-sm font-medium rounded-md transition-all duration-200 ${
                                         creationMode === tab.id 
-                                            ? "text-zinc-900 dark:text-zinc-100 shadow-sm" 
-                                            : "text-zinc-500 hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200"
+                                            ? "text-foreground shadow-sm" 
+                                            : "text-muted-foreground hover:text-foreground"
                                     }`}
                                 >
                                     {creationMode === tab.id && (
                                         <motion.div
                                             layoutId="activeTab"
-                                            className="absolute inset-0 bg-white dark:bg-zinc-700 rounded-md"
-                                            transition={{ type: "spring", stiffness: 500, damping: 30 }}
+                                            className="absolute inset-0 bg-card rounded-md shadow-xs"
+                                            transition={SPRING.snap}
                                         />
                                     )}
                                     <span className="relative z-10">{tab.label}</span>
@@ -195,8 +130,8 @@ export function CreationStart({
                             transition={{ duration: 0.2 }}
                             className="space-y-3"
                         >
-                            <div className="flex items-center gap-2 text-sm text-zinc-700 dark:text-zinc-200">
-                                {creationMode === "beautify" ? <Sparkles className="w-4 h-4 text-blue-600" /> : creationMode === "image_transform" ? <Presentation className="w-4 h-4 text-blue-600" /> : <Lightbulb className="w-4 h-4 text-amber-500" />}
+                            <div className="flex items-center gap-2 text-sm text-foreground/80">
+                                {creationMode === "beautify" ? <Sparkles className="w-4 h-4 text-primary-strong" /> : creationMode === "image_transform" ? <Presentation className="w-4 h-4 text-primary-strong" /> : <Lightbulb className="w-4 h-4 text-primary-strong" />}
                                 <span>{modeCopy.hint}</span>
                             </div>
 
@@ -210,10 +145,10 @@ export function CreationStart({
                                   onChange={inputs.beautify.onInputChange}
                                 />
 
-                                <div className="flex items-center justify-between gap-3 rounded-xl border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-900/50 px-4 py-3">
+                                <div className="flex items-center justify-between gap-3 rounded-xl border border-border bg-sunken px-4 py-3">
                                   <div className="min-w-0">
-                                    <div className="text-sm font-medium text-zinc-900 dark:text-zinc-100">{tr("上传 PDF", "Upload PDF")}</div>
-                                    <div className="text-xs text-zinc-500 dark:text-zinc-400 truncate">
+                                    <div className="text-sm font-medium text-foreground">{tr("上传 PDF", "Upload PDF")}</div>
+                                    <div className="text-xs text-muted-foreground truncate">
                                       {inputs.beautify.file ? inputs.beautify.file.name : tr("未选择文件", "No file selected")}
                                     </div>
                                   </div>
@@ -228,10 +163,10 @@ export function CreationStart({
                                   </Button>
                                 </div>
 
-                                <label className="flex items-center justify-between gap-3 rounded-xl border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-900/50 px-4 py-3 cursor-pointer">
+                                <label className="flex items-center justify-between gap-3 rounded-xl border border-border bg-sunken px-4 py-3 cursor-pointer">
                                   <div className="min-w-0">
-                                    <div className="text-sm font-medium text-zinc-900 dark:text-zinc-100">{tr("启用模板美化（可选）", "Use template for beautify (optional)")}</div>
-                                    <div className="text-xs text-zinc-500 dark:text-zinc-400">
+                                    <div className="text-sm font-medium text-foreground">{tr("启用模板美化（可选）", "Use template for beautify (optional)")}</div>
+                                    <div className="text-xs text-muted-foreground">
                                       {tr("开启后将把当前模板传给美化模型；关闭则仅基于上传的幻灯片美化。", "When enabled, current template is passed to beautify model; otherwise beautify uses only uploaded slides.")}
                                     </div>
                                   </div>
@@ -239,14 +174,14 @@ export function CreationStart({
                                     type="checkbox"
                                     checked={inputs.beautify.useTemplate}
                                     onChange={(e) => inputs.beautify.setUseTemplate(e.target.checked)}
-                                    className="h-4 w-4 rounded border-zinc-300 text-blue-600 focus:ring-blue-500"
+                                    className="h-4 w-4 rounded border-input text-primary-strong focus:ring-ring"
                                   />
                                 </label>
 
                                 <textarea
                                   value={inputs.beautify.requirement}
                                   onChange={(e) => inputs.beautify.setRequirement(e.target.value)}
-                                  className="w-full h-36 p-4 rounded-xl border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-900/50 text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all resize-none outline-none"
+                                  className="w-full h-36 p-4 rounded-xl border border-border bg-sunken text-sm focus:ring-2 focus:ring-ring/30 focus:border-ring transition-all resize-none outline-none"
                                   placeholder={modeCopy.placeholder}
                                 />
                               </div>
@@ -260,10 +195,10 @@ export function CreationStart({
                                   onChange={inputs.imageTransform.onInputChange}
                                 />
 
-                                <div className="flex items-center justify-between gap-3 rounded-xl border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-900/50 px-4 py-3">
+                                <div className="flex items-center justify-between gap-3 rounded-xl border border-border bg-sunken px-4 py-3">
                                   <div className="min-w-0">
-                                    <div className="text-sm font-medium text-zinc-900 dark:text-zinc-100">{tr("上传 PDF", "Upload PDF")}</div>
-                                    <div className="text-xs text-zinc-500 dark:text-zinc-400 truncate">
+                                    <div className="text-sm font-medium text-foreground">{tr("上传 PDF", "Upload PDF")}</div>
+                                    <div className="text-xs text-muted-foreground truncate">
                                       {inputs.imageTransform.file ? inputs.imageTransform.file.name : tr("未选择文件", "No file selected")}
                                     </div>
                                   </div>
@@ -278,7 +213,7 @@ export function CreationStart({
                                   </Button>
                                 </div>
 
-                                <div className="rounded-xl border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-900/50 px-4 py-3 text-xs text-zinc-500 dark:text-zinc-400 leading-6">
+                                <div className="rounded-xl border border-border bg-sunken px-4 py-3 text-xs text-muted-foreground leading-6">
                                   <div>{tr("处理结果：", "Output:")}</div>
                                   <div>{tr("系统会把 PDF 每一页导入为图片幻灯片。", "The system imports each PDF page as an image slide.")}</div>
                                   <div>{tr("如需可编辑文字，请在导出可编辑 PPTX 时再进行文字识别与回填。", "If you need editable text, recognition and text refill happen only during editable PPTX export.")}</div>
@@ -294,7 +229,7 @@ export function CreationStart({
                                             if (creationMode === "idea") inputs.setIdeaInput(v);
                                             else inputs.setOutlineInput(v);
                                         }}
-                                        className="w-full h-40 p-4 pb-12 rounded-xl border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-900/50 text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all resize-none outline-none"
+                                        className="w-full h-40 p-4 pb-12 rounded-xl border border-border bg-sunken text-sm focus:ring-2 focus:ring-ring/30 focus:border-ring transition-all resize-none outline-none"
                                         placeholder={modeCopy.placeholder}
                                     />
                                     <button
@@ -302,7 +237,7 @@ export function CreationStart({
                                         onClick={() => inputs.reference.inputRef.current?.click()}
                                         disabled={inputs.reference.isParsing}
                                         title={tr("上传参考文件", "Upload reference files")}
-                                        className="absolute bottom-3 right-3 inline-flex items-center gap-2 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white/80 dark:bg-zinc-900/60 px-3 py-1.5 text-xs text-zinc-700 dark:text-zinc-200 shadow-sm hover:bg-white dark:hover:bg-zinc-900 transition-colors disabled:opacity-60"
+                                        className="absolute bottom-3 right-3 inline-flex items-center gap-2 rounded-lg border border-border bg-card/80 px-3 py-1.5 text-xs text-foreground/80 shadow-xs hover:bg-card transition-colors disabled:opacity-60"
                                     >
                                         {inputs.reference.isParsing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />}
                                         {tr("上传文件", "Upload files")}
@@ -310,7 +245,7 @@ export function CreationStart({
                                 </div>
 
                                 <div className="flex items-center justify-between gap-3">
-                                    <div className="text-xs text-zinc-500 dark:text-zinc-400">
+                                    <div className="text-xs text-muted-foreground">
                                         {tr(
                                           "上传 PDF/Word/LaTeX/TXT作为参考资料（可选）；推荐 Word/LaTeX，图表素材更稳定。",
                                           "Upload PDF/Word/LaTeX/TXT as reference (optional); Word/LaTeX recommended for stable figures."
@@ -321,7 +256,7 @@ export function CreationStart({
                                             type="button"
                                             onClick={() => inputs.reference.setUploadFiles([])}
                                             title={tr("清空参考文件", "Clear reference files")}
-                                            className="text-xs text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200"
+                                            className="text-xs text-muted-foreground hover:text-foreground"
                                             disabled={inputs.reference.isParsing}
                                         >
                                             {tr("清空", "Clear")}
@@ -332,20 +267,20 @@ export function CreationStart({
                                 {inputs.reference.files.length > 0 && (
                                     <div className="grid gap-2">
                                         {inputs.reference.files.map((f) => (
-                                            <div key={f.id} className="flex items-center justify-between gap-3 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-900/40 px-3 py-2">
+                                            <div key={f.id} className="flex items-center justify-between gap-3 rounded-lg border border-border bg-sunken px-3 py-2">
                                                 <button
                                                     type="button"
                                                     onClick={() => inputs.reference.openPreview(f)}
                                                     title={tr("预览文件", "Preview file")}
                                                     className="flex items-center gap-2 min-w-0 text-left"
                                                 >
-                                                    <FileText className="w-4 h-4 text-zinc-500 flex-shrink-0" />
-                                                    <span className="truncate text-sm text-zinc-800 dark:text-zinc-100">{f.filename}</span>
-                                                    <span className="text-xs text-zinc-500 dark:text-zinc-400 flex-shrink-0">({f.charCount} chars)</span>
+                                                    <FileText className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+                                                    <span className="truncate text-sm text-foreground/90">{f.filename}</span>
+                                                    <span className="text-xs text-muted-foreground flex-shrink-0">({f.charCount} chars)</span>
                                                 </button>
                                                 <button
                                                     type="button"
-                                                    className="text-xs text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200"
+                                                    className="text-xs text-muted-foreground hover:text-foreground"
                                                     title={tr("移除文件", "Remove file")}
                                                     onClick={() => {
                                                       const nextFiles = inputs.reference.uploadFiles.filter((rf) => rf.name !== f.filename);
@@ -366,11 +301,34 @@ export function CreationStart({
                     <Button 
                         onClick={creationMode === "beautify" ? onStartBeautify : creationMode === "image_transform" ? onStartImageTransform : creationMode === "idea" ? onGenerateOutline : onLoadOutline}
                         disabled={Boolean(progress.message) || (creationMode === "beautify" ? !inputs.beautify.file : creationMode === "image_transform" ? !inputs.imageTransform.file || !isPdfFile(inputs.imageTransform.file) : inputs.reference.isParsing || (creationMode === "idea" ? !inputs.ideaInput.trim() : !inputs.outlineInput.trim()))}
-                        className="w-full py-6 text-lg font-medium bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white shadow-lg shadow-blue-500/20 rounded-xl transition-all hover:scale-[1.01] active:scale-[0.99]"
+                        size="lg"
+                        // The blue-to-indigo gradient was the loudest element on
+                        // the screen; the solid variant carries the same weight
+                        // without introducing a second hue.
+                        className="w-full h-auto py-5 text-lg font-semibold tracking-[-0.01em] rounded-xl shadow-soft hover:shadow-soft-lg"
                     >
-                        {progress.message ? <Loader2 className="w-5 h-5 mr-2 animate-spin" /> : <Sparkles className="w-5 h-5 mr-2" />}
+                        {/* `size-5`, not `w-5 h-5`: the button's own
+                            `[&_svg:not([class*='size-'])]:size-4` rule outranks a
+                            plain width/height pair, so these icons were 16px. */}
+                        {progress.message ? <Loader2 className="size-5 mr-2 animate-spin" /> : <Sparkles className="size-5 mr-2" />}
                         {progress.message || (creationMode === "beautify" ? tr("开始渲染", "Start rendering") : creationMode === "image_transform" ? tr("开始转化", "Start transform") : creationMode === "idea" ? tr("开始生成大纲", "Generate outline") : tr("载入大纲", "Load outline"))}
                     </Button>
+
+                    {/* Below the button, at the user's request: the template is
+                        a refinement, not the first decision. The header carries
+                        the current selection so it stays visible from up there. */}
+                    {creationMode !== "image_transform" ? (
+                      <TemplatePicker
+                        templateLibrary={templateLibrary}
+                        tr={tr}
+                        heading={
+                          <label className="text-sm font-semibold text-foreground flex items-center gap-2">
+                            <span className="w-6 h-6 rounded-full bg-primary/12 text-primary-strong text-xs flex items-center justify-center font-bold">2</span>
+                            {tr("选择或上传参考模板", "Choose or upload a reference template")}
+                          </label>
+                        }
+                      />
+                    ) : null}
                 </div>
 
                 <Dialog open={inputs.reference.previewOpen} onOpenChange={inputs.reference.setPreviewOpen}>
@@ -388,7 +346,7 @@ export function CreationStart({
                             <DialogTitle>{tr("AI生成模板", "AI Template Generator")}</DialogTitle>
                         </DialogHeader>
                         <div className="space-y-4">
-                            <div className="text-xs text-zinc-500 dark:text-zinc-400">
+                            <div className="text-xs text-muted-foreground">
                                 {tr("生成的模板会自动加入模板列表，可随时删除。", "Generated templateLibrary.templates will be added to the template list automatically and can be deleted anytime.")}
                             </div>
                             <Textarea
@@ -414,7 +372,7 @@ export function CreationStart({
                                   type="button"
                                   onClick={templateLibrary.generator.generate}
                                   disabled={templateLibrary.generator.isGenerating || !templateLibrary.generator.requirement.trim()}
-                                  className="bg-blue-600 hover:bg-blue-700"
+                                  className="bg-primary hover:bg-primary/90"
                                 >
                                   {templateLibrary.generator.isGenerating ? (
                                     <>

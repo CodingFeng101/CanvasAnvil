@@ -14,23 +14,23 @@ export type PortalCanvasItem = {
 export const portalCanvasItems: PortalCanvasItem[] = [
   {
     id: "flow",
-    zhTitle: "\u6d41\u7a0b\u753b\u5e03",
-    enTitle: "Flow Canvas",
-    zhSummary: "\u7ed3\u6784\u5316\u6d41\u7a0b\u56fe\u4e0e\u8282\u70b9\u7ea7\u5c40\u90e8\u4fee\u6539",
-    enSummary: "Structured flow diagrams with node-level edits",
+    zhTitle: "\u56fe\u8868\u753b\u5e03",
+    enTitle: "Diagram Canvas",
+    zhSummary: "\u7ed3\u6784\u5316\u56fe\u8868\u4e0e\u8282\u70b9\u7ea7\u5c40\u90e8\u4fee\u6539",
+    enSummary: "Structured diagrams with node-level edits",
     image: "/examples/flow/01.png",
     angle: -90,
-    accent: "#236CFF",
+    accent: "#C96442",
   },
   {
     id: "cad",
     zhTitle: "\u5ba4\u5185\u8bbe\u8ba1\u753b\u5e03",
     enTitle: "Interior Canvas",
     zhSummary: "\u5e73\u9762\u65b9\u6848\u3001\u6548\u679c\u56fe\u4e0e\u6750\u6599\u6e05\u5355\u8054\u52a8",
-    enSummary: "Layouts, renders, and material lists in one flow",
+    enSummary: "Layouts, renders, and material lists in one pass",
     image: "/examples/cad/01.png",
     angle: 30,
-    accent: "#8B5CF6",
+    accent: "#7C8B6E",
   },
   {
     id: "ppt",
@@ -40,6 +40,6 @@ export const portalCanvasItems: PortalCanvasItem[] = [
     enSummary: "Outline-first decks with editable, PDF, and image exports",
     image: "/examples/ppt/ppt1/01.png",
     angle: 150,
-    accent: "#1F63F3",
+    accent: "#A8825C",
   },
 ];

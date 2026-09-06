@@ -5,7 +5,7 @@
 <h1 align="center">CanvasAnvil</h1>
 
 <p align="center">
-  <strong>AI-powered multi-canvas creation for Flow, CAD, and PPT.</strong>
+  <strong>AI-powered multi-canvas creation for Diagrams, CAD, and PPT.</strong>
 </p>
 
 <p align="center">
@@ -33,7 +33,7 @@
 
 > CanvasAnvil brings diagramming, interior design workflows, and presentation production into one unified workspace.
 
-## 🔷 Flow Canvas
+## 🔷 Diagram Canvas
 
 Turn structured prompts into clear diagrams for research, systems, delivery plans, and teaching maps, then keep refining layout, labels, and node relationships in one place.
 
@@ -41,12 +41,12 @@ Turn structured prompts into clear diagrams for research, systems, delivery plan
 
 <table>
   <tr>
-    <td width="50%" align="center"><img src="public/examples/readme-previews/flow/01.png" alt="Flow example: academic research framework" width="100%" /><br/><strong>Academic Research Framework</strong></td>
-    <td width="50%" align="center"><img src="public/examples/readme-previews/flow/02.png" alt="Flow example: intelligent Q&A system architecture" width="100%" /><br/><strong>Intelligent Q&A System Architecture</strong></td>
+    <td width="50%" align="center"><img src="public/examples/readme-previews/flow/01.png" alt="Diagram example: academic research framework" width="100%" /><br/><strong>Academic Research Framework</strong></td>
+    <td width="50%" align="center"><img src="public/examples/readme-previews/flow/02.png" alt="Diagram example: intelligent Q&A system architecture" width="100%" /><br/><strong>Intelligent Q&A System Architecture</strong></td>
   </tr>
   <tr>
-    <td width="50%" align="center"><img src="public/examples/readme-previews/flow/03.png" alt="Flow example: project implementation roadmap" width="100%" /><br/><strong>Project Implementation Roadmap</strong></td>
-    <td width="50%" align="center"><img src="public/examples/readme-previews/flow/04.png" alt="Flow example: course design mind map" width="100%" /><br/><strong>Course Design Mind Map</strong></td>
+    <td width="50%" align="center"><img src="public/examples/readme-previews/flow/03.png" alt="Diagram example: project implementation roadmap" width="100%" /><br/><strong>Project Implementation Roadmap</strong></td>
+    <td width="50%" align="center"><img src="public/examples/readme-previews/flow/04.png" alt="Diagram example: course design mind map" width="100%" /><br/><strong>Course Design Mind Map</strong></td>
   </tr>
 </table>
 
@@ -107,7 +107,7 @@ Generate full presentations through a controlled pipeline: outline first, visual
 
 | Workspace | Focus | Typical output |
 | --- | --- | --- |
-| `Flow` | structured diagram generation and partial editing | flowcharts, architecture diagrams, logic diagrams |
+| `Diagram` | structured diagram generation and partial editing | flowcharts, architecture diagrams, logic diagrams |
 | `CAD` | interior planning, drawing coordination, and delivery packaging | concept boards, 2D drawings, render briefs, material lists |
 | `PPT` | structured presentation generation and mixed export workflows | presentations, pitch decks, editable decks, report slides |
 
@@ -120,7 +120,7 @@ fixes that came out of it. See [CHANGELOG.md](CHANGELOG.md) for the full list.
 
 **Narrowed**
 
-- Three canvases only: Flow, Interior Design and PPT. The poster, product and infographic canvases are gone.
+- Three canvases only: Diagram, Interior Design and PPT. The poster, product and infographic canvases are gone.
 - The embedded `pptist-lab` editor is gone; editable decks export directly as `.pptx`.
 - One OpenAI-compatible request path. The provider list is gone from the app *and* from the `cad-skill` and `ppt-skill` bundles, which had carried a nine-vendor image registry of their own — eight of them with no reachable endpoint.
 - The Next.js port that shadowed the Vite client is gone, along with roughly 900 lines of unreachable code the old `PptWorkspace` was hiding.

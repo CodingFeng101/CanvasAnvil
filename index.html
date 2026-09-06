@@ -6,6 +6,25 @@
     <link rel="shortcut icon" href="/favicon.svg?v=CanvasAnvil" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>CanvasAnvil</title>
+    <!-- Runs before first paint so a dark-theme user never sees an ivory
+         flash. Kept in sync with client/shared/theme.ts. -->
+    <script>
+      (function () {
+        try {
+          var stored = localStorage.getItem('CanvasAnvil-theme-v1');
+          if (stored !== 'light' && stored !== 'dark' && stored !== 'system') {
+            var legacy = localStorage.getItem('next-ai-draw-io-dark-mode');
+            stored = legacy === 'true' ? 'dark' : legacy === 'false' ? 'light' : 'system';
+          }
+          var dark =
+            stored === 'dark' ||
+            (stored === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+          document.documentElement.classList.toggle('dark', dark);
+        } catch (e) {
+          /* Blocked storage just means we fall through to the light default. */
+        }
+      })();
+    </script>
     <script type="module">
       if (import.meta.hot?.on) {
         import.meta.hot.on('vite:error', (error) => {

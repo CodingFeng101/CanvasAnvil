@@ -40,7 +40,7 @@ Good contribution areas include:
 - 🐛 Bug fixes with clear reproduction steps
 - ⚡ Performance and stability improvements
 - 📝 Documentation improvements
-- 🎨 UX improvements for the Flow, CAD, and PPT workspaces
+- 🎨 UX improvements for the Diagram, CAD, and PPT workspaces
 - 📦 Deployment improvements for the app service
 
 For large changes, open an issue first so the direction can be discussed before implementation.

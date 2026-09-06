@@ -9,6 +9,7 @@ import {
     Send,
     Square,
     Trash2,
+    Upload,
 } from "lucide-react"
 import type React from "react"
 import { useCallback, useEffect, useRef, useState } from "react"
@@ -20,6 +21,7 @@ import { STORAGE_KEYS } from "@/workspaces/flow/storage";
 import { HistoryDialog } from "@/workspaces/flow/chat/history-dialog"
 import { ResetWarningModal } from "@/shared/chat"
 import { Textarea } from "@/shared/ui/textarea"
+import { cn } from "@/shared/lib/utils"
 import { useDiagram } from "@/workspaces/flow/state/diagram-context"
 import { useFlowT } from "@/workspaces/flow/lib/translations"
 import { isPdfFile, isTextFile } from "@/shared/files"
@@ -172,6 +174,7 @@ export function ChatInput({
     const imageInputRef = useRef<HTMLInputElement>(null)
     const fileInputRef = useRef<HTMLInputElement>(null)
     const [isDragging, setIsDragging] = useState(false)
+    const dragDepth = useRef(0)
     const [showClearDialog, setShowClearDialog] = useState(false)
     const [showConstraintsDialog, setShowConstraintsDialog] = useState(false)
 
@@ -294,13 +297,21 @@ export function ChatInput({
     const handleDragOver = (e: React.DragEvent<HTMLFormElement>) => {
         e.preventDefault()
         e.stopPropagation()
+    }
+
+    const handleDragEnter = (e: React.DragEvent<HTMLFormElement>) => {
+        e.preventDefault()
+        e.stopPropagation()
+        if (!Array.from(e.dataTransfer?.types || []).includes("Files")) return
+        dragDepth.current += 1
         setIsDragging(true)
     }
 
     const handleDragLeave = (e: React.DragEvent<HTMLFormElement>) => {
         e.preventDefault()
         e.stopPropagation()
-        setIsDragging(false)
+        dragDepth.current = Math.max(0, dragDepth.current - 1)
+        if (dragDepth.current === 0) setIsDragging(false)
     }
 
     const handleDrop = (e: React.DragEvent<HTMLFormElement>) => {
@@ -333,12 +344,9 @@ export function ChatInput({
     return (
         <form
             onSubmit={onSubmit}
-            className={`w-full transition-all duration-200 ${
-                isDragging
-                    ? "ring-2 ring-primary ring-offset-2 rounded-2xl"
-                    : ""
-            }`}
+            className="w-full"
             onDragOver={handleDragOver}
+            onDragEnter={handleDragEnter}
             onDragLeave={handleDragLeave}
             onDrop={handleDrop}
         >
@@ -354,7 +362,23 @@ export function ChatInput({
             )}
 
             {/* Input container */}
-            <div className="relative rounded-2xl border border-border bg-background shadow-sm focus-within:ring-2 focus-within:ring-primary/20 focus-within:border-primary/50 transition-all duration-200">
+            <div
+                className={cn(
+                    "relative rounded-2xl border bg-card shadow-soft transition-[border-color,box-shadow,background-color] duration-base ease-out-soft",
+                    "focus-within:ring-[3px] focus-within:ring-ring/25 focus-within:border-ring focus-within:shadow-soft-lg",
+                    isDragging
+                        ? "border-primary border-dashed bg-primary/[0.06] shadow-soft-lg"
+                        : "border-border",
+                )}
+            >
+                {isDragging && (
+                    <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center rounded-2xl bg-card/70 backdrop-blur-[1px] animate-fade-in">
+                        <span className="flex items-center gap-2 text-sm font-medium text-primary-strong">
+                            <Upload className="h-4 w-4" />
+                            {t("chat.drop_to_attach")}
+                        </span>
+                    </div>
+                )}
                 <Textarea
                     ref={textareaRef}
                     value={input}
@@ -434,7 +458,7 @@ export function ChatInput({
                             <Brain
                                 className={`h-3.5 w-3.5 ${
                                     deepThinkingEnabled
-                                        ? "text-blue-600"
+                                        ? "text-primary-strong"
                                         : "text-muted-foreground"
                                 }`}
                             />

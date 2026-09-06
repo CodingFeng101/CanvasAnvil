@@ -27,7 +27,7 @@ export function QuotaLimitToast({
                         {t("quota.limit.desc").replace("{limit}", limit.toString())}
                     </p>
                 </div>
-                <div className="flex items-center justify-center w-8 h-8 rounded-full bg-amber-100 text-amber-600 shrink-0">
+                <div className="flex items-center justify-center w-8 h-8 rounded-full bg-warning/15 text-warning shrink-0">
                     <span className="text-xs font-bold">!</span>
                 </div>
             </div>
@@ -35,7 +35,7 @@ export function QuotaLimitToast({
             {/* Progress bar */}
             <div className="w-full h-1.5 bg-secondary rounded-full overflow-hidden">
                 <div
-                    className="h-full bg-amber-500 rounded-full transition-all duration-500 ease-out"
+                    className="h-full bg-warning rounded-full transition-all duration-500 ease-out"
                     style={{ width: `${percentage}%` }}
                 />
             </div>

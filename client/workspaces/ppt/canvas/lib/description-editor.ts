@@ -12,8 +12,10 @@ import { materialToken } from "@/workspaces/ppt/canvas/lib/material-tokens";
  * than by the test runner.
  */
 
+// Matches the material/slide chips in the chat panels. This one lives in a
+// .ts file, which is why it survived the sweeps that globbed .tsx.
 const CHIP_CLASS =
-  "mx-0.5 inline-flex items-center rounded-md border border-blue-200 bg-blue-50 px-1.5 py-0.5 text-[11px] text-blue-700 align-middle";
+  "mx-0.5 inline-flex items-center rounded-md border border-primary/25 bg-primary/[0.08] px-1.5 py-0.5 text-[11px] text-primary-strong align-middle";
 
 /** A material reference, rendered as one indivisible chip. */
 export function createMaterialChip(name: string): HTMLSpanElement {

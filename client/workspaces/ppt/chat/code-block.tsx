@@ -1,6 +1,10 @@
 import { useMemo, useRef, useState } from 'react';
-import { Highlight, themes, type Language } from "prism-react-renderer";
-import { ChevronRight, Loader2 } from 'lucide-react';
+import { Highlight } from "prism-react-renderer";
+import { syntaxTheme } from "@/shared/chat/syntax-theme";
+import { toPrismLanguage } from "@/shared/chat/code-format";
+import { Shimmer } from "@/shared/chat/shimmer";
+import { useUiLanguage } from "@/shared/i18n";
+import { ChevronRight } from 'lucide-react';
 import { cn } from '@/shared/lib/utils';
 
 interface CodeBlockProps {
@@ -13,6 +17,7 @@ interface CodeBlockProps {
 const openStateById = new Map<string, boolean>();
 
 export function CodeBlock({ code, language = "xml", isStreaming = false, blockId }: CodeBlockProps) {
+    const uiLang = useUiLanguage();
     const [isOpen, setIsOpen] = useState(() => {
         if (blockId && openStateById.has(blockId)) return Boolean(openStateById.get(blockId));
         return false;
@@ -20,33 +25,7 @@ export function CodeBlock({ code, language = "xml", isStreaming = false, blockId
     const preRef = useRef<HTMLPreElement | null>(null);
     const normalizedLanguage = useMemo(() => (language || "text").toLowerCase(), [language]);
     const normalizedCode = useMemo(() => String(code ?? ""), [code]);
-    const prismLanguage = useMemo<Language>(() => {
-        const lang = normalizedLanguage;
-        if (lang === "svg") return "xml";
-        if (lang === "yml") return "yaml";
-        if (lang === "shell" || lang === "sh" || lang === "zsh") return "bash";
-        if (lang === "ts") return "typescript";
-        if (lang === "tsx") return "tsx";
-        if (lang === "js") return "javascript";
-        if (lang === "md") return "markdown";
-        const allowed = new Set([
-            "text",
-            "xml",
-            "json",
-            "javascript",
-            "typescript",
-            "tsx",
-            "jsx",
-            "python",
-            "bash",
-            "yaml",
-            "markdown",
-            "css",
-            "html",
-        ]);
-        if (allowed.has(lang)) return lang as Language;
-        return "text";
-    }, [normalizedLanguage]);
+    const prismLanguage = useMemo(() => toPrismLanguage(normalizedLanguage), [normalizedLanguage]);
     
     const setOpen = (open: boolean) => {
         setIsOpen(open);
@@ -54,21 +33,25 @@ export function CodeBlock({ code, language = "xml", isStreaming = false, blockId
     };
 
     return (
-        <div className="w-full my-2 border border-border/50 rounded-lg bg-zinc-50 dark:bg-zinc-900/40 overflow-hidden shadow-sm">
+        <div className="w-full my-2 border border-border/50 rounded-lg bg-sunken overflow-hidden shadow-sm">
             <button
                 type="button"
                 onClick={() => setOpen(!isOpen)}
-                className="flex items-center gap-2 w-full p-2.5 cursor-pointer hover:bg-zinc-100 dark:hover:bg-zinc-800/40 transition-colors text-xs font-medium text-zinc-600 dark:text-zinc-300 select-none bg-zinc-100/70 dark:bg-zinc-900/60"
+                className="flex items-center gap-2 w-full p-2.5 cursor-pointer hover:bg-accent transition-colors text-xs font-medium text-muted-foreground select-none bg-muted/70"
             >
-                <ChevronRight className={cn("w-4 h-4 transition-transform duration-200 text-zinc-600 dark:text-zinc-300", isOpen && "rotate-90")} />
+                <ChevronRight className={cn("w-4 h-4 transition-transform duration-200 text-muted-foreground", isOpen && "rotate-90")} />
                 
-                <span className="uppercase font-semibold tracking-wider text-zinc-700 dark:text-zinc-200">{normalizedLanguage}</span>
+                <span className="uppercase font-semibold tracking-wider text-foreground/80">{normalizedLanguage}</span>
                 
                 {isStreaming ? (
-                    <div className="flex items-center gap-2 ml-auto">
-                         <span className="text-[10px] text-blue-600 animate-pulse">Generating code...</span>
-                         <Loader2 className="w-3.5 h-3.5 animate-spin text-blue-600" />
-                    </div>
+                    // Same in-progress idiom as the chat's "thinking" line, and
+                    // translated -- this was the one hardcoded English string
+                    // left in the panel.
+                    <span className="ml-auto">
+                        <Shimmer as="span" className="text-[10px]" duration={1.6}>
+                            {uiLang === "zh" ? "正在生成代码..." : "Generating code..."}
+                        </Shimmer>
+                    </span>
                 ) : (
                     <span className="ml-auto text-[10px] opacity-70 font-mono">{normalizedCode.length} chars</span>
                 )}
@@ -76,8 +59,8 @@ export function CodeBlock({ code, language = "xml", isStreaming = false, blockId
             
             {isOpen && (
                 <div className="p-0 border-t border-border/50">
-                     <div className="overflow-hidden w-full bg-zinc-50 dark:bg-zinc-900/40">
-                        <Highlight theme={themes.github} code={normalizedCode} language={prismLanguage}>
+                     <div className="overflow-hidden w-full bg-sunken">
+                        <Highlight theme={syntaxTheme} code={normalizedCode} language={prismLanguage}>
                             {({
                                 style,
                                 tokens,
@@ -86,10 +69,9 @@ export function CodeBlock({ code, language = "xml", isStreaming = false, blockId
                             }) => (
                                 <pre
                                     ref={preRef}
-                                    className="text-[11px] leading-relaxed overflow-x-hidden overflow-y-auto overscroll-contain max-h-[500px] scrollbar-thin p-3 whitespace-pre-wrap break-words"
+                                    className="text-[11px] leading-relaxed overflow-x-hidden overflow-y-auto overscroll-contain max-h-[500px] scrollbar-thin p-3 whitespace-pre-wrap break-words font-mono"
                                     style={{
                                         ...style,
-                                        fontFamily: "var(--font-mono), ui-monospace, monospace",
                                         backgroundColor: "transparent",
                                         margin: 0,
                                     }}
@@ -111,7 +93,7 @@ export function CodeBlock({ code, language = "xml", isStreaming = false, blockId
                                                 {...lineProps}
                                                 className={cn("grid grid-cols-[3.25rem_1fr] gap-0", lineProps?.className)}
                                             >
-                                                <span className="select-none text-zinc-400 text-right pr-4">{i + 1}</span>
+                                                <span className="select-none text-muted-foreground/70 text-right pr-4">{i + 1}</span>
                                                 <span className="min-w-0 whitespace-pre-wrap break-words">
                                                     {line.map((token, key) => (
                                                         <span key={key} {...getTokenProps({ token })} />

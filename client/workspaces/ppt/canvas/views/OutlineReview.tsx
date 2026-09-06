@@ -34,9 +34,9 @@ export function OutlineReview({
   onGenerate,
 }: OutlineReviewProps) {
   return (
-    <div className="w-full h-full bg-zinc-50 dark:bg-zinc-900 flex flex-col overflow-hidden">
+    <div className="w-full h-full bg-sunken flex flex-col overflow-hidden">
         <div className="flex-1 overflow-auto p-6">
-          <div className="w-full min-h-full bg-white dark:bg-zinc-800 rounded-xl shadow-sm flex flex-col overflow-hidden">
+          <div className="w-full min-h-full bg-card rounded-2xl shadow-soft flex flex-col overflow-hidden">
             <div className="p-6 border-b border-border flex justify-between items-center">
                 <h3 className="font-semibold text-lg">{tr("确认大纲", "Review outline")}</h3>
                 <div className="text-sm text-muted-foreground">{tr(`共 ${slides.length} 页`, `${slides.length} slides`)}</div>
@@ -44,13 +44,17 @@ export function OutlineReview({
             
             <div className="flex-1 overflow-y-auto p-6 space-y-4">
                 {slides.length === 0 && (
-                  <div className="rounded-lg border border-dashed border-zinc-300 bg-zinc-50 px-4 py-6 text-center text-sm text-zinc-500">
+                  <div className="rounded-lg border border-dashed border-input bg-sunken px-4 py-6 text-center text-sm text-muted-foreground">
                     {tr("当前没有大纲，请返回修改后重新生成。", "No outline yet. Go back and regenerate.")}
                   </div>
                 )}
                 {slides.map((slide, i) => (
-                    <div key={slide.id || i} className="flex gap-4 p-4 border rounded-lg bg-zinc-50 dark:bg-zinc-900/50">
-                        <div className="w-8 h-8 flex items-center justify-center bg-white dark:bg-zinc-800 rounded-full border text-sm font-medium text-muted-foreground">
+                    <div
+                      key={slide.id || i}
+                      style={{ animationDelay: `${Math.min(i, 10) * 40}ms` }}
+                      className="animate-rise-in flex gap-4 p-4 border border-border/70 rounded-xl bg-sunken transition-[border-color,box-shadow] duration-base ease-out-soft hover:border-border hover:shadow-soft"
+                    >
+                        <div className="w-8 h-8 flex items-center justify-center bg-card rounded-full border text-sm font-medium text-muted-foreground">
                             {i + 1}
                         </div>
                         <div className="flex-1 space-y-2">
@@ -238,8 +242,8 @@ export function OutlineReview({
                                         title={tr(`插入第 ${idx + 1} 张素材`, `Insert material ${idx + 1}`)}
                                         className={`flex w-full items-center gap-2 rounded-md border px-2 py-1.5 text-left text-xs ${
                                           materials.picker.activeIndex === idx
-                                            ? "border-blue-300 bg-blue-100 text-blue-800 ring-1 ring-blue-300"
-                                              : "border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100"
+                                            ? "border-primary/40 bg-primary/12 text-primary-strong ring-1 ring-primary/40"
+                                              : "border-primary/30 bg-primary/[0.08] text-primary-strong hover:bg-primary/15"
                                           }`}
                                         >
                                           <img src={img.dataUrl} alt={img.name} className="h-8 w-8 rounded object-cover" />
@@ -257,7 +261,7 @@ export function OutlineReview({
                                     type="button"
                                     onClick={() => materials.editor.inputRefs.current[slide.id]?.click()}
                                     title={tr("上传素材图片", "Upload material images")}
-                                    className="inline-flex items-center gap-1 rounded-md border border-zinc-300 px-2 py-1 text-xs text-zinc-700 hover:bg-zinc-100"
+                                    className="inline-flex items-center gap-1 rounded-md border border-input px-2 py-1 text-xs text-foreground/80 hover:bg-accent"
                                   >
                                     <Upload className="h-3.5 w-3.5" />
                                     {tr("上传", "Upload")}
@@ -278,7 +282,7 @@ export function OutlineReview({
                                   />
                                 </div>
                                 {(materials.slideMaterials[slide.id] || []).length === 0 ? (
-                                  <div className="rounded-md border border-dashed border-zinc-300 px-3 py-2 text-xs text-zinc-500">
+                                  <div className="rounded-md border border-dashed border-input px-3 py-2 text-xs text-muted-foreground">
                                     {tr("暂无素材，上传后可在 description 输入 / 选择变量", "No materials yet. Upload images, then type / in description to insert variables.")}
                                   </div>
                                 ) : (
@@ -297,7 +301,7 @@ export function OutlineReview({
                                               e.stopPropagation();
                                               materials.setPreview({ open: true, slideTitle: slide.title, item: img });
                                             }}
-                                            className="absolute bottom-1 left-1 inline-flex h-5 w-5 items-center justify-center rounded-full bg-blue-600/85 text-white opacity-0 transition-all group-hover:opacity-100 hover:bg-blue-700"
+                                            className="absolute bottom-1 left-1 inline-flex h-5 w-5 items-center justify-center rounded-full bg-primary/85 text-primary-foreground opacity-0 transition-all group-hover:opacity-100 hover:bg-primary/90"
                                             aria-label={tr("查看素材", "Preview material")}
                                             title={tr("查看", "Preview")}
                                           >
@@ -319,7 +323,7 @@ export function OutlineReview({
                                         <button
                                           type="button"
                                           onClick={() => materials.setPreview({ open: true, slideTitle: slide.title, item: img })}
-                                          className="mt-1 w-full truncate text-center text-xs text-foreground hover:text-blue-600"
+                                          className="mt-1 w-full truncate text-center text-xs text-foreground hover:text-primary-strong"
                                           title={tr("点击查看素材", "Click to preview material")}
                                         >
                                           {img.name}
@@ -335,9 +339,9 @@ export function OutlineReview({
                 ))}
             </div>
 
-            <div className="p-6 border-t border-border bg-zinc-50/50 dark:bg-zinc-900/50 flex justify-end gap-3">
+            <div className="p-6 border-t border-border bg-sunken/50 flex justify-end gap-3">
                 <Button variant="outline" onClick={onBack}>{tr("返回修改", "Back")}</Button>
-                <Button onClick={onGenerate} className="bg-blue-600 hover:bg-blue-700" disabled={slides.length === 0}>
+                <Button onClick={onGenerate} className="bg-primary hover:bg-primary/90" disabled={slides.length === 0}>
                     <Sparkles className="w-4 h-4 mr-2" />
                     {tr("生成完整 PPT", "Generate full deck")}
                 </Button>

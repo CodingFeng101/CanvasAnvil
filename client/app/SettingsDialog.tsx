@@ -106,7 +106,7 @@ function SecretInput({
             href={docsUrl}
             target="_blank"
             rel="noreferrer"
-            className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
+            className="inline-flex items-center gap-1 text-xs text-primary-strong hover:underline"
           >
             {uiLang === "zh" ? "获取 Key" : "Get Key"}
             <ExternalLink className="h-3.5 w-3.5" />
@@ -277,7 +277,7 @@ export function SettingsDialog() {
 
       {isOpen &&
         createPortal(
-          <div className="animate-in fade-in fixed inset-0 z-[100] flex items-center justify-center bg-black/40 p-4 duration-200 backdrop-blur-sm">
+          <div className="animate-in fade-in fixed inset-0 z-[100] flex items-center justify-center bg-overlay/45 p-4 duration-base backdrop-blur-sm">
             <div className="animate-in zoom-in-95 flex max-h-[90vh] w-full max-w-4xl flex-col overflow-hidden rounded-xl border border-border/50 bg-background shadow-2xl duration-200">
               <div className="flex items-center justify-between border-b border-border/50 bg-muted/10 p-6">
                 <div>

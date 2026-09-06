@@ -645,7 +645,7 @@ const getPptTag = (slideId: string, title: string, kind: "outline" | "slide_imag
   }
 
   return (
-    <div className={cn("h-full flex flex-col bg-card shadow-soft animate-slide-in-right rounded-xl border border-border/30 relative", className)}>
+    <div className={cn("h-full flex flex-col bg-card animate-slide-in-right relative", className)}>
       {/* Header */}
       <div className="px-5 py-4 border-b border-border/50">
         <div className="flex items-center justify-between">
@@ -707,7 +707,7 @@ const getPptTag = (slideId: string, title: string, kind: "outline" | "slide_imag
                   className={cn(
                     "h-8 w-8 p-0",
                     imageMode === "edit"
-                      ? "bg-primary/10 text-primary hover:bg-primary/15"
+                      ? "bg-primary/10 text-primary-strong hover:bg-primary/15"
                       : "text-muted-foreground hover:text-foreground",
                   )}
                 >
@@ -724,7 +724,7 @@ const getPptTag = (slideId: string, title: string, kind: "outline" | "slide_imag
                   className={cn(
                     "h-8 w-8 p-0",
                     imageMode === "regenerate"
-                      ? "bg-primary/10 text-primary hover:bg-primary/15"
+                      ? "bg-primary/10 text-primary-strong hover:bg-primary/15"
                       : "text-muted-foreground hover:text-foreground",
                   )}
                 >

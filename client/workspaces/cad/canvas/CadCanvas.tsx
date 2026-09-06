@@ -711,7 +711,7 @@ export function CadCanvas({
 
         <div className="w-full h-full pt-16 p-6">
           {viewMode === "analysis" && (
-            <div className="w-full h-full bg-white dark:bg-zinc-900 shadow-sm rounded-xl overflow-auto border border-border/50 p-4">
+            <div className="w-full h-full bg-card shadow-soft rounded-xl overflow-auto border border-border/50 p-4">
               <div className="grid gap-4 grid-cols-1 md:grid-cols-2">
                 {analysisSlots.map((img, idx) => (
                   <div key={`${img.title}-${idx}`} className="rounded-xl border border-border/50 overflow-hidden bg-background">
@@ -768,7 +768,7 @@ export function CadCanvas({
           )}
 
           {viewMode === "renders" && (
-            <div className="w-full h-full bg-white dark:bg-zinc-900 shadow-sm rounded-xl overflow-auto border border-border/50 p-4">
+            <div className="w-full h-full bg-card shadow-soft rounded-xl overflow-auto border border-border/50 p-4">
               <div className="grid gap-4 grid-cols-1 md:grid-cols-2 xl:grid-cols-3">
                 {renderSlots.map((img, idx) => (
                   <div key={`${img.title}-${idx}`} className="rounded-xl border border-border/50 overflow-hidden bg-background">
@@ -814,7 +814,7 @@ export function CadCanvas({
           )}
 
           {viewMode === "bom" && (
-            <div className="w-full h-full bg-white dark:bg-zinc-900 shadow-sm rounded-xl overflow-auto border border-border/50 p-4">
+            <div className="w-full h-full bg-card shadow-soft rounded-xl overflow-auto border border-border/50 p-4">
               {!bom || !Array.isArray(bom.columns) || bom.columns.length === 0 ? (
                 <div className="h-full w-full flex items-center justify-center text-muted-foreground text-sm">
                   {uiLang === "zh" ? "暂无物料清单" : "No BOM yet"}

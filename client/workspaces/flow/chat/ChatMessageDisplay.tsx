@@ -1,8 +1,11 @@
 "use client"
 
+import remarkGfm from "remark-gfm"
+import { cn } from "@/shared/lib/utils"
 import {
     getMessageTextContent,
     getUserOriginalText,
+    isFencedCode,
     splitTextIntoFileSections,
     type TextSection,
 } from "@/shared/chat/message-content"
@@ -33,9 +36,7 @@ import {
     Cpu,
     FileCode,
     FileText,
-    Loader2,
     Pencil,
-    Play,
     RotateCcw,
     X,
 } from "lucide-react"
@@ -44,9 +45,11 @@ import type { MutableRefObject } from "react"
 import { Fragment, useCallback, useEffect, useRef, useState } from "react"
 import ReactMarkdown from "react-markdown"
 import {
+    ApplyCodeButton,
     Reasoning,
     ReasoningContent,
     ReasoningTrigger,
+    Shimmer,
 } from "@/shared/chat"
 import { ScrollArea } from "@/shared/ui/scroll-area"
 import { useFlowT } from "@/workspaces/flow/lib/translations"
@@ -330,17 +333,23 @@ export function ChatMessageDisplay({
         const getToolDisplayName = (name: string) => {
             switch (name) {
                 case "display_diagram":
-                    return "Generate Diagram"
+                    return t("tool.display_diagram")
                 case "edit_diagram":
-                    return "Edit Diagram"
+                    return t("tool.edit_diagram")
                 case "append_diagram":
-                    return "Append Diagram"
+                    return t("tool.append_diagram")
                 case "get_shape_library":
-                    return "Get Shape Library"
+                    return t("tool.get_shape_library")
                 default:
                     return name
             }
         }
+
+        /** A truncated diagram is a warning, not a failure: the XML arrived
+            incomplete but what did arrive is still shown. */
+        const isTruncated =
+            (toolName === "display_diagram" || toolName === "append_diagram") &&
+            !isMxCellXmlComplete(String(input?.xml || ""))
 
         return (
             <div
@@ -350,7 +359,7 @@ export function ChatMessageDisplay({
                 <div className="flex items-center justify-between px-4 py-3 bg-muted/50">
                     <div className="flex items-center gap-2">
                         <div className="w-6 h-6 rounded-md bg-primary/10 flex items-center justify-center">
-                            <Cpu className="w-3.5 h-3.5 text-primary" />
+                            <Cpu className="w-3.5 h-3.5 text-primary-strong" />
                         </div>
                         <span className="text-sm font-medium text-foreground/80">
                             {getToolDisplayName(toolName)}
@@ -361,13 +370,19 @@ export function ChatMessageDisplay({
                             <div className="h-4 w-4 border-2 border-primary border-t-transparent rounded-full animate-spin" />
                         )}
                         {state === "output-available" && (
-                            <span className="text-xs font-medium text-green-600 bg-green-50 px-2 py-0.5 rounded-full">
-                                Complete
+                            <span className="text-xs font-medium text-success bg-success/[0.08] px-2 py-0.5 rounded-full">
+                                {t("tool.status.complete")}
                             </span>
                         )}
                         {state === "output-error" && (
-                            <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${((toolName === "display_diagram" || toolName === "append_diagram") && !isMxCellXmlComplete(String(input?.xml || ""))) ? "text-yellow-700 bg-yellow-50" : "text-red-600 bg-red-50"}`}>
-                                {((toolName === "display_diagram" || toolName === "append_diagram") && !isMxCellXmlComplete(String(input?.xml || ""))) ? "Truncated" : "Error"}
+                            // `text-yellow-700 bg-yellow-50` was raw Tailwind
+                            // palette in a token-driven interface: it stayed a
+                            // light-mode chip on a dark card.
+                            <span className={cn(
+                                "text-xs font-medium px-2 py-0.5 rounded-full",
+                                isTruncated ? "text-warning bg-warning/[0.10]" : "text-destructive bg-destructive/[0.08]",
+                            )}>
+                                {isTruncated ? t("tool.status.truncated") : t("tool.status.error")}
                             </span>
                         )}
                         {input && Object.keys(input).length > 0 && (
@@ -388,34 +403,27 @@ export function ChatMessageDisplay({
                 {input && isExpanded && (
                     <div className="px-4 py-3 border-t border-border/40 bg-muted/20">
                         {typeof input === "object" && input.xml ? (
-                            <CodeBlock code={input.xml} language="xml" onApply={applyCodeToDiagram} />
+                            <CodeBlock code={input.xml} language="xml" onApply={applyCodeToDiagram} framed={false} />
                         ) : typeof input === "object" &&
                           input.operations &&
                           Array.isArray(input.operations) ? (
                             <div className="space-y-2">
                                 <div className="flex justify-end">
-                                    <button
-                                        type="button"
-                                        onClick={() =>
-                                            void applyCodeToDiagram(
-                                                JSON.stringify(
-                                                    {
-                                                        type: "flow_patch",
-                                                        mode: "patch",
-                                                        operations: input.operations,
-                                                    },
-                                                    null,
-                                                    2,
-                                                ),
-                                                "json",
-                                            )
-                                        }
-                                        className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[10px] text-muted-foreground hover:bg-muted transition-colors"
-                                        title="Apply to canvas"
-                                    >
-                                        <Play className="h-3 w-3" />
-                                        <span>Apply</span>
-                                    </button>
+                                    {/* The same apply button the code blocks use,
+                                        rather than a third hand-rolled copy. */}
+                                    <ApplyCodeButton
+                                        code={JSON.stringify(
+                                            {
+                                                type: "flow_patch",
+                                                mode: "patch",
+                                                operations: input.operations,
+                                            },
+                                            null,
+                                            2,
+                                        )}
+                                        language="json"
+                                        onApply={(code) => applyCodeToDiagram(code, "json")}
+                                    />
                                 </div>
                                 <OperationsDisplay operations={input.operations} />
                             </div>
@@ -430,12 +438,13 @@ export function ChatMessageDisplay({
                                 code={JSON.stringify(input, null, 2)}
                                 language="json"
                                 onApply={applyCodeToDiagram}
+                                framed={false}
                             />
                         ) : null}
                     </div>
                 )}
                 {output && state === "output-error" && (
-                    <div className="px-4 py-3 border-t border-border/40 text-sm text-red-600">
+                    <div className="px-4 py-3 border-t border-border/40 text-sm text-destructive">
                         {output}
                     </div>
                 )}
@@ -492,7 +501,10 @@ export function ChatMessageDisplay({
                                             : "justify-start"
                                     } animate-message-in`}
                                     style={{
-                                        animationDelay: `${messageIndex * 50}ms`,
+                                        // Capped: uncapped, the fortieth message
+                                        // in a thread waited two seconds before
+                                        // it appeared at all.
+                                        animationDelay: `${Math.min(messageIndex, 6) * 45}ms`,
                                     }}
                                 >
                                 <div className="max-w-[95%] min-w-0">
@@ -826,7 +838,7 @@ export function ChatMessageDisplay({
                                                                                         width={96}
                                                                                         height={96}
                                                                                         alt="Uploaded image"
-                                                                                        className="rounded-md border border-white/20"
+                                                                                        className="rounded-md border border-border"
                                                                                         style={{ objectFit: "cover" }}
                                                                                     />
                                                                                 )
@@ -849,9 +861,9 @@ export function ChatMessageDisplay({
                                                                                         >
                                                                                             {section.fileType ===
                                                                                             "pdf" ? (
-                                                                                                <FileText className="h-4 w-4 text-red-500" />
+                                                                                                <FileText className="h-4 w-4 text-destructive" />
                                                                                             ) : (
-                                                                                                <FileCode className="h-4 w-4 text-blue-500" />
+                                                                                                <FileCode className="h-4 w-4 text-primary-strong" />
                                                                                             )}
                                                                                             <span className="text-xs font-medium leading-none">
                                                                                                 {
@@ -879,28 +891,6 @@ export function ChatMessageDisplay({
                                                             {message.role === "user" &&
                                                                 !isEditing && (
                                                                     <div className="order-2 flex items-center gap-1 self-end">
-                                                                        {onEditMessage &&
-                                                                            isLastUserMessage && (
-                                                                                <button
-                                                                                    type="button"
-                                                                                    onClick={() => {
-                                                                                        setEditingMessageId(
-                                                                                            message.id,
-                                                                                        )
-                                                                                        setEditText(
-                                                                                            getUserOriginalText(
-                                                                                                message,
-                                                                                            ),
-                                                                                        )
-                                                                                    }}
-                                                                                    className="p-1.5 rounded-lg text-muted-foreground/60 hover:text-muted-foreground hover:bg-muted transition-colors"
-                                                                                    title={t(
-                                                                                        "message.edit",
-                                                                                    )}
-                                                                                >
-                                                                                    <Pencil className="h-3.5 w-3.5" />
-                                                                                </button>
-                                                                            )}
                                                                         <button
                                                                             type="button"
                                                                             onClick={() =>
@@ -912,7 +902,7 @@ export function ChatMessageDisplay({
                                                                                         ),
                                                                                 )
                                                                             }
-                                                                            className="p-1.5 rounded-lg text-muted-foreground/60 hover:text-muted-foreground hover:bg-muted transition-colors"
+                                                                            className="p-1.5 rounded-lg transition-[color,background-color,opacity,transform] duration-fast ease-out-soft active:scale-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/30 text-muted-foreground/70 hover:text-foreground hover:bg-accent"
                                                                             title={
                                                                                 copiedMessageId ===
                                                                                 message.id
@@ -931,26 +921,52 @@ export function ChatMessageDisplay({
                                                                         >
                                                                             {copiedMessageId ===
                                                                             message.id ? (
-                                                                                <Check className="h-3.5 w-3.5 text-green-500" />
+                                                                                <Check className="h-3.5 w-3.5 text-success" />
                                                                             ) : copyFailedMessageId ===
                                                                               message.id ? (
-                                                                                <X className="h-3.5 w-3.5 text-red-500" />
+                                                                                <X className="h-3.5 w-3.5 text-destructive" />
                                                                             ) : (
                                                                                 <Copy className="h-3.5 w-3.5" />
                                                                             )}
                                                                         </button>
+                                                                        {onEditMessage &&
+                                                                            isLastUserMessage && (
+                                                                                <button
+                                                                                    type="button"
+                                                                                    onClick={() => {
+                                                                                        setEditingMessageId(
+                                                                                            message.id,
+                                                                                        )
+                                                                                        setEditText(
+                                                                                            getUserOriginalText(
+                                                                                                message,
+                                                                                            ),
+                                                                                        )
+                                                                                    }}
+                                                                                    className="p-1.5 rounded-lg transition-[color,background-color,opacity,transform] duration-fast ease-out-soft active:scale-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/30 text-muted-foreground/70 hover:text-foreground hover:bg-accent"
+                                                                                    title={t(
+                                                                                        "message.edit",
+                                                                                    )}
+                                                                                >
+                                                                                    <Pencil className="h-3.5 w-3.5" />
+                                                                                </button>
+                                                                            )}
                                                                     </div>
                                                                 )}
                                                             <div
-                                                                className={`order-1 w-full px-4 py-3 text-sm leading-relaxed ${
+                                                                // Same split as the other two panels: only the user's
+                                                                // turn is a card. This had it backwards -- the assistant
+                                                                // carried the bubble while the user's `bg-background`
+                                                                // matched the page ground and read as no bubble at all.
+                                                                className={`order-1 w-full text-sm leading-relaxed ${
                                                                 message.role ===
                                                                 "user"
-                                                                    ? "bg-background text-foreground rounded-2xl rounded-br-md border border-border/50 shadow-sm"
+                                                                    ? "px-4 py-3 bg-muted text-foreground rounded-2xl rounded-br-md border border-border/60 transition-[background-color] duration-fast ease-out-soft"
                                                                     : message.role ===
                                                                         "system"
-                                                                      ? "bg-destructive/10 text-destructive border border-destructive/20 rounded-2xl rounded-bl-md"
-                                                                      : "bg-muted/60 text-foreground rounded-2xl rounded-bl-md"
-                                                            } ${message.role === "user" && isLastUserMessage && onEditMessage ? "cursor-pointer hover:opacity-90 transition-opacity" : ""}`}
+                                                                      ? "px-4 py-3 bg-destructive/10 text-destructive border border-destructive/20 rounded-2xl rounded-bl-md"
+                                                                      : "py-1 text-foreground"
+                                                            } ${message.role === "user" && isLastUserMessage && onEditMessage ? "cursor-pointer hover:bg-accent" : ""}`}
                                                             role={
                                                                 message.role ===
                                                                     "user" &&
@@ -1056,18 +1072,45 @@ export function ChatMessageDisplay({
                                                                                         ) : (
                                                                                             <div
                                                                                                 key={`${message.id}-textsection-${partIndex}-${sectionIndex}`}
-                                                                                                className="prose prose-sm max-w-none break-words [&>*:first-child]:mt-0 [&>*:last-child]:mb-0 dark:prose-invert"
+                                                                                                className={cn(
+                                                                                                    "prose prose-sm max-w-none break-words [&>*:first-child]:mt-0 [&>*:last-child]:mb-0",
+                                                                                                )}
                                                                                             >
                                                                                                 <ReactMarkdown
+                                                                                                    remarkPlugins={[remarkGfm]}
                                                                                                     components={{
+                                                                                                        // A fenced block arrives as
+                                                                                                        // `<pre><code>`, and the `code`
+                                                                                                        // override below returns a card --
+                                                                                                        // which was then sitting inside
+                                                                                                        // prose's own `<pre>`, box in box.
+                                                                                                        // The card and the plain fallback
+                                                                                                        // both bring their own container.
+                                                                                                        pre({ children }: any) {
+                                                                                                            return <>{children}</>
+                                                                                                        },
+                                                                                                        table({
+                                                                                                            children,
+                                                                                                            ...props
+                                                                                                        }: any) {
+                                                                                                            return (
+                                                                                                                <div className="prose-scroll-x my-4">
+                                                                                                                    <table
+                                                                                                                        {...props}
+                                                                                                                        className={cn("my-0", props?.className)}
+                                                                                                                    >
+                                                                                                                        {children}
+                                                                                                                    </table>
+                                                                                                                </div>
+                                                                                                            )
+                                                                                                        },
                                                                                                         code({
-                                                                                                            inline,
                                                                                                             className,
                                                                                                             children,
                                                                                                             ...props
                                                                                                         }: any) {
                                                                                                             if (
-                                                                                                                inline
+                                                                                                                !isFencedCode(className, children)
                                                                                                             ) {
                                                                                                                 return (
                                                                                                                     <code
@@ -1178,10 +1221,10 @@ export function ChatMessageDisplay({
                                                         ),
                                                     )
                                                 }
-                                                className={`p-1.5 rounded-lg transition-colors ${
+                                                className={`p-1.5 rounded-lg transition-[color,background-color,opacity,transform] duration-fast ease-out-soft active:scale-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/30 ${
                                                     copiedMessageId ===
                                                     message.id
-                                                        ? "text-green-600 bg-green-100"
+                                                        ? "text-success bg-success/15"
                                                         : "text-muted-foreground/60 hover:text-foreground hover:bg-muted"
                                                 }`}
                                                 title={
@@ -1213,7 +1256,7 @@ export function ChatMessageDisplay({
                                                             e.stopPropagation()
                                                             onRegenerate(messageIndex)
                                                         }}
-                                                        className="p-1.5 rounded-lg text-muted-foreground/60 hover:text-foreground hover:bg-muted transition-colors cursor-pointer relative z-10"
+                                                        className="p-1.5 rounded-lg transition-[color,background-color,opacity,transform] duration-fast ease-out-soft active:scale-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/30 text-muted-foreground/70 hover:text-foreground hover:bg-accent cursor-pointer relative z-10"
                                                         title={t("message.regenerate")}
                                                     >
                                                         <RotateCcw className="h-3.5 w-3.5" />
@@ -1226,14 +1269,11 @@ export function ChatMessageDisplay({
                                 {showPendingIndicator && (
                                     <div className="flex w-full justify-start animate-message-in mt-3">
                                         <div className="max-w-[85%] min-w-0">
-                                            <div className="flex items-center gap-2 px-3 py-2 text-xs text-muted-foreground bg-muted/40 rounded-2xl rounded-bl-md">
-                                                <Loader2 className="h-3 w-3 animate-spin" />
-                                                <span>
-                                                    {isParsingFiles
-                                                        ? t("message.parsing_files")
-                                                        : t("message.thinking")}
-                                                </span>
-                                            </div>
+                                            <Shimmer as="span" className="py-1 text-sm" duration={1.6}>
+                                                {isParsingFiles
+                                                    ? t("message.parsing_files")
+                                                    : t("message.thinking")}
+                                            </Shimmer>
                                         </div>
                                     </div>
                                 )}
