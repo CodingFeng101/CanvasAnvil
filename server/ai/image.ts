@@ -1,5 +1,5 @@
 import { dataUrlToFile, postForm, postJson, toDataUrl } from "./transport";
-import type { ImageRequest } from "../../contracts/ai";
+import type { ImageQuality, ImageRequest, ImageSize } from "../../contracts/ai";
 
 /**
  * Image models are reached through three OpenAI routes, tried in order:
@@ -25,6 +25,19 @@ export function referenceImageUrls(req: ImageRequest): string[] {
     ...(req.referenceImageUrl ? [req.referenceImageUrl] : []),
     ...(req.additionalReferenceImageUrls || []).filter(Boolean),
   ];
+}
+
+/**
+ * The size/quality the images routes should be sent. "auto" is what the API
+ * does when they are left out, so it is left out rather than spelled out: a
+ * model that predates the knob rejects the literal value, and some gateways
+ * do that with a bare 500 instead of a 400 that says why.
+ */
+function sizingOf(req: ImageRequest): { size?: ImageSize; quality?: ImageQuality } {
+  return {
+    size: req.size && req.size !== "auto" ? req.size : undefined,
+    quality: req.quality && req.quality !== "auto" ? req.quality : undefined,
+  };
 }
 
 /** OpenAI's images routes answer with either base64 or a short-lived URL. */
@@ -68,9 +81,12 @@ const editRoute: Route = async (req) => {
   const urls = referenceImageUrls(req);
   if (urls.length === 0) throw new Error("No reference image to edit.");
 
+  const { size, quality } = sizingOf(req);
   const form = new FormData();
   form.append("model", req.channel.model);
   form.append("prompt", req.prompt);
+  if (size) form.append("size", size);
+  if (quality) form.append("quality", quality);
   const files = await Promise.all(
     urls.map((url, i) => dataUrlToFile(url, i === 0 ? "reference.png" : `material-${i}.png`)),
   );
@@ -86,8 +102,36 @@ const editRoute: Route = async (req) => {
 
 const generationRoute: Route = async (req) =>
   await readImagesResponse(
-    await postJson(req.channel, "/images/generations", { model: req.channel.model, prompt: req.prompt }, req.signal),
+    await postJson(
+      req.channel,
+      "/images/generations",
+      { model: req.channel.model, prompt: req.prompt, ...sizingOf(req) },
+      req.signal,
+    ),
   );
+
+/**
+ * Sizes and qualities are model-specific -- 256/512 only on dall-e-2, 1792
+ * only on dall-e-3, 1536 and low/medium/high only on gpt-image-* -- and a
+ * model handed one it does not take can fail outright rather than ignore it.
+ * Asking once more without them still gets the user a picture, at the
+ * model's default size.
+ */
+const retryingWithoutSizing =
+  (route: Route): Route =>
+  async (req) => {
+    try {
+      return await route(req);
+    } catch (error) {
+      const { size, quality } = sizingOf(req);
+      if ((error as any)?.name === "AbortError" || (!size && !quality)) throw error;
+      console.warn(
+        `[ai] image request with size=${size ?? "-"} quality=${quality ?? "-"} failed; retrying without them:`,
+        (error as Error)?.message,
+      );
+      return await route({ ...req, size: undefined, quality: undefined });
+    }
+  };
 
 const chatRoute: Route = async (req) => {
   const parts: any[] = [{ type: "text", text: req.prompt }];
@@ -126,7 +170,11 @@ export function routeNamesFor(req: ImageRequest): Array<"edit" | "generation" | 
 }
 
 export async function generateImage(req: ImageRequest): Promise<string> {
-  const byName = { edit: editRoute, generation: generationRoute, chat: chatRoute };
+  const byName = {
+    edit: retryingWithoutSizing(editRoute),
+    generation: retryingWithoutSizing(generationRoute),
+    chat: chatRoute,
+  };
   const routes: Route[] = routeNamesFor(req).map((name) => byName[name]);
 
   let firstError: unknown = null;

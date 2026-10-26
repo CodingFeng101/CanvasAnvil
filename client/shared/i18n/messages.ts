@@ -28,6 +28,13 @@ const messages = {
   "workspace.cad.placeholder": { zh: "描述 CAD…", en: "Describe the CAD…" },
   "workspace.ppt.title": { zh: "PPT 助手", en: "PPT Assistant" },
   "workspace.ppt.placeholder": { zh: "描述 PPT…", en: "Describe the PPT…" },
+  "workspace.canvas.title": { zh: "画布助手", en: "Canvas Assistant" },
+  "workspace.canvas.placeholder": { zh: "描述想生成的图片…", en: "Describe the image to generate…" },
+  "workspace.canvas.annotateEdit": { zh: "按标注编辑选中的图片", en: "Edit selected image using annotations" },
+  "workspace.canvas.annotateEditHint": {
+    zh: "选中图片，或选中虚线框内的标注，两种都行",
+    en: "Select the image, or an annotation inside its dashed box — either works",
+  },
   "workspace.default.title": { zh: "AI 助手", en: "AI Assistant" },
 
   "chat.stop": { zh: "暂停", en: "Pause" },
@@ -43,6 +50,7 @@ const messages = {
   "nav.flow": { zh: "图表绘制", en: "Diagram" },
   "nav.cad": { zh: "室内设计", en: "CAD" },
   "nav.ppt": { zh: "PPT演示", en: "PPT" },
+  "nav.canvas": { zh: "自由画布", en: "Canvas" },
 
 
   "history.title": { zh: "版本历史", en: "Version History" },

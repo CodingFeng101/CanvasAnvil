@@ -92,6 +92,34 @@ test("a reference image switches to /images/edits as multipart", async () => {
   assert.equal(authHeader(last()), "Bearer test-key");
 });
 
+test("size and quality reach /images/generations, but auto is left out", async () => {
+  await generateImage({ channel, prompt: "draw a square", size: "1024x1024", quality: "high" });
+  assert.equal(last().body.size, "1024x1024");
+  assert.equal(last().body.quality, "high");
+
+  await generateImage({ channel, prompt: "draw a square", size: "auto", quality: "auto" });
+  assert.ok(!("size" in last().body), "auto size must not be sent");
+  assert.ok(!("quality" in last().body), "auto quality must not be sent");
+});
+
+test("an images route that fails with size/quality set is asked again without them", async () => {
+  respond = () => {
+    if (last().body?.size) throw new Error("unsupported size");
+    return { data: [{ b64_json: "aGVsbG8=" }] };
+  };
+
+  const result = await generateImage({ channel, prompt: "draw a square", size: "1792x1024", quality: "high" });
+
+  assert.equal(result, "data:image/png;base64,aGVsbG8=");
+  assert.deepEqual(
+    captured.map((request) => [new URL(request.url).pathname, request.body?.size ?? null]),
+    [
+      ["/v1/images/generations", "1792x1024"],
+      ["/v1/images/generations", null],
+    ],
+  );
+});
+
 test("falls back to /chat/completions when the images route fails", async () => {
   respond = (url) => {
     if (url.includes("/images/")) throw new Error("no images route here");

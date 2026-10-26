@@ -1,4 +1,11 @@
-export type PortalWorkspace = "flow" | "cad" | "ppt";
+import type { WorkspaceId } from "@/app/workspaces";
+
+/**
+ * Every workspace gets a card and a detail page here. Keying on WorkspaceId
+ * (rather than a hand-kept union) means a canvas added to WORKSPACES without
+ * its portal entries fails to compile instead of silently going missing.
+ */
+export type PortalWorkspace = WorkspaceId;
 
 export type PortalCanvasItem = {
   id: PortalWorkspace;
@@ -14,9 +21,9 @@ export type PortalCanvasItem = {
 export const portalCanvasItems: PortalCanvasItem[] = [
   {
     id: "flow",
-    zhTitle: "\u56fe\u8868\u753b\u5e03",
+    zhTitle: "图表画布",
     enTitle: "Diagram Canvas",
-    zhSummary: "\u7ed3\u6784\u5316\u56fe\u8868\u4e0e\u8282\u70b9\u7ea7\u5c40\u90e8\u4fee\u6539",
+    zhSummary: "结构化图表与节点级局部修改",
     enSummary: "Structured diagrams with node-level edits",
     image: "/examples/flow/01.png",
     angle: -90,
@@ -24,22 +31,32 @@ export const portalCanvasItems: PortalCanvasItem[] = [
   },
   {
     id: "cad",
-    zhTitle: "\u5ba4\u5185\u8bbe\u8ba1\u753b\u5e03",
+    zhTitle: "室内设计画布",
     enTitle: "Interior Canvas",
-    zhSummary: "\u5e73\u9762\u65b9\u6848\u3001\u6548\u679c\u56fe\u4e0e\u6750\u6599\u6e05\u5355\u8054\u52a8",
+    zhSummary: "平面方案、效果图与材料清单联动",
     enSummary: "Layouts, renders, and material lists in one pass",
     image: "/examples/cad/01.png",
-    angle: 30,
+    angle: 0,
     accent: "#7C8B6E",
   },
   {
     id: "ppt",
-    zhTitle: "PPT\u753b\u5e03",
+    zhTitle: "PPT画布",
     enTitle: "PPT Canvas",
-    zhSummary: "\u5148\u5927\u7eb2\u540e\u89c6\u89c9\uff0c\u5bfc\u51fa\u53ef\u7f16\u8f91\u7a3f\u3001PDF \u548c\u56fe\u7247\u7248",
+    zhSummary: "先大纲后视觉，导出可编辑稿、PDF 和图片版",
     enSummary: "Outline-first decks with editable, PDF, and image exports",
     image: "/examples/ppt/ppt1/01.png",
-    angle: 150,
+    angle: 90,
     accent: "#A8825C",
+  },
+  {
+    id: "canvas",
+    zhTitle: "自由画布",
+    enTitle: "Free Canvas",
+    zhSummary: "一句话生成图片，圈画标注即可改图",
+    enSummary: "Prompt images onto a board, then mark them up to edit",
+    image: "/examples/canvas/01.svg",
+    angle: 180,
+    accent: "#6E8594",
   },
 ];

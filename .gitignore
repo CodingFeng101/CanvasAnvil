@@ -59,3 +59,6 @@ temp/
 .DS_Store
 Thumbs.db
 Desktop.ini
+
+# Large local test fixtures (see tests/ppt-vision-fixture.test.ts)
+tests/fixtures/

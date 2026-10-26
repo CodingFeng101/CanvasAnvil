@@ -46,3 +46,13 @@ For new diagrams or non-trivial edits, run:
 ```powershell
 node skill/flow-skill/scripts/validate-drawio-xml.mjs --input path\to\diagram.drawio
 ```
+
+## Online editor
+
+After validation, build a self-contained editor URL:
+
+```powershell
+node skill/flow-skill/scripts/build-drawio-url.mjs --input path\to\diagram.drawio
+```
+
+Open the printed URL in the agent's built-in browser. Do not export images.

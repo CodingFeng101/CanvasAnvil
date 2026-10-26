@@ -1,7 +1,7 @@
 import { generateImage } from "../ai/image"
 import { generateText } from "../ai/text"
 import { getImageChannel, getTextChannel, normalizeAIConfig } from "../../contracts/ai"
-import type { AIConfig, MultimodalMessage } from "../../contracts/ai"
+import type { AIConfig, ImageQuality, ImageSize, MultimodalMessage } from "../../contracts/ai"
 
 /**
  * Non-streaming model proxy for the CAD and PPT workspaces.
@@ -19,6 +19,8 @@ type RequestBody =
           referenceImageUrl?: string
           additionalReferenceImageUrls?: string[]
           maskImageUrl?: string
+          size?: ImageSize
+          quality?: ImageQuality
           model?: string
       }
 
@@ -29,6 +31,13 @@ const badRequest = (error: string) =>
 
 const optionalString = (value: unknown) =>
     typeof value === "string" && value ? value : undefined
+
+const IMAGE_SIZES: readonly ImageSize[] = ["auto", "1024x1024", "1536x1024", "1024x1536"]
+const IMAGE_QUALITIES: readonly ImageQuality[] = ["auto", "low", "medium", "high"]
+
+function optionalEnum<T extends string>(value: unknown, allowed: readonly T[]): T | undefined {
+    return typeof value === "string" && (allowed as readonly string[]).includes(value) ? (value as T) : undefined
+}
 
 export async function POST(req: Request) {
     try {
@@ -63,6 +72,8 @@ export async function POST(req: Request) {
                 additionalReferenceImageUrls: Array.isArray(body.additionalReferenceImageUrls)
                     ? body.additionalReferenceImageUrls.map((x) => String(x || "")).filter(Boolean)
                     : [],
+                size: optionalEnum(body.size, IMAGE_SIZES),
+                quality: optionalEnum(body.quality, IMAGE_QUALITIES),
             })
             return Response.json({ url }, { headers: jsonHeaders })
         }

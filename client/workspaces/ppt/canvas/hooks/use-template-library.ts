@@ -42,6 +42,7 @@ export function useTemplateLibrary({ initialSelectedTemplateId, uiLang, tr }: Te
   const [generatorOpen, setGeneratorOpen] = useState(false);
   const [generatorRequirement, setGeneratorRequirement] = useState("");
   const [generatorIsGenerating, setGeneratorIsGenerating] = useState(false);
+  const [generatorCategoryId, setGeneratorCategoryId] = useState("other");
 
   // Load from IndexedDB. The useState initialisers above read the older
   // localStorage copy so the picker is populated on the very first paint;
@@ -99,17 +100,15 @@ export function useTemplateLibrary({ initialSelectedTemplateId, uiLang, tr }: Te
         kind: "preset" as const,
         previewSrc: t.path,
         presetPath: t.path,
-        categories: t.categories,
+        categoryId: t.categoryId,
       })),
-      // Uploads carry no category: the picker files them under "mine", which
-      // is where someone looks for a template they added themselves.
       ...uploadedTemplates.map((t) => ({
         id: t.id,
         name: t.name,
         kind: "upload" as const,
         previewSrc: t.dataUrl,
         dataUrl: t.dataUrl,
-        categories: [] as string[],
+        categoryId: t.categoryId,
       })),
     ],
     [hiddenPresetTemplateIds, uploadedTemplates, uiLang],
@@ -165,7 +164,7 @@ export function useTemplateLibrary({ initialSelectedTemplateId, uiLang, tr }: Te
       reader.readAsDataURL(file);
     });
 
-  const addUploadedTemplates = async (files: File[]) => {
+  const addUploadedTemplates = async (files: File[], categoryId: string) => {
     const imageFiles = Array.from(files || []).filter((f) => f && f.type.startsWith("image/"));
     if (imageFiles.length === 0) return;
 
@@ -177,6 +176,7 @@ export function useTemplateLibrary({ initialSelectedTemplateId, uiLang, tr }: Te
           id: `upload-${Date.now()}-${Math.random().toString(16).slice(2)}`,
           name: String(file.name || "").replace(/\.[^.]+$/, "") || tr("模板", "Template"),
           dataUrl,
+          categoryId,
         });
       } catch (e) {
         // One unreadable file should not lose the rest of the selection.
@@ -191,14 +191,15 @@ export function useTemplateLibrary({ initialSelectedTemplateId, uiLang, tr }: Te
     setTemplateImage(last.dataUrl);
   };
 
-  const handleUploadInputChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  /** `categoryId` is whichever filter tab was active when "Add template" was clicked. */
+  const handleUploadInputChange = async (e: React.ChangeEvent<HTMLInputElement>, categoryId: string) => {
     const files = Array.from(e.target.files || []);
     // Cleared so picking the same file again still fires a change event.
     e.target.value = "";
-    await addUploadedTemplates(files);
+    await addUploadedTemplates(files, categoryId);
   };
 
-  const addGeneratedTemplate = async (imageUrl: string) => {
+  const addGeneratedTemplate = async (imageUrl: string, categoryId: string) => {
     const persisted = await persistImageUrlIfNeeded(imageUrl);
     if (!persisted.startsWith("data:image")) {
       throw new Error(
@@ -209,10 +210,17 @@ export function useTemplateLibrary({ initialSelectedTemplateId, uiLang, tr }: Te
       id: `generated-${Date.now()}-${Math.random().toString(16).slice(2)}`,
       name: `${tr("AI 模板", "AI Template")}-${Date.now()}`,
       dataUrl: persisted,
+      categoryId,
     };
     setUploadedTemplates((prev) => [...prev, created]);
     setSelectedTemplateId(created.id);
     setTemplateImage(created.dataUrl);
+  };
+
+  /** Opens the generator dialog, remembering which filter tab it was opened from. */
+  const openGenerator = (categoryId: string) => {
+    setGeneratorCategoryId(categoryId);
+    setGeneratorOpen(true);
   };
 
   const generateTemplate = async () => {
@@ -230,7 +238,7 @@ export function useTemplateLibrary({ initialSelectedTemplateId, uiLang, tr }: Te
         alert(tr("模板生成失败，请重试", "Template generation failed. Please retry."));
         return;
       }
-      await addGeneratedTemplate(imageUrl);
+      await addGeneratedTemplate(imageUrl, generatorCategoryId);
       setGeneratorRequirement("");
       setGeneratorOpen(false);
     } catch (e) {
@@ -271,6 +279,7 @@ export function useTemplateLibrary({ initialSelectedTemplateId, uiLang, tr }: Te
     generator: {
       open: generatorOpen,
       setOpen: setGeneratorOpen,
+      openForCategory: openGenerator,
       requirement: generatorRequirement,
       setRequirement: setGeneratorRequirement,
       isGenerating: generatorIsGenerating,

@@ -31,7 +31,7 @@ export function TemplatePicker({ templateLibrary, tr, heading }: TemplatePickerP
     let mine = 0;
     for (const t of templates) {
       if (t.kind === "upload") mine += 1;
-      for (const c of t.categories) counts.set(c, (counts.get(c) || 0) + 1);
+      counts.set(t.categoryId, (counts.get(t.categoryId) || 0) + 1);
     }
     const rows = [{ id: ALL, label: tr("全部", "All"), count: templates.length }];
     for (const c of TEMPLATE_CATEGORIES) {
@@ -49,8 +49,13 @@ export function TemplatePicker({ templateLibrary, tr, heading }: TemplatePickerP
   const visible = useMemo(() => {
     if (activeId === ALL) return templates;
     if (activeId === MINE) return templates.filter((t) => t.kind === "upload");
-    return templates.filter((t) => t.categories.includes(activeId));
+    return templates.filter((t) => t.categoryId === activeId);
   }, [templates, activeId]);
+
+  // New templates are filed under whichever category tab was open when "Add
+  // template" or "AI generate" was clicked; from "All" or "Mine" there is no
+  // single category to inherit, so they fall back to "Other".
+  const categoryForNewTemplate = activeId === ALL || activeId === MINE ? "other" : activeId;
 
   const selectedName = templates.find((t) => t.id === selectedTemplateId)?.name;
 
@@ -94,12 +99,18 @@ export function TemplatePicker({ templateLibrary, tr, heading }: TemplatePickerP
             </div>
             <span className="text-xs font-medium">{tr("添加模板", "Add template")}</span>
           </div>
-          <input type="file" accept="image/*" multiple className="hidden" onChange={templateLibrary.handleUploadInputChange} />
+          <input
+            type="file"
+            accept="image/*"
+            multiple
+            className="hidden"
+            onChange={(e) => templateLibrary.handleUploadInputChange(e, categoryForNewTemplate)}
+          />
         </label>
 
         <button
           type="button"
-          onClick={() => templateLibrary.generator.setOpen(true)}
+          onClick={() => templateLibrary.generator.openForCategory(categoryForNewTemplate)}
           title={tr("AI生成模板", "AI generate template")}
           className="cursor-pointer border-2 border-dashed rounded-xl transition-all duration-200 overflow-hidden relative aspect-video flex flex-col items-center justify-center group border-border hover:border-primary hover:bg-primary/[0.08]"
         >

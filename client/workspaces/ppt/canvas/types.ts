@@ -70,18 +70,18 @@ export type ReferenceVisualAsset = {
 export type TemplateCategory = { id: string; zhName: string; enName: string };
 
 /**
- * A template can sit in more than one bucket -- a frosted-glass deck is both
- * "tech" and "minimal" -- so listing it twice is not a mistake.
+ * Every template sits in exactly one bucket, so it never shows up twice
+ * across category filters.
  */
 export type PresetTemplate = {
   id: string;
   zhName: string;
   enName: string;
   path: string;
-  categories: string[];
+  categoryId: string;
 };
-export type UploadTemplate = { id: string; name: string; dataUrl: string };
+export type UploadTemplate = { id: string; name: string; dataUrl: string; categoryId: string };
 
 export type TemplateItem =
-  | { id: string; name: string; kind: "preset"; previewSrc: string; presetPath: string; categories: string[] }
-  | { id: string; name: string; kind: "upload"; previewSrc: string; dataUrl: string; categories: string[] };
+  | { id: string; name: string; kind: "preset"; previewSrc: string; presetPath: string; categoryId: string }
+  | { id: string; name: string; kind: "upload"; previewSrc: string; dataUrl: string; categoryId: string };

@@ -1,19 +1,20 @@
 import { lazy, type ComponentType, type LazyExoticComponent } from "react";
-import { FileCode, Layers, Presentation, type LucideIcon } from "lucide-react";
+import { FileCode, Layers, Paintbrush, Presentation, type LucideIcon } from "lucide-react";
 import type { MessageKey } from "@/shared/i18n";
 
 /**
  * The canvases the app offers.
  *
- * Adding or removing one is a change to this array and nothing else — the
- * header tabs, the persisted selection and the rendered workspace all read
- * from here.
+ * The header tabs, the persisted selection and the rendered workspace all
+ * read from this array. The portal (pages/portal) also needs a card and a
+ * detail page per canvas; it is keyed on WorkspaceId, so the compiler points
+ * at what's missing when one is added here.
  *
  * Each shell is loaded lazily: a session normally uses one canvas, and the
  * other two together account for most of the bundle.
  */
 
-export type WorkspaceId = "flow" | "cad" | "ppt";
+export type WorkspaceId = "flow" | "cad" | "ppt" | "canvas";
 
 export interface WorkspaceDescriptor {
   id: WorkspaceId;
@@ -46,6 +47,14 @@ export const WORKSPACES: WorkspaceDescriptor[] = [
     icon: Presentation,
     Component: lazy(() =>
       import("@/workspaces/ppt/PptWorkspace").then((m) => ({ default: m.PptWorkspace })),
+    ),
+  },
+  {
+    id: "canvas",
+    labelKey: "nav.canvas",
+    icon: Paintbrush,
+    Component: lazy(() =>
+      import("@/workspaces/canvas/CanvasWorkspace").then((m) => ({ default: m.CanvasWorkspace })),
     ),
   },
 ];

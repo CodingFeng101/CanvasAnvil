@@ -88,7 +88,12 @@ export const readLegacyUploadedTemplates = (): UploadTemplate[] => {
     if (!Array.isArray(parsed)) return [];
     return parsed
       .filter((x: any) => x && typeof x.id === "string" && typeof x.name === "string" && typeof x.dataUrl === "string")
-      .map((x: any) => ({ id: x.id, name: x.name, dataUrl: x.dataUrl }));
+      .map((x: any) => ({
+        id: x.id,
+        name: x.name,
+        dataUrl: x.dataUrl,
+        categoryId: typeof x.categoryId === "string" && x.categoryId ? x.categoryId : "other",
+      }));
   } catch {
     return [];
   }
@@ -305,7 +310,12 @@ export const normalizePersistedUploadedTemplates = (value: unknown): UploadTempl
   if (!Array.isArray(value)) return [];
   return value
     .filter((x: any) => x && typeof x.id === "string" && typeof x.name === "string" && typeof x.dataUrl === "string")
-    .map((x: any) => ({ id: x.id, name: x.name, dataUrl: x.dataUrl }));
+    .map((x: any) => ({
+      id: x.id,
+      name: x.name,
+      dataUrl: x.dataUrl,
+      categoryId: typeof x.categoryId === "string" && x.categoryId ? x.categoryId : "other",
+    }));
 };
 
 export const normalizePersistedStringArray = (value: unknown): string[] => {

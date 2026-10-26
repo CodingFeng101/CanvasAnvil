@@ -10,9 +10,9 @@ import {
   normalizeImageUrlForModel,
   normalizeImageUrlsForModel,
 } from "@/ai/images";
-import type { AIConfig, ChatContentPart, ChatMessage, MultimodalMessage } from "@contracts/ai";
+import type { AIConfig, ChatContentPart, ChatMessage, ImageQuality, ImageSize, MultimodalMessage } from "@contracts/ai";
 
-export type { AIConfig, ChatMessage } from "@contracts/ai";
+export type { AIConfig, ChatMessage, ImageQuality, ImageSize } from "@contracts/ai";
 export { getAIConfig, saveAIConfig } from "@/ai/storage";
 
 /**
@@ -31,6 +31,8 @@ export interface ImageGenerationRequest {
   referenceImageUrl?: string;
   additionalReferenceImageUrls?: string[];
   maskImageUrl?: string;
+  size?: ImageSize;
+  quality?: ImageQuality;
 }
 
 export type GenerateChatMessageOptions = {
@@ -221,6 +223,8 @@ export async function generateImage(request: ImageGenerationRequest, signal?: Ab
           referenceImageUrl: referenceImageUrl || undefined,
           additionalReferenceImageUrls,
           maskImageUrl: maskImageUrl || undefined,
+          size: request.size,
+          quality: request.quality,
           model: channel.model,
         },
         signal,

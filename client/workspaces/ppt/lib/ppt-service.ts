@@ -1,4 +1,5 @@
 import { generateChatMessage, generateImage, generateVisionChatMessage } from "@/ai/client"
+import { FREEFORM, PPTX_SHAPE, type ShapeName } from "@/workspaces/ppt/lib/shapes"
 import { buildRisenPrompt } from "./risen-prompt"
 import pptOutlineSystem from "@prompts/ppt/outline.md?raw"
 import pptSlidesGenerateSystem from "@prompts/ppt/slides-generate.md?raw"
@@ -67,10 +68,17 @@ export interface PptImageElement extends PptElementBase {
 
 export interface PptShapeElement extends PptElementBase {
     type: "shape";
-    shape: "rect" | "roundRect" | "triangle" | "parallelogram" | "trapezoid" | "hexagon" | "chevron" | "message" | "line";
+    shape: ShapeName;
     fill?: string;
     stroke?: string;
     strokeWidth?: number;
+    /** For `polygon`: the traced outline, in fractions of the shape's own box. */
+    points?: Array<readonly [number, number]>;
+    /**
+     * For a ring: how much of its radius is hole, measured rather than
+     * assumed. Zero means it was found to be solid.
+     */
+    innerRatio?: number;
 }
 
 export interface PptTableElement extends PptElementBase {
@@ -1197,7 +1205,46 @@ export const pptService = {
         return imageUrl;
     },
 
+    /**
+     * The text on a rendered slide, measured off its pixels.
+     *
+     * OCR reads the characters and everything else -- position, size, colour,
+     * weight -- is measured, because a model asked to report sixty boxes on a
+     * dense page returns sixty approximations and approximations are what
+     * make a rebuilt slide look subtly wrong.
+     *
+     * The engine is imported on demand: it carries an inference runtime that
+     * no other part of the app needs, and a deck that is never exported as
+     * editable should never pay to load it.
+     */
     extractSlideTextBlocks: async (
+        page: PptPage,
+        slideImageUrl: string,
+        uiLanguage: "zh" | "en" = "zh",
+    ): Promise<PptTextBlock[]> => {
+        try {
+            const { extractSlideTextBlocks: readFromPixels } = await import("@/workspaces/ppt/vision/extract-text");
+            return await readFromPixels(slideImageUrl, {
+                slideId: page.id || "slide",
+                // The deck's own copy corrects near-miss transcriptions, and
+                // is never allowed to introduce text that is not on the page.
+                expected: [page.title || "", ...(page.content || [])].filter(Boolean),
+            });
+        } catch (error) {
+            // Reaching the weights needs the network on a first run. Falling
+            // back keeps the export working at the quality it had before the
+            // reader existed, rather than failing outright.
+            console.error("Pixel text extraction failed; falling back to the vision model.", error);
+            return await pptService.extractSlideTextBlocksWithModel(page, slideImageUrl, uiLanguage);
+        }
+    },
+
+    /**
+     * The reader this replaced: one vision call reporting text and geometry
+     * together. Kept as the fallback for a machine that cannot reach the OCR
+     * weights, where approximate boxes still beat no editable text at all.
+     */
+    extractSlideTextBlocksWithModel: async (
         page: PptPage,
         slideImageUrl: string,
         uiLanguage: "zh" | "en" = "zh",
@@ -1491,40 +1538,60 @@ export const pptService = {
                         continue;
                     }
 
-                    const pptxShapeType =
-                        element.shape === "roundRect"
-                            ? pptx.ShapeType.roundRect
-                            : element.shape === "triangle"
-                                ? ((pptx.ShapeType as any).triangle || (pptx.ShapeType as any).rtTriangle || pptx.ShapeType.rect)
-                                : element.shape === "parallelogram"
-                                    ? ((pptx.ShapeType as any).parallelogram || pptx.ShapeType.rect)
-                                    : element.shape === "trapezoid"
-                                        ? ((pptx.ShapeType as any).trapezoid || pptx.ShapeType.rect)
-                                        : element.shape === "hexagon"
-                                            ? ((pptx.ShapeType as any).hexagon || pptx.ShapeType.rect)
-                                            : element.shape === "chevron"
-                                                ? ((pptx.ShapeType as any).chevron || pptx.ShapeType.rect)
-                                                : element.shape === "message"
-                                                    ? ((pptx.ShapeType as any).wedgeRoundRectCallout || (pptx.ShapeType as any).wedgeRectCallout || pptx.ShapeType.roundRect)
-                                                    : pptx.ShapeType.rect;
+                    const paint = {
+                        fill: element.fill
+                            ? { color: String(element.fill).replace(/^#/, ""), transparency: 0 }
+                            : { color: "FFFFFF", transparency: 100 },
+                        line: {
+                            color: String(element.stroke || "FFFFFF").replace(/^#/, ""),
+                            transparency: element.stroke ? 0 : 100,
+                            width: element.strokeWidth || 1,
+                        },
+                    };
 
-                    slide.addShape(
-                        pptxShapeType,
-                        {
-                            x: element.x * slideW,
-                            y: element.y * slideH,
-                            w: element.w * slideW,
-                            h: element.h * slideH,
-                            fill: element.fill
-                                ? { color: String(element.fill).replace(/^#/, ""), transparency: 0 }
-                                : { color: "FFFFFF", transparency: 100 },
-                            line: {
-                                color: String(element.stroke || "FFFFFF").replace(/^#/, ""),
-                                transparency: element.stroke ? 0 : 100,
-                                width: element.strokeWidth || 1,
-                            },
+                    // A traced outline has no preset to stand for it, so it
+                    // goes out as custom geometry built from its own points.
+                    // `custGeom` is what the writer checks for, even though
+                    // the published ShapeType enum does not list it.
+                    if (element.shape === FREEFORM) {
+                        const traced = Array.isArray(element.points) ? element.points : [];
+                        if (traced.length >= 3) {
+                            slide.addShape("custGeom" as any, {
+                                ...paint,
+                                x: element.x * slideW,
+                                y: element.y * slideH,
+                                w: element.w * slideW,
+                                h: element.h * slideH,
+                                points: [
+                                    ...traced.map(([px, py], index) => ({
+                                        x: px * element.w * slideW,
+                                        y: py * element.h * slideH,
+                                        ...(index === 0 ? { moveTo: true } : {}),
+                                    })),
+                                    { close: true },
+                                ],
+                            } as any);
+                            continue;
                         }
-                    );
+                    }
+
+                    const preset = PPTX_SHAPE[element.shape as Exclude<ShapeName, "polygon">];
+                    const pptxShapeType = (pptx.ShapeType as any)[preset] || pptx.ShapeType.rect;
+
+                    // A measured `innerRatio` does not survive this step. The
+                    // hole belongs in the preset's OOXML adjustment handle, so
+                    // that resizing the ring by hand keeps it a ring, and the
+                    // writer exposes no way to set one -- only `rectRadius`,
+                    // which is a rounded rectangle's corner and not a hole.
+                    // Rings therefore export at PowerPoint's default aperture;
+                    // the preview draws the measured one.
+                    slide.addShape(pptxShapeType, {
+                        ...paint,
+                        x: element.x * slideW,
+                        y: element.y * slideH,
+                        w: element.w * slideW,
+                        h: element.h * slideH,
+                    });
                 }
 
                 if (element.type === "table") {

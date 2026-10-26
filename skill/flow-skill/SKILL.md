@@ -1,21 +1,23 @@
 ---
 name: flow-skill
-description: Generate, edit, validate, and bundle draw.io or diagrams.net diagrams in XML form. Use for new diagrams, local XML edits, shape-library diagrams, truncated XML continuation, and local image export.
+description: Generate, edit, and validate draw.io or diagrams.net diagrams as XML, then open them directly in the draw.io online editor so the user can keep editing there. Use for new diagrams, local XML edits, shape-library diagrams, and truncated XML continuation.
 ---
 
 # Flow Skill
 
 ## Trigger
 
-Use when the task requires draw.io or diagrams.net XML output, local XML editing, shape-library-backed diagrams, or exported image artifacts.
+Use when the user asks for a diagram, flowchart, architecture diagram, network diagram, ER diagram, BPMN diagram, or a cloud/infrastructure diagram, or mentions draw.io, diagrams.net, drawio, or a `.drawio` file.
 
 ## Order
 
 1. Classify the request.
 2. Read the required references.
 3. Produce or modify draw.io XML.
-4. Validate when needed.
-5. Export or bundle artifacts when requested.
+4. Validate the XML.
+5. Write the XML to a `.drawio` file when file writes are available.
+6. Build an online editor URL and open it in the agent's built-in browser.
+7. Return the XML code, the `.drawio` path, and the online editor link.
 
 ## Classification
 
@@ -60,19 +62,40 @@ Do not guess undocumented shape-library prefixes or shape names.
 ## Output Contract
 
 - Prefer complete XML for new diagrams.
-- Prefer the smallest safe edit set for local changes.
+- Prefer the smallest safe edit set for local changes, then return the full updated XML.
 - Stop at a clean boundary when output length is at risk.
 - Continue from the exact next character when appending.
+- Return the XML as a code block in chat.
+- Write the same XML to `<name>.drawio` when file writes are available.
+- Do not produce PNG, SVG, PDF, xmlpng, or metadata artifacts.
+- Do not run Playwright and do not install browser dependencies.
+
+## Online Editor Handoff
+
+1. Save the XML to a `.drawio` file.
+2. Build the editor URL:
+
+   ```powershell
+   node skill/flow-skill/scripts/build-drawio-url.mjs --input path\to\diagram.drawio
+   ```
+
+   The script prints a self-contained `https://app.diagrams.net/?offline=1#R...` URL with the diagram compressed inside it.
+3. Open that URL with the agent's built-in browser tool in a new tab and leave the tab open.
+4. Tell the user the diagram is loaded and can be edited directly in the online editor. Do not automate edits.
+5. If no browser tool is available, or the page fails to load, give the user the URL and the `.drawio` path instead.
+6. If the script reports `tooLong`, or the browser rejects the URL, fall back to the `.drawio` file: open `https://app.diagrams.net` and use File > Open From > Device.
+7. Re-running the handoff opens a fresh editor tab with the current XML. It does not update a tab the user has already edited; ask before replacing manual changes.
+8. Do not ask the user to log in. `app.diagrams.net` works without an account.
 
 ## Scripts
 
 - `scripts/validate-drawio-xml.mjs`
-- `scripts/export-drawio-image.mjs`
-- `scripts/build-flow-bundle.mjs`
+- `scripts/build-drawio-url.mjs`
+- `vendor/pako_deflate.min.cjs` (compression only, no install step)
 
-If the user specifies an output directory or file path, write artifacts there.
+If the user specifies an output directory or file path, write the `.drawio` file there.
 
-If the user does not specify an output location, create a new output folder automatically and write all artifacts there.
+If the user does not specify an output location, create a new output folder automatically and write the `.drawio` file there.
 
 Do not write generated artifacts into the skill folder.
 
@@ -80,11 +103,6 @@ Do not write generated artifacts into the skill folder.
 
 Preferred:
 
-- `.drawio`
-- `png`
-- metadata JSON
-
-Optional on request:
-
-- `svg`
-- `xmlpng`
+- draw.io XML code in chat
+- `<name>.drawio`
+- online editor link (`https://app.diagrams.net/?offline=1#R...`)

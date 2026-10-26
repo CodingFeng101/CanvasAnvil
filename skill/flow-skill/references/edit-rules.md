@@ -22,7 +22,7 @@ Use these rules when the task is a local edit to existing draw.io XML.
 - Replace the smallest valid `mxCell` block that solves the task.
 - Keep ids stable unless the user explicitly requests renaming.
 - When deleting a node, account for connected edges.
-- After editing, validate the result.
+- After editing, validate the result, then rebuild the online editor URL with `scripts/build-drawio-url.mjs`.
 
 ## Safe review checklist
 

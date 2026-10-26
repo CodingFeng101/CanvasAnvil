@@ -31,3 +31,7 @@ Return local edit operations in a machine-friendly structure such as:
   ]
 }
 ```
+
+## After Editing
+
+Return the full updated XML after the operations. The caller validates it, writes the `.drawio` file, and opens the result in the draw.io online editor.

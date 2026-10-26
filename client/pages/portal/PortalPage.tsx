@@ -12,6 +12,7 @@ import {
   Layers3,
   Mail,
   Package,
+  Paintbrush,
   Pencil,
   Presentation,
   Scale,
@@ -93,6 +94,7 @@ const canvasIcons: Record<PortalWorkspace, typeof Blocks> = {
   flow: Blocks,
   cad: Home,
   ppt: Presentation,
+  canvas: Paintbrush,
 };
 
 const detailConfigs: Record<PortalWorkspace, DetailConfig> = {
@@ -165,6 +167,29 @@ const detailConfigs: Record<PortalWorkspace, DetailConfig> = {
     cta: "\u5f00\u59cb\u7ed8\u5236",
     slogan: "\u8ba9\u6f14\u793a\u521b\u4f5c\u50cf\u753b\u5e03\u4e00\u6837\u81ea\u7531\u6d41\u7545",
   },
+  canvas: {
+    title: "\u81ea\u7531\u753b\u5e03",
+    subtitle: "\u4e00\u53e5\u8bdd\u751f\u6210\u56fe\u7247\uff0c\u5708\u4e00\u5708\u5c31\u80fd\u6539\u56fe",
+    intro: "\u81ea\u7531\u753b\u5e03\u662f\u4e00\u5757\u767d\u677f\uff1a\u7528\u4e00\u53e5\u8bdd\u751f\u6210\u56fe\u7247\u5e76\u76f4\u63a5\u653e\u4e0a\u753b\u5e03\uff0c\u518d\u7528\u7bad\u5934\u3001\u5708\u9009\u3001\u624b\u7ed8\u6216\u6587\u5b57\u5728\u56fe\u4e0a\u6807\u51fa\u60f3\u6539\u7684\u5730\u65b9\uff0cAI \u8bfb\u61c2\u6807\u6ce8\u540e\u751f\u6210\u4fee\u6539\u7248\uff0c\u6bcf\u4e00\u7248\u90fd\u7559\u5728\u7248\u672c\u8c31\u7cfb\u91cc\u3002",
+    tags: ["\u6587\u751f\u56fe", "\u6807\u6ce8\u6539\u56fe", "\u7248\u672c\u8c31\u7cfb"],
+    bullets: ["\u4e00\u53e5\u8bdd\u751f\u6210\u56fe\u7247\uff0c\u81ea\u52a8\u6446\u653e\u5230\u753b\u5e03\u7a7a\u4f4d", "\u7bad\u5934\u3001\u5708\u9009\u3001\u624b\u7ed8\u3001\u6587\u5b57\u76f4\u63a5\u753b\u5728\u56fe\u4e0a\u5f53\u4fee\u6539\u8bf4\u660e", "\u53d1\u9001\u524d\u9884\u89c8 AI \u770b\u5230\u7684\u6807\u6ce8\uff0c\u5e76\u56de\u663e\u5b83\u8bfb\u51fa\u7684\u4fee\u6539\u610f\u56fe", "\u6bcf\u6b21\u4fee\u6539\u751f\u6210\u65b0\u7248\u672c\u5e76\u4fdd\u7559\u8c31\u7cfb\uff0c\u53ef\u968f\u65f6\u5207\u6362\u5bf9\u6bd4"],
+    previews: [
+      { title: "\u4e00\u53e5\u8bdd\u751f\u6210\u56fe\u7247", image: "/examples/canvas/01.svg" },
+      { title: "\u5728\u56fe\u4e0a\u5708\u753b\u6807\u6ce8", image: "/examples/canvas/02.svg" },
+      { title: "\u6309\u6807\u6ce8\u751f\u6210\u65b0\u7248", image: "/examples/canvas/03.svg" },
+      { title: "\u7248\u672c\u8c31\u7cfb\u5bf9\u6bd4", image: "/examples/canvas/04.svg" },
+    ],
+    steps: [
+      { title: "\u63cf\u8ff0\u753b\u9762", text: "\u7528\u4e00\u53e5\u8bdd\u63cf\u8ff0\u60f3\u8981\u7684\u56fe\u7247\u3002", icon: FileText },
+      { title: "\u751f\u6210\u4e0a\u677f", text: "\u56fe\u7247\u751f\u6210\u540e\u81ea\u52a8\u653e\u5230\u753b\u5e03\u7a7a\u4f4d\u3002", icon: Image },
+      { title: "\u5708\u753b\u6807\u6ce8", text: "\u7528\u7bad\u5934\u3001\u5708\u9009\u6216\u6587\u5b57\u6807\u51fa\u8981\u6539\u7684\u5730\u65b9\u3002", icon: Pencil },
+      { title: "\u9884\u89c8\u786e\u8ba4", text: "\u67e5\u770b AI \u5c06\u8981\u8bfb\u53d6\u7684\u6807\u6ce8\u753b\u9762\u3002", icon: ChartNoAxesCombined },
+      { title: "\u751f\u6210\u65b0\u7248", text: "AI \u6309\u6807\u6ce8\u4fee\u6539\u5e76\u653e\u4e0a\u65b0\u7248\u672c\u3002", icon: Share2 },
+      { title: "\u7248\u672c\u5bf9\u6bd4", text: "\u5728\u8c31\u7cfb\u4e2d\u5207\u6362\u3001\u5bf9\u6bd4\u5404\u4e2a\u7248\u672c\u3002", icon: Layers3 },
+    ],
+    cta: "\u5f00\u59cb\u521b\u4f5c",
+    slogan: "\u8ba9\u7075\u611f\u5728\u753b\u5e03\u4e0a\u81ea\u7531\u751f\u957f",
+  },
 };
 
 const detailConfigsEn: Record<PortalWorkspace, DetailConfig> = {
@@ -221,6 +246,24 @@ const detailConfigsEn: Record<PortalWorkspace, DetailConfig> = {
     ],
     cta: "Start Drawing",
     slogan: "Make presentation creation smooth and visual",
+  },
+  canvas: {
+    title: "Free Canvas",
+    subtitle: "Prompt an image, then circle what to change",
+    intro: "Free Canvas is a whiteboard: generate an image from one sentence and place it on the board, then mark it up with arrows, circles, strokes, or text. AI reads the markup, produces a revised version, and keeps every version in a lineage.",
+    tags: ["Text to image", "Edit by annotation", "Version lineage"],
+    bullets: ["Generate images from a prompt and place them in free space", "Draw arrows, circles, strokes, or notes on the image as edit instructions", "Preview the markup AI will read, and see how it interpreted the edit", "Each edit becomes a new version you can switch between and compare"],
+    previews: detailConfigs.canvas.previews,
+    steps: [
+      { title: "Describe", text: "Describe the image in one sentence.", icon: FileText },
+      { title: "Place", text: "The result lands in free space on the board.", icon: Image },
+      { title: "Annotate", text: "Mark what to change with arrows, circles, or text.", icon: Pencil },
+      { title: "Preview", text: "Check the markup AI is about to read.", icon: ChartNoAxesCombined },
+      { title: "Revise", text: "AI applies the markup as a new version.", icon: Share2 },
+      { title: "Compare", text: "Switch between versions in the lineage.", icon: Layers3 },
+    ],
+    cta: "Start Creating",
+    slogan: "Let ideas grow freely on the canvas",
   },
 };
 
@@ -563,8 +606,8 @@ export function PortalPage({ onEnterWorkspace }: PortalPageProps) {
         titleB: "\u521b\u4f5c\u7684",
         titleAccent: "\u667a\u80fd\u5de5\u4f5c\u53f0",
         intro:
-          "CanvasAnvil \u652f\u6301\u4e09\u79cd\u753b\u5e03\uff1a\u56fe\u8868\u753b\u5e03\u3001\u5ba4\u5185\u8bbe\u8ba1\u753b\u5e03\u3001PPT\u753b\u5e03\u3002\u63d0\u4f9b\u7ed3\u6784\u5316\u751f\u6210\u4e0e\u672c\u5730\u5c40\u90e8\u4fee\u6539\u80fd\u529b\uff0c\u5e2e\u52a9\u4f60\u9ad8\u6548\u3001\u53ef\u63a7\u5730\u5b8c\u6210\u5404\u7c7b\u53ef\u89c6\u5316\u521b\u4f5c\u3002",
-        tagA: "\u4e09\u79cd\u753b\u5e03",
+          "CanvasAnvil \u652f\u6301\u56db\u79cd\u753b\u5e03\uff1a\u56fe\u8868\u753b\u5e03\u3001\u5ba4\u5185\u8bbe\u8ba1\u753b\u5e03\u3001PPT\u753b\u5e03\u3001\u81ea\u7531\u753b\u5e03\u3002\u63d0\u4f9b\u7ed3\u6784\u5316\u751f\u6210\u4e0e\u672c\u5730\u5c40\u90e8\u4fee\u6539\u80fd\u529b\uff0c\u5e2e\u52a9\u4f60\u9ad8\u6548\u3001\u53ef\u63a7\u5730\u5b8c\u6210\u5404\u7c7b\u53ef\u89c6\u5316\u521b\u4f5c\u3002",
+        tagA: "\u56db\u79cd\u753b\u5e03",
         tagB: "\u7ed3\u6784\u5316\u751f\u6210",
         tagC: "\u5c40\u90e8\u4fee\u6539",
         openRepo: "GitHub",
@@ -580,8 +623,8 @@ export function PortalPage({ onEnterWorkspace }: PortalPageProps) {
         titleB: "for multi-canvas",
         titleAccent: "creation",
         intro:
-          "CanvasAnvil supports three canvases: diagram, interior, and PPT. It combines structured generation with local Patch / Replace editing so visual creation stays fast and controllable.",
-        tagA: "Three Canvases",
+          "CanvasAnvil supports four canvases: diagram, interior, PPT, and free-form. It combines structured generation with local Patch / Replace editing so visual creation stays fast and controllable.",
+        tagA: "Four Canvases",
         tagB: "Structured Output",
         tagC: "Patch and Replace",
         openRepo: "GitHub",

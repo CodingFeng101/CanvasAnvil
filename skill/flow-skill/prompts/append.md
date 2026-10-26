@@ -18,3 +18,7 @@ Continue from the exact point where the previous XML fragment stopped.
 
 - Output only the continuation fragment
 - No explanation unless the previous fragment is too corrupted to continue safely
+
+## After Completion
+
+Once the XML is complete, stop. The caller validates it and opens it in the draw.io online editor.

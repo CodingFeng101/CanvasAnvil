@@ -162,8 +162,13 @@ function PptEditorShapeNode(props: { element: EditorShapeElement; scale: number 
       ) : (
         <svg viewBox="0 0 100 100" preserveAspectRatio="none" className="absolute inset-0 h-full w-full overflow-visible">
           <path
-            d={buildEditorShapePath(element.shape, 100, 100)}
+            d={buildEditorShapePath(element.shape, 100, 100, {
+              innerRatio: element.innerRatio,
+              points: element.points,
+            })}
             fill={element.fill || "rgba(255,255,255,0.16)"}
+            // A ring is two subpaths, and only this rule leaves its hole open.
+            fillRule="evenodd"
             stroke={element.stroke || "rgba(255,255,255,0.6)"}
             strokeWidth={Math.max(1, (element.strokeWidth || 1.5) * 1.5)}
             vectorEffect="non-scaling-stroke"

@@ -33,6 +33,10 @@ export interface EditorShapeElement extends EditorElementBase {
   fill?: string;
   stroke?: string;
   strokeWidth?: number;
+  /** For `polygon`: the traced outline, in fractions of the shape's own box. */
+  points?: Array<readonly [number, number]>;
+  /** For a ring: how much of its radius is hole. Zero means solid. */
+  innerRatio?: number;
 }
 
 export interface EditorTableElement extends EditorElementBase {

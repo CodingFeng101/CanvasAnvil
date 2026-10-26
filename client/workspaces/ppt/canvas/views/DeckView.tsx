@@ -38,6 +38,8 @@ import {
   canvasAnvilToEditorSlide,
   PptEditorBridge,
 } from "@/features/ppt-editor";
+import type { RebuildLogEntry } from "@/workspaces/ppt/canvas/lib/rebuild-log";
+import { RebuildLogPanel } from "@/workspaces/ppt/canvas/views/RebuildLogPanel";
 import {
   PPT_REFERENCE_SLIDE_HEIGHT,
   PPT_REFERENCE_SLIDE_WIDTH,
@@ -92,6 +94,8 @@ interface DeckViewProps {
     downloadEditablePpt: () => void;
     generateAiImage: () => void;
     retryFailedBeautify: () => void;
+    /** Clear the rebuild log once it has been read. */
+    dismissExportLog: () => void;
   };
   status: {
     currentSlideFailure: string | undefined;
@@ -99,6 +103,10 @@ interface DeckViewProps {
     failedImageTransformCount: number;
     isApplyingEdits: boolean;
     isGeneratingImage: boolean;
+    /** Which slide the editable export is on, while it runs. */
+    exportProgress?: string;
+    /** Step-by-step detail of the rebuild, newest last. */
+    exportLog?: RebuildLogEntry[];
   };
   layout: {
     canvasRef: React.MutableRefObject<HTMLDivElement | null>;
@@ -154,7 +162,14 @@ export function DeckView({
     );
   };
   return (
-    <div className="w-full h-full bg-muted flex flex-col">
+    <div className="relative w-full h-full bg-muted flex flex-col">
+      <RebuildLogPanel
+        progress={status.exportProgress || ""}
+        entries={status.exportLog || []}
+        onDismiss={actions.dismissExportLog}
+        tr={tr}
+        uiLang={uiLang === "zh" ? "zh" : "en"}
+      />
       {/* Toolbar */}
       <div className="relative z-50 h-14 px-4 bg-card border-b border-border flex justify-between items-center shadow-sm">
         <div className="flex items-center gap-4 [&>h2]:hidden">
@@ -187,7 +202,11 @@ export function DeckView({
                 className="flex items-center gap-2 px-3 py-1.5 bg-muted hover:bg-accent text-xs rounded transition-colors shadow-sm disabled:opacity-60"
               >
                 {exporter.isExporting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
-                <span>{exporter.isExporting ? tr("导出中…", "Exporting...") : tr("导出", "Export")}</span>
+                <span>
+                  {exporter.isExporting
+                    ? status.exportProgress || tr("导出中…", "Exporting...")
+                    : tr("导出", "Export")}
+                </span>
               </button>
               {exporter.menuOpen && !exporter.isExporting ? (
                 <motion.div

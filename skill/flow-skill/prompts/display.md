@@ -29,3 +29,7 @@ If the request uses AWS, Azure, GCP, Kubernetes, BPMN, network appliances, or an
 
 - Output only the requested XML payload
 - No explanation unless you are reporting an unrecoverable constraint problem
+
+## Handoff
+
+After the XML is complete, return it as the deliverable. The caller validates it, writes the `.drawio` file, and opens it in the draw.io online editor. Do not add image export instructions.

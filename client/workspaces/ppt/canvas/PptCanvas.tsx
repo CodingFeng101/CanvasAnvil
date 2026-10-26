@@ -31,10 +31,13 @@ import { useCreationInputs } from "./hooks/use-creation-inputs";
 import { useDeckExport } from "./hooks/use-deck-export";
 import { useSlideshow } from "./hooks/use-slideshow";
 import { buildBeautifyInstruction } from "./lib/beautify-instruction";
+import { describeRebuildEvent, type RebuildLogEntry } from "./lib/rebuild-log";
 import { generateChatMessage } from '@/ai/client';
 import {
   pptService,
   PptPage,
+  type PptElement,
+  type PptTextBlock,
   type SlideEditRoutingItem,
 } from '@/workspaces/ppt/lib/ppt-service';
 import { PPT_STATE_KEY, PPT_WORKSPACE_STORAGE_KEY, pptStore } from "@/workspaces/ppt/storage";
@@ -182,6 +185,18 @@ export function PptCanvas({
     }
     return out;
   });
+  /** What the editable export is doing, while it does it. Reading a deck's
+   *  text and repainting each background takes minutes, and a button that
+   *  only says "exporting" for that long reads as a hang. */
+  const [editableExportProgress, setEditableExportProgress] = useState("");
+  /**
+   * Every step of the rebuild, kept so a failure can be read afterwards.
+   *
+   * A page that could not be rebuilt exports as the picture it already was,
+   * which is indistinguishable from the button having done nothing. This log
+   * is the only place that difference shows.
+   */
+  const [editableExportLog, setEditableExportLog] = useState<RebuildLogEntry[]>([]);
   const [renderLayers, setRenderLayers] = useState<Record<string, Record<string, SlideRenderLayer>>>(() => {
     const v = initialPptState?.renderLayers;
     if (!v || typeof v !== "object" || Array.isArray(v)) return {};
@@ -2025,17 +2040,161 @@ export function PptCanvas({
   };
 
 
-  /** Exports the deck as a .pptx, with editable text on any slide that has it. */
+  /**
+   * A slide that already carries a rebuild, from an earlier export.
+   *
+   * Rebuilding costs image calls, so a deck exported twice pays once. The
+   * layer and the background are kept together: half of a rebuild is worse
+   * than none, because the background has had its content removed and only
+   * the elements can put it back.
+   */
+  const existingRebuild = (
+    slide: SlideData,
+  ): { textBlocks: PptTextBlock[]; elements: PptElement[]; backgroundImageUrl: string } | null => {
+    const { versionId } = getSlideVersionMeta(slide.id);
+    if (!versionId) return null;
+
+    const layer = renderLayers[slide.id]?.[versionId];
+    const background = getTextlessBackgroundVersion(slide.id);
+    if (!background?.url || !hasRenderableTextBlocks(layer)) return null;
+
+    return {
+      textBlocks: layer.textBlocks.filter((block) => block.text.trim().length > 0),
+      elements: Array.isArray(layer.elements) ? layer.elements : [],
+      backgroundImageUrl: background.url,
+    };
+  };
+
+  /**
+   * Exports the deck as a .pptx, rebuilt from each slide's own pixels.
+   *
+   * The whole page is rebuilt rather than only its text: a background with
+   * its content removed needs the text, the shapes *and* the pictures put
+   * back, and any one of the three missing is content erased from the deck.
+   *
+   * Results are collected here rather than read back from state. The writes
+   * below land after this closure captured `renderLayers`, so reading it
+   * would find nothing and rebuild every slide a second time.
+   */
   const handleDownloadEditablePpt = async () => {
     if (activeSlides.length === 0 || exporter.isExporting) return;
     exporter.setIsExporting("pptx_editable");
+
+    // A fresh run starts a fresh log; ids carry the run so React never
+    // reconciles two different runs' lines.
+    const runId = `run-${Date.now()}`;
+    setEditableExportLog([]);
+
     try {
-      const pages = activeSlides.map((slide) => buildEditableExportPage(slide));
+      const rebuilt = new Map<
+        string,
+        { textBlocks: PptTextBlock[]; elements: PptElement[]; backgroundImageUrl: string }
+      >();
+
+      const pending: { id: string; imageUrl: string; expected: string[] }[] = [];
+      for (const slide of activeSlides) {
+        const done = existingRebuild(slide);
+        if (done) {
+          rebuilt.set(slide.id, done);
+          continue;
+        }
+        const imageUrl = getSlideImageUrl(slide.id);
+        if (!imageUrl) continue;
+        pending.push({
+          id: slide.id,
+          imageUrl,
+          expected: [slide.title || "", ...(slide.content || [])].filter(Boolean),
+        });
+      }
+
+      if (pending.length > 0) {
+        // Imported on demand: the rebuild carries an inference runtime and a
+        // page of pixel code that a deck exported as images never needs.
+        const { rebuildDeck } = await import("@/workspaces/ppt/vision/pipeline");
+        let line = 0;
+        const results = await rebuildDeck(pending, {
+          onEvent: (event) => {
+            const described = describeRebuildEvent(event, uiLang === "zh" ? "zh" : "en");
+            if (!described) return;
+            line += 1;
+            const entry = { id: `${runId}-${line}`, ...described };
+            setEditableExportLog((prev) => [...prev, entry]);
+            // The headline is the last thing that happened, so a long step
+            // does not look like a stall.
+            setEditableExportProgress(entry.text);
+          },
+        });
+
+        for (const result of results) {
+          if (result.status !== "ready" || !result.backgroundImageUrl) {
+            // Never fall back to the original page as a background: it still
+            // holds every card and icon, and the rebuilt elements would draw
+            // each of them a second time.
+            console.error(`Could not rebuild ${result.slideId}`, result.error);
+            continue;
+          }
+
+          const persisted = await persistImageUrlIfNeeded(result.backgroundImageUrl);
+          rebuilt.set(result.slideId, {
+            textBlocks: result.textBlocks,
+            elements: result.elements,
+            backgroundImageUrl: persisted,
+          });
+
+          const { versionId } = getSlideVersionMeta(result.slideId);
+          if (!versionId) continue;
+          pushImageVersion(
+            result.slideId,
+            persisted,
+            "derived_textless",
+            tr("导出可编辑 PPTX 时生成", "Derived for editable PPTX export"),
+            { setCurrent: false, sourceVersionId: versionId },
+          );
+          setRenderLayers((prev) => ({
+            ...prev,
+            [result.slideId]: {
+              ...(prev[result.slideId] || {}),
+              [versionId]: {
+                backgroundImageUrl: persisted,
+                textBlocks: result.textBlocks,
+                elements: result.elements,
+                status: "ready",
+              },
+            },
+          }));
+        }
+      }
+
+      setEditableExportProgress(tr("正在写入文件…", "Writing the file..."));
+      const pages = activeSlides.map((slide) => {
+        const own = rebuilt.get(slide.id);
+        // A page that could not be rebuilt goes out as the image it already
+        // is, which is what this button produced before.
+        if (!own) return buildEditableExportPage(slide);
+
+        return {
+          ...toRenderablePage(slide),
+          backgroundImageUrl: own.backgroundImageUrl,
+          textBlocks: own.textBlocks,
+          elements: mergeTextBlocksIntoElements(own.textBlocks, own.elements),
+          status: "completed",
+        };
+      });
+
       await pptService.exportPptx(pages, buildCurrentSlideImagesMap(), `presentation-editable-${Date.now()}`);
     } catch (e) {
       console.error("Editable export failed", e);
-      alert(tr("导出可编辑 PPTX 失败", "Failed to export editable PPTX"));
+      const reason = e instanceof Error ? e.message : String(e);
+      setEditableExportLog((prev) => [
+        ...prev,
+        {
+          id: `${runId}-fatal`,
+          level: "error" as const,
+          text: tr(`导出失败：${reason}`, `Export failed: ${reason}`),
+        },
+      ]);
     } finally {
+      setEditableExportProgress("");
       exporter.setIsExporting(null);
     }
   };
@@ -2233,6 +2392,7 @@ export function PptCanvas({
         downloadEditablePpt: () => void handleDownloadEditablePpt(),
         generateAiImage: () => void handleGenerateAiImage(),
         retryFailedBeautify: () => void handleRetryFailedBeautify(),
+        dismissExportLog: () => setEditableExportLog([]),
       }}
       status={{
         currentSlideFailure,
@@ -2240,6 +2400,8 @@ export function PptCanvas({
         failedImageTransformCount,
         isApplyingEdits,
         isGeneratingImage,
+        exportProgress: editableExportProgress,
+        exportLog: editableExportLog,
       }}
       layout={{
         canvasRef: previewCanvasRef,

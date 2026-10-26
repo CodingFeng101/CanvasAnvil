@@ -1,3 +1,4 @@
+import "./server/proxy-setup";
 import { defineConfig } from "vite";
 import type { Connect, Plugin } from "vite";
 import react from "@vitejs/plugin-react";

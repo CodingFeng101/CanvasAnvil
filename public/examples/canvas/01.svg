@@ -1,0 +1,102 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 700" width="1200" height="700" font-family="'PingFang SC','Microsoft YaHei','Noto Sans SC',sans-serif">
+
+<defs>
+  <pattern id="dots" width="22" height="22" patternUnits="userSpaceOnUse">
+    <circle cx="2" cy="2" r="1.3" fill="#DCD5C6"/>
+  </pattern>
+  <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0" stop-color="#9DB4CF"/>
+    <stop offset="0.55" stop-color="#F0B791"/>
+    <stop offset="1" stop-color="#F7D9AE"/>
+  </linearGradient>
+  <linearGradient id="sea" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0" stop-color="#7FA3B8"/>
+    <stop offset="1" stop-color="#466F8A"/>
+  </linearGradient>
+  <filter id="shadow" x="-10%" y="-10%" width="120%" height="130%">
+    <feDropShadow dx="0" dy="8" stdDeviation="10" flood-color="#3A2A20" flood-opacity="0.12"/>
+  </filter>
+  <filter id="soft" x="-10%" y="-10%" width="120%" height="130%">
+    <feDropShadow dx="0" dy="3" stdDeviation="5" flood-color="#3A2A20" flood-opacity="0.08"/>
+  </filter>
+</defs>
+<rect width="1200" height="700" fill="#FAF8F3"/>
+<rect width="1200" height="700" fill="url(#dots)"/>
+
+  
+  <g filter="url(#soft)"><rect x="250" y="22" width="348" height="48" rx="14" fill="#FFFFFF"/></g>
+  <rect x="262" y="28" width="36" height="36" rx="9" fill="#E0DFFF"/><path d="M275 38 L286 47 L281 48 L284 54 L281 55 L278 49 L275 52Z" fill="#3A2F28"/><rect x="320" y="39" width="16" height="14" rx="2" fill="none" stroke="#3A2F28" stroke-width="1.8"/><ellipse cx="376" cy="46" rx="8.5" ry="7" fill="none" stroke="#3A2F28" stroke-width="1.8"/><path d="M416 53 L431 39 M431 39 h-7 M431 39 v7" fill="none" stroke="#3A2F28" stroke-width="1.8" stroke-linecap="round"/><path d="M465 54 l2 -6 l10 -10 l4 4 l-10 10z" fill="none" stroke="#3A2F28" stroke-width="1.8" stroke-linejoin="round"/><text x="520" y="52" text-anchor="middle" font-size="18" font-weight="600" fill="#3A2F28">T</text><rect x="560" y="39" width="16" height="14" rx="2" fill="none" stroke="#3A2F28" stroke-width="1.8"/><path d="M560 51 l5 -5 l4 3 l3 -3 l4 4" fill="none" stroke="#3A2F28" stroke-width="1.6"/>
+  
+  <rect x="150" y="112" width="94.8" height="26" rx="13" fill="#F4E6DF"/>
+  <text x="161" y="129" font-size="13" font-weight="600" fill="#A0472A">✦ 刚刚生成</text>
+  
+  <g filter="url(#shadow)"><rect x="150" y="150" width="560" height="364" rx="4" fill="#FFFFFF"/></g>
+  <svg x="150" y="150" width="560" height="364" viewBox="0 0 400 260" preserveAspectRatio="none">
+  <rect width="400" height="170" fill="url(#sky)"/>
+  <circle cx="285" cy="150" r="62" fill="#FBE8C0" opacity="0.28"/>
+  <circle cx="285" cy="150" r="34" fill="#FBE8C0" opacity="0.95"/>
+  <path d="M0 165 C60 150 110 158 160 152 C210 146 250 160 300 156 C340 153 370 160 400 158 L400 172 L0 172Z" fill="#B98C86" opacity="0.55"/>
+  <rect y="168" width="400" height="92" fill="url(#sea)"/>
+  <path d="M262 182h46 M270 194h30 M256 207h56 M274 221h22 M280 236h10" stroke="#FBE8C0" stroke-width="3" stroke-linecap="round" opacity="0.6"/>
+  <polygon points="59,72 190,50 190,96" fill="#FCE7A6" opacity="0.32"/>
+  <path d="M0 260 L0 150 C22 142 48 140 70 150 C92 160 104 190 120 214 C134 236 150 248 170 260Z" fill="#5E4B40"/>
+  <path d="M0 158 C22 150 48 148 70 157 C80 162 88 172 94 182 C80 170 60 160 40 160 C24 160 10 164 0 168Z" fill="#7A6253"/>
+  <polygon points="40,146 64,146 60,86 44,86" fill="#FFFDF8" stroke="#3A2F28" stroke-width="1.2" stroke-linejoin="round"/>
+  <polygon points="40.9,132 63.1,132 62.3,120 41.7,120" fill="#C96442"/>
+  <polygon points="42.5,108 61.5,108 60.8,98 43.2,98" fill="#C96442"/>
+  <rect x="41" y="80" width="22" height="6" fill="#3A2F28"/>
+  <rect x="45" y="66" width="14" height="14" fill="#FCE7A6" stroke="#3A2F28" stroke-width="1.2"/>
+  <polygon points="42,66 62,66 52,55" fill="#C96442" stroke="#3A2F28" stroke-width="1.2" stroke-linejoin="round"/>
+  
+  </svg>
+  
+  <rect x="143" y="143" width="574" height="378" fill="none" stroke="#6965DB" stroke-width="1.5"/>
+  <rect x="138" y="138" width="10" height="10" rx="2.5" fill="#FFFFFF" stroke="#6965DB" stroke-width="1.5"/><rect x="712" y="138" width="10" height="10" rx="2.5" fill="#FFFFFF" stroke="#6965DB" stroke-width="1.5"/><rect x="138" y="516" width="10" height="10" rx="2.5" fill="#FFFFFF" stroke="#6965DB" stroke-width="1.5"/><rect x="712" y="516" width="10" height="10" rx="2.5" fill="#FFFFFF" stroke="#6965DB" stroke-width="1.5"/><rect x="425" y="138" width="10" height="10" rx="2.5" fill="#FFFFFF" stroke="#6965DB" stroke-width="1.5"/><rect x="425" y="516" width="10" height="10" rx="2.5" fill="#FFFFFF" stroke="#6965DB" stroke-width="1.5"/><rect x="138" y="327" width="10" height="10" rx="2.5" fill="#FFFFFF" stroke="#6965DB" stroke-width="1.5"/><rect x="712" y="327" width="10" height="10" rx="2.5" fill="#FFFFFF" stroke="#6965DB" stroke-width="1.5"/>
+  <circle cx="430" cy="121" r="5.5" fill="#FFFFFF" stroke="#6965DB" stroke-width="1.5"/>
+  
+  <g filter="url(#soft)"><rect x="872" y="20" width="308" height="660" rx="20" fill="#FFFFFF"/></g>
+  <rect x="872" y="20" width="308" height="660" rx="20" fill="none" stroke="#E6E0D4"/>
+  <circle cx="902" cy="54" r="12" fill="#F4E6DF"/>
+  <path d="M896 58 l2 -5 l7 -7 l3 3 l-7 7z" fill="none" stroke="#A0472A" stroke-width="1.6" stroke-linejoin="round"/>
+  <text x="922" y="60" font-size="17" font-weight="700" fill="#3A2F28">画布助手</text>
+  <path d="M892 84 H1160" stroke="#EEE9DF"/>
+  
+    
+  <rect x="936" y="104" width="224" height="64" rx="14" fill="#F4E6DF"/>
+  <text x="952" y="133" font-size="14" fill="#3A2F28">黄昏时分的海边灯塔，</text><text x="952" y="155" font-size="14" fill="#3A2F28">水彩风格</text>
+    
+  <rect x="892" y="186" width="248" height="42" rx="14" fill="#F3F1EC"/>
+  <text x="908" y="215" font-size="14" fill="#3A2F28">已生成，并放到画布上</text>
+  
+    <svg x="908" y="244" width="216" height="140.4" viewBox="0 0 400 260" preserveAspectRatio="none">
+  <rect width="400" height="170" fill="url(#sky)"/>
+  <circle cx="285" cy="150" r="62" fill="#FBE8C0" opacity="0.28"/>
+  <circle cx="285" cy="150" r="34" fill="#FBE8C0" opacity="0.95"/>
+  <path d="M0 165 C60 150 110 158 160 152 C210 146 250 160 300 156 C340 153 370 160 400 158 L400 172 L0 172Z" fill="#B98C86" opacity="0.55"/>
+  <rect y="168" width="400" height="92" fill="url(#sea)"/>
+  <path d="M262 182h46 M270 194h30 M256 207h56 M274 221h22 M280 236h10" stroke="#FBE8C0" stroke-width="3" stroke-linecap="round" opacity="0.6"/>
+  <polygon points="59,72 190,50 190,96" fill="#FCE7A6" opacity="0.32"/>
+  <path d="M0 260 L0 150 C22 142 48 140 70 150 C92 160 104 190 120 214 C134 236 150 248 170 260Z" fill="#5E4B40"/>
+  <path d="M0 158 C22 150 48 148 70 157 C80 162 88 172 94 182 C80 170 60 160 40 160 C24 160 10 164 0 168Z" fill="#7A6253"/>
+  <polygon points="40,146 64,146 60,86 44,86" fill="#FFFDF8" stroke="#3A2F28" stroke-width="1.2" stroke-linejoin="round"/>
+  <polygon points="40.9,132 63.1,132 62.3,120 41.7,120" fill="#C96442"/>
+  <polygon points="42.5,108 61.5,108 60.8,98 43.2,98" fill="#C96442"/>
+  <rect x="41" y="80" width="22" height="6" fill="#3A2F28"/>
+  <rect x="45" y="66" width="14" height="14" fill="#FCE7A6" stroke="#3A2F28" stroke-width="1.2"/>
+  <polygon points="42,66 62,66 52,55" fill="#C96442" stroke="#3A2F28" stroke-width="1.2" stroke-linejoin="round"/>
+  
+  </svg>
+  <rect x="908" y="244" width="216" height="140.4" rx="3" fill="none" stroke="#E6E0D4"/>
+  
+  
+  <rect x="892" y="574" width="70" height="25" rx="12.5" fill="#F3F1EC"/>
+  <text x="903" y="590" font-size="12" font-weight="600" fill="#8A7F74">自动尺寸</text>
+         
+  <rect x="976" y="574" width="91.60000000000001" height="25" rx="12.5" fill="#F3F1EC"/>
+  <text x="987" y="590" font-size="12" font-weight="600" fill="#8A7F74">清晰度 · 高</text>
+         <rect x="892" y="606" width="268" height="56" rx="14" fill="#FAF8F3" stroke="#E6E0D4"/>
+         <text x="910" y="639" font-size="14" fill="#A79D92">描述想生成的图片…</text>
+         <circle cx="1134" cy="634" r="16" fill="#C96442"/>
+         <path d="M1134 642 V627 M1128 632 L1134 626 L1140 632" fill="none" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+
+</svg>

@@ -63,6 +63,8 @@ export const editorSlideToPptElements = (slide: EditorSlide): PptElement[] =>
         fill: element.fill,
         stroke: element.stroke,
         strokeWidth: element.strokeWidth,
+        points: element.points,
+        innerRatio: element.innerRatio,
         x: element.x,
         y: element.y,
         w: element.w,

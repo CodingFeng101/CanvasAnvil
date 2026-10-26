@@ -52,6 +52,17 @@ export interface TextRequest {
   signal?: AbortSignal;
 }
 
+export type ImageSize =
+  | "auto"
+  | "256x256"
+  | "512x512"
+  | "1024x1024"
+  | "1536x1024"
+  | "1024x1536"
+  | "1792x1024"
+  | "1024x1792";
+export type ImageQuality = "auto" | "low" | "medium" | "high";
+
 export interface ImageRequest {
   channel: AIChannel;
   prompt: string;
@@ -59,6 +70,9 @@ export interface ImageRequest {
   referenceImageUrl?: string;
   additionalReferenceImageUrls?: string[];
   maskImageUrl?: string;
+  /** gpt-image-* size/quality knobs; ignored by the chat-completions fallback route. */
+  size?: ImageSize;
+  quality?: ImageQuality;
   signal?: AbortSignal;
 }
 
