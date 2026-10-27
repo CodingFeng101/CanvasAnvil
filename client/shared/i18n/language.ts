@@ -23,7 +23,7 @@ export function setUiLanguage(lang: UiLanguage) {
   try {
     document.documentElement.setAttribute("lang", lang === "zh" ? "zh-CN" : "en");
   } catch {
-    // A blocked localStorage only means the old history lingers.
+    // No document to mark (server render).
   }
   try {
     window.dispatchEvent(new Event("ui-language-changed"));
@@ -37,10 +37,6 @@ export function detectLanguageFromText(text: string): UiLanguage | null {
   if (/[\u4E00-\u9FFF]/.test(raw)) return "zh";
   if (/[A-Za-z]/.test(raw)) return "en";
   return null;
-}
-
-export function resolveResponseLanguage(args: { userText: string; uiLang: UiLanguage }): UiLanguage {
-  return detectLanguageFromText(args.userText) || args.uiLang;
 }
 
 /** Subscribes to the change event above; use inside components. */

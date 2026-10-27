@@ -5,16 +5,16 @@
 <h1 align="center">CanvasAnvil</h1>
 
 <p align="center">
-  <strong>AI-powered multi-canvas creation for Diagrams, CAD, and PPT.</strong>
+  <strong>AI-powered multi-canvas creation for diagrams, interior design, presentations and images.</strong>
 </p>
 
 <p align="center">
-  <img alt="version" src="https://img.shields.io/badge/version-v2.1.0-blue" />
+  <img alt="version" src="https://img.shields.io/badge/version-v2.2.0-blue" />
   <img alt="license" src="https://img.shields.io/badge/license-AGPL--3.0-green" />
   <img alt="React" src="https://img.shields.io/badge/React-18.3-61dafb?logo=react&logoColor=white" />
   <img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-5.8-3178c6?logo=typescript&logoColor=white" />
   <img alt="Vite" src="https://img.shields.io/badge/Vite-6.3-646cff?logo=vite&logoColor=white" />
-  <img alt="workspaces" src="https://img.shields.io/badge/workspaces-3-orange" />
+  <img alt="workspaces" src="https://img.shields.io/badge/workspaces-4-orange" />
   <img alt="PRs welcome" src="https://img.shields.io/badge/PRs-welcome-brightgreen" />
 </p>
 
@@ -31,7 +31,7 @@
   <strong>⭐ If CanvasAnvil helps your workflow, please star the repo and fork it for your own canvas experiments.</strong>
 </p>
 
-> CanvasAnvil brings diagramming, interior design workflows, and presentation production into one unified workspace.
+> CanvasAnvil brings diagramming, interior design, presentation production and free-form image work into one workspace, in Chinese or English.
 
 ## 🔷 Diagram Canvas
 
@@ -41,12 +41,12 @@ Turn structured prompts into clear diagrams for research, systems, delivery plan
 
 <table>
   <tr>
-    <td width="50%" align="center"><img src="public/examples/readme-previews/flow/01.png" alt="Diagram example: academic research framework" width="100%" /><br/><strong>Academic Research Framework</strong></td>
-    <td width="50%" align="center"><img src="public/examples/readme-previews/flow/02.png" alt="Diagram example: intelligent Q&A system architecture" width="100%" /><br/><strong>Intelligent Q&A System Architecture</strong></td>
+    <td width="50%" align="center"><img src="public/examples/readme-previews/diagram/01.png" alt="Diagram example: academic research framework" width="100%" /><br/><strong>Academic Research Framework</strong></td>
+    <td width="50%" align="center"><img src="public/examples/readme-previews/diagram/02.png" alt="Diagram example: intelligent Q&A system architecture" width="100%" /><br/><strong>Intelligent Q&A System Architecture</strong></td>
   </tr>
   <tr>
-    <td width="50%" align="center"><img src="public/examples/readme-previews/flow/03.png" alt="Diagram example: project implementation roadmap" width="100%" /><br/><strong>Project Implementation Roadmap</strong></td>
-    <td width="50%" align="center"><img src="public/examples/readme-previews/flow/04.png" alt="Diagram example: course design mind map" width="100%" /><br/><strong>Course Design Mind Map</strong></td>
+    <td width="50%" align="center"><img src="public/examples/readme-previews/diagram/03.png" alt="Diagram example: project implementation roadmap" width="100%" /><br/><strong>Project Implementation Roadmap</strong></td>
+    <td width="50%" align="center"><img src="public/examples/readme-previews/diagram/04.png" alt="Diagram example: course design mind map" width="100%" /><br/><strong>Course Design Mind Map</strong></td>
   </tr>
 </table>
 
@@ -76,7 +76,7 @@ Move from concept framing to drawable outputs by combining planning boards, 2D l
 
 ## 📑 PPT Canvas
 
-Generate full presentations through a controlled pipeline: outline first, visual production second, then export as editable PPT, PDF, or image-based PPT.
+Generate full presentations through a controlled pipeline: outline first, visual production second, then export as PDF or image-based PPT. The deck template sets the style and colour palette; each slide gets a layout of its own.
 
 ### Showcase
 
@@ -103,47 +103,60 @@ Generate full presentations through a controlled pipeline: outline first, visual
   </tr>
 </table>
 
+## 🖌️ Free Canvas
+
+A whiteboard for images: describe a picture in one sentence and it lands on the board. Circle what to change, write a note beside it, press the wand, and a new version appears next to the original. Every version is kept, and the version strip shows what each one changed and when.
+
+### Showcase
+
+<table>
+  <tr>
+    <td width="50%" align="center"><img src="public/examples/canvas/01.svg" alt="Free Canvas: an image from one sentence" width="100%" /><br/><strong>An Image from One Sentence</strong></td>
+    <td width="50%" align="center"><img src="public/examples/canvas/02.svg" alt="Free Canvas: marking up the image" width="100%" /><br/><strong>Mark It Up on the Board</strong></td>
+  </tr>
+  <tr>
+    <td width="50%" align="center"><img src="public/examples/canvas/03.svg" alt="Free Canvas: a new version from the marks" width="100%" /><br/><strong>A New Version from the Marks</strong></td>
+    <td width="50%" align="center"><img src="public/examples/canvas/04.svg" alt="Free Canvas: comparing versions" width="100%" /><br/><strong>Compare the Versions</strong></td>
+  </tr>
+</table>
+
 ## 🎨 Creative Canvases
 
 | Workspace | Focus | Typical output |
 | --- | --- | --- |
 | `Diagram` | structured diagram generation and partial editing | flowcharts, architecture diagrams, logic diagrams |
-| `CAD` | interior planning, drawing coordination, and delivery packaging | concept boards, 2D drawings, render briefs, material lists |
-| `PPT` | structured presentation generation and mixed export workflows | presentations, pitch decks, editable decks, report slides |
+| `Interior Design` | interior planning, drawing coordination, and delivery packaging | concept boards, 2D drawings, render briefs, material lists |
+| `PPT` | structured presentation generation and export | presentations, pitch decks, report slides |
+| `Free Canvas` | text-to-image and edit-by-annotation on a whiteboard | posters, illustrations, revised versions of an image |
 
 ## 🌈 Release
 
-Current release: `v2.1.0`
+Current release: `v2.2.0` (2026-10-26). See [CHANGELOG.md](CHANGELOG.md) for the full list.
 
-Unreleased on this branch — a structural refactor of the whole project, plus the
-fixes that came out of it. See [CHANGELOG.md](CHANGELOG.md) for the full list.
+**Four canvases**
 
-**Narrowed**
+- Diagram, Interior Design and PPT, plus the new **Free Canvas**: text-to-image on a whiteboard, editing by drawing on the picture, and a version strip for every image.
+- The Flow canvas is now called **Diagram** everywhere, from the UI to the code, prompts and the `diagram-skill` bundle. Saved selections and chat histories carry over.
+- The poster, product and infographic canvases and the embedded `pptist-lab` editor are gone. The editable-PPTX export is hidden from the menu for now; its code is kept.
 
-- Three canvases only: Diagram, Interior Design and PPT. The poster, product and infographic canvases are gone.
-- The embedded `pptist-lab` editor is gone; editable decks export directly as `.pptx`.
-- One OpenAI-compatible request path. The provider list is gone from the app *and* from the `cad-skill` and `ppt-skill` bundles, which had carried a nine-vendor image registry of their own — eight of them with no reachable endpoint.
-- The Next.js port that shadowed the Vite client is gone, along with roughly 900 lines of unreachable code the old `PptWorkspace` was hiding.
+**A friendlier interface**
 
-**Restructured**
+- Every chat panel opens with a short guide and example requests instead of a blank column.
+- The homepage has a clear way in, one button style throughout, and lays out cleanly from 1024px laptop windows to large monitors, in both languages.
+- Switch between Chinese and English from the top bar of any workspace; every string, error message and screen-reader label follows.
+- Quieter details: neutral disabled buttons that say why they are disabled, loading skeletons, and gentle motion that respects the system's reduced-motion setting.
 
-- The repository now separates `client/`, `server/`, `contracts/` and `resources/`, and every workspace has the same three layers: pure modules, per-feature hooks, one file per screen. Written down in [docs/architecture.md](docs/architecture.md).
-- `PptCanvas.tsx` went from 5,300 lines to roughly 2,250 and renders no UI of its own.
-- The shared UI kit, storage layer, file pipeline, chat plumbing and i18n each exist once instead of per workspace.
-- TypeScript strict mode is on and the bundle is split: initial load dropped from 2.89 MB to roughly 700 KB raw.
-- 260 tests (`npm test`, node:test) cover the pure logic the refactor had to preserve.
+**Better results**
 
-**PPT workflow**
+- Free Canvas reads the annotation at the picture's full resolution, takes written notes verbatim, and quotes the exact text to change — edits land where they were marked.
+- PPT slides take only the style and colours from the template, not its layout, so a deck no longer repeats one arrangement.
+- Image size options that the server used to drop silently now reach the model.
 
-- Editable export is immediate. It used to open a text-box review and then spend three model calls per slide; a two-slide deck took over five minutes, and now takes about a second.
-- The planner is given the deck template and writes slide descriptions that match it. It used to invent its own palette, which then outvoted the template at render time — a deck built on a dark template came out white.
-- Material images attached to a slide, and pictures attached in the chat panel, now actually reach the image model. Both were being dropped before the API call.
-- The chat toolbar has two toggles for pinning whether a message edits the current slide image or redraws it; leaving both off keeps the router in charge.
-- The slideshow has a way in again — it was complete but had no entry point.
+**Lighter and cleaner**
 
-**Fixed**
-
-Twenty-one defects found along the way, including an infinite render loop in every chat panel, four CAD catch blocks that swallowed a failed patch apply, and server-side debug logging that wrote entire conversations to the console.
+- PPT templates went from 285 MB to 34 MB, with small thumbnails for the picker; the bundled SVG editor from 18 MB to 4 MB; example images from 42 MB to 12 MB.
+- The repository separates `client/`, `server/`, `contracts/` and `resources/`, every workspace has the same three layers ([docs/architecture.md](docs/architecture.md)), TypeScript strict mode is on, and the initial load dropped from 2.89 MB to roughly 700 KB.
+- Over 450 tests (`npm test`) cover the pure logic; `npm run lint` reports no errors.
 
 ## 🌐 Online Access
 
@@ -159,7 +172,7 @@ Current online access URL:
 
 CanvasAnvil includes dedicated local skills for each canvas so workflows stay opinionated, repeatable, and easier to maintain.
 
-- `flow-skill` · Diagram generation and packaging
+- `diagram-skill` · Diagram generation and packaging
   Outputs clean diagram assets and skips standalone HTML preview by default.
 - `cad-skill` · Interior-delivery workflow
   Exports drawing bundles and a CSV material list for downstream delivery.
@@ -202,6 +215,8 @@ npm run build
 
 - `npm run dev`: start the app on `8001`
 - `npm run check`: run TypeScript checks
+- `npm run lint`: run ESLint
+- `npm test`: run the test suite
 - `npm run build`: build the production bundle
 
 ## 📝 Development Notes
@@ -216,6 +231,7 @@ npm run build
 ## 📚 Docs
 
 - Architecture overview: [docs/architecture.md](docs/architecture.md)
+- Handoff notes (Chinese): [docs/HANDOFF.md](docs/HANDOFF.md)
 - Deployment guide: [deploy/README.md](deploy/README.md)
 
 ## ⚖️ License

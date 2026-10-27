@@ -1,10 +1,10 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { PanelRightClose, PanelRightOpen, Pencil, RefreshCw } from 'lucide-react';
+import { PanelRightClose, PanelRightOpen, Pencil, Presentation, RefreshCw } from 'lucide-react';
 import { cn } from '@/shared/lib/utils';
 import { streamChatMessage, generatePptProxyChatMessage, ChatMessage, getAIConfig } from '@/ai/client';
 
 import { ButtonWithTooltip } from '@/shared/chat';
-import { ChatInput } from '@/shared/chat';
+import { ChatEmptyState, ChatInput } from '@/shared/chat';
 import { chatStorageKey, loadChatHistory, saveChatHistory } from '@/shared/chat/chat-storage';
 import { createAssistantUpdater } from '@/shared/chat/assistant-stream';
 import { getChatErrorText } from '@/shared/chat/chat-errors';
@@ -31,7 +31,7 @@ interface ChatPanelProps {
   onRemoveAttachment?: (id: string) => void;
   pptDraftSlides?: Array<{ id: string; slideId: string; title: string; json: string; kind: "outline" | "slide_image"; imageUrl?: string }>;
   onClearPptDraftSlides?: () => void;
-  onCodeAction?: (code: string, type: 'flow' | 'cad' | 'ppt') => MaybePromise<void | CodeActionResult>;
+  onCodeAction?: (code: string, type: 'diagram' | 'cad' | 'ppt') => MaybePromise<void | CodeActionResult>;
   systemPrompt: string;
   initialMessages?: ChatMessage[];
   onMessagesChange?: (messages: ChatMessage[]) => void;
@@ -98,7 +98,7 @@ export function ChatPanel({
   const [isLoading, setIsLoading] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
   const [showResetWarning, setShowResetWarning] = useState(false);
-  const flowAutoRetryCountRef = useRef(0);
+  const autoRetryCountRef = useRef(0);
   
   const [files, setFiles] = useState<File[]>([]);
   const abortControllerRef = useRef<AbortController | null>(null);
@@ -205,7 +205,7 @@ const getPptTag = (slideId: string, title: string, kind: "outline" | "slide_imag
     setShowResetWarning(false);
   };
 
-  const runCodeAction = async (code: string, type: 'flow' | 'cad' | 'ppt') => {
+  const runCodeAction = async (code: string, type: 'diagram' | 'cad' | 'ppt') => {
     const result = await Promise.resolve(onCodeAction?.(code, type));
     if (!result || typeof result !== "object") return { ok: true } as CodeActionResult;
     const r = result as any;
@@ -216,15 +216,15 @@ const getPptTag = (slideId: string, title: string, kind: "outline" | "slide_imag
   };
 
   const handleAssistantResponse = async (fullResponse: string) => {
-    if (!fullResponse) return { flowPatchFound: false, flowRetryError: null as string | null };
+    if (!fullResponse) return { patchFound: false, retryError: null as string | null };
 
     const svgMatch = fullResponse.match(/```svg\n([\s\S]*?)\n```/);
     if (svgMatch && svgMatch[1]) {
       await runCodeAction(svgMatch[1], 'cad');
     }
 
-    let flowPatchFound = false;
-    let flowRetryError: string | null = null;
+    let patchFound = false;
+    let retryError: string | null = null;
 
     const jsonRegex = /```json\s*([\s\S]*?)```/g;
     let m: RegExpExecArray | null;
@@ -246,7 +246,7 @@ const getPptTag = (slideId: string, title: string, kind: "outline" | "slide_imag
       }
     }
 
-    return { flowPatchFound, flowRetryError };
+    return { patchFound, retryError };
   };
 
   const handleSend = async () => {
@@ -254,7 +254,7 @@ const getPptTag = (slideId: string, title: string, kind: "outline" | "slide_imag
           .map((s) => (s.type === "text" ? s.text : s.tag))
           .join("");
     if ((!rawInput.trim() && files.length === 0 && attachments.length === 0 && pptDraftSlides.length === 0) || isLoading) return;
-    flowAutoRetryCountRef.current = 0;
+    autoRetryCountRef.current = 0;
 
     const normalizedInput = rawInput.trim();
     const referencedPptSlideIds = new Set(
@@ -589,7 +589,7 @@ const getPptTag = (slideId: string, title: string, kind: "outline" | "slide_imag
     if (base.length === 0) return;
     const last = base[base.length - 1];
     if (last.role !== 'user') return;
-    flowAutoRetryCountRef.current = 0;
+    autoRetryCountRef.current = 0;
     await runTextChat(base);
   };
 
@@ -617,7 +617,7 @@ const getPptTag = (slideId: string, title: string, kind: "outline" | "slide_imag
     const base = [...messages.slice(0, messageIndex), updatedUser];
     setInput("");
     setFiles([]);
-    flowAutoRetryCountRef.current = 0;
+    autoRetryCountRef.current = 0;
     await runTextChat(base);
   };
 
@@ -671,13 +671,27 @@ const getPptTag = (slideId: string, title: string, kind: "outline" | "slide_imag
 
       {/* Messages */}
       <div className="flex-1 w-full overflow-hidden">
-          <ChatMessageDisplay 
-            messages={uiMessages} 
+        {!isLoading && !uiMessages.some((m) => m.role === "user" || m.role === "assistant") ? (
+          <ChatEmptyState
+            icon={Presentation}
+            title={t(uiLang, "empty.ppt.title")}
+            description={t(uiLang, "empty.ppt.desc")}
+            examplesLabel={t(uiLang, "empty.examplesLabel")}
+            examples={[t(uiLang, "empty.ppt.ex1"), t(uiLang, "empty.ppt.ex2"), t(uiLang, "empty.ppt.ex3")]}
+            onPickExample={(text) => {
+              setPptInputSegments([{ type: "text", text }]);
+              setPptInputFocusTick((tick) => tick + 1);
+            }}
+          />
+        ) : (
+          <ChatMessageDisplay
+            messages={uiMessages}
             status={isLoading ? "streaming" : "idle"}
-            onDisplayChart={(xml) => onCodeAction?.(xml, 'flow')}
+            onDisplayChart={(xml) => onCodeAction?.(xml, 'diagram')}
             onRegenerate={handleRegenerate}
             onEditMessage={handleEditAndResend}
           />
+        )}
       </div>
 
       {/* Input */}

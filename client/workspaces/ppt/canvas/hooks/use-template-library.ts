@@ -6,6 +6,7 @@ import {
   PPT_TEMPLATE_HIDDEN_PRESETS_KEY,
   PPT_TEMPLATE_UPLOADS_KEY,
   PRESET_TEMPLATES,
+  templateThumbPath,
 } from "@/workspaces/ppt/canvas/lib/constants";
 import {
   normalizePersistedStringArray,
@@ -98,7 +99,7 @@ export function useTemplateLibrary({ initialSelectedTemplateId, uiLang, tr }: Te
         id: t.id,
         name: uiLang === "zh" ? t.zhName : t.enName,
         kind: "preset" as const,
-        previewSrc: t.path,
+        previewSrc: templateThumbPath(t.path),
         presetPath: t.path,
         categoryId: t.categoryId,
       })),

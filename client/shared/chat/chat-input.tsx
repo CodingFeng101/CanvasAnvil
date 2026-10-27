@@ -602,8 +602,11 @@ export function ChatInput({
                 </div>
             )}
 
-            <div className="flex items-center justify-between px-3 py-2 border-t border-border/50">
-                <div className="flex items-center gap-1">
+            {/* Wraps rather than overflowing: in a narrow panel the canvas
+                toolbar's size and quality pickers used to push the send
+                button off the right edge. */}
+            <div className="flex flex-wrap items-center justify-between gap-y-1.5 px-3 py-2 border-t border-border/50">
+                <div className="flex flex-wrap items-center gap-1">
                     {toolbarExtras}
                     {onClearChat && (
                         <ButtonWithTooltip
@@ -618,7 +621,7 @@ export function ChatInput({
                     )}
                 </div>
 
-                <div className="flex items-center gap-1">
+                <div className="ml-auto flex items-center gap-1">
                     {onToggleHistory && (
                         <ButtonWithTooltip
                             tooltipContent={t(uiLang, "chat.historyTitle")}

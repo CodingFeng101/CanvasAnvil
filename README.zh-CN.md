@@ -5,16 +5,16 @@
 <h1 align="center">CanvasAnvil</h1>
 
 <p align="center">
-  <strong>面向图表绘制、室内设计与 PPT 的 AI 多画布创作平台。</strong>
+  <strong>面向图表绘制、室内设计、PPT 演示与图片创作的 AI 多画布平台。</strong>
 </p>
 
 <p align="center">
-  <img alt="version" src="https://img.shields.io/badge/version-v2.1.0-blue" />
+  <img alt="version" src="https://img.shields.io/badge/version-v2.2.0-blue" />
   <img alt="license" src="https://img.shields.io/badge/license-AGPL--3.0-green" />
   <img alt="React" src="https://img.shields.io/badge/React-18.3-61dafb?logo=react&logoColor=white" />
   <img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-5.8-3178c6?logo=typescript&logoColor=white" />
   <img alt="Vite" src="https://img.shields.io/badge/Vite-6.3-646cff?logo=vite&logoColor=white" />
-  <img alt="workspaces" src="https://img.shields.io/badge/workspaces-3-orange" />
+  <img alt="workspaces" src="https://img.shields.io/badge/workspaces-4-orange" />
   <img alt="PRs welcome" src="https://img.shields.io/badge/PRs-welcome-brightgreen" />
 </p>
 
@@ -31,7 +31,7 @@
   <strong>⭐ 如果 CanvasAnvil 对你有帮助，欢迎给仓库点个 Star，也可以 Fork 一份继续扩展你自己的画布工作流。</strong>
 </p>
 
-> CanvasAnvil 将图表、室内设计工作流和 PPT 制作整合到一个统一工作区中。
+> CanvasAnvil 把图表、室内设计、PPT 制作和自由的图片创作整合在一个工作区里，界面支持中英文。
 
 ## 🔷 图表绘制画布
 
@@ -41,12 +41,12 @@
 
 <table>
   <tr>
-    <td width="50%" align="center"><img src="public/examples/readme-previews/flow/01.png" alt="图表示例：学术研究框架图" width="100%" /><br/><strong>学术研究框架图</strong></td>
-    <td width="50%" align="center"><img src="public/examples/readme-previews/flow/02.png" alt="图表示例：智能问答系统架构图" width="100%" /><br/><strong>智能问答系统架构图</strong></td>
+    <td width="50%" align="center"><img src="public/examples/readme-previews/diagram/01.png" alt="图表示例：学术研究框架图" width="100%" /><br/><strong>学术研究框架图</strong></td>
+    <td width="50%" align="center"><img src="public/examples/readme-previews/diagram/02.png" alt="图表示例：智能问答系统架构图" width="100%" /><br/><strong>智能问答系统架构图</strong></td>
   </tr>
   <tr>
-    <td width="50%" align="center"><img src="public/examples/readme-previews/flow/03.png" alt="图表示例：项目实施路线图" width="100%" /><br/><strong>项目实施路线图</strong></td>
-    <td width="50%" align="center"><img src="public/examples/readme-previews/flow/04.png" alt="图表示例：课程设计思维导图" width="100%" /><br/><strong>课程设计思维导图</strong></td>
+    <td width="50%" align="center"><img src="public/examples/readme-previews/diagram/03.png" alt="图表示例：项目实施路线图" width="100%" /><br/><strong>项目实施路线图</strong></td>
+    <td width="50%" align="center"><img src="public/examples/readme-previews/diagram/04.png" alt="图表示例：课程设计思维导图" width="100%" /><br/><strong>课程设计思维导图</strong></td>
   </tr>
 </table>
 
@@ -76,7 +76,7 @@
 
 ## 📑 PPT 演示画布
 
-通过“先大纲、后视觉”的方式生成完整演示文稿，并导出可编辑 PPT、PDF 或图片版 PPT。
+通过“先大纲、后视觉”的方式生成完整演示文稿，并导出 PDF 或图片版 PPT。模板决定整套的风格与配色，每一页的版式按内容单独设计。
 
 ### 成品实例
 
@@ -103,46 +103,60 @@
   </tr>
 </table>
 
+## 🖌️ 自由画布
+
+一块用来做图的白板：用一句话描述画面，图片就生成到画布上；在图上圈出要改的地方、旁边写上要求，点一下魔棒，修改后的新版本会出现在原图旁边。每个版本都会保留，版本条里能看到每一版改了什么、什么时候改的。
+
+### 成品实例
+
+<table>
+  <tr>
+    <td width="50%" align="center"><img src="public/examples/canvas/01.svg" alt="自由画布：一句话生成图片" width="100%" /><br/><strong>一句话生成图片</strong></td>
+    <td width="50%" align="center"><img src="public/examples/canvas/02.svg" alt="自由画布：在图上圈画标注" width="100%" /><br/><strong>在图上圈画标注</strong></td>
+  </tr>
+  <tr>
+    <td width="50%" align="center"><img src="public/examples/canvas/03.svg" alt="自由画布：按标注生成新版" width="100%" /><br/><strong>按标注生成新版</strong></td>
+    <td width="50%" align="center"><img src="public/examples/canvas/04.svg" alt="自由画布：版本对比" width="100%" /><br/><strong>版本对比</strong></td>
+  </tr>
+</table>
+
 ## 🎨 创作画布
 
 | 画布 | 核心能力 | 常见输出 |
 | --- | --- | --- |
 | `图表绘制` | 结构化图表生成与局部编辑 | 流程图、架构图、逻辑图 |
 | `室内设计` | 室内方案规划、图纸协同与交付打包 | 概念板、二维图纸、渲染任务单、材料清单 |
-| `PPT 演示` | 结构化演示文稿生成与多种导出 | 演示文稿、汇报幻灯片、可编辑演示稿、提案稿 |
+| `PPT 演示` | 结构化演示文稿生成与导出 | 演示文稿、汇报幻灯片、提案稿 |
+| `自由画布` | 白板上的文生图与按标注改图 | 海报、插画、同一张图的修改版本 |
 
 ## 🌈 版本发布
 
-当前版本：`v2.1.0`
+当前版本：`v2.2.0`（2026-10-26）。完整列表见 [CHANGELOG.md](CHANGELOG.md)。
 
-本分支未发布内容 —— 整个项目的结构性重构，以及重构过程中发现并修复的问题。完整列表见 [CHANGELOG.md](CHANGELOG.md)。
+**四个画布**
 
-**做减法**
+- 图表绘制、室内设计、PPT 演示之外，新增**自由画布**：白板上一句话生成图片，直接在图上画圈标注来改图，每张图都有版本条。
+- 原来的「流程画布」统一更名为**图表绘制（Diagram）**，从界面到代码、提示词和 `diagram-skill` 都已改名；已保存的选择和聊天记录会自动沿用。
+- 海报、产品、信息图画布和内嵌的 `pptist-lab` 编辑器已移除。「导出可编辑 PPTX」暂时从菜单里隐藏，相关代码保留。
 
-- 只保留三个画布：图表绘制、室内设计、PPT 演示。海报、产品、信息图画布已移除。
-- 移除内嵌的 `pptist-lab` 编辑器；可编辑演示稿直接导出 `.pptx`。
-- 统一为一条 OpenAI 兼容请求路径。厂商列表不仅从应用中移除，也从 `cad-skill` 和 `ppt-skill` 两个 skill 包中移除 —— 它们各自还带着一份九厂商的图像注册表，其中八个根本没有可用的接口地址。
-- 移除与 Vite 客户端重复的 Next.js 移植版本，以及旧 `PptWorkspace` 藏着的约 900 行不可达代码。
+**更友好的界面**
 
-**做结构**
+- 每个交互区打开时都有简短说明和可直接使用的示例，不再是一片空白。
+- 首页有了明确的入口，全站按钮风格统一；从 1024 宽的笔记本到大屏，中英文下都不再拥挤或被截断。
+- 任意工作区顶栏都能一键切换中英文，所有文字、报错和读屏标签都会跟着切换。
+- 细节打磨：禁用按钮改为中性灰并说明原因、加载时显示骨架屏、新增克制的动效，并遵守系统「减少动态效果」设置。
 
-- 仓库拆分为 `client/`、`server/`、`contracts/`、`resources/`；每个工作区都是同样的三层：纯函数模块、按功能划分的 hook、一个界面一个文件。规范写在 [docs/architecture.md](docs/architecture.md)。
-- `PptCanvas.tsx` 从 5,300 行降到约 2,250 行，并且自身不再渲染任何界面。
-- 共享 UI 组件、存储层、文件处理链路、聊天基础设施和多语言各自只存在一份，不再每个工作区一套。
-- 开启 TypeScript 严格模式并做了分包：首屏加载从 2.89 MB 降到约 700 KB（未压缩）。
-- 260 个测试（`npm test`，node:test）覆盖重构必须保持不变的纯逻辑。
+**更准确的结果**
 
-**PPT 工作流**
+- 自由画布按图片原始分辨率读取标注，标注里写的文字逐字传给模型，并要求引用原文和新文字，改图更准确。
+- PPT 生图只参考模板的风格与色调，不再照搬模板版式，整套 PPT 不会千篇一律。
+- 之前被服务端悄悄丢掉的图片尺寸选项，现在能正确传给模型。
 
-- 可编辑导出改为即时完成。此前会先进入文本框校对界面，再为每页跑三次模型调用；两页的演示稿要五分钟以上，现在约一秒。
-- 大纲规划智能体现在能看到模板，并据此撰写每页画面描述。此前它凭空发明配色，生图时又压过模板 —— 用深色模板做出来的演示稿是白底的。
-- 挂在某一页上的素材图、以及在交互区上传的图片，现在能真正送达生图模型。此前它们都在调用接口前被丢弃。
-- 交互区工具栏新增两个开关，可指定本次消息是「改图」还是「重画」；两个都不选则仍由模型自行判断。
-- 放映功能重新有了入口 —— 它一直是完整的，只是没有任何地方能进去。
+**更轻、更整洁**
 
-**修复**
-
-沿途发现并修复 21 处缺陷，包括每个聊天面板都存在的无限渲染循环、CAD 中四处吞掉补丁失败的 catch 块，以及会把整段对话写进控制台的服务端调试日志。
+- PPT 模板图从 285 MB 压缩到 34 MB，模板列表改用缩略图；内置的 SVG 编辑器从 18 MB 精简到 4 MB；示例图从 42 MB 精简到 12 MB。
+- 仓库拆分为 `client/`、`server/`、`contracts/`、`resources/`，每个工作区结构一致（见 [docs/architecture.md](docs/architecture.md)）；开启 TypeScript 严格模式，首屏加载从 2.89 MB 降到约 700 KB。
+- 450 多个测试（`npm test`）覆盖核心逻辑，`npm run lint` 零错误。
 
 ## 🌐 在线使用
 
@@ -158,7 +172,7 @@
 
 CanvasAnvil 为每个画布都提供了专用本地 skill，用来保证工作流稳定、输出一致，而不是把所有任务都塞进同一条通用提示链。
 
-- `flow-skill` · 图表生成与打包
+- `diagram-skill` · 图表生成与打包
   输出整洁的图表资源，并默认跳过独立 HTML 预览。
 - `cad-skill` · 室内设计交付流程
   导出图纸打包结果与 CSV 材料清单，便于后续交付。
@@ -201,6 +215,8 @@ npm run build
 
 - `npm run dev`：在 `8001` 端口启动应用
 - `npm run check`：执行 TypeScript 检查
+- `npm run lint`：运行 ESLint
+- `npm test`：运行测试
 - `npm run build`：构建生产版本
 
 ## 📝 开发说明
@@ -215,6 +231,7 @@ npm run build
 ## 📚 文档
 
 - 架构说明：[docs/architecture.md](docs/architecture.md)
+- 交接文档：[docs/HANDOFF.md](docs/HANDOFF.md)
 - 部署说明：[deploy/README.md](deploy/README.md)
 
 ## ⚖️ 许可证

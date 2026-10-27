@@ -20,19 +20,19 @@ export type PortalCanvasItem = {
 
 export const portalCanvasItems: PortalCanvasItem[] = [
   {
-    id: "flow",
-    zhTitle: "图表画布",
-    enTitle: "Diagram Canvas",
+    id: "diagram",
+    zhTitle: "图表绘制",
+    enTitle: "Diagram",
     zhSummary: "结构化图表与节点级局部修改",
     enSummary: "Structured diagrams with node-level edits",
-    image: "/examples/flow/01.png",
+    image: "/examples/diagram/01.png",
     angle: -90,
     accent: "#C96442",
   },
   {
     id: "cad",
-    zhTitle: "室内设计画布",
-    enTitle: "Interior Canvas",
+    zhTitle: "室内设计",
+    enTitle: "Interior Design",
     zhSummary: "平面方案、效果图与材料清单联动",
     enSummary: "Layouts, renders, and material lists in one pass",
     image: "/examples/cad/01.png",
@@ -41,8 +41,8 @@ export const portalCanvasItems: PortalCanvasItem[] = [
   },
   {
     id: "ppt",
-    zhTitle: "PPT画布",
-    enTitle: "PPT Canvas",
+    zhTitle: "PPT 演示",
+    enTitle: "PPT",
     zhSummary: "先大纲后视觉，导出可编辑稿、PDF 和图片版",
     enSummary: "Outline-first decks with editable, PDF, and image exports",
     image: "/examples/ppt/ppt1/01.png",

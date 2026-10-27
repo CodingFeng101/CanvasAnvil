@@ -1,8 +1,9 @@
 # Architecture
 
 CanvasAnvil is three programs in one repository: a Vite + React browser app, a
-small Node API, and the contract between them. Three canvases — Flow, Interior
-Design (CAD), and PPT — share one shell, one UI kit, and one model client.
+small Node API, and the contract between them. Four canvases — Diagram, Interior
+Design (CAD), PPT and Free Canvas — share one shell, one UI kit, and one model
+client.
 
 ## Layout
 
@@ -39,7 +40,7 @@ contracts/              what the client and server agree on (AIConfig and its
                         normalisation); no browser or Node APIs
 resources/              data read at runtime
   prompts/              agent prompts, as markdown
-  shape-libraries/      draw.io shape references the Flow agent can pull in
+  shape-libraries/      draw.io shape references the Diagram agent can pull in
 
 public/  docs/  deploy/  skill/  tests/
 ```
@@ -49,7 +50,7 @@ public/  docs/  deploy/  skill/  tests/
 **Nothing in `server/` imports from `client/`.** They are separate programs;
 the only thing they share is `contracts/`. A backend reaching into a frontend
 folder is what once put the draw.io system prompt and the Langfuse client
-inside the Flow workspace.
+inside the Diagram workspace.
 
 **`server/**` uses relative imports, not the `@/` alias.** `vite.config.ts`
 imports the dev middleware so `npm run dev` serves the API in-process, and Vite
@@ -58,7 +59,7 @@ paths.
 
 **Storage keys are load-bearing.** IndexedDB database names and localStorage
 keys carry users' saved work across releases. Each workspace names its own in
-`workspaces/<id>/storage.ts`. Flow's keep their original
+`workspaces/<id>/storage.ts`. Diagram's keep their original
 `next-ai-draw-io-` prefix from before that workspace was folded in. Renaming
 one orphans whatever was stored under it.
 
@@ -136,7 +137,7 @@ Two paths reach the model:
   `client/ai/client.ts`. The browser never talks to the provider directly, so
   the key stays out of cross-origin requests and the server can inline remote
   images the browser could not fetch.
-- **`/api/chat`** — streaming with tool calls, used by Flow. Runs as a pipeline
+- **`/api/chat`** — streaming with tool calls, used by Diagram. Runs as a pipeline
   whose stages live in `server/chat/`: validate, extract attachments,
   summarise, classify intent, optionally draft a reference image, assemble the
   prompt, stream.

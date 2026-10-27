@@ -1,5 +1,5 @@
 import { Suspense, useEffect, useState } from "react";
-import { Loader2, Monitor, Moon, Sun } from "lucide-react";
+import { Monitor, Moon, Sun } from "lucide-react";
 import { AnimatePresence, MotionConfig, motion } from "motion/react";
 import { Toaster } from "sonner";
 import { BrandIcon } from "@/app/BrandIcon";
@@ -8,7 +8,7 @@ import { DEFAULT_WORKSPACE, WORKSPACES, isWorkspaceId, type WorkspaceId } from "
 import { SettingsDialog } from "@/app/SettingsDialog";
 import { LandingPage } from "@/pages/LandingPage";
 import { cn } from "@/shared/lib/utils";
-import { t, useUiLanguage } from "@/shared/i18n";
+import { setUiLanguage, t, useUiLanguage, type UiLanguage } from "@/shared/i18n";
 import { SPRING, TWEEN } from "@/shared/motion";
 import { applyTheme, useTheme, type Theme } from "@/shared/theme";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/shared/ui/tooltip";
@@ -19,13 +19,47 @@ const APP_WORKSPACE_STORAGE_KEY = "CanvasAnvil-active-workspace-v1";
 function readStoredWorkspace(): WorkspaceId {
   if (typeof window === "undefined") return DEFAULT_WORKSPACE;
   const saved = localStorage.getItem(APP_WORKSPACE_STORAGE_KEY);
+  // The diagram workspace's id was "flow" before the rename.
+  if (saved === "flow") return "diagram";
   return isWorkspaceId(saved) ? saved : DEFAULT_WORKSPACE;
 }
 
+/** A shimmering block for the loading skeleton. */
+function SkeletonBlock({ className }: { className?: string }) {
+  return (
+    <div className={cn("relative overflow-hidden rounded-xl bg-muted/60", className)}>
+      <div className="absolute inset-0 animate-sheen bg-[linear-gradient(110deg,transparent_30%,hsl(var(--card)/0.6)_50%,transparent_70%)] bg-[length:200%_100%]" />
+    </div>
+  );
+}
+
+/**
+ * Shown while a workspace's chunk loads: the shape of the screen about to
+ * appear -- canvas on the left, chat on the right -- rather than a lone
+ * spinner on a blank page, so the switch reads as the layout filling in.
+ */
 function WorkspaceFallback() {
   return (
-    <div className="h-full w-full flex items-center justify-center">
-      <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+    <div className="flex h-full w-full animate-fade-in" aria-busy="true">
+      <div className="flex-[68] p-6">
+        <SkeletonBlock className="h-full w-full rounded-2xl" />
+      </div>
+      <div className="flex flex-[32] flex-col border-l border-border/50 bg-card">
+        <div className="flex items-center justify-between border-b border-border/50 px-5 py-4">
+          <SkeletonBlock className="h-5 w-24 rounded-md" />
+          <SkeletonBlock className="size-7 rounded-md" />
+        </div>
+        <div className="flex flex-1 flex-col justify-center gap-3 px-5">
+          <SkeletonBlock className="size-12 rounded-2xl" />
+          <SkeletonBlock className="h-5 w-2/3 rounded-md" />
+          <SkeletonBlock className="h-4 w-full rounded-md" />
+          <SkeletonBlock className="mt-4 h-12 w-full" />
+          <SkeletonBlock className="h-12 w-full" />
+        </div>
+        <div className="border-t border-border/50 p-4">
+          <SkeletonBlock className="h-[104px] w-full rounded-2xl" />
+        </div>
+      </div>
     </div>
   );
 }
@@ -64,6 +98,43 @@ function ThemeToggle() {
               className="flex items-center justify-center"
             >
               <Icon className="size-[18px]" />
+            </motion.span>
+          </AnimatePresence>
+        </button>
+      </TooltipTrigger>
+      <TooltipContent side="bottom">{label}</TooltipContent>
+    </Tooltip>
+  );
+}
+
+/**
+ * One-click language switch beside the theme toggle. Inside a workspace the
+ * only way to change language used to be the settings dialog, while the
+ * portal had its own button in the header -- now both are one click.
+ */
+function LanguageToggle() {
+  const uiLang = useUiLanguage();
+  const next: UiLanguage = uiLang === "zh" ? "en" : "zh";
+  const label = uiLang === "zh" ? "Switch to English" : "切换到中文";
+
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <button
+          type="button"
+          aria-label={label}
+          onClick={() => setUiLanguage(next)}
+          className="flex h-9 min-w-9 items-center justify-center rounded-lg px-2 text-[13px] font-semibold text-muted-foreground transition-[background-color,color] duration-fast ease-out-soft hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/30"
+        >
+          <AnimatePresence mode="wait" initial={false}>
+            <motion.span
+              key={uiLang}
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -6 }}
+              transition={TWEEN.fast}
+            >
+              {uiLang === "zh" ? "EN" : "中"}
             </motion.span>
           </AnimatePresence>
         </button>
@@ -173,6 +244,7 @@ export default function App() {
           </div>
 
           <div className="flex items-center gap-1 justify-self-end">
+            <LanguageToggle />
             <ThemeToggle />
             <SettingsDialog />
           </div>

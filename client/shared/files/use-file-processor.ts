@@ -30,7 +30,7 @@ import type { ExtractedVisualAsset } from "@/shared/files/types"
  * model. Shared by every workspace's chat input.
  */
 
-export type FileWorkspace = "flow" | "cad" | "ppt" | "unknown"
+export type FileWorkspace = "diagram" | "cad" | "ppt" | "unknown"
 
 export interface FileData {
     text: string

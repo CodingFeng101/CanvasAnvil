@@ -52,16 +52,25 @@ export interface TextRequest {
   signal?: AbortSignal;
 }
 
-export type ImageSize =
-  | "auto"
-  | "256x256"
-  | "512x512"
-  | "1024x1024"
-  | "1536x1024"
-  | "1024x1536"
-  | "1792x1024"
-  | "1024x1792";
-export type ImageQuality = "auto" | "low" | "medium" | "high";
+/**
+ * Every size and quality a client may ask for. The server validates against
+ * these same lists, so a value offered in the UI can never be silently
+ * dropped on the way to the model.
+ */
+export const IMAGE_SIZES = [
+  "auto",
+  "256x256",
+  "512x512",
+  "1024x1024",
+  "1536x1024",
+  "1024x1536",
+  "1792x1024",
+  "1024x1792",
+] as const;
+export const IMAGE_QUALITIES = ["auto", "low", "medium", "high"] as const;
+
+export type ImageSize = (typeof IMAGE_SIZES)[number];
+export type ImageQuality = (typeof IMAGE_QUALITIES)[number];
 
 export interface ImageRequest {
   channel: AIChannel;

@@ -1,5 +1,5 @@
 /**
- * System prompts for Flow workspace models.
+ * System prompts for Diagram workspace models.
  */
 
 export const DEFAULT_SYSTEM_PROMPT = `

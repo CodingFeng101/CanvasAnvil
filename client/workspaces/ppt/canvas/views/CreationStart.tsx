@@ -64,7 +64,7 @@ export function CreationStart({
         }
         if (creationMode === "image_transform") {
             return {
-                hint: tr("上传 PDF，系统会将每一页导入为图片幻灯片；仅在导出可编辑 PPTX 时才进行文字识别。", "Upload a PDF and the system will import each page as an image slide; text recognition runs only for editable PPTX export."),
+                hint: tr("上传 PDF，系统会将每一页导入为一张图片幻灯片。", "Upload a PDF and each page is imported as an image slide."),
                 placeholder: "",
             };
         }
@@ -72,6 +72,18 @@ export function CreationStart({
             hint: tr("输入你的想法，AI 将为你生成完整 PPT", "Describe your idea and AI will generate a full deck."),
             placeholder: tr("例如：生成一份关于 AI 发展史的演讲 PPT", "e.g. Create a presentation about the history of AI")
         };
+    })();
+    /** Why the start button is disabled, when it is for a reason the user can fix. */
+    const blockedReason = (() => {
+        if (creationMode === "beautify") return inputs.beautify.file ? "" : tr("先上传要美化的 PDF", "Upload the PDF to beautify first");
+        if (creationMode === "image_transform") {
+            const file = inputs.imageTransform.file;
+            if (!file) return tr("先上传要转化的 PDF", "Upload the PDF to transform first");
+            return isPdfFile(file) ? "" : tr("只支持 PDF 文件", "Only PDF files are supported");
+        }
+        if (inputs.reference.isParsing) return tr("参考资料解析中，请稍候…", "Still reading your reference files…");
+        if (creationMode === "idea") return inputs.ideaInput.trim() ? "" : tr("先在上面写下你的想法", "Write your idea above first");
+        return inputs.outlineInput.trim() ? "" : tr("先在上面粘贴大纲", "Paste your outline above first");
     })();
 
 
@@ -216,7 +228,6 @@ export function CreationStart({
                                 <div className="rounded-xl border border-border bg-sunken px-4 py-3 text-xs text-muted-foreground leading-6">
                                   <div>{tr("处理结果：", "Output:")}</div>
                                   <div>{tr("系统会把 PDF 每一页导入为图片幻灯片。", "The system imports each PDF page as an image slide.")}</div>
-                                  <div>{tr("如需可编辑文字，请在导出可编辑 PPTX 时再进行文字识别与回填。", "If you need editable text, recognition and text refill happen only during editable PPTX export.")}</div>
                                 </div>
                               </div>
                             ) : (
@@ -313,6 +324,11 @@ export function CreationStart({
                         {progress.message ? <Loader2 className="size-5 mr-2 animate-spin" /> : <Sparkles className="size-5 mr-2" />}
                         {progress.message || (creationMode === "beautify" ? tr("开始渲染", "Start rendering") : creationMode === "image_transform" ? tr("开始转化", "Start transform") : creationMode === "idea" ? tr("开始生成大纲", "Generate outline") : tr("载入大纲", "Load outline"))}
                     </Button>
+                    {/* Says why the button is unavailable instead of leaving
+                        the user to guess. */}
+                    {!progress.message && blockedReason ? (
+                        <p className="-mt-2 text-center text-xs text-muted-foreground animate-fade-in">{blockedReason}</p>
+                    ) : null}
 
                     {/* Below the button, at the user's request: the template is
                         a refinement, not the first decision. The header carries

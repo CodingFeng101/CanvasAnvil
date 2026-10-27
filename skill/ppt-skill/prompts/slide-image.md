@@ -18,7 +18,7 @@ The slide must remain suitable for formal presentation use.
 # S - Steps
 1. Read the slide title, content, description, layout, and deck context.
 2. Convert the slide into one precise 16:9 image-generation prompt.
-3. Treat the template as style guidance only.
+3. Treat the template as style and colour-tone guidance only. Do not reuse its layout -- arrange the slide from its own content.
 4. Use material images only when they meaningfully support the current slide.
 5. Preserve readable slide text and strong hierarchy.
 6. Keep language aligned with `ui_language`.

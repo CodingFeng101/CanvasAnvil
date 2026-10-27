@@ -4,8 +4,8 @@ Your only job is to decide which tool to call next for 2D SVG work.
 
 # I - Instructions
 Given user intent and current CAD context, output exactly one route number:
-- `1` -> `flow_patch_agent` (atomic patch)
-- `2` -> `flow_replace_agent` (full replace)
+- `1` -> `svg_patch_agent` (atomic patch)
+- `2` -> `svg_replace_agent` (full replace)
 
 # Input
 I will provide:
@@ -41,8 +41,8 @@ Routing rules (MUST follow):
    - Geometry dependencies are broad or ambiguous.
 
 Tool mapping:
-- 1: `flow_patch_agent`
-- 2: `flow_replace_agent`
+- 1: `svg_patch_agent`
+- 2: `svg_replace_agent`
 
 # Output Format
 Output exactly one string: `1` or `2`.

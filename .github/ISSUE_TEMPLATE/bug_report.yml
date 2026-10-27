@@ -12,9 +12,10 @@ body:
     attributes:
       label: Which canvas is affected?
       options:
-        - Flow canvas
-        - CAD canvas
+        - Diagram canvas
+        - Interior Design canvas
         - PPT canvas
+        - Free Canvas
         - Deployment / Server
         - Other
     validations:

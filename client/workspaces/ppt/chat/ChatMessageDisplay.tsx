@@ -529,7 +529,7 @@ export function ChatMessageDisplay({
                                                             <div key={idx} className="w-full min-w-0 space-y-2">
                                                                 {pptToolPayload.slides.map((slide, slideIdx) => {
                                                                     const slideNumber = getSlideNumber(slide, slideIdx);
-                                                                    const rows = slidePatchEntries(slide);
+                                                                    const rows = slidePatchEntries(slide, uiLang);
                                                                     const cardKey = `${message.id}-ppt-edit-${idx}-${slideIdx}`;
                                                                     const expanded = expandedSlideCards[cardKey] ?? false;
                                                                     return (

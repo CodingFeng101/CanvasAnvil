@@ -5,7 +5,7 @@ import { getUiLanguage, useUiLanguage, type UiLanguage } from "@/shared/i18n/lan
  *
  * The app shell and each workspace own their own strings — the same key means
  * different things in different places ("history.title" is "Version History"
- * in the shell and "Diagram History" in Flow) — but they all look those
+ * in the shell and "Diagram History" in Diagram) — but they all look those
  * strings up the same way and follow the same language setting.
  */
 

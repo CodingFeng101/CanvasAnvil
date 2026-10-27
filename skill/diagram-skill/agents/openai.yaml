@@ -1,0 +1,7 @@
+interface:
+  display_name: "Diagram Skill"
+  short_description: "Create and edit draw.io diagrams as XML, validate them, and open them directly in the draw.io online editor."
+  default_prompt: "Use $diagram-skill to generate or edit a draw.io diagram, then open it in the draw.io online editor."
+
+policy:
+  allow_implicit_invocation: true

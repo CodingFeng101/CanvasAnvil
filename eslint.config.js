@@ -7,7 +7,9 @@ import tseslint from 'typescript-eslint'
 export default tseslint.config(
   // `.claude/worktrees` holds full checkouts of this same repo, so without
   // this every file gets linted once per live worktree.
-  { ignores: ['dist', '.claude'] },
+  // Vendored builds are someone else's minified code; their inline
+  // eslint-disable comments name plugins this project does not load.
+  { ignores: ['dist', '.claude', 'public/vendor', 'skill/*/vendor'] },
   {
     extends: [js.configs.recommended, ...tseslint.configs.recommended],
     files: ['**/*.{ts,tsx}'],
@@ -33,6 +35,8 @@ export default tseslint.config(
         },
       ],
       'no-empty': 'warn',
+      // CJK character classes deliberately include the ideographic space.
+      'no-irregular-whitespace': ['error', { skipRegExps: true }],
       'prefer-const': 'warn',
       'react-refresh/only-export-components': [
         'warn',

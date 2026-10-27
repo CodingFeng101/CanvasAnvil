@@ -134,7 +134,13 @@ export function TemplatePicker({ templateLibrary, tr, heading }: TemplatePickerP
                 : "border-border hover:ring-2 hover:ring-primary hover:shadow-md",
             )}
           >
-            <img src={t.previewSrc} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" alt={t.name} />
+            <img
+              src={t.previewSrc}
+              loading="lazy"
+              decoding="async"
+              className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+              alt={t.name}
+            />
             {selectedTemplateId === t.id && (
               <div className="absolute top-2 left-2 rounded-full bg-primary px-2 py-0.5 text-[10px] font-medium text-primary-foreground shadow-xs">
                 {tr("已选择", "Selected")}

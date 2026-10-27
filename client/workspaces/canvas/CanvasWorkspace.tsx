@@ -52,11 +52,11 @@ export function CanvasWorkspace() {
     setVersions(info && api ? getLineageVersions(api, info.lineageId) : []);
   };
 
-  const handleImageGenerated = async (dataUrl: string): Promise<string | null> => {
+  const handleImageGenerated = async (dataUrl: string, prompt: string): Promise<string | null> => {
     const api = excalidrawApiRef.current;
     if (!api) return null;
     try {
-      const { elementId } = await insertGeneratedImage(api, dataUrl);
+      const { elementId } = await insertGeneratedImage(api, dataUrl, { note: prompt });
       return elementId;
     } catch (e) {
       console.error("Failed to place generated image on the canvas", e);
