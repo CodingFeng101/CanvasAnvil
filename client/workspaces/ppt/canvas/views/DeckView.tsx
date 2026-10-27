@@ -180,9 +180,8 @@ export function DeckView({
       />
       {/* Toolbar */}
       <div className="relative z-50 h-14 px-4 bg-card border-b border-border flex justify-between items-center shadow-sm">
-        <div className="flex items-center gap-4 [&>h2]:hidden">
-            <h2 className="hidden font-semibold text-sm text-foreground">{tr("PPT 演示文稿", "PPT Deck")}</h2>
-            <div className="font-semibold text-sm text-foreground">{tr("PPT \u6f14\u793a\u6587\u7a3f", "PPT Deck")}</div>
+        <div className="flex items-center gap-4">
+            <h2 className="font-semibold text-sm text-foreground">{tr("PPT 演示文稿", "PPT Deck")}</h2>
             <button
                 onClick={actions.backToStart}
                 title={tr("返回开始", "Back to start")}
@@ -191,7 +190,6 @@ export function DeckView({
                 <ArrowLeft className="w-3.5 h-3.5" />
                 <span>{tr("返回", "Back")}</span>
             </button>
-            <h2 className="font-semibold text-sm text-foreground">{tr("PPT 演示文稿", "PPT Deck")}</h2>
             <div className="h-4 w-px bg-border"></div>
             <button
                 onClick={() => slideshow.open(deck.currentIndex)}
