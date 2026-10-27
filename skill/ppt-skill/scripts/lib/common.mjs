@@ -1,6 +1,13 @@
 import fs from "node:fs";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { OPENAI_DEFAULT_BASE_URL } from "./image-route.mjs";
+
+// The skill's own config file, found from this script rather than from the
+// caller's working directory, so the scripts can run from anywhere.
+export const DEFAULT_IMAGE_CONFIG_FILE = fileURLToPath(
+  new URL("../../config/image-provider.json", import.meta.url),
+);
 
 export function fail(message) {
   console.error(message);
@@ -25,11 +32,9 @@ export function resolveFromCwd(inputPath) {
 }
 
 export function loadImageConfig(configFile) {
-  const target = configFile
-    ? resolveFromCwd(configFile)
-    : resolveFromCwd(path.join("config", "image-provider.json"));
+  const target = configFile ? resolveFromCwd(configFile) : DEFAULT_IMAGE_CONFIG_FILE;
   if (!fs.existsSync(target)) {
-    fail(`Missing image config file: ${target}`);
+    fail(`Missing image config file: ${target}. Copy image-provider.example.json next to it and fill it in.`);
   }
   const raw = readJson(target);
   const apiKey = String(raw.apiKey || "").trim();

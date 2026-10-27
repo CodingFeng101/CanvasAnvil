@@ -26,6 +26,7 @@ lerna-debug.log*
 .env.*
 !.env.example
 *.local
+skill/*/config/image-provider.json
 
 # Cache / temp
 .cache/

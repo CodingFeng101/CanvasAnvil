@@ -3,6 +3,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 import { chromium } from "playwright";
 
 function parseArgs(argv) {
@@ -103,7 +104,14 @@ async function main() {
   const outputPath = path.resolve(process.cwd(), args.output);
   fs.mkdirSync(path.dirname(outputPath), { recursive: true });
 
-  const browser = await chromium.launch();
+  let browser;
+  try {
+    browser = await chromium.launch();
+  } catch (error) {
+    fs.rmSync(tempDir, { recursive: true, force: true });
+    const detail = error instanceof Error ? error.message.split("\n")[0] : String(error);
+    fail(`Could not launch Chromium (${detail}). Install it once with: npx playwright install chromium`);
+  }
   try {
     const page = await browser.newPage({
       viewport: {
@@ -112,7 +120,7 @@ async function main() {
       },
       deviceScaleFactor: 1,
     });
-    await page.goto(`file:///${htmlPath.replace(/\\/g, "/")}`);
+    await page.goto(pathToFileURL(htmlPath).href);
     await page.locator("#stage").waitFor();
 
     if (String(args.format).toLowerCase() === "jpg" || String(args.format).toLowerCase() === "jpeg") {

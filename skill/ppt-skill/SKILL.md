@@ -17,7 +17,9 @@ Use when the task requires:
 ## First-Use Reminder
 
 On the first use of this skill in a conversation, remind the user that image generation reads
-`config/image-provider.json`, and that it must be filled in before any image can be produced.
+`config/image-provider.json` in this skill folder, and that it must be filled in before any image can be produced.
+If it does not exist, they copy `config/image-provider.example.json` to it; the filled file is git-ignored and
+must not be committed.
 
 ## Order
 

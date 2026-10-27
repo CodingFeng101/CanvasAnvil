@@ -9,6 +9,6 @@
     "build:bundle": "node scripts/build-cad-bundle.mjs"
   },
   "dependencies": {
-    "playwright": "^1.59.1"
+    "playwright": "^1.64.0"
   }
 }
