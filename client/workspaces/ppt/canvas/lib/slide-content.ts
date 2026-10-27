@@ -9,18 +9,6 @@ export const hasRenderableTextBlocks = (layer?: SlideRenderLayer | unknown) => {
   return Array.isArray(blocks) && blocks.length > 0;
 };
 
-export const cloneSerializable = <T,>(value: T): T => JSON.parse(JSON.stringify(value));
-
-export const stripLeadingBullet = (value: string) =>
-  value.replace(/^[•●▪◦·]\s*/, "").trim();
-
-export const textToLines = (value: string) =>
-  value
-    .replace(/\r\n/g, "\n")
-    .split("\n")
-    .map((item) => item.trim())
-    .filter(Boolean);
-
 export const deriveTextElementsFromBlocks = (textBlocks: PptTextBlock[] = []): PptElement[] =>
   textBlocksToPptElements(textBlocks);
 

@@ -12,9 +12,10 @@ body:
     attributes:
       label: Which canvas is this for?
       options:
-        - Flow canvas
-        - CAD canvas
+        - Diagram canvas
+        - Interior Design canvas
         - PPT canvas
+        - Free Canvas
         - Cross-canvas / Platform
         - Other
     validations:

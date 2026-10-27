@@ -101,10 +101,10 @@ export function getAnnotationSearchBounds(image: ExcalidrawImageElement): Bounds
  * to select the picture itself.
  *
  * Selecting the image directly always wins. Otherwise, every image whose
- * annotation box the selection overlaps is a candidate -- and since edits
- * land right beside their source (a 40px gap in insert-image.ts's grid,
- * routinely smaller than a picture's own margin), two neighbours' boxes
- * overlapping in the gap between them is the common case, not an edge case.
+ * annotation box the selection overlaps is a candidate. insert-image.ts
+ * spaces pictures so their boxes do not overlap, but a picture the user
+ * dragged in or moved by hand obeys no such spacing, so two candidates is
+ * still an ordinary case.
  * Picking whichever candidate's own footprint the selection sits closest to
  * resolves that the way a person would -- "closer to this one" -- rather
  * than refusing to guess and silently doing nothing.

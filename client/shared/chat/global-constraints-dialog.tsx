@@ -15,13 +15,13 @@ import { t, useUiLanguage } from "@/shared/i18n"
  * Standing instructions the workspace prepends to every request.
  *
  * Constraints are scoped per workspace: a CAD drawing convention has no place
- * in a slide deck. Flow passes an explicit storageKey to keep reading the key
+ * in a slide deck. Diagram passes an explicit storageKey to keep reading the key
  * it shipped with, so nobody's saved constraints disappear.
  */
 export const STORAGE_GLOBAL_CONSTRAINTS_KEY = "CanvasAnvil-global-constraints"
 
 const WORKSPACE_LABELS: Record<string, string> = {
-    flow: "Diagram",
+    diagram: "Diagram",
     cad: "CAD",
     ppt: "PPT",
 }

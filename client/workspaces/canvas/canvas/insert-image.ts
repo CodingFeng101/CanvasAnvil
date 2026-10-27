@@ -1,8 +1,9 @@
 import { CaptureUpdateAction, convertToExcalidrawElements } from "@excalidraw/excalidraw";
 import type { BinaryFileData, DataURL, ExcalidrawImperativeAPI } from "@excalidraw/excalidraw/types";
 import type { FileId } from "@excalidraw/excalidraw/element/types";
-import { annotationMargin } from "@/workspaces/canvas/canvas/bounds";
-import { makeLineageId, withImageLineage } from "@/workspaces/canvas/canvas/lineage";
+import type { ExcalidrawImageElement } from "@excalidraw/excalidraw/element/types";
+import { annotationMargin, boundsOverlap, elementBounds, type Bounds } from "@/workspaces/canvas/canvas/bounds";
+import { lineageIdOf, makeLineageId, withImageLineage } from "@/workspaces/canvas/canvas/lineage";
 
 /** Excalidraw's file store wants a real data URI; a generated image is usually one already, but a remote URL needs converting first. */
 async function toDataUrl(url: string): Promise<string> {
@@ -56,18 +57,78 @@ export interface InsertGeneratedImageResult {
 }
 
 /**
- * Drops a newly generated image onto the board as a new element, laid out in
- * a simple grid so successive generations don't stack on top of each other,
- * and selects it so it's immediately available for another annotated edit.
+ * Where a new picture starts: the first grid cell nothing sits in.
+ *
+ * Counting images to pick "the next cell" stopped working once versions are
+ * laid out beside their source rather than in the grid -- the counted cell
+ * could be one a version row already ran through.
+ */
+function nextGridSlot(api: ExcalidrawImperativeAPI): { x: number; y: number } {
+  const occupied = api
+    .getSceneElements()
+    .filter((el) => el.type === "image")
+    .map(elementBounds);
+  const cell = MAX_PLACED_DIMENSION + GRID_GAP;
+  for (let index = 0; ; index++) {
+    const x = GRID_MARGIN + (index % GRID_COLUMNS) * cell;
+    const y = GRID_MARGIN + Math.floor(index / GRID_COLUMNS) * cell;
+    const box = { x: x - GRID_GAP / 2, y: y - GRID_GAP / 2, width: cell, height: cell };
+    if (!occupied.some((other) => boundsOverlap(other, box))) return { x, y };
+  }
+}
+
+/**
+ * Where a new version of an existing picture goes: to the right of that
+ * picture's last version, so its versions read left to right as one row.
+ *
+ * The grid slot it used to take was "the next cell", which after a few
+ * pictures was nowhere near the image being edited -- the board filled up
+ * with near-identical pictures and nothing said which was a version of which.
+ *
+ * The gap covers both pictures' annotation reach (see annotationMargin), for
+ * the same reason the grid's does. If the spot is taken -- another picture
+ * already sits to the right -- it steps down a row at a time until clear.
+ */
+function slotBesideLineage(
+  api: ExcalidrawImperativeAPI,
+  lineageId: string,
+  width: number,
+  height: number,
+): { x: number; y: number } | null {
+  const images = api
+    .getSceneElements()
+    .filter((el) => el.type === "image") as unknown as ExcalidrawImageElement[];
+  const members = images.filter((el) => lineageIdOf(el) === lineageId);
+  if (members.length === 0) return null;
+
+  const last = members.reduce((a, b) => (a.x + a.width >= b.x + b.width ? a : b));
+  const gap = annotationMargin(Math.max(last.width, last.height)) + annotationMargin(Math.max(width, height));
+  const occupied = images.map(elementBounds);
+  const x = last.x + last.width + gap;
+  let y = last.y;
+  const clearOf = (slot: Bounds) =>
+    !occupied.some((box) =>
+      boundsOverlap(box, { x: slot.x - gap, y: slot.y - gap, width: slot.width + gap * 2, height: slot.height + gap * 2 }),
+    );
+  for (let tries = 0; tries < 50 && !clearOf({ x, y, width, height }); tries++) {
+    y += height + gap;
+  }
+  return { x, y };
+}
+
+/**
+ * Drops a newly generated image onto the board as a new element and selects
+ * it so it's immediately available for another annotated edit.
  *
  * `lineageId` continues an existing picture's version history (an annotated
- * edit passes the source image's lineage); omitted, the image starts a new
- * one of its own.
+ * edit passes the source image's lineage) and places the result beside it;
+ * omitted, the image starts a new picture in the next grid cell. `note`
+ * records what produced this version, for the version strip.
  */
 export async function insertGeneratedImage(
   api: ExcalidrawImperativeAPI,
   imageUrl: string,
-  options?: { lineageId?: string },
+  options?: { lineageId?: string; note?: string },
 ): Promise<InsertGeneratedImageResult> {
   const dataUrl = await toDataUrl(imageUrl);
   const naturalSize = await loadImageSize(dataUrl);
@@ -83,13 +144,11 @@ export async function insertGeneratedImage(
     },
   ]);
 
-  const placementIndex = api.getSceneElements().filter((el) => el.type === "image").length;
-  const column = placementIndex % GRID_COLUMNS;
-  const row = Math.floor(placementIndex / GRID_COLUMNS);
-  const x = GRID_MARGIN + column * (MAX_PLACED_DIMENSION + GRID_GAP);
-  const y = GRID_MARGIN + row * (MAX_PLACED_DIMENSION + GRID_GAP);
+  const { x, y } =
+    (options?.lineageId && slotBesideLineage(api, options.lineageId, width, height)) || nextGridSlot(api);
 
   const lineageId = options?.lineageId || makeLineageId();
+  const note = options?.note?.trim();
   const [imageElement] = convertToExcalidrawElements([
     {
       type: "image",
@@ -98,7 +157,7 @@ export async function insertGeneratedImage(
       y,
       width,
       height,
-      customData: withImageLineage(undefined, { lineageId, createdAt: Date.now() }),
+      customData: withImageLineage(undefined, { lineageId, createdAt: Date.now(), ...(note ? { note } : {}) }),
     },
   ]);
 

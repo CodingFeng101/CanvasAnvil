@@ -172,22 +172,27 @@ export function getSlideNumber(slide: PptEditSlidePatch, index: number): number 
 
 /** The fields shown first, in the order a reader expects them. */
 const KNOWN_FIELDS = ["title", "description", "layout", "note", "content"];
-const EMPTY_VALUE = "（空）";
+const EMPTY_VALUE = { zh: "（空）", en: "(empty)" } as const;
+const LIST_SEPARATOR = { zh: "；", en: "; " } as const;
 
 /** Flattens a patch into displayable rows, keeping unknown fields rather than hiding them. */
-export function slidePatchEntries(slide: PptEditSlidePatch): Array<{ key: string; value: string }> {
+export function slidePatchEntries(
+  slide: PptEditSlidePatch,
+  uiLang: "zh" | "en" = "zh",
+): Array<{ key: string; value: string }> {
   const rows: Array<{ key: string; value: string }> = [];
+  const empty = EMPTY_VALUE[uiLang];
 
   for (const key of KNOWN_FIELDS) {
     if (!(key in slide)) continue;
     const raw = slide[key];
     if (Array.isArray(raw)) {
-      const text = raw.map((x) => String(x || "").trim()).filter(Boolean).join("；");
-      rows.push({ key, value: text || EMPTY_VALUE });
+      const text = raw.map((x) => String(x || "").trim()).filter(Boolean).join(LIST_SEPARATOR[uiLang]);
+      rows.push({ key, value: text || empty });
     } else if (raw && typeof raw === "object") {
       rows.push({ key, value: JSON.stringify(raw) });
     } else {
-      rows.push({ key, value: String(raw ?? "").trim() || EMPTY_VALUE });
+      rows.push({ key, value: String(raw ?? "").trim() || empty });
     }
   }
 

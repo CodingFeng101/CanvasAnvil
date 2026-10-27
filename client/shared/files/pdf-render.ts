@@ -11,11 +11,6 @@ export async function getPdfDocumentFromUrl(url: string): Promise<any> {
     return await getDocumentProxy(new Uint8Array(buffer))
 }
 
-export async function getPdfPageCountFromUrl(url: string): Promise<number> {
-    const pdf = await getPdfDocumentFromUrl(url)
-    return (pdf as any).numPages ?? 0
-}
-
 /** Draws one page at `targetWidth` CSS pixels, scaled up for the device ratio. */
 export async function renderPdfPageToCanvas(opts: {
     pdf: any

@@ -490,7 +490,7 @@ export function CadWorkspace() {
 
   const handleCadCodeAction = async (
     code: string,
-    type: "flow" | "cad" | "ppt",
+    type: "diagram" | "cad" | "ppt",
   ): Promise<CodeActionResult> => {
     if (type !== "cad") return { ok: true };
 

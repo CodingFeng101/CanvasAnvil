@@ -57,6 +57,14 @@ import type { useDeckExport } from "@/workspaces/ppt/canvas/hooks/use-deck-expor
 import type { useSlideMaterials } from "@/workspaces/ppt/canvas/hooks/use-slide-materials";
 import type { useSlideshow } from "@/workspaces/ppt/canvas/hooks/use-slideshow";
 
+/**
+ * The editable-PPTX export is hidden from the menu for now. Only the entry is
+ * gone: the export itself (PptCanvas's handleDownloadEditablePpt and the
+ * vision/ rebuild behind it) is untouched, so flipping this back is all it
+ * takes to bring it back.
+ */
+const SHOW_EDITABLE_EXPORT = false;
+
 /** The deck as this screen needs to see it: the slides, and how to resolve one. */
 export interface DeckViewModel {
   slides: SlideData[];
@@ -235,16 +243,18 @@ export function DeckView({
                   >
                     {tr("导出图片版 PPT", "Export Image PPT")}
                   </button>
-                  <button
-                    type="button"
-                    className="flex w-full items-center rounded-lg px-3 py-2 text-left text-xs text-foreground/80 transition-colors hover:bg-accent"
-                    onClick={() => {
-                      exporter.setMenuOpen(false);
-                      void actions.downloadEditablePpt();
-                    }}
-                  >
-                    {tr("导出可编辑 PPTX", "Export Editable PPTX")}
-                  </button>
+                  {SHOW_EDITABLE_EXPORT && (
+                    <button
+                      type="button"
+                      className="flex w-full items-center rounded-lg px-3 py-2 text-left text-xs text-foreground/80 transition-colors hover:bg-accent"
+                      onClick={() => {
+                        exporter.setMenuOpen(false);
+                        void actions.downloadEditablePpt();
+                      }}
+                    >
+                      {tr("导出可编辑 PPTX", "Export Editable PPTX")}
+                    </button>
+                  )}
                 </motion.div>
               ) : null}
             </div>
@@ -489,7 +499,7 @@ export function DeckView({
                   <ContextMenuContent>
                       <ContextMenuItem onClick={() => deck.currentSlide && actions.addSlideToChat(deck.currentSlide)} className="gap-2">
                           <MessageSquarePlus className="w-4 h-4" />
-                          <span>把此页添加到对话</span>
+                          <span>{tr("把此页添加到对话", "Add this slide to the chat")}</span>
                       </ContextMenuItem>
                   </ContextMenuContent>
                 ) : null}

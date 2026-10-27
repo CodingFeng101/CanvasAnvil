@@ -1,10 +1,10 @@
 import { useState, useRef, useEffect } from 'react';
-import { PanelRightClose, PanelRightOpen } from 'lucide-react';
+import { Home, PanelRightClose, PanelRightOpen } from 'lucide-react';
 import { cn } from '@/shared/lib/utils';
 import { streamChatMessage, generateChatMessage, ChatMessage, getAIConfig } from '@/ai/client';
 
 import { ButtonWithTooltip } from '@/shared/chat';
-import { ChatInput } from '@/shared/chat';
+import { ChatEmptyState, ChatInput } from '@/shared/chat';
 import { ChatMessageDisplay, UIMessage } from '@/workspaces/cad/chat/ChatMessageDisplay';
 import { STORAGE_GLOBAL_CONSTRAINTS_KEY } from '@/shared/chat';
 import { HistoryDialog, HistoryItem } from '@/shared/chat';
@@ -19,8 +19,8 @@ import {
 import {
   CAD_PLAN_AGENT_PROMPT,
   CAD_SVG_AGENT_ROUTER_PROMPT,
-  CAD_SVG_FLOW_PATCH_AGENT_PROMPT,
-  CAD_SVG_FLOW_REPLACE_AGENT_PROMPT,
+  CAD_SVG_PATCH_AGENT_PROMPT,
+  CAD_SVG_REPLACE_AGENT_PROMPT,
 } from '@/workspaces/cad/lib/agents';
 import { getCadRenderFallbackTitle, getCadRenderSlotTitles } from "@/workspaces/cad/lib/render-titles";
 import { applyCadPatchFromReply } from "@/workspaces/cad/lib/apply-cad-patch";
@@ -57,7 +57,7 @@ interface ChatPanelProps {
   className?: string;
   attachments?: Attachment[];
   onRemoveAttachment?: (id: string) => void;
-  onCodeAction?: (code: string, type: 'flow' | 'cad' | 'ppt') => MaybePromise<void | CodeActionResult>;
+  onCodeAction?: (code: string, type: 'diagram' | 'cad' | 'ppt') => MaybePromise<void | CodeActionResult>;
   systemPrompt: string;
   initialMessages?: ChatMessage[];
   onMessagesChange?: (messages: ChatMessage[]) => void;
@@ -160,10 +160,11 @@ export function ChatPanel({
   );
 
   const [input, setInput] = useState('');
+  const [inputFocusTick, setInputFocusTick] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
   const [showResetWarning, setShowResetWarning] = useState(false);
-  const flowAutoRetryCountRef = useRef(0);
+  const autoRetryCountRef = useRef(0);
   const cadSvgAutoRetryCountRef = useRef(0);
   const MAX_CAD_SVG_AUTO_RETRY = 3;
   const cadApprovedPlanRef = useRef<any | null>(null);
@@ -341,7 +342,7 @@ export function ChatPanel({
     setShowResetWarning(false);
   };
 
-  const runCodeAction = async (code: string, type: 'flow' | 'cad' | 'ppt') => {
+  const runCodeAction = async (code: string, type: 'diagram' | 'cad' | 'ppt') => {
     const result = await Promise.resolve(onCodeAction?.(code, type));
     if (!result || typeof result !== "object") return { ok: true } as CodeActionResult;
     const r = result as any;
@@ -518,7 +519,7 @@ export function ChatPanel({
   };
 
   const handleAssistantResponse = async (fullResponse: string) => {
-    if (!fullResponse) return { flowPatchFound: false, flowRetryError: null as string | null };
+    if (!fullResponse) return { patchFound: false, retryError: null as string | null };
 
     if (workspaceId === "cad") {
       const jsMatch = fullResponse.match(/```(javascript|js)\n([\s\S]*?)\n```/);
@@ -543,8 +544,8 @@ export function ChatPanel({
       }
     }
 
-    let flowPatchFound = false;
-    let flowRetryError: string | null = null;
+    let patchFound = false;
+    let retryError: string | null = null;
 
     const jsonRegex = /```json\s*([\s\S]*?)```/g;
     let m: RegExpExecArray | null;
@@ -555,7 +556,7 @@ export function ChatPanel({
       await runCodeAction(jsonText, 'cad');
     }
 
-    return { flowPatchFound, flowRetryError };
+    return { patchFound, retryError };
   };
 
   const buildCadSvgRetryPrompt = (errorText: string, forceReplace: boolean) => {
@@ -585,7 +586,7 @@ export function ChatPanel({
   const handleSend = async () => {
     const rawInput = input;
     if ((!rawInput.trim() && files.length === 0 && attachments.length === 0) || isLoading) return;
-    flowAutoRetryCountRef.current = 0;
+    autoRetryCountRef.current = 0;
     cadSvgAutoRetryCountRef.current = 0;
 
     const normalizedInput = rawInput.trim();
@@ -1210,7 +1211,7 @@ export function ChatPanel({
             };
 
             const getCadSvgToolPrompt = (tool: "patch" | "replace") =>
-              tool === "patch" ? CAD_SVG_FLOW_PATCH_AGENT_PROMPT : CAD_SVG_FLOW_REPLACE_AGENT_PROMPT;
+              tool === "patch" ? CAD_SVG_PATCH_AGENT_PROMPT : CAD_SVG_REPLACE_AGENT_PROMPT;
 
             let cadSvgToolMessagesBase: ChatMessage[] = [
               { role: "system", content: [getCadSvgToolPrompt(cadSvgSelectedTool), globalSystemPrompt, globalConstraints, cadOutputLanguageInstruction].filter(Boolean).join("\n\n") },
@@ -1778,7 +1779,7 @@ export function ChatPanel({
               };
 
               const getCadSvgToolPrompt = (tool: "patch" | "replace") =>
-                tool === "patch" ? CAD_SVG_FLOW_PATCH_AGENT_PROMPT : CAD_SVG_FLOW_REPLACE_AGENT_PROMPT;
+                tool === "patch" ? CAD_SVG_PATCH_AGENT_PROMPT : CAD_SVG_REPLACE_AGENT_PROMPT;
 
               let cadSvgToolMessagesBase: ChatMessage[] = [
                 { role: "system", content: [getCadSvgToolPrompt(cadSvgSelectedTool), globalSystemPrompt, globalConstraints, cadOutputLanguageInstruction].filter(Boolean).join("\n\n") },
@@ -1972,7 +1973,7 @@ export function ChatPanel({
     if (base.length === 0) return;
     const last = base[base.length - 1];
     if (last.role !== 'user') return;
-    flowAutoRetryCountRef.current = 0;
+    autoRetryCountRef.current = 0;
     cadSvgAutoRetryCountRef.current = 0;
     cadApprovedPlanRef.current = null;
     await runTextChat(base);
@@ -2002,7 +2003,7 @@ export function ChatPanel({
     const base = [...messages.slice(0, messageIndex), updatedUser];
     setInput("");
     setFiles([]);
-    flowAutoRetryCountRef.current = 0;
+    autoRetryCountRef.current = 0;
     cadSvgAutoRetryCountRef.current = 0;
     cadApprovedPlanRef.current = null;
     await runTextChat(base);
@@ -2058,14 +2059,28 @@ export function ChatPanel({
 
       {/* Messages */}
       <div className="flex-1 w-full overflow-hidden">
-          <ChatMessageDisplay 
-            messages={uiMessages} 
+        {!isLoading && !uiMessages.some((m) => m.role === "user" || m.role === "assistant") ? (
+          <ChatEmptyState
+            icon={Home}
+            title={t(uiLang, "empty.cad.title")}
+            description={t(uiLang, "empty.cad.desc")}
+            examplesLabel={t(uiLang, "empty.examplesLabel")}
+            examples={[t(uiLang, "empty.cad.ex1"), t(uiLang, "empty.cad.ex2"), t(uiLang, "empty.cad.ex3")]}
+            onPickExample={(text) => {
+              setInput(text);
+              setInputFocusTick((tick) => tick + 1);
+            }}
+          />
+        ) : (
+          <ChatMessageDisplay
+            messages={uiMessages}
             status={isLoading ? "streaming" : "idle"}
-            onDisplayChart={(xml) => onCodeAction?.(xml, 'flow')}
+            onDisplayChart={(xml) => onCodeAction?.(xml, 'diagram')}
             onApplyCode={applyCodeFromMessage}
             onRegenerate={handleRegenerate}
             onEditMessage={handleEditAndResend}
           />
+        )}
       </div>
 
       {/* Input */}
@@ -2083,6 +2098,7 @@ export function ChatPanel({
             onFilesChange={setFiles}
             files={files}
             uploadMode="filesOnly"
+            focusKey={inputFocusTick || undefined}
             placeholder={inputPlaceholder}
             bottomChips={
               attachments.length > 0

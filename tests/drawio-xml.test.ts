@@ -6,8 +6,8 @@ import {
   formatXML,
   validateMxCellStructure,
   wrapWithMxFile,
-} from "../client/workspaces/flow/lib/drawio-xml";
-import { isMxCellXmlComplete } from "../client/workspaces/flow/lib/diagram-operations";
+} from "../client/workspaces/diagram/lib/drawio-xml";
+import { isMxCellXmlComplete } from "../client/workspaces/diagram/lib/diagram-operations";
 
 /**
  * The repair layer between what the model emits and what draw.io will accept.

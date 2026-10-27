@@ -14,7 +14,7 @@ import type { MessageKey } from "@/shared/i18n";
  * other two together account for most of the bundle.
  */
 
-export type WorkspaceId = "flow" | "cad" | "ppt" | "canvas";
+export type WorkspaceId = "diagram" | "cad" | "ppt" | "canvas";
 
 export interface WorkspaceDescriptor {
   id: WorkspaceId;
@@ -26,11 +26,11 @@ export interface WorkspaceDescriptor {
 
 export const WORKSPACES: WorkspaceDescriptor[] = [
   {
-    id: "flow",
-    labelKey: "nav.flow",
+    id: "diagram",
+    labelKey: "nav.diagram",
     icon: Layers,
     Component: lazy(() =>
-      import("@/workspaces/flow/FlowWorkspace").then((m) => ({ default: m.FlowWorkspace })),
+      import("@/workspaces/diagram/DiagramWorkspace").then((m) => ({ default: m.DiagramWorkspace })),
     ),
   },
   {
@@ -59,7 +59,7 @@ export const WORKSPACES: WorkspaceDescriptor[] = [
   },
 ];
 
-export const DEFAULT_WORKSPACE: WorkspaceId = "flow";
+export const DEFAULT_WORKSPACE: WorkspaceId = "diagram";
 
 /** Guards the value read back from localStorage, which may predate a removal. */
 export function isWorkspaceId(value: unknown): value is WorkspaceId {

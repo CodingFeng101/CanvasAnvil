@@ -4,16 +4,16 @@ import { useEffect, useState } from "react";
  * The colour theme, stored once and broadcast on change — same shape as the
  * UI-language store next door.
  *
- * This used to live inside the Flow workspace, which meant a control buried in
+ * This used to live inside the Diagram workspace, which meant a control buried in
  * one canvas was mutating `documentElement` for the whole app: switching away
- * from Flow left its theme behind with nothing left on screen to undo it.
+ * from Diagram left its theme behind with nothing left on screen to undo it.
  */
 
 export type Theme = "light" | "dark" | "system";
 export type ResolvedTheme = "light" | "dark";
 
 const THEME_STORAGE_KEY = "CanvasAnvil-theme-v1";
-/** Flow's old key, read once so an existing preference survives the move. */
+/** The Diagram workspace's old key, read once so an existing preference survives the move. */
 const LEGACY_DARK_KEY = "next-ai-draw-io-dark-mode";
 
 function prefersDark(): boolean {

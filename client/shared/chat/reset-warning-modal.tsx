@@ -13,7 +13,7 @@ import { t, useUiLanguage } from "@/shared/i18n"
  * Confirmation before a destructive clear.
  *
  * Labels are overridable because what gets cleared differs per workspace —
- * Flow drops the diagram along with the conversation, the others only the
+ * Diagram drops the diagram along with the conversation, the others only the
  * conversation — and the wording has to say so.
  */
 export interface ResetWarningLabels {

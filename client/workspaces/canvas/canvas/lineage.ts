@@ -12,6 +12,8 @@ import type { ExcalidrawImageElement } from "@excalidraw/excalidraw/element/type
 export interface ImageLineageData {
   lineageId: string;
   createdAt: number;
+  /** What made this version: the prompt, or the change an edit applied. Shown in the version strip. */
+  note?: string;
 }
 
 export interface SelectedImageInfo {
@@ -23,6 +25,7 @@ export interface ImageVersion {
   elementId: string;
   url: string;
   createdAt: number;
+  note?: string;
 }
 
 const CUSTOM_DATA_KEY = "canvasAnvil";
@@ -32,7 +35,16 @@ export function getImageLineage(element: ExcalidrawImageElement): ImageLineageDa
     | Partial<ImageLineageData>
     | undefined;
   if (!data || typeof data.lineageId !== "string") return null;
-  return { lineageId: data.lineageId, createdAt: typeof data.createdAt === "number" ? data.createdAt : 0 };
+  return {
+    lineageId: data.lineageId,
+    createdAt: typeof data.createdAt === "number" ? data.createdAt : 0,
+    note: typeof data.note === "string" && data.note ? data.note : undefined,
+  };
+}
+
+/** Which picture an image element is a version of; an untagged image is a picture of its own. */
+export function lineageIdOf(element: ExcalidrawImageElement): string {
+  return getImageLineage(element)?.lineageId || element.id;
 }
 
 export function withImageLineage(
@@ -53,12 +65,16 @@ export function getLineageVersions(api: ExcalidrawImperativeAPI, lineageId: stri
     .getSceneElements()
     .filter((el) => el.type === "image")
     .map((el) => el as unknown as ExcalidrawImageElement)
-    .filter((el) => (getImageLineage(el)?.lineageId || el.id) === lineageId)
-    .map((el) => ({
-      elementId: el.id,
-      url: el.fileId ? files[el.fileId]?.dataURL || "" : "",
-      createdAt: getImageLineage(el)?.createdAt ?? 0,
-    }))
+    .filter((el) => lineageIdOf(el) === lineageId)
+    .map((el) => {
+      const lineage = getImageLineage(el);
+      return {
+        elementId: el.id,
+        url: el.fileId ? files[el.fileId]?.dataURL || "" : "",
+        createdAt: lineage?.createdAt ?? 0,
+        note: lineage?.note,
+      };
+    })
     .filter((version) => !!version.url)
     .sort((a, b) => a.createdAt - b.createdAt);
 }

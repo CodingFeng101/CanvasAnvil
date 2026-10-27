@@ -743,10 +743,7 @@ export function CadCanvas({
                       {img.url ? (
                         <img src={img.url} alt={img.title} className="w-full h-full object-cover cursor-pointer" onClick={() => setPreviewImage(img)} />
                       ) : (
-                        <div className="w-full h-full flex items-center justify-center text-xs text-muted-foreground gap-2">
-                          {analysisImagesLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}
-                          <span>{analysisImagesLoading ? (uiLang === "zh" ? "生成中" : "Generating") : (uiLang === "zh" ? "待生成" : "Pending")}</span>
-                        </div>
+                        <SlotPlaceholder loading={analysisImagesLoading} isZh={uiLang === "zh"} />
                       )}
                     </div>
                   </div>
@@ -801,10 +798,7 @@ export function CadCanvas({
                       {img.url ? (
                         <img src={img.url} alt={img.title} className="w-full h-full object-cover cursor-pointer" onClick={() => setPreviewImage(img)} />
                       ) : (
-                        <div className="w-full h-full flex items-center justify-center text-xs text-muted-foreground gap-2">
-                          {imagesLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}
-                          <span>{imagesLoading ? (uiLang === "zh" ? "生成中" : "Generating") : (uiLang === "zh" ? "待生成" : "Pending")}</span>
-                        </div>
+                        <SlotPlaceholder loading={imagesLoading} isZh={uiLang === "zh"} />
                       )}
                     </div>
                   </div>
@@ -897,5 +891,33 @@ export function CadCanvas({
         </DialogContent>
       </Dialog>
     </ContextMenu>
+  );
+}
+
+/**
+ * An image slot with nothing in it yet.
+ *
+ * It used to be a bare "待生成" in the middle of a grey box -- no hint that
+ * the chat on the right is what fills it, and a 14px spinner as the only sign
+ * of work. Idle, it now says where the picture comes from; generating, the
+ * whole slot shimmers so progress reads from across the screen.
+ */
+function SlotPlaceholder({ loading, isZh }: { loading: boolean; isZh: boolean }) {
+  if (loading) {
+    return (
+      <div className="relative h-full w-full overflow-hidden bg-muted/50">
+        <div className="absolute inset-0 animate-sheen bg-[linear-gradient(110deg,transparent_30%,hsl(var(--card)/0.75)_50%,transparent_70%)] bg-[length:200%_100%]" />
+        <div className="absolute inset-0 flex items-center justify-center gap-2 text-xs font-medium text-muted-foreground">
+          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+          {isZh ? "生成中…" : "Generating…"}
+        </div>
+      </div>
+    );
+  }
+  return (
+    <div className="flex h-full w-full flex-col items-center justify-center gap-2 bg-[radial-gradient(circle_at_1px_1px,hsl(var(--foreground)/0.07)_1px,transparent_0)] bg-[length:16px_16px] text-muted-foreground">
+      <ImageIcon className="h-6 w-6 opacity-40" strokeWidth={1.5} />
+      <span className="text-xs">{isZh ? "在右侧描述需求后，这里会自动生成" : "Appears here once you describe the space"}</span>
+    </div>
   );
 }

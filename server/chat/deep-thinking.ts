@@ -6,7 +6,7 @@ import type { AIChannel } from "../../contracts/ai"
 import { parseDataUrl } from "./files"
 
 /**
- * "Deep thinking" for Flow: before writing XML, have an image model draw the
+ * "Deep thinking" for Diagram: before writing XML, have an image model draw the
  * diagram, then hand that picture to the text model as a layout reference.
  *
  * The draft is saved to disk when a debug directory is configured, because
@@ -59,49 +59,21 @@ export function extractImageUrlFromModelContent(messageContent: any): string | n
     return null
 }
 
-export function parseImageGenerationResponse(result: any): string | null {
-    if (result?.error) {
-        throw new Error(result.error.message || "Image model request failed")
-    }
-
-    if (Array.isArray(result?.choices) && result.choices.length > 0) {
-        return extractImageUrlFromModelContent(result.choices[0]?.message?.content)
-    }
-
-    return null
-}
-
-export async function convertRemoteImageToDataUrl(url: string): Promise<string | null> {
-    const safeUrl = cleanImageReferenceUrl(url)
-    if (!safeUrl) return null
-    if (safeUrl.startsWith("data:image/")) return safeUrl
-
-    const response = await fetch(safeUrl)
-    if (!response.ok) {
-        throw new Error(`Failed to fetch generated image: ${response.status}`)
-    }
-
-    const contentType = response.headers.get("content-type") || "image/png"
-    const arrayBuffer = await response.arrayBuffer()
-    const base64 = Buffer.from(arrayBuffer).toString("base64")
-    return `data:${contentType};base64,${base64}`
-}
-
 /** The prompt file rarely changes; read it once per process. */
-let flowDeepThinkingImagePromptTemplateCache: string | null = null
+let diagramDeepThinkingImagePromptTemplateCache: string | null = null
 
-export async function getFlowDeepThinkingImagePromptTemplate(): Promise<string> {
-    if (flowDeepThinkingImagePromptTemplateCache) {
-        return flowDeepThinkingImagePromptTemplateCache
+export async function getDiagramDeepThinkingImagePromptTemplate(): Promise<string> {
+    if (diagramDeepThinkingImagePromptTemplateCache) {
+        return diagramDeepThinkingImagePromptTemplateCache
     }
 
-    const promptPath = path.join(promptsDir(), "flow", "deep-thinking-image.md")
+    const promptPath = path.join(promptsDir(), "diagram", "deep-thinking-image.md")
     const raw = await readFile(promptPath, "utf8")
-    flowDeepThinkingImagePromptTemplateCache = String(raw || "").trim()
-    return flowDeepThinkingImagePromptTemplateCache
+    diagramDeepThinkingImagePromptTemplateCache = String(raw || "").trim()
+    return diagramDeepThinkingImagePromptTemplateCache
 }
 
-export function buildFlowDeepThinkingImagePrompt(params: {
+export function buildDiagramDeepThinkingImagePrompt(params: {
     userText: string
     globalConstraints: string
     processedFilesContext: string
@@ -143,7 +115,7 @@ export async function saveDeepThinkingImageDebugArtifact(args: {
         String(args.sessionId || "anonymous").replace(/[^a-zA-Z0-9_-]/g, "_") ||
         "anonymous"
     const stamp = new Date().toISOString().replace(/[:.]/g, "-")
-    const outDir = path.join(process.cwd(), ".tmp-flow-deep-thinking")
+    const outDir = path.join(process.cwd(), ".tmp-diagram-deep-thinking")
     const imagePath = path.join(outDir, `${stamp}-${safeSession}.${ext}`)
     const metaPath = path.join(outDir, `${stamp}-${safeSession}.txt`)
 
@@ -173,8 +145,8 @@ export async function generateDeepThinkingDiagramImage(args: {
 }): Promise<string | null> {
     let promptText = ""
     try {
-        const template = await getFlowDeepThinkingImagePromptTemplate()
-        promptText = buildFlowDeepThinkingImagePrompt({
+        const template = await getDiagramDeepThinkingImagePromptTemplate()
+        promptText = buildDiagramDeepThinkingImagePrompt({
             userText: args.userText,
             globalConstraints: args.globalConstraints,
             processedFilesContext: args.processedFilesContext,

@@ -1,5 +1,5 @@
 /**
- * The draw.io shape libraries the Flow agent can pull in on demand.
+ * The draw.io shape libraries the Diagram agent can pull in on demand.
  *
  * These are runtime data, not documentation: the chat route reads the
  * matching markdown file when the model calls get_shape_library.

@@ -6,7 +6,14 @@ The format is based on Keep a Changelog, and the project aims to follow Semantic
 
 ## [Unreleased]
 
-A structural refactor of the whole project. The repository now separates
+## [2.2.0] - 2026-10-26
+
+A structural refactor of the whole project, a fourth canvas, and a pass over
+the whole interface: empty states, unified naming and styling, complete
+Chinese/English support, and a portal that lays out at every common window
+size.
+
+The refactor itself: the repository now separates
 `client/`, `server/`, `contracts/` and `resources/`, every workspace has the
 same shape, and the shared UI kit, storage layer, file pipeline and i18n each
 exist once instead of per workspace.
@@ -14,19 +21,38 @@ exist once instead of per workspace.
 ### Removed
 
 - Removed the `pptist-lab` editor integration. The PPT canvas stays; editable decks export directly as `.pptx`.
-- Removed the poster, product and infographic canvases, narrowing the product to Flow, Interior Design and PPT.
+- Removed the poster, product and infographic canvases, narrowing the product to Flow, Interior Design and PPT. (Free Canvas was added afterwards; see Added.)
 - Removed the multi-provider model layer and the vendor picker. All model access goes through one OpenAI-compatible transport.
 - Removed the Next.js port that shadowed the Vite client, and roughly 900 lines of unreachable code the old `PptWorkspace` was hiding.
 - Removed the editable-export review and the pipeline behind it. Asking for an editable `.pptx` used to open a text-box confirmation pass and then spend three model calls per slide; it now writes the file from what the deck already has, in about a second. A deck that went through the old review still exports with its text editable, but new decks export as images -- which makes the editable and image exports the same thing.
 - Removed the nine-vendor image registry the `cad-skill` and `ppt-skill` packages still carried, along with the `provider` config key it read. Eight of those vendors had no base URL to reach and each skill shipped its own byte-identical copy of the table. The endpoint now follows from the model's name -- `gpt-image-*` and `dall-e-*` use the images endpoint, everything else answers through chat -- and `baseUrl` points at whichever OpenAI-compatible gateway serves it.
+- Removed the settings button and dialog from the Diagram chat panel; the top-bar settings cover the model configuration. The access-code field, the draw.io sketch style and the leave-page confirmation went with it.
+- Hid the "Export editable PPTX" menu entry. The export code, including the on-device OCR rebuild, is kept behind a flag in `DeckView.tsx`.
+- Removed unused code and assets: two UI components, three dependencies (`@radix-ui/react-label`, `@radix-ui/react-switch`, `vite-tsconfig-paths`), about fifteen dead exports, 35 unused translation keys, the brush cursor, the svgedit builds, demo extension and source maps the CAD editor never loads (18 MB down to 4 MB), 30 example images nothing referenced (42 MB down to 12 MB), and the `/api/verify-access-code` and `/api/log-feedback` endpoints, which nothing called any more.
 
 ### Added
 
+- Added **Free Canvas**, an Excalidraw board for images: generate a picture from a sentence, mark up what to change with arrows, circles or notes, and get a revised version beside the original.
+- Added a version strip to Free Canvas: thumbnails of every version of the selected picture, with what changed and when. New versions are placed to the right of the picture they came from.
+- Added empty states to all four chat panels: what the assistant does, and three example requests that fill the input when clicked.
+- Added a Chinese/English toggle to the workspace top bar, and a primary "Start creating" action to the portal homepage.
+- Added keyboard paging (arrow keys, PageUp/PageDown) to the portal, alongside the wheel.
+- Added a loading skeleton shaped like the workspace layout, in place of a lone spinner.
 - Added a **Present** button to the deck toolbar. The slideshow was complete but had no entry point, so full-screen presentation, arrow-key paging and Escape had all been unreachable.
 - Added a test suite (`npm test`, node:test) covering the pure logic the refactor had to preserve: AI request shaping, draw.io XML repair, chat storage, PPT persistence and editor adapters, the deck state machine, slide-version resolution, render-layer edits, material tokens and the chat message readers.
 
 ### Changed
 
+- Renamed the Flow canvas to **Diagram** throughout: directories, identifiers, the workspace id, prompts and their `diagram_patch` payload type, and the `diagram-skill` bundle. A saved `"flow"` selection and `flow_patch` payloads in old chats are still read.
+- Unified the canvas names across the portal, the top bar and the chat panels (Diagram, Interior Design, PPT, Free Canvas); the CAD Assistant is now the Design Assistant.
+- PPT slide generation, slide editing and outline planning treat the template as a style and colour reference only; layouts follow each slide's content instead of repeating the template's.
+- Free Canvas annotation edits now render the marked-up picture at its native resolution, pass the annotation's written text verbatim, send the clean original alongside it, and ask for the exact old and new text of any text change.
+- Compressed the PPT templates from 285 MB of PNG to 34 MB of JPEG, with 480px thumbnails for the picker, loaded lazily.
+- Restyled the portal: one button style in place of the brush-stroke plate and brush cursor, drifting colour washes in place of stray decorative strokes, a two-row header below 1280px, and English copy that matches the Chinese.
+- Portal pages now scroll when they do not fit, and tighten their spacing on laptop-height windows so they fit on one screen at 1366x768 and 1280x800.
+- Disabled primary buttons are a neutral grey rather than half-transparent clay, and the PPT start button says why it is disabled.
+- The page's `lang` attribute now follows the interface language from the first paint.
+- `npm run lint` skips vendored bundles and allows the ideographic space in CJK regexes; it now reports no errors.
 - Turned on TypeScript strict mode and split the bundle; initial load dropped from 2.89 MB to roughly 700 KB raw.
 - Replaced the deck's 25 scattered step assignments with a state machine, so the creation step and its progress bar can no longer drift apart.
 - Consolidated the CAD and PPT chat panels, chat inputs and transcript message readers, which had been forks of one another.
@@ -35,6 +61,17 @@ exist once instead of per workspace.
 
 ### Fixed
 
+- Fixed the image sizes 256, 512 and 1792 being silently dropped by the server, which only accepted the gpt-image sizes.
+- Fixed Free Canvas messages showing raw base64 when the prompt contained a line break, `|` or `]`.
+- Fixed the Free Canvas annotation preview being lost on reload, and a reply that arrived after "clear" restoring the cleared chat and placing its picture on the empty board.
+- Fixed Free Canvas edits that failed while compositing the annotation leaving the user's message without a reply, and failure messages that hid the reason.
+- Fixed annotation notes written beside a picture disappearing from what the model saw, when the composite was re-encoded as JPEG with a transparent margin.
+- Fixed the Free Canvas version history going stale after a version was deleted, and its button being disabled with no explanation.
+- Fixed the portal's detail pages being cut off below 1280px wide, and in English at laptop heights, with no way to scroll to the hidden part.
+- Fixed the English homepage headline running "canvas" and "creation" together.
+- Fixed strings that stayed Chinese in English: the portal's preview captions, the Diagram upload checks, send/stop labels and error toasts, the PPT slide context menu and the "(empty)" marker in slide-change previews.
+- Fixed the chat input toolbar pushing the send button out of a narrow panel.
+- Fixed a stale test expecting uploaded templates without a category.
 - Fixed an infinite render loop in every workspace's chat panel. Two file-sync effects running one step apart traded two equal-but-distinct arrays back and forth on every render.
 - Fixed the theme and dark-mode switches in the Flow chat panel, which received their handlers as props and used none of them.
 - Fixed CAD patch failures being swallowed: an exception while applying a patch left no error and no retry, so the patch appeared to do nothing.
@@ -55,7 +92,6 @@ exist once instead of per workspace.
 - Fixed a slide's material images never reaching the image model. The picture was read from the description, collected and sent, then dropped by the server: the edits route attached only the first reference image, which the template had taken, and the generations route sends no images at all. Because the prompt still named each material and told the model to place it, the slide came back with an invented picture rather than a visible gap. Only the materials a description actually refers to are sent now, and image generation carries up to six references instead of sharing the vision cap of three.
 - Fixed the chosen template being outvoted by the outline. The planner had no parameter for a template and had never seen one, yet it wrote a background colour and art style into every slide's visual description; that concrete text then beat the template reference at render time, so a deck built on the dark navy template came out white and flat. The planner is now given the template image and writes descriptions that match its palette and art style, and the template still outranks a description that disagrees with it at render time.
 - Fixed a slide displaying with its text erased after an editable export, from the adapter preferring a render layer's background -- the text-stripped derivative -- over the one the deck view passed.
-- Fixed the Flow composer never growing past three lines. The shared `Textarea` did not forward its ref, so the height it measured on every keystroke was never applied and the box stayed at its minimum, with resizing disabled.
 
 ### Security
 

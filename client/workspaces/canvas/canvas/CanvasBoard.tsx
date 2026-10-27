@@ -7,10 +7,10 @@ import type {
   ExcalidrawImperativeAPI,
   ExcalidrawInitialDataState,
 } from "@excalidraw/excalidraw/types";
-import type { OrderedExcalidrawElement } from "@excalidraw/excalidraw/element/types";
+import type { ExcalidrawImageElement, OrderedExcalidrawElement } from "@excalidraw/excalidraw/element/types";
 import { canvasStore, CANVAS_SCENE_KEY } from "@/workspaces/canvas/storage";
 import { getAnnotationSearchBounds, resolveTargetImage } from "@/workspaces/canvas/canvas/bounds";
-import { getImageLineage, type SelectedImageInfo } from "@/workspaces/canvas/canvas/lineage";
+import { lineageIdOf, type SelectedImageInfo } from "@/workspaces/canvas/canvas/lineage";
 
 type PersistedScene = {
   elements: OrderedExcalidrawElement[];
@@ -33,7 +33,11 @@ interface CanvasBoardProps {
   theme: "light" | "dark";
   langCode: string;
   onApiReady?: (api: ExcalidrawImperativeAPI) => void;
-  /** Fires only when the resolved target image (if any) actually changes, not on every selection tweak. */
+  /**
+   * Fires when the resolved target image (if any) changes, or when the
+   * versions of its picture do (one deleted, undone, added) -- not on every
+   * selection tweak or stroke.
+   */
   onSelectedImageChange?: (info: SelectedImageInfo | null) => void;
 }
 
@@ -95,9 +99,18 @@ export function CanvasBoard({ theme, langCode, onApiReady, onSelectedImageChange
     const targetImage = resolveTargetImage(elements, selectedElements);
 
     const info: SelectedImageInfo | null = targetImage
-      ? { elementId: targetImage.id, lineageId: getImageLineage(targetImage)?.lineageId || targetImage.id }
+      ? { elementId: targetImage.id, lineageId: lineageIdOf(targetImage) }
       : null;
-    const infoKey = info ? `${info.elementId}:${info.lineageId}` : "";
+    // The live members of the selected picture's lineage are part of the key,
+    // so deleting a version (or undoing that) refreshes the version strip
+    // without the user having to reselect.
+    const versionIds = info
+      ? elements
+          .filter((el) => el.type === "image" && !el.isDeleted && lineageIdOf(el as ExcalidrawImageElement) === info.lineageId)
+          .map((el) => el.id)
+          .join(",")
+      : "";
+    const infoKey = info ? `${info.elementId}:${info.lineageId}:${versionIds}` : "";
     if (infoKey !== lastSelectedImageKeyRef.current) {
       lastSelectedImageKeyRef.current = infoKey;
       onSelectedImageChange?.(info);

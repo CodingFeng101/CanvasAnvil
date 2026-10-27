@@ -26,7 +26,7 @@ import {
     validateUploadedFiles,
 } from "../chat/files"
 import { summarizeBlockMethod, summarizeRecursiveMethod } from "../chat/summarize"
-import { classifyFlowRequest, shouldRunDeepThinking } from "../chat/intent"
+import { classifyDiagramRequest, shouldRunDeepThinking } from "../chat/intent"
 import { fixToolCallInputs, replaceHistoricalToolInputs } from "../chat/messages"
 import {
     type ImageAttachment,
@@ -41,10 +41,8 @@ import {
     wrapWithObserve,
 } from "../telemetry/langfuse"
 
-export const maxDuration = 300
-
 /**
- * Streaming chat endpoint for the Flow workspace.
+ * Streaming chat endpoint for the Diagram workspace.
  *
  * The turn runs as a pipeline: validate the payload, resolve the model
  * channel from the request, summarise any uploads, optionally draft a
@@ -230,18 +228,18 @@ async function handleChatRequest(req: Request): Promise<Response> {
         })
         .filter((item): item is ImageAttachment => Boolean(item))
 
-    const flowRequestRoute = classifyFlowRequest({
+    const diagramRequestRoute = classifyDiagramRequest({
         xml: String(xml || ""),
         userText: lastMessageText,
     })
 
     const shouldUseDeepThinking = shouldRunDeepThinking({
         deepThinkingEnabled,
-        route: flowRequestRoute,
+        route: diagramRequestRoute,
     })
 
-    console.log("[FlowRoute]", {
-        route: flowRequestRoute,
+    console.log("[DiagramRoute]", {
+        route: diagramRequestRoute,
         deepThinkingEnabled,
         shouldUseDeepThinking,
     })

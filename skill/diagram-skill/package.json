@@ -1,0 +1,10 @@
+{
+  "name": "diagram-skill",
+  "private": true,
+  "version": "2.0.0",
+  "type": "module",
+  "scripts": {
+    "validate": "node scripts/validate-drawio-xml.mjs",
+    "url": "node scripts/build-drawio-url.mjs"
+  }
+}

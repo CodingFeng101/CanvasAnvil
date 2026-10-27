@@ -125,7 +125,7 @@ function SecretInput({
           type="button"
           onClick={() => setVisible((prev) => !prev)}
           className="absolute inset-y-0 right-0 flex w-10 items-center justify-center text-muted-foreground transition-colors hover:text-foreground"
-          aria-label={visible ? "Hide secret" : "Show secret"}
+          aria-label={uiLang === "zh" ? (visible ? "隐藏密钥" : "显示密钥") : visible ? "Hide secret" : "Show secret"}
         >
           {visible ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
         </button>

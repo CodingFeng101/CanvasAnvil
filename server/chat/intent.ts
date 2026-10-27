@@ -1,7 +1,7 @@
 import { isMinimalDiagram } from "./messages"
 
 /**
- * Decides what the user is asking Flow for.
+ * Decides what the user is asking Diagram for.
  *
  * A tweak to one node and a request for a whole new diagram need different
  * treatment: the first must preserve the existing XML, the second may replace
@@ -9,7 +9,7 @@ import { isMinimalDiagram } from "./messages"
  * "regenerate" phrase always wins over the local-edit heuristics.
  */
 
-export type FlowRequestRoute = "local_edit" | "full_generation"
+export type DiagramRequestRoute = "local_edit" | "full_generation"
 
 export function normalizeIntentText(text: string): string {
     return String(text || "")
@@ -42,10 +42,10 @@ export function isExplicitFullRegenerationRequest(text: string): boolean {
     return patterns.some((pattern) => pattern.test(normalized))
 }
 
-export function classifyFlowRequest(params: {
+export function classifyDiagramRequest(params: {
     xml: string
     userText: string
-}): FlowRequestRoute {
+}): DiagramRequestRoute {
     if (isMinimalDiagram(params.xml || "")) return "full_generation"
     if (isExplicitFullRegenerationRequest(params.userText)) {
         return "full_generation"
@@ -56,7 +56,7 @@ export function classifyFlowRequest(params: {
 
 export function shouldRunDeepThinking(params: {
     deepThinkingEnabled: boolean
-    route: FlowRequestRoute
+    route: DiagramRequestRoute
 }): boolean {
     if (!params.deepThinkingEnabled) return false
     return params.route === "full_generation"

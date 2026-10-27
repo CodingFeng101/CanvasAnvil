@@ -1,28 +1,24 @@
-import { useState } from "react";
-import { Maximize2, PanelRightClose, PanelRightOpen, Sparkles, Wand2 } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { Maximize2, Paintbrush, PanelRightClose, PanelRightOpen, Sparkles, Wand2 } from "lucide-react";
+import { IMAGE_QUALITIES, IMAGE_SIZES } from "@contracts/ai";
 import { cn } from "@/shared/lib/utils";
 import { generateImage, type ImageQuality, type ImageSize } from "@/ai/client";
-import { ButtonWithTooltip, ChatInput, ResetWarningModal } from "@/shared/chat";
+import { ButtonWithTooltip, ChatEmptyState, ChatInput, ResetWarningModal } from "@/shared/chat";
 import { chatStorageKey, loadChatHistory, saveChatHistory } from "@/shared/chat/chat-storage";
 import { t, useUiLanguage } from "@/shared/i18n";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/shared/ui/select";
 import type { AnnotatedEditOptions, AnnotatedEditPreview, AnnotatedEditResult } from "@/workspaces/canvas/canvas/annotated-edit";
 import type { ImageVersion } from "@/workspaces/canvas/canvas/lineage";
-import { withCanvasImageRef } from "@/workspaces/canvas/chat/canvas-image-ref";
+import { referencedChatImageIds, withCanvasImageRef, withChatImageRef } from "@/workspaces/canvas/chat/canvas-image-ref";
+import {
+  loadChatImages,
+  pruneChatImages,
+  saveChatImages,
+  shrinkForChat,
+  type ChatImageMap,
+} from "@/workspaces/canvas/chat/chat-images";
 import { ChatMessageDisplay, type CanvasChatMessage } from "@/workspaces/canvas/chat/ChatMessageDisplay";
-import { HistoryDialog } from "@/workspaces/canvas/chat/HistoryDialog";
-
-const IMAGE_SIZES: ImageSize[] = [
-  "auto",
-  "256x256",
-  "512x512",
-  "1024x1024",
-  "1536x1024",
-  "1024x1536",
-  "1792x1024",
-  "1024x1792",
-];
-const IMAGE_QUALITIES: ImageQuality[] = ["auto", "low", "medium", "high"];
+import { VersionStrip } from "@/workspaces/canvas/chat/version-strip";
 
 const STORAGE_KEY = chatStorageKey("canvas");
 const IMAGE_OPTIONS_STORAGE_KEY = "CanvasAnvil-canvas-image-options-v1";
@@ -31,6 +27,10 @@ function makeId() {
   return typeof crypto !== "undefined" && "randomUUID" in crypto
     ? crypto.randomUUID()
     : Math.random().toString(36).slice(2);
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error ?? "");
 }
 
 function loadImageOptions(): { size: ImageSize; quality: ImageQuality } {
@@ -53,7 +53,7 @@ interface ChatPanelProps {
   collapsed?: boolean;
   onToggleCollapse?: () => void;
   /** Places the picture on the canvas and returns the element it was placed as, so the chat message can reference it. */
-  onImageGenerated: (dataUrl: string) => Promise<string | null>;
+  onImageGenerated: (dataUrl: string, prompt: string) => Promise<string | null>;
   /** Looks up a picture's current data URL by canvas element id, for messages reloaded with their image data stripped out. */
   resolveCanvasImage?: (elementId: string) => string | null;
   /** Whether the current canvas selection resolves to an image, so the annotate-edit action has something to work on. */
@@ -92,8 +92,51 @@ export function ChatPanel({
   const [input, setInput] = useState("");
   const [isGenerating, setIsGenerating] = useState(false);
   const [showResetWarning, setShowResetWarning] = useState(false);
-  const [showHistory, setShowHistory] = useState(false);
   const [imageOptions, setImageOptions] = useState(loadImageOptions);
+  const [focusTick, setFocusTick] = useState(0);
+
+  /** An example from the empty state goes into the input, not straight to the model, so it can be adjusted first. */
+  const pickExample = (text: string) => {
+    setInput(text);
+    setFocusTick((tick) => tick + 1);
+  };
+  // Bumped by "clear". A request still in flight when the user clears belongs
+  // to the conversation that was just wiped: without this, its reply would
+  // write the old history back and drop its picture onto the emptied canvas.
+  const clearEpochRef = useRef(0);
+  // The ref is the source of truth for writes (an edit can land before the
+  // initial load has); the state is only there to re-render once it arrives.
+  const chatImagesRef = useRef<ChatImageMap>({});
+  const [chatImages, setChatImages] = useState<ChatImageMap>({});
+
+  useEffect(() => {
+    let cancelled = false;
+    void loadChatImages()
+      .then((stored) => {
+        if (cancelled) return;
+        // History is trimmed as it is saved, so stored pictures can outlive
+        // the messages that showed them; drop those on the way in.
+        const referenced = referencedChatImageIds(messages.map((m) => m.content || ""));
+        const kept = pruneChatImages(stored, referenced);
+        chatImagesRef.current = { ...kept, ...chatImagesRef.current };
+        setChatImages(chatImagesRef.current);
+        if (Object.keys(kept).length !== Object.keys(stored).length) {
+          void saveChatImages(chatImagesRef.current).catch((e) => console.error("Failed to prune chat images", e));
+        }
+      })
+      .catch((e) => console.error("Failed to load chat images", e));
+    return () => {
+      cancelled = true;
+    };
+    // Once, against the history this panel mounted with.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const writeChatImages = (next: ChatImageMap) => {
+    chatImagesRef.current = next;
+    setChatImages(next);
+    void saveChatImages(next).catch((e) => console.error("Failed to persist chat images", e));
+  };
 
   const updateImageOptions = (next: Partial<{ size: ImageSize; quality: ImageQuality }>) => {
     setImageOptions((prev) => {
@@ -121,11 +164,13 @@ export function ChatPanel({
     persist(withUser);
     setInput("");
     setIsGenerating(true);
+    const epoch = clearEpochRef.current;
 
     try {
       const url = await generateImage({ prompt, size: imageOptions.size, quality: imageOptions.quality });
       if (!url) throw new Error("empty result");
-      const elementId = await onImageGenerated(url);
+      if (epoch !== clearEpochRef.current) return;
+      const elementId = await onImageGenerated(url, prompt);
       const assistantMessage: CanvasChatMessage = {
         id: makeId(),
         role: "assistant",
@@ -134,10 +179,15 @@ export function ChatPanel({
       persist([...withUser, assistantMessage]);
     } catch (error) {
       console.error("Canvas image generation failed", error);
+      if (epoch !== clearEpochRef.current) return;
+      const reason = errorMessage(error);
       const assistantMessage: CanvasChatMessage = {
         id: makeId(),
         role: "assistant",
-        content: tr("生成失败，请重试。", "Generation failed. Please try again."),
+        content: tr(
+          `生成失败${reason ? `：${reason}` : ""}，请重试。`,
+          `Generation failed${reason ? `: ${reason}` : ""}. Please try again.`,
+        ),
       };
       persist([...withUser, assistantMessage]);
     } finally {
@@ -151,22 +201,39 @@ export function ChatPanel({
     const instructionText =
       instruction || tr("根据画布上的标注修改选中的图片", "Edit the selected image based on the canvas annotation");
 
-    const preview = await onPreviewAnnotatedEdit();
-    const userMessage: CanvasChatMessage = {
-      id: makeId(),
-      role: "user",
-      content:
-        preview.ok && preview.previewUrl
-          ? `[[IMAGE|${tr("标注", "Annotation")}|${preview.previewUrl}]]\n${instructionText}`
-          : instructionText,
-    };
-    const withUser = [...messages, userMessage];
-    persist(withUser);
-    setInput("");
+    // Busy from the click on: building the preview composites the picture,
+    // which takes long enough for a second click to start a second edit.
     setIsGenerating(true);
+    const epoch = clearEpochRef.current;
+    let withUser = messages;
 
     try {
-      const result = await onAnnotatedEdit(instruction, { size: imageOptions.size, quality: imageOptions.quality });
+      const preview = await onPreviewAnnotatedEdit().catch((error): AnnotatedEditPreview => {
+        console.error("Rendering the annotation preview failed", error);
+        return { ok: false };
+      });
+      let previewTag = "";
+      if (preview.ok && preview.previewUrl) {
+        const chatImageId = makeId();
+        const thumbnail = await shrinkForChat(preview.previewUrl);
+        writeChatImages({ ...chatImagesRef.current, [chatImageId]: thumbnail });
+        previewTag = `[[IMAGE|${withChatImageRef(tr("标注", "Annotation"), chatImageId)}|${thumbnail}]]\n`;
+      }
+      const userMessage: CanvasChatMessage = {
+        id: makeId(),
+        role: "user",
+        content: `${previewTag}${instructionText}`,
+      };
+      withUser = [...messages, userMessage];
+      persist(withUser);
+      setInput("");
+
+      const result = await onAnnotatedEdit(instruction, {
+        size: imageOptions.size,
+        quality: imageOptions.quality,
+        isCancelled: () => epoch !== clearEpochRef.current,
+      });
+      if (epoch !== clearEpochRef.current) return;
       const assistantMessage: CanvasChatMessage = result.ok
         ? {
             id: makeId(),
@@ -184,13 +251,33 @@ export function ChatPanel({
             content: result.error || tr("编辑失败，请重试。", "Edit failed. Please try again."),
           };
       persist([...withUser, assistantMessage]);
+    } catch (error) {
+      // runAnnotatedEdit only catches the model call; compositing the
+      // annotation before it can still throw, and used to leave the user's
+      // message hanging with no reply.
+      console.error("Annotated edit failed", error);
+      if (epoch !== clearEpochRef.current) return;
+      const reason = errorMessage(error);
+      persist([
+        ...withUser,
+        {
+          id: makeId(),
+          role: "assistant",
+          content: tr(
+            `编辑失败${reason ? `：${reason}` : ""}，请重试。`,
+            `Edit failed${reason ? `: ${reason}` : ""}. Please try again.`,
+          ),
+        },
+      ]);
     } finally {
       setIsGenerating(false);
     }
   };
 
   const clearAll = () => {
+    clearEpochRef.current += 1;
     persist([]);
+    writeChatImages({});
     onClearAll();
     setShowResetWarning(false);
   };
@@ -242,19 +329,39 @@ export function ChatPanel({
       </div>
 
       <div className="flex-1 w-full overflow-hidden">
-        <ChatMessageDisplay messages={messages} isGenerating={isGenerating} resolveCanvasImage={resolveCanvasImage} />
+        {messages.length === 0 && !isGenerating ? (
+          <ChatEmptyState
+            icon={Paintbrush}
+            title={t(uiLang, "empty.canvas.title")}
+            description={t(uiLang, "empty.canvas.desc")}
+            examplesLabel={t(uiLang, "empty.examplesLabel")}
+            examples={[t(uiLang, "empty.canvas.ex1"), t(uiLang, "empty.canvas.ex2"), t(uiLang, "empty.canvas.ex3")]}
+            onPickExample={pickExample}
+          />
+        ) : (
+          <ChatMessageDisplay
+            messages={messages}
+            isGenerating={isGenerating}
+            resolveCanvasImage={resolveCanvasImage}
+            chatImages={chatImages}
+          />
+        )}
       </div>
 
       <div className="p-4 border-t border-border/50 bg-card/50">
+        <VersionStrip
+          versions={imageVersions}
+          activeElementId={activeImageElementId}
+          onSelectVersion={onSelectVersion}
+        />
         <ChatInput
           input={input}
           setInput={setInput}
           onSubmit={handleSubmit}
           isLoading={isGenerating}
           onClearChat={() => setShowResetWarning(true)}
-          onToggleHistory={() => setShowHistory(true)}
-          historyDisabled={imageVersions.length === 0}
           uploadMode="none"
+          focusKey={focusTick || undefined}
           placeholder={t(uiLang, "workspace.canvas.placeholder")}
           toolbarExtras={
             <>
@@ -321,13 +428,6 @@ export function ChatPanel({
         />
       </div>
 
-      <HistoryDialog
-        open={showHistory}
-        onOpenChange={setShowHistory}
-        versions={imageVersions}
-        activeElementId={activeImageElementId}
-        onSelectVersion={onSelectVersion}
-      />
 
       <ResetWarningModal
         open={showResetWarning}

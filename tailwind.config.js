@@ -11,6 +11,11 @@ export default {
       },
     },
     extend: {
+      screens: {
+        // Laptop-height windows (1366x768, 1280x800). The portal's full-page
+        // layouts are tuned for taller screens and tighten up under this.
+        short: { raw: "(max-height: 820px)" },
+      },
       fontFamily: {
         // Source Serif 4 stands in for Copernicus; Inter for Styrene. Both are
         // self-hosted (see client/main.tsx) so there is no CDN round trip.

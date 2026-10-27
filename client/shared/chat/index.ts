@@ -9,3 +9,4 @@ export * from "@/shared/chat/global-constraints-dialog";
 export * from "@/shared/chat/file-preview-list";
 export * from "@/shared/chat/history-dialog";
 export * from "@/shared/chat/chat-input";
+export * from "@/shared/chat/chat-empty-state";

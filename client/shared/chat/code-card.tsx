@@ -9,8 +9,8 @@ import { useUiLanguage } from "@/shared/i18n";
 /**
  * The code block the assistant's replies render into, shared by the canvases.
  *
- * CAD and Flow had grown two of these. CAD's laid the code out -- indented XML,
- * re-serialised JSON -- inside a titled card; Flow's dumped the model's raw
+ * CAD and Diagram had grown two of these. CAD's laid the code out -- indented XML,
+ * re-serialised JSON -- inside a titled card; Diagram's dumped the model's raw
  * single-line XML into a bare `<pre>` with `break-all`, which turns a draw.io
  * document into an unreadable wall of characters. The two also disagreed on
  * where the copy and apply buttons live. One component, one answer.

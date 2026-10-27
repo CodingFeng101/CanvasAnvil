@@ -16,6 +16,8 @@ interface ChatMessageDisplayProps {
   isGenerating: boolean;
   /** Looks up a picture's current data URL by canvas element id; null once it's gone (cleared, undone). */
   resolveCanvasImage?: (elementId: string) => string | null;
+  /** Pictures that were never on the canvas, by chat-image id (see chat-images.ts). */
+  chatImages?: Record<string, string>;
 }
 
 /**
@@ -26,12 +28,18 @@ interface ChatMessageDisplayProps {
  * looking that picture back up on the canvas -- it never actually left, only
  * the chat's own copy of the bytes did.
  */
-function rehydrateCanvasImageTags(text: string, resolveCanvasImage?: (elementId: string) => string | null): string {
-  if (!resolveCanvasImage) return text;
+function rehydrateCanvasImageTags(
+  text: string,
+  resolveCanvasImage?: (elementId: string) => string | null,
+  chatImages?: Record<string, string>,
+): string {
   return text.replace(/^\[\[IMAGE\|([^|]*)\|\[image-data\]\]\]$/gm, (full, rawLabel) => {
-    const { label, elementId } = parseCanvasImageRef(String(rawLabel || ""));
-    if (!elementId) return full;
-    const dataUrl = resolveCanvasImage(elementId);
+    const { label, elementId, chatImageId } = parseCanvasImageRef(String(rawLabel || ""));
+    const dataUrl = chatImageId
+      ? chatImages?.[chatImageId]
+      : elementId
+        ? resolveCanvasImage?.(elementId)
+        : null;
     return dataUrl ? `[[IMAGE|${label}|${dataUrl}]]` : full;
   });
 }
@@ -40,18 +48,23 @@ function rehydrateCanvasImageTags(text: string, resolveCanvasImage?: (elementId:
  * Whatever `rehydrateCanvasImageTags` could not repair (no reference, or the
  * picture is genuinely gone) falls through as plain text instead of the raw
  * `[[IMAGE|...]]` marker `extractImageTags` would otherwise leave untouched.
+ *
+ * Reaching here means the picture is *not* on the canvas: a tag with a
+ * reference got this far because that element is gone, and one without (the
+ * annotation preview) was never placed there.
  */
 function describeStrippedImageTags(text: string, uiLang: "zh" | "en"): string {
   return text.replace(/^\[\[IMAGE\|([^|]*)\|\[image-data\]\]\]$/gm, (_match, rawLabel) => {
-    const { label } = parseCanvasImageRef(String(rawLabel || ""));
+    const { label, elementId } = parseCanvasImageRef(String(rawLabel || ""));
     const trimmed = label.trim();
-    return uiLang === "zh"
-      ? `[图片${trimmed ? `：${trimmed}` : ""}，已在画布上]`
-      : `[Image${trimmed ? `: ${trimmed}` : ""}, already on the canvas]`;
+    if (uiLang === "zh") {
+      return `[图片${trimmed ? `：${trimmed}` : ""}${elementId ? "，已从画布移除" : ""}]`;
+    }
+    return `[Image${trimmed ? `: ${trimmed}` : ""}${elementId ? ", removed from the canvas" : ""}]`;
   });
 }
 
-export function ChatMessageDisplay({ messages, isGenerating, resolveCanvasImage }: ChatMessageDisplayProps) {
+export function ChatMessageDisplay({ messages, isGenerating, resolveCanvasImage, chatImages }: ChatMessageDisplayProps) {
   const uiLang = useUiLanguage();
   const tr = (zh: string, en: string) => (uiLang === "zh" ? zh : en);
   const endRef = useRef<HTMLDivElement>(null);
@@ -64,13 +77,13 @@ export function ChatMessageDisplay({ messages, isGenerating, resolveCanvasImage 
     <ScrollArea className="h-full w-full scrollbar-thin">
       <div className="py-5 px-4 space-y-4">
         {messages.map((message) => {
-          const rehydrated = rehydrateCanvasImageTags(message.content || "", resolveCanvasImage);
+          const rehydrated = rehydrateCanvasImageTags(message.content || "", resolveCanvasImage, chatImages);
           const { images, rest } = extractImageTags(describeStrippedImageTags(rehydrated, uiLang));
           const text = rest.trim();
           return (
             <div
               key={message.id}
-              className={cn("flex w-full", message.role === "user" ? "justify-end" : "justify-start")}
+              className={cn("flex w-full animate-message-in", message.role === "user" ? "justify-end" : "justify-start")}
             >
               <div
                 className={cn(

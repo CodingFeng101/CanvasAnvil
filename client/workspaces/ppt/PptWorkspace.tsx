@@ -221,7 +221,7 @@ export function PptWorkspace() {
 
   const handlePptCodeAction = async (
     code: string,
-    type: "flow" | "cad" | "ppt",
+    type: "diagram" | "cad" | "ppt",
   ): Promise<CodeActionResult> => {
     if (type !== "ppt") return { ok: true };
     try {

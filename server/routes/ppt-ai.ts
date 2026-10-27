@@ -1,6 +1,6 @@
 import { generateImage } from "../ai/image"
 import { generateText } from "../ai/text"
-import { getImageChannel, getTextChannel, normalizeAIConfig } from "../../contracts/ai"
+import { IMAGE_QUALITIES, IMAGE_SIZES, getImageChannel, getTextChannel, normalizeAIConfig } from "../../contracts/ai"
 import type { AIConfig, ImageQuality, ImageSize, MultimodalMessage } from "../../contracts/ai"
 
 /**
@@ -31,9 +31,6 @@ const badRequest = (error: string) =>
 
 const optionalString = (value: unknown) =>
     typeof value === "string" && value ? value : undefined
-
-const IMAGE_SIZES: readonly ImageSize[] = ["auto", "1024x1024", "1536x1024", "1024x1536"]
-const IMAGE_QUALITIES: readonly ImageQuality[] = ["auto", "low", "medium", "high"]
 
 function optionalEnum<T extends string>(value: unknown, allowed: readonly T[]): T | undefined {
     return typeof value === "string" && (allowed as readonly string[]).includes(value) ? (value as T) : undefined

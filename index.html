@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html lang="zh-CN">
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=CanvasAnvil" />
@@ -7,7 +7,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>CanvasAnvil</title>
     <!-- Runs before first paint so a dark-theme user never sees an ivory
-         flash. Kept in sync with client/shared/theme.ts. -->
+         flash, and so `lang` matches the interface language from the start
+         (it picks the CJK glyph forms and the screen-reader voice). Kept in
+         sync with client/shared/theme.ts and client/shared/i18n/language.ts. -->
     <script>
       (function () {
         try {
@@ -20,6 +22,8 @@
             stored === 'dark' ||
             (stored === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
           document.documentElement.classList.toggle('dark', dark);
+          document.documentElement.lang =
+            localStorage.getItem('CanvasAnvil-ui-lang-v1') === 'en' ? 'en' : 'zh-CN';
         } catch (e) {
           /* Blocked storage just means we fall through to the light default. */
         }

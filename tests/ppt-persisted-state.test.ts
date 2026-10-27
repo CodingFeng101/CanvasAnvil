@@ -144,9 +144,14 @@ test("slide materials need id, name and dataUrl", () => {
 });
 
 test("uploaded templates and string arrays are coerced", () => {
+  // An upload saved before templates had categories is filed under "other".
   assert.deepEqual(
     normalizePersistedUploadedTemplates([{ id: "t1", name: "n", dataUrl: "d" }, { id: "t2" }]),
-    [{ id: "t1", name: "n", dataUrl: "d" }],
+    [{ id: "t1", name: "n", dataUrl: "d", categoryId: "other" }],
+  );
+  assert.deepEqual(
+    normalizePersistedUploadedTemplates([{ id: "t3", name: "n", dataUrl: "d", categoryId: "business" }]),
+    [{ id: "t3", name: "n", dataUrl: "d", categoryId: "business" }],
   );
   assert.deepEqual(normalizePersistedStringArray(["a", 1, null]), ["a", "1", "null"]);
   assert.deepEqual(normalizePersistedStringArray("nope"), []);

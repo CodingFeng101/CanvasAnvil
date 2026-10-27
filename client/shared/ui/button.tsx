@@ -20,8 +20,10 @@ const buttonVariants = cva(
   {
     variants: {
       variant: {
+        // Disabled goes neutral rather than half-transparent: a 50%-opacity
+        // clay block read as a broken or loading button, not an unavailable one.
         default:
-          "bg-primary text-primary-foreground shadow-xs hover:bg-primary/90 hover:shadow-soft hover:-translate-y-px",
+          "bg-primary text-primary-foreground shadow-xs hover:bg-primary/90 hover:shadow-soft hover:-translate-y-px disabled:bg-muted disabled:text-muted-foreground disabled:shadow-none disabled:opacity-100",
         destructive:
           "bg-destructive text-destructive-foreground shadow-xs hover:bg-destructive/90 hover:-translate-y-px focus-visible:ring-destructive/30",
         outline:
