@@ -3,6 +3,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
 
 function parseArgs(argv) {
   const args = {
@@ -64,7 +65,7 @@ function main() {
   const outDir = path.resolve(process.cwd(), args.outDir);
   fs.mkdirSync(outDir, { recursive: true });
 
-  const scriptDir = path.resolve(path.dirname(new URL(import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, "$1")));
+  const scriptDir = path.dirname(fileURLToPath(import.meta.url));
   const export2dScript = path.join(scriptDir, "export-cad-2d-image.mjs");
   const generateImageScript = path.join(scriptDir, "generate-cad-image.mjs");
 

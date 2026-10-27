@@ -2,6 +2,7 @@
 
 import fs from "node:fs";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { generateImageThroughGateway } from "./lib/gateway.mjs";
 import { OPENAI_DEFAULT_BASE_URL } from "./lib/image-route.mjs";
 
@@ -44,12 +45,14 @@ function fail(message) {
   process.exit(1);
 }
 
+// The skill's own config file, found from this script rather than from the
+// caller's working directory, so the script can run from anywhere.
+const DEFAULT_CONFIG_FILE = fileURLToPath(new URL("../config/image-provider.json", import.meta.url));
+
 function loadConfig(configFile) {
-  const target = configFile
-    ? path.resolve(process.cwd(), configFile)
-    : path.resolve(process.cwd(), "config", "image-provider.json");
+  const target = configFile ? path.resolve(process.cwd(), configFile) : DEFAULT_CONFIG_FILE;
   if (!fs.existsSync(target)) {
-    fail(`Missing provider config file: ${target}`);
+    fail(`Missing provider config file: ${target}. Copy image-provider.example.json next to it and fill it in.`);
   }
   return JSON.parse(fs.readFileSync(target, "utf8"));
 }
@@ -77,7 +80,7 @@ async function main() {
   const baseUrl = String(rawConfig.baseUrl || OPENAI_DEFAULT_BASE_URL).trim();
 
   if (!apiKey || !model) {
-    fail("Missing image configuration. Required: apiKey, model. Fill config/image-provider.json.");
+    fail(`Missing image configuration. Required: apiKey, model. Fill ${args.configFile || DEFAULT_CONFIG_FILE}.`);
   }
 
   const dataUrl = await generateImageThroughGateway({

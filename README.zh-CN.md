@@ -10,7 +10,7 @@
 
 <p align="center">
   <img alt="version" src="https://img.shields.io/badge/version-v2.2.0-blue" />
-  <img alt="license" src="https://img.shields.io/badge/license-AGPL--3.0-green" />
+  <img alt="license" src="https://img.shields.io/badge/license-MIT-green" />
   <img alt="React" src="https://img.shields.io/badge/React-18.3-61dafb?logo=react&logoColor=white" />
   <img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-5.8-3178c6?logo=typescript&logoColor=white" />
   <img alt="Vite" src="https://img.shields.io/badge/Vite-6.3-646cff?logo=vite&logoColor=white" />
@@ -236,7 +236,7 @@ npm run build
 
 ## ⚖️ 许可证
 
-CanvasAnvil 采用 GNU Affero General Public License v3.0（AGPL-3.0）协议发布。
+CanvasAnvil 采用 MIT 协议发布。
 完整协议内容请查看 [LICENSE](LICENSE)。
 
 ## 💌 联系方式

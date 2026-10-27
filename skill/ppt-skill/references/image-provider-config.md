@@ -16,7 +16,15 @@ point `baseUrl` at whichever compatible gateway serves the model.
 
 ## File Path
 
-- `config/image-provider.json`
+- `config/image-provider.json` inside this skill folder
+- the scripts find it from their own location, so they can run from any working directory
+- pass `--config-file <path>` to use a different file (resolved from the working directory)
+
+## Setup
+
+The file holds a secret and is git-ignored. On first use, copy
+`config/image-provider.example.json` to `config/image-provider.json` and fill it in.
+Never commit the filled file.
 
 ## Example
 
