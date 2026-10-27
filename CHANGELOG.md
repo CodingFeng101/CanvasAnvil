@@ -6,6 +6,10 @@ The format is based on Keep a Changelog, and the project aims to follow Semantic
 
 ## [Unreleased]
 
+### Changed
+
+- Relicensed the project from AGPL-3.0 to MIT.
+
 ## [2.2.0] - 2026-10-26
 
 A structural refactor of the whole project, a fourth canvas, and a pass over
