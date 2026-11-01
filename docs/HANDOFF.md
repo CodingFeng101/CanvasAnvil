@@ -1,6 +1,6 @@
 # 交接文档
 
-> 版本 v2.2.0 · 2026-10-26。详细架构见 [architecture.md](architecture.md)，完整变更见 [CHANGELOG.md](../CHANGELOG.md)。
+> 版本 v2.2.0 · 2026-10-26。详细架构见 [architecture.md](architecture.md)。
 
 ## 一句话
 
