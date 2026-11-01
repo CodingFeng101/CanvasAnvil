@@ -5,6 +5,7 @@ import {
   Blocks,
   ChartNoAxesCombined,
   CheckCircle2,
+  CirclePlay,
   Code2,
   FileText,
   Github,
@@ -29,6 +30,7 @@ import { portalCanvasItems, type PortalCanvasItem, type PortalWorkspace } from "
 
 type PortalPageProps = {
   onEnterWorkspace: (workspace: PortalWorkspace) => void;
+  onOpenTutorials: () => void;
 };
 
 type PortalSection = "home" | PortalWorkspace;
@@ -122,10 +124,10 @@ const detailConfigs: Record<PortalWorkspace, DetailConfig> = {
   },
   cad: {
     title: "\u5ba4\u5185\u8bbe\u8ba1",
-    subtitle: "\u4ece\u7a7a\u95f4\u9700\u6c42\u5230\u6210\u5957\u56fe\u7eb8\u4e0e\u6e32\u67d3",
-    intro: "\u5ba4\u5185\u8bbe\u8ba1\u5c06\u7a7a\u95f4\u9700\u6c42\u8f6c\u5316\u4e3a\u5b8c\u6574\u7684\u8bbe\u8ba1\u65b9\u6848\uff0c\u81ea\u52a8\u751f\u6210\u5e73\u9762\u5e03\u5c40\u3001\u7acb\u9762\u4e0e\u8be6\u56fe\uff0c\u8f93\u51fa\u6e32\u67d3\u53ca\u6750\u6599\u6e05\u5355\u3002",
-    tags: ["\u7a7a\u95f4\u89c4\u5212", "2D SVG", "\u6e32\u67d3 / \u6750\u6599\u6e05\u5355"],
-    bullets: ["\u6237\u578b\u89e3\u6790\u4e0e\u529f\u80fd\u5206\u533a\uff0c\u5feb\u901f\u786e\u5b9a\u7a7a\u95f4\u5e03\u5c40", "\u591a\u56fe\u7eb8\u8054\u52a8\u751f\u6210\uff0c\u5e73\u9762\u3001\u7acb\u9762\u3001\u8be6\u56fe\u4e00\u4f53\u5316", "\u6548\u679c\u56fe\u4e0e\u6750\u6599\u53c2\u8003\uff0c\u5448\u73b0\u771f\u5b9e\u7a7a\u95f4\u6548\u679c", "\u6750\u6599\u6e05\u5355\u4e0e\u56fe\u7eb8\u5bfc\u51fa\uff0c\u652f\u6301\u65bd\u5de5\u4ea4\u4ed8"],
+    subtitle: "\u4ece\u7a7a\u95f4\u9700\u6c42\u5230\u6210\u5957\u56fe\u7eb8\u4e0e\u7269\u6599\u6e05\u5355",
+    intro: "\u5ba4\u5185\u8bbe\u8ba1\u5c06\u7a7a\u95f4\u9700\u6c42\u8f6c\u5316\u4e3a\u5b8c\u6574\u7684\u8bbe\u8ba1\u65b9\u6848\uff0c\u81ea\u52a8\u751f\u6210\u5e73\u9762\u5e03\u5c40\u3001\u7acb\u9762\u4e0e\u8be6\u56fe\uff0c\u8f93\u51fa\u88c5\u4fee\u56fe\u7eb8\u53ca\u6750\u6599\u6e05\u5355\u3002",
+    tags: ["\u7a7a\u95f4\u89c4\u5212", "2D SVG", "\u56fe\u7eb8 / \u6750\u6599\u6e05\u5355"],
+    bullets: ["\u6237\u578b\u89e3\u6790\u4e0e\u529f\u80fd\u5206\u533a\uff0c\u5feb\u901f\u786e\u5b9a\u7a7a\u95f4\u5e03\u5c40", "\u591a\u56fe\u7eb8\u8054\u52a8\u751f\u6210\uff0c\u5e73\u9762\u3001\u7acb\u9762\u3001\u8be6\u56fe\u4e00\u4f53\u5316", "\u5206\u6790\u56fe\u677f\u68b3\u7406\u65b9\u6848\uff0c\u5206\u533a\u4e0e\u7b56\u7565\u4e00\u76ee\u4e86\u7136", "\u6750\u6599\u6e05\u5355\u4e0e\u56fe\u7eb8\u5bfc\u51fa\uff0c\u652f\u6301\u65bd\u5de5\u4ea4\u4ed8"],
     previews: [
       { title: "\u88c5\u4fee\u5e73\u9762\u5e03\u7f6e\u56fe", image: "/examples/cad/01.png" },
       { title: "\u5730\u9762\u94fa\u88c5\u56fe", image: "/examples/cad/02.png" },
@@ -137,8 +139,8 @@ const detailConfigs: Record<PortalWorkspace, DetailConfig> = {
       { title: "\u7a7a\u95f4\u5206\u6790", text: "\u5206\u6790\u529f\u80fd\u5206\u533a\u4e0e\u52a8\u7ebf\u3002", icon: Package },
       { title: "\u751f\u6210\u5e73\u9762", text: "\u751f\u6210\u5e73\u9762\u5e03\u7f6e\u4e0e\u5c3a\u5bf8\u6807\u6ce8\u3002", icon: Home },
       { title: "\u8054\u52a8\u56fe\u7eb8", text: "\u8054\u52a8\u7acb\u9762\u3001\u5929\u82b1\u548c\u8282\u70b9\u56fe\u3002", icon: Layers3 },
-      { title: "\u6e32\u67d3\u6821\u9a8c", text: "\u751f\u6210\u6548\u679c\u56fe\u5e76\u6821\u9a8c\u6750\u8d28\u3002", icon: Image },
-      { title: "\u5bfc\u51fa\u56fe\u7eb8", text: "\u5bfc\u51fa CAD/PDF/SVG \u4e0e\u6750\u6599\u6e05\u5355\u3002", icon: Upload },
+      { title: "\u56fe\u7eb8\u6210\u5957", text: "\u4e00\u6b21\u751f\u6210\u4e03\u5f20\u88c5\u4fee\u65bd\u5de5\u56fe\u7eb8\u3002", icon: Image },
+      { title: "\u5bfc\u51fa\u56fe\u7eb8", text: "\u5bfc\u51fa SVG\u3001JPG\u3001PDF \u4e0e\u6750\u6599\u6e05\u5355\u3002", icon: Upload },
     ],
     cta: "\u5f00\u59cb\u8bbe\u8ba1",
     slogan: "\u8ba9\u5ba4\u5185\u8bbe\u8ba1\u50cf\u753b\u5e03\u4e00\u6837\u81ea\u7531\u521b\u4f5c",
@@ -148,7 +150,7 @@ const detailConfigs: Record<PortalWorkspace, DetailConfig> = {
     subtitle: "\u4ece\u4e3b\u9898\u5230\u6f14\u793a\u6587\u7a3f\uff0c\u6309\u9875\u9762\u6301\u7eed\u8fed\u4ee3",
     intro: "PPT \u6f14\u793a\u5c06\u4e3b\u9898\u7ed3\u6784\u5316\u4e3a\u53ef\u6f14\u793a\u7684\u903b\u8f91\u5185\u5bb9\uff0c\u81ea\u52a8\u751f\u6210\u6f14\u793a\u6587\u7a3f\u5927\u7eb2\u5e76\u62c6\u5206\u9875\u9762\u7c7b\u578b\uff0c\u652f\u6301\u9875\u9762\u751f\u6210\u4e0e\u5c40\u90e8\u8fed\u4ee3\u3002",
     tags: ["\u7ed3\u6784\u5316\u751f\u6210", "\u9875\u9762\u7ea7\u7f16\u8f91", "\u6a21\u677f\u5bf9\u9f50"],
-    bullets: ["\u4e3b\u9898\u8f6c\u5927\u7eb2\uff0c\u6784\u5efa\u6e05\u6670\u7684\u6f14\u793a\u903b\u8f91", "\u81ea\u52a8\u62c6\u5206\u9875\u9762\u7c7b\u578b\uff0c\u5339\u914d\u6700\u4f73\u8868\u8fbe\u65b9\u5f0f", "\u652f\u6301\u5c40\u90e8\u7eed\u5199\u4e0e\u6539\u5199\uff0c\u7cbe\u7ec6\u8c03\u6574\u6bcf\u4e00\u9875", "\u5bfc\u51fa\u53ef\u7f16\u8f91\u6f14\u793a\u7a3f\uff0c\u81ea\u7531\u8c03\u6574\u4e0e\u590d\u7528"],
+    bullets: ["\u4e3b\u9898\u8f6c\u5927\u7eb2\uff0c\u6784\u5efa\u6e05\u6670\u7684\u6f14\u793a\u903b\u8f91", "\u81ea\u52a8\u62c6\u5206\u9875\u9762\u7c7b\u578b\uff0c\u5339\u914d\u6700\u4f73\u8868\u8fbe\u65b9\u5f0f", "\u652f\u6301\u5c40\u90e8\u7eed\u5199\u4e0e\u6539\u5199\uff0c\u7cbe\u7ec6\u8c03\u6574\u6bcf\u4e00\u9875", "\u5bfc\u51fa PDF \u4e0e\u56fe\u7247\u7248 PPT\uff0c\u65b9\u4fbf\u5206\u4eab\u4e0e\u6f14\u793a"],
     previews: [
       { title: "AI\u5185\u5bb9\u521b\u4f5c\u6d41\u7a0b", image: "/examples/readme-previews/ppt/ppt1.png" },
       { title: "\u667a\u80fd\u534f\u4f5c\u589e\u957f", image: "/examples/readme-previews/ppt/ppt2.png" },
@@ -161,7 +163,7 @@ const detailConfigs: Record<PortalWorkspace, DetailConfig> = {
       { title: "\u62c6\u5206\u9875\u9762", text: "\u81ea\u52a8\u8bc6\u522b\u5c01\u9762\u3001\u76ee\u5f55\u3001\u56fe\u8868\u3001\u7ed3\u8bba\u7b49\u7ed3\u6784\u3002", icon: Blocks },
       { title: "\u9875\u9762\u751f\u6210", text: "\u6309\u5927\u7eb2\u548c\u9875\u9762\u7c7b\u578b\u751f\u6210\u5185\u5bb9\u3002", icon: Presentation },
       { title: "\u5c40\u90e8\u8fed\u4ee3", text: "\u652f\u6301\u9875\u9762\u7eed\u5199\u3001\u6539\u5199\u4e0e\u8c03\u6574\u3002", icon: Pencil },
-      { title: "\u5bfc\u51fa PPT", text: "\u5bfc\u51fa\u53ef\u7f16\u8f91\u7684 PPT \u683c\u5f0f\u3002", icon: Upload },
+      { title: "\u5bfc\u51fa PPT", text: "\u5bfc\u51fa PDF \u6216\u56fe\u7247\u7248 PPT\u3002", icon: Upload },
     ],
     cta: "\u5f00\u59cb\u5236\u4f5c",
     slogan: "\u8ba9\u6f14\u793a\u521b\u4f5c\u50cf\u753b\u5e03\u4e00\u6837\u81ea\u7531\u6d41\u7545",
@@ -220,17 +222,17 @@ const detailConfigsEn: Record<PortalWorkspace, DetailConfig> = {
   },
   cad: {
     title: "Interior Design",
-    subtitle: "From spatial requirements to drawings, renders, and material lists",
-    intro: "The Interior Design workspace turns room requirements into design packages, including layouts, elevations, details, render references, and material lists.",
-    tags: ["Space planning", "2D SVG", "Renders / Materials"],
-    bullets: ["Analyze floor plans and functional zones", "Generate linked plan, elevation, ceiling, and detail drawings", "Use render references and material cues to present the space", "Export drawings and material lists for delivery"],
+    subtitle: "From spatial requirements to drawing sets and material lists",
+    intro: "The Interior Design workspace turns room requirements into design packages, including layouts, elevations, details, analysis boards, and material lists.",
+    tags: ["Space planning", "2D SVG", "Drawings / Materials"],
+    bullets: ["Analyze floor plans and functional zones", "Generate linked plan, elevation, ceiling, and detail drawings", "Map zones and key strategies on analysis boards", "Export drawings and material lists for delivery"],
     previews: withTitles(detailConfigs.cad.previews, ["Furnished floor plan", "Floor finish plan", "Reflected ceiling plan", "Construction details"]),
     steps: [
       { title: "Input Brief", text: "Provide room information and design needs.", icon: FileText },
       { title: "Plan Space", text: "Analyze zoning and circulation.", icon: Package },
       { title: "Create Plan", text: "Generate layout drawings and dimensions.", icon: Home },
       { title: "Link Drawings", text: "Connect elevations, ceilings, and details.", icon: Layers3 },
-      { title: "Render Check", text: "Generate render references and review materials.", icon: Image },
+      { title: "Drawing Set", text: "Generate seven renovation drawing sheets in one pass.", icon: Image },
       { title: "Export", text: "Export drawings and material lists.", icon: Upload },
     ],
     cta: "Start Designing",
@@ -241,7 +243,7 @@ const detailConfigsEn: Record<PortalWorkspace, DetailConfig> = {
     subtitle: "From topic to deck, with page-level iteration",
     intro: "The PPT workspace structures your topic into a presentation outline, splits it into slide types, and supports slide generation, review, and local revision.",
     tags: ["Outline first", "Slide editing", "Template aligned"],
-    bullets: ["Turn a topic into a clear deck outline", "Split content into cover, agenda, chart, and conclusion slides", "Revise or extend individual slides", "Export editable presentation files"],
+    bullets: ["Turn a topic into a clear deck outline", "Split content into cover, agenda, chart, and conclusion slides", "Revise or extend individual slides", "Export as PDF or image-based PPT"],
     previews: withTitles(detailConfigs.ppt.previews, ["AI content creation", "Growth through collaboration", "Business innovation", "Low-carbon campus"]),
     steps: [
       { title: "Input Topic", text: "Enter the topic and target audience.", icon: FileText },
@@ -249,7 +251,7 @@ const detailConfigsEn: Record<PortalWorkspace, DetailConfig> = {
       { title: "Split Slides", text: "Identify cover, agenda, chart, and summary pages.", icon: Blocks },
       { title: "Generate", text: "Create slides from the outline and page types.", icon: Presentation },
       { title: "Iterate", text: "Rewrite, extend, or adjust selected pages.", icon: Pencil },
-      { title: "Export PPT", text: "Export an editable PPT file.", icon: Upload },
+      { title: "Export PPT", text: "Export as PDF or image-based PPT.", icon: Upload },
     ],
     cta: "Start Building",
     slogan: "Make presentation creation smooth and visual",
@@ -350,13 +352,15 @@ function Header({
   setActiveSection,
   setActiveCanvas,
   setUiLang,
+  onOpenTutorials,
 }: {
   uiLang: UiLanguage;
-  copy: { home: string; openRepo: string };
+  copy: { home: string; openRepo: string; tutorials: string };
   activeSection: PortalSection;
   setActiveSection: (section: PortalSection) => void;
   setActiveCanvas: (workspace: PortalWorkspace) => void;
   setUiLang: Dispatch<SetStateAction<UiLanguage>>;
+  onOpenTutorials: () => void;
 }) {
   const isChinese = uiLang === "zh";
 
@@ -365,7 +369,7 @@ function Header({
       {/* Below xl: logo and buttons share the first row, the nav takes the
           second. It used to stack all three, spending a third row -- about
           60px of an already short page -- on two small buttons. */}
-      <div className="grid grid-cols-[1fr_auto] items-center gap-x-4 gap-y-2 xl:grid-cols-[220px_minmax(0,1fr)_132px] xl:gap-3">
+      <div className="grid grid-cols-[1fr_auto] items-center gap-x-2 gap-y-2 sm:gap-x-4 xl:grid-cols-[220px_minmax(0,1fr)_220px] xl:gap-3">
         <button
           className="group col-start-1 row-start-1 flex items-center gap-3 justify-self-start text-left"
           onClick={() => {
@@ -418,10 +422,20 @@ function Header({
           </div>
         </nav>
 
-        <div className="col-start-2 row-start-1 flex justify-end gap-2 xl:col-start-3">
+        <div className="col-start-2 row-start-1 flex justify-end gap-1.5 sm:gap-2 xl:col-start-3">
+          {/* Icon only on phones, where the label pushed the GitHub button off the edge. */}
           <Button
             variant="outline"
-            className="h-9 rounded-full px-4"
+            className="h-9 w-9 rounded-full px-0 sm:w-auto sm:px-4"
+            onClick={onOpenTutorials}
+            aria-label={copy.tutorials}
+          >
+            <CirclePlay className="h-4 w-4" />
+            <span className="hidden sm:inline">{copy.tutorials}</span>
+          </Button>
+          <Button
+            variant="outline"
+            className="h-9 rounded-full px-3 sm:px-4"
             onClick={() => setUiLang((prev) => (prev === "zh" ? "en" : "zh"))}
           >
             {uiLang === "zh" ? "EN" : "\u4e2d\u6587"}
@@ -578,7 +592,7 @@ function SimpleCanvasDetailPage({
   );
 }
 
-export function PortalPage({ onEnterWorkspace }: PortalPageProps) {
+export function PortalPage({ onEnterWorkspace, onOpenTutorials }: PortalPageProps) {
   const [uiLang, setUiLang] = useState<UiLanguage>(() => getUiLanguage());
   const [activeCanvas, setActiveCanvas] = useState<PortalWorkspace>("diagram");
   const [activeSection, setActiveSection] = useState<PortalSection>("home");
@@ -664,6 +678,7 @@ export function PortalPage({ onEnterWorkspace }: PortalPageProps) {
         tagB: "\u7ed3\u6784\u5316\u751f\u6210",
         tagC: "\u5c40\u90e8\u4fee\u6539",
         openRepo: "GitHub",
+        tutorials: "教程",
         footerLicense: "\u5f00\u6e90\u534f\u8bae\uff1aMIT",
         footerContact: "\u8054\u7cfb\u65b9\u5f0f",
         hub: "CanvasAnvil",
@@ -685,6 +700,7 @@ export function PortalPage({ onEnterWorkspace }: PortalPageProps) {
         tagB: "Structured output",
         tagC: "Partial edits",
         openRepo: "GitHub",
+        tutorials: "Tutorials",
         footerLicense: "License: MIT",
         footerContact: "Contact",
         hub: "CanvasAnvil",
@@ -772,6 +788,7 @@ export function PortalPage({ onEnterWorkspace }: PortalPageProps) {
           setActiveSection={setActiveSection}
           setActiveCanvas={setActiveCanvas}
           setUiLang={setUiLang}
+          onOpenTutorials={onOpenTutorials}
         />
         </div>
 

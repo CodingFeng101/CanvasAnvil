@@ -27,6 +27,8 @@
   <a href="README.md">English</a>
 </p>
 
+https://github.com/user-attachments/assets/582c70ae-38df-4949-913c-c3f4369a7c8c
+
 <p align="center">
   <strong>⭐ 如果 CanvasAnvil 对你有帮助，欢迎给仓库点个 Star，也可以 Fork 一份继续扩展你自己的画布工作流。</strong>
 </p>
@@ -166,7 +168,18 @@
 
 ## 🎬 视频教程
 
-- Bilibili 教程：[https://b23.tv/pFWv7iI](https://b23.tv/pFWv7iI)
+每个画布一段 B 站完整演示。在应用里，首页顶部的「教程」按钮可以直接播放。
+
+<table>
+  <tr>
+    <td width="50%" align="center"><a href="https://www.bilibili.com/video/BV1wyxs66EEd"><img src="public/tutorials/diagram.jpg" alt="一句话画出整张架构图，改图只动你说的地方" width="100%" /></a><br/><strong>🔷 图表绘制</strong> · <a href="https://www.bilibili.com/video/BV1wyxs66EEd">一句话画出整张架构图，改图只动你说的地方</a></td>
+    <td width="50%" align="center"><a href="https://www.bilibili.com/video/BV1ryxs6zEtN"><img src="public/tutorials/cad.jpg" alt="一句需求出整套装修图纸，还能 3D 漫游" width="100%" /></a><br/><strong>🏠 室内设计</strong> · <a href="https://www.bilibili.com/video/BV1ryxs6zEtN">一句需求出整套装修图纸，还能 3D 漫游</a></td>
+  </tr>
+  <tr>
+    <td width="50%" align="center"><a href="https://www.bilibili.com/video/BV1oGxs6hEf6"><img src="public/tutorials/ppt.jpg" alt="一句话生成 8 页 PPT，200 多套模板随便挑" width="100%" /></a><br/><strong>📑 PPT 演示</strong> · <a href="https://www.bilibili.com/video/BV1oGxs6hEf6">一句话生成 8 页 PPT，200 多套模板随便挑</a></td>
+    <td width="50%" align="center"><a href="https://www.bilibili.com/video/BV17Gxs6aETm"><img src="public/tutorials/canvas.jpg" alt="圈哪里改哪里，AI 改图不动其他地方" width="100%" /></a><br/><strong>🖌️ 自由画布</strong> · <a href="https://www.bilibili.com/video/BV17Gxs6aETm">圈哪里改哪里，AI 改图不动其他地方</a></td>
+  </tr>
+</table>
 
 ## 🧰 Skills
 

@@ -1003,6 +1003,22 @@ const outlineTemplateRule = (hasTemplate: boolean) =>
         ? "\n5. description must stay inside the template image's colour scheme and art style, and must never describe a look that contradicts it.\n6. description must not reproduce the template's layout -- where its title, text blocks, cards or pictures sit; vary the layout to fit each slide's content."
         : "";
 
+/**
+ * A whole-deck plan is one long JSON answer (every slide's bullets, notes and
+ * image description), sent with the template image when there is one; slower
+ * models need well over two minutes for an eight-slide deck.
+ */
+export const PLAN_TIMEOUT_MS = 300_000;
+
+/**
+ * Image gateways sometimes accept a request and never answer. Without a limit
+ * that slide spins forever and so does the whole deck's progress bar; with one
+ * it gets one more try and then fails, where "re-render this slide" can pick
+ * it up.
+ */
+export const SLIDE_IMAGE_TIMEOUT_MS = 240_000;
+const SLIDE_IMAGE_ATTEMPTS = 2;
+
 export const pptService = {
     // A1. PlanFromIdeaAgent
 
@@ -1028,7 +1044,7 @@ export const pptService = {
 
         const response = hasTemplate
             ? await generateVisionChatMessage(PPT_OUTLINE_SYSTEM, prompt, [templateImage], undefined, {
-                  timeoutMs: 120000,
+                  timeoutMs: PLAN_TIMEOUT_MS,
               })
             : await generateChatMessage(
                   [
@@ -1036,7 +1052,7 @@ export const pptService = {
                       { role: "user", content: prompt },
                   ],
                   undefined,
-                  { timeoutMs: 120000 },
+                  { timeoutMs: PLAN_TIMEOUT_MS },
               );
 
         try {
@@ -1078,7 +1094,7 @@ export const pptService = {
         });
         const response = hasTemplate
             ? await generateVisionChatMessage(PPT_OUTLINE_SYSTEM, prompt, [templateImage], undefined, {
-                  timeoutMs: 120000,
+                  timeoutMs: PLAN_TIMEOUT_MS,
               })
             : await generateChatMessage(
                   [
@@ -1086,7 +1102,7 @@ export const pptService = {
                       { role: "user", content: prompt },
                   ],
                   undefined,
-                  { timeoutMs: 120000 },
+                  { timeoutMs: PLAN_TIMEOUT_MS },
               );
         try {
             const parsed = parseJsonLoose(response);
@@ -1200,13 +1216,27 @@ export const pptService = {
             ? normalizedAdditional.map((x) => String(x?.url || "")).filter(Boolean)
             : [];
 
-        const imageUrl = await generateImage({
-            prompt,
-            referenceImageUrl: templateImageUrl || undefined,
-            additionalReferenceImageUrls,
-        });
-        if (!imageUrl) throw new Error("Slide image generation returned no image.");
-        return imageUrl;
+        let lastError: unknown;
+        for (let attempt = 1; attempt <= SLIDE_IMAGE_ATTEMPTS; attempt++) {
+            try {
+                const imageUrl = await generateImage(
+                    {
+                        prompt,
+                        referenceImageUrl: templateImageUrl || undefined,
+                        additionalReferenceImageUrls,
+                    },
+                    AbortSignal.timeout(SLIDE_IMAGE_TIMEOUT_MS),
+                );
+                if (!imageUrl) throw new Error("Slide image generation returned no image.");
+                return imageUrl;
+            } catch (error) {
+                lastError = error;
+                // Only a stalled request is worth repeating; a rejected one would fail the same way again.
+                const name = (error as { name?: string })?.name;
+                if (name !== "TimeoutError" && name !== "AbortError") break;
+            }
+        }
+        throw lastError;
     },
 
     /**

@@ -7,12 +7,23 @@
   <base href="/vendor/svgedit/" />
   <link rel="stylesheet" href="/vendor/svgedit/svgedit.css" />
   <style>
+    /*
+     * Lighter work area and rulers to sit with the rest of the app. The toolbars
+     * stay mid-grey: svgedit's tool icons are drawn in white.
+     */
+    :root {
+      --main-bg-color: #868e92;
+      --icon-bg-color: #868e92;
+      --canvas-bg-color: #e9edf0;
+      --ruler-color: #dfe4e8;
+      --input-color: #f4f6f8;
+    }
     html, body {
       margin: 0;
       width: 100%;
       height: 100%;
       overflow: hidden;
-      background: #5f6467;
+      background: #e9edf0;
     }
     #svgedit-container {
       width: 100vw;
@@ -42,6 +53,13 @@
       imgPath: "/vendor/svgedit/images",
       extPath: "/vendor/svgedit/extensions"
     });
+
+    // svgedit's storage extension asks (in English) whether to keep preferences
+    // and content locally the first time it opens. CanvasAnvil keeps the plan
+    // itself, so answer "preferences only" up front instead of interrupting.
+    if (!/(?:^|;\s*)svgeditstore=/.test(document.cookie)) {
+      document.cookie = "svgeditstore=prefsOnly; path=/; max-age=31536000";
+    }
 
     editor.init();
 
@@ -130,24 +148,43 @@
       return /^<svg[\s/>]/i.test(raw) ? raw : "";
     };
 
+    // Loading straight into the canvas skips the editor's own resize, so the
+    // drawing would sit at 100% in a corner; resize the work area and zoom the
+    // whole sheet into view instead.
+    const fitToView = () => {
+      try {
+        editor.updateCanvas?.(true);
+        editor.zoomChanged?.(window, "canvas");
+      } catch {
+        // An editor that cannot zoom still shows the drawing, just not framed.
+      }
+    };
+
     const loadSvg = async (svg) => {
       const text = normalizeIncomingSvg(svg);
       if (!text) return false;
 
       try {
         const ok = editor?.svgCanvas?.setSvgString?.(text);
-        if (ok !== false) return true;
+        if (ok !== false) {
+          fitToView();
+          return true;
+        }
       } catch {
       }
 
       try {
         const ok = editor?.svgCanvas?.importSvgString?.(text);
-        if (ok !== false) return true;
+        if (ok !== false) {
+          fitToView();
+          return true;
+        }
       } catch {
       }
 
       try {
         await editor.loadFromString(text, { noAlert: true });
+        fitToView();
         return true;
       } catch (e) {
         console.error("Failed to load SVG", e);

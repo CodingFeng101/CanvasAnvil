@@ -61,6 +61,9 @@ import {
 import { convertToLegalXml, replaceNodes, validateMxCellStructure } from "@/workspaces/diagram/lib/drawio-xml"
 import { CodeBlock } from "./code-block"
 
+/** Minimum gap between canvas redraws while a diagram's XML streams in. */
+const STREAM_PREVIEW_INTERVAL_MS = 400
+
 // Tool part interface for type safety
 interface ToolPartLike {
     type: string
@@ -138,6 +141,7 @@ export function ChatMessageDisplay({
     const messagesEndRef = useRef<HTMLDivElement>(null)
     const previousXML = useRef<string>("")
     const assembledXmlRef = useRef<string>("")
+    const lastStreamPreviewAtRef = useRef(0)
     const processedToolCalls = processedToolCallsRef
     const [expandedTools, setExpandedTools] = useState<Record<string, boolean>>(
         {},
@@ -278,6 +282,18 @@ export function ChatMessageDisplay({
     }, [editingMessageId])
 
     useEffect(() => {
+        // Each preview is a full reload inside draw.io, so while the XML is
+        // still streaming in, redraw at most every STREAM_PREVIEW_INTERVAL_MS.
+        // "input-available" (the complete XML) always goes through.
+        const now = Date.now()
+        const streamPreviewDue =
+            now - lastStreamPreviewAtRef.current >= STREAM_PREVIEW_INTERVAL_MS
+        const previewStreaming = (xml: string) => {
+            if (!streamPreviewDue) return
+            lastStreamPreviewAtRef.current = now
+            handleDisplayChart(xml)
+        }
+
         messages.forEach((message) => {
             if (message.parts) {
                 message.parts.forEach((part) => {
@@ -286,16 +302,21 @@ export function ChatMessageDisplay({
                         const { toolCallId, state, input } = toolPart
 
                         if (state === "output-available") {
-                            setExpandedTools((prev) => ({
-                                ...prev,
-                                [toolCallId]: false,
-                            }))
+                            // Returning prev when already collapsed skips a
+                            // rerender for every finished tool in the history.
+                            setExpandedTools((prev) =>
+                                prev[toolCallId] === false
+                                    ? prev
+                                    : { ...prev, [toolCallId]: false },
+                            )
                         }
 
                         if (part.type === "tool-display_diagram" && input?.xml) {
                             const xml = String(input.xml)
                             assembledXmlRef.current = xml
-                            if (state === "input-streaming" || state === "input-available") {
+                            if (state === "input-streaming") {
+                                previewStreaming(xml)
+                            } else if (state === "input-available") {
                                 handleDisplayChart(xml)
                             } else if (!processedToolCalls.current.has(toolCallId)) {
                                 handleDisplayChart(xml)
@@ -305,7 +326,9 @@ export function ChatMessageDisplay({
 
                         if (part.type === "tool-append_diagram" && input?.xml) {
                             const combinedXml = `${assembledXmlRef.current}${String(input.xml)}`
-                            if (state === "input-streaming" || state === "input-available") {
+                            if (state === "input-streaming") {
+                                previewStreaming(combinedXml)
+                            } else if (state === "input-available") {
                                 handleDisplayChart(combinedXml)
                             } else if (!processedToolCalls.current.has(toolCallId)) {
                                 assembledXmlRef.current = combinedXml
@@ -405,7 +428,13 @@ export function ChatMessageDisplay({
                 {input && isExpanded && (
                     <div className="px-4 py-3 border-t border-border/40 bg-muted/20">
                         {typeof input === "object" && input.xml ? (
-                            <CodeBlock code={input.xml} language="xml" onApply={applyCodeToDiagram} framed={false} />
+                            <CodeBlock
+                                code={input.xml}
+                                language="xml"
+                                onApply={applyCodeToDiagram}
+                                framed={false}
+                                isStreaming={state === "input-streaming"}
+                            />
                         ) : typeof input === "object" &&
                           input.operations &&
                           Array.isArray(input.operations) ? (

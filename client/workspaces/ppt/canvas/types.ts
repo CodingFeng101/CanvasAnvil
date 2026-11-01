@@ -37,7 +37,7 @@ export interface PptData {
 }
 
 export type CreationStep = 'idle' | 'input' | 'outline' | 'generating_content' | 'generating_images' | 'done';
-export type CreationMode = 'idea' | 'outline' | 'beautify' | 'image_transform';
+export type CreationMode = 'idea' | 'outline' | 'beautify';
 
 export type ReferenceFile = { id: string; filename: string; content: string; charCount: number };
 

@@ -108,7 +108,6 @@ interface DeckViewProps {
   status: {
     currentSlideFailure: string | undefined;
     failedBeautifyCount: number;
-    failedImageTransformCount: number;
     isApplyingEdits: boolean;
     isGeneratingImage: boolean;
     /** Which slide the editable export is on, while it runs. */
@@ -275,11 +274,6 @@ export function DeckView({
                 {tr(`失败 ${status.failedBeautifyCount} 页`, `${status.failedBeautifyCount} failed`)}
               </span>
             ) : null}
-            {creationMode === "image_transform" && status.failedImageTransformCount > 0 ? (
-              <span className="rounded border border-destructive/25 bg-destructive/[0.08] px-2 py-1 text-destructive">
-                {tr(`转化失败 ${status.failedImageTransformCount} 页`, `${status.failedImageTransformCount} failed`)}
-              </span>
-            ) : null}
             <span>{deck.slides.length > 0 ? tr(`第 ${deck.currentIndex + 1} / ${deck.slides.length} 页`, `Slide ${deck.currentIndex + 1} / ${deck.slides.length}`) : tr("空文档", "Empty")}</span>
         </div>
       </div>
@@ -290,7 +284,7 @@ export function DeckView({
         <div className="w-64 bg-sunken border-r border-border overflow-y-auto p-4 space-y-4">
           {deck.slides.map((slide, index) => {
             const hasGeneratedImage = deck.getBackgroundUrl(slide.id);
-            const slideFailure = creationMode === "image_transform" ? inputs.imageTransform.failures[slide.id] : inputs.beautify.failures[slide.id];
+            const slideFailure = inputs.beautify.failures[slide.id];
             return (
             <ContextMenu key={slide.id || index}>
                 <ContextMenuTrigger asChild>
@@ -303,22 +297,20 @@ export function DeckView({
                         : 'border-transparent hover:border-border hover:-translate-y-0.5 bg-card shadow-xs'
                     }`}
                     >
-                    {creationMode !== "image_transform" ? (
-                      <div
-                        className="absolute top-1 left-1 z-20"
-                        onClick={(e) => e.stopPropagation()}
+                    <div
+                      className="absolute top-1 left-1 z-20"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <Button
+                        size="sm"
+                        variant="destructive"
+                        className="h-6 px-2 text-[10px] gap-1 shadow-sm opacity-0 group-hover:opacity-100 transition-opacity"
+                        onClick={() => actions.addSlideToChat(slide)}
                       >
-                        <Button
-                          size="sm"
-                          variant="destructive"
-                          className="h-6 px-2 text-[10px] gap-1 shadow-sm opacity-0 group-hover:opacity-100 transition-opacity"
-                          onClick={() => actions.addSlideToChat(slide)}
-                        >
-                          <Presentation className="w-3 h-3" />
-                          {tr("加入对话", "Add to chat")}
-                        </Button>
-                      </div>
-                    ) : null}
+                        <Presentation className="w-3 h-3" />
+                        {tr("加入对话", "Add to chat")}
+                      </Button>
+                    </div>
                     {/* Thumbnail Preview */}
                     {hasGeneratedImage ? (
                         // The scene lays out at a fixed 240x135 while this slot is
@@ -349,19 +341,17 @@ export function DeckView({
                         className="absolute top-1 right-1 bg-destructive/90 text-destructive-foreground text-[10px] px-1.5 py-0.5 rounded-sm max-w-[85%] truncate"
                         title={slideFailure}
                       >
-                        {creationMode === "image_transform" ? tr("转化失败", "Transform failed") : tr("美化失败", "Beautify failed")}
+                        {tr("美化失败", "Beautify failed")}
                       </div>
                     ) : null}
                     </div>
                 </ContextMenuTrigger>
-                {creationMode !== "image_transform" ? (
-                  <ContextMenuContent>
-                      <ContextMenuItem onClick={() => actions.addSlideToChat(slide)} className="gap-2">
-                          <MessageSquarePlus className="w-4 h-4" />
-                          <span>{tr("把此页添加到对话", "Add this slide to chat")}</span>
-                      </ContextMenuItem>
-                  </ContextMenuContent>
-                ) : null}
+                <ContextMenuContent>
+                    <ContextMenuItem onClick={() => actions.addSlideToChat(slide)} className="gap-2">
+                        <MessageSquarePlus className="w-4 h-4" />
+                        <span>{tr("把此页添加到对话", "Add this slide to chat")}</span>
+                    </ContextMenuItem>
+                </ContextMenuContent>
             </ContextMenu>
           )})}
           
@@ -431,7 +421,7 @@ export function DeckView({
           </div>
           {status.currentSlideFailure ? (
             <div className="absolute top-16 left-4 z-30 max-w-[520px] rounded-lg border border-destructive/25 bg-destructive/[0.08] px-3 py-2 text-xs text-destructive shadow-sm">
-              <span className="font-medium mr-1">{creationMode === "image_transform" ? tr("本页转化失败：", "Slide transform failed:") : tr("本页美化失败：", "Slide beautify failed:")}</span>
+              <span className="font-medium mr-1">{tr("本页美化失败：", "Slide beautify failed:")}</span>
               <span>{status.currentSlideFailure}</span>
             </div>
           ) : null}
@@ -493,14 +483,12 @@ export function DeckView({
                         )}
                     </div>
                 </ContextMenuTrigger>
-                {creationMode !== "image_transform" ? (
-                  <ContextMenuContent>
-                      <ContextMenuItem onClick={() => deck.currentSlide && actions.addSlideToChat(deck.currentSlide)} className="gap-2">
-                          <MessageSquarePlus className="w-4 h-4" />
-                          <span>{tr("把此页添加到对话", "Add this slide to the chat")}</span>
-                      </ContextMenuItem>
-                  </ContextMenuContent>
-                ) : null}
+                <ContextMenuContent>
+                    <ContextMenuItem onClick={() => deck.currentSlide && actions.addSlideToChat(deck.currentSlide)} className="gap-2">
+                        <MessageSquarePlus className="w-4 h-4" />
+                        <span>{tr("把此页添加到对话", "Add this slide to the chat")}</span>
+                    </ContextMenuItem>
+                </ContextMenuContent>
             </ContextMenu>
           ) : (
             <div className="text-muted-foreground flex flex-col items-center">

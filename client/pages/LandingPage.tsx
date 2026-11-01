@@ -3,8 +3,9 @@ import type { PortalWorkspace } from "@/pages/portal/data";
 
 interface LandingPageProps {
   onStart: (workspace?: PortalWorkspace) => void;
+  onOpenTutorials: () => void;
 }
 
-export function LandingPage({ onStart }: LandingPageProps) {
-  return <PortalPage onEnterWorkspace={(workspace) => onStart(workspace)} />;
+export function LandingPage({ onStart, onOpenTutorials }: LandingPageProps) {
+  return <PortalPage onEnterWorkspace={(workspace) => onStart(workspace)} onOpenTutorials={onOpenTutorials} />;
 }

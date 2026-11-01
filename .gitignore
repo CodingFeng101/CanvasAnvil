@@ -63,3 +63,6 @@ Desktop.ini
 
 # Large local test fixtures (see tests/ppt-vision-fixture.test.ts)
 tests/fixtures/
+
+# Tutorial video tooling and its recordings stay local
+tools/video/

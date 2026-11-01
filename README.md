@@ -27,6 +27,8 @@
   <a href="README.zh-CN.md">Chinese</a>
 </p>
 
+https://github.com/user-attachments/assets/582c70ae-38df-4949-913c-c3f4369a7c8c
+
 <p align="center">
   <strong>⭐ If CanvasAnvil helps your workflow, please star the repo and fork it for your own canvas experiments.</strong>
 </p>
@@ -166,7 +168,18 @@ Current online access URL:
 
 ## Video Tutorial
 
-- Bilibili tutorial: [https://b23.tv/pFWv7iI](https://b23.tv/pFWv7iI)
+One walkthrough per canvas on Bilibili (narrated in Chinese). In the app, the **Tutorials** button at the top of the home page plays them in place.
+
+<table>
+  <tr>
+    <td width="50%" align="center"><a href="https://www.bilibili.com/video/BV1wyxs66EEd"><img src="public/tutorials/diagram.jpg" alt="A whole architecture diagram from one sentence, and edits that touch only what you name" width="100%" /></a><br/><strong>🔷 Diagram</strong> · <a href="https://www.bilibili.com/video/BV1wyxs66EEd">A whole architecture diagram from one sentence, and edits that touch only what you name</a></td>
+    <td width="50%" align="center"><a href="https://www.bilibili.com/video/BV1ryxs6zEtN"><img src="public/tutorials/cad.jpg" alt="A full set of renovation drawings from one request, plus a 3D walkthrough" width="100%" /></a><br/><strong>🏠 Interior Design</strong> · <a href="https://www.bilibili.com/video/BV1ryxs6zEtN">A full set of renovation drawings from one request, plus a 3D walkthrough</a></td>
+  </tr>
+  <tr>
+    <td width="50%" align="center"><a href="https://www.bilibili.com/video/BV1oGxs6hEf6"><img src="public/tutorials/ppt.jpg" alt="An 8-slide deck from one sentence, with 200+ templates to choose from" width="100%" /></a><br/><strong>📑 PPT</strong> · <a href="https://www.bilibili.com/video/BV1oGxs6hEf6">An 8-slide deck from one sentence, with 200+ templates to choose from</a></td>
+    <td width="50%" align="center"><a href="https://www.bilibili.com/video/BV17Gxs6aETm"><img src="public/tutorials/canvas.jpg" alt="Circle a spot and only that changes; the rest of the image stays put" width="100%" /></a><br/><strong>🖌️ Free Canvas</strong> · <a href="https://www.bilibili.com/video/BV17Gxs6aETm">Circle a spot and only that changes; the rest of the image stays put</a></td>
+  </tr>
+</table>
 
 ## 🧰 Skills
 

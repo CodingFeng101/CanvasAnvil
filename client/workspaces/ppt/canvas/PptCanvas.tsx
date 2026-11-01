@@ -9,7 +9,6 @@ import { OutlineReview } from "./views/OutlineReview";
 import { CreationStart } from "./views/CreationStart";
 import { DeckView } from "./views/DeckView";
 import {
-  getOriginalSlideVersion as originalVersionOf,
   getTextlessBackgroundVersion as textlessBackgroundOf,
   getVisibleSlideVersions as getVisibleVersions,
   resolveSlideVersion,
@@ -34,6 +33,7 @@ import { buildBeautifyInstruction } from "./lib/beautify-instruction";
 import { describeRebuildEvent, type RebuildLogEntry } from "./lib/rebuild-log";
 import { generateChatMessage } from '@/ai/client';
 import {
+  PLAN_TIMEOUT_MS,
   pptService,
   PptPage,
   type PptElement,
@@ -84,7 +84,6 @@ interface PptCanvasProps {
   onAddToChat?: (json: string, name: string) => void;
   onPptReadyChange?: (ready: boolean) => void;
   onPptStageChange?: (stage: "start" | "outline" | "slides") => void;
-  onCreationModeChange?: (mode: "idea" | "outline" | "beautify" | "image_transform") => void;
   onExportReviewModeChange?: (active: boolean) => void;
   incomingEdit?: { id: string; payload: string } | null;
   onIncomingEditHandled?: (id: string) => void;
@@ -96,7 +95,6 @@ export function PptCanvas({
   onAddToChat,
   onPptReadyChange,
   onPptStageChange,
-  onCreationModeChange,
   onExportReviewModeChange,
   incomingEdit,
   onIncomingEditHandled,
@@ -245,15 +243,11 @@ export function PptCanvas({
     }
     onPptStageChange?.("start");
   }, [creationStep, onPptStageChange]);
-  const inputs = useCreationInputs({
-    initialState: initialPptState,
-    onCreationModeChange,
-  });
+  const inputs = useCreationInputs({ initialState: initialPptState });
   const { creationMode, setCreationMode, ideaInput, outlineInput } = inputs;
   const { setIdeaInput, setOutlineInput } = inputs;
   const { setRequirement: setBeautifyRequirement, setUseTemplate: setBeautifyUseTemplate,
     setFailures: setBeautifyFailures } = inputs.beautify;
-  const { setFailures: setImageTransformFailures } = inputs.imageTransform;
   const materials = useSlideMaterials({
     localSlides,
     setLocalSlides,
@@ -367,8 +361,7 @@ export function PptCanvas({
         setCreationMode(
           coreState?.creationMode === "idea" ||
             coreState?.creationMode === "outline" ||
-            coreState?.creationMode === "beautify" ||
-            coreState?.creationMode === "image_transform"
+            coreState?.creationMode === "beautify"
             ? coreState.creationMode
             : "idea",
         );
@@ -381,12 +374,6 @@ export function PptCanvas({
         setBeautifyFailures(
           filterRecordByAllowedKeys(
             normalizePersistedStringMap(coreState?.beautifyFailures, true),
-            allowedSlideIds,
-          ),
-        );
-        setImageTransformFailures(
-          filterRecordByAllowedKeys(
-            normalizePersistedStringMap(coreState?.imageTransformFailures, true),
             allowedSlideIds,
           ),
         );
@@ -411,7 +398,6 @@ export function PptCanvas({
     setBeautifyRequirement,
     setBeautifyUseTemplate,
     setBeautifyFailures,
-    setImageTransformFailures,
   ]);
 
   useEffect(() => {
@@ -435,7 +421,6 @@ export function PptCanvas({
       beautifyRequirement: inputs.beautify.requirement,
       beautifyUseTemplate: inputs.beautify.useTemplate,
       beautifyFailures: inputs.beautify.failures,
-      imageTransformFailures: inputs.imageTransform.failures,
       updatedAt,
     };
     try {
@@ -457,7 +442,6 @@ export function PptCanvas({
           beautifyRequirement: inputs.beautify.requirement,
           beautifyUseTemplate: inputs.beautify.useTemplate,
           beautifyFailures: inputs.beautify.failures,
-          imageTransformFailures: inputs.imageTransform.failures,
           updatedAt,
         })
       );
@@ -483,7 +467,6 @@ export function PptCanvas({
     inputs.beautify.requirement,
     inputs.beautify.useTemplate,
     inputs.beautify.failures,
-    inputs.imageTransform.failures,
     isPersistenceHydrated,
   ]);
 
@@ -1168,7 +1151,6 @@ export function PptCanvas({
     (slideId: string) => getVisibleVersions(slideId, versionState, originalVersionLabel),
     [versionState, originalVersionLabel],
   );
-  const getOriginalSlideVersion = (slideId: string) => originalVersionOf(slideId, versionState);
   const getTextlessBackgroundVersion = (slideId: string) => textlessBackgroundOf(slideId, versionState);
   const getSlideImageUrl = (slideId: string) => getSlideVersionMeta(slideId).imageUrl;
   const getSlideRenderLayer = useCallback((slideId: string) => {
@@ -1237,10 +1219,7 @@ export function PptCanvas({
   const currentReviewLayer = currentSlide ? getSlideRenderLayer(currentSlide.id) : undefined;
 
   const failedBeautifyCount = activeSlides.reduce((n, s) => n + (inputs.beautify.failures[s.id] ? 1 : 0), 0);
-  const failedImageTransformCount = activeSlides.reduce((n, s) => n + (inputs.imageTransform.failures[s.id] ? 1 : 0), 0);
-  const currentSlideFailure = currentSlide
-    ? (creationMode === "image_transform" ? inputs.imageTransform.failures[currentSlide.id] : inputs.beautify.failures[currentSlide.id])
-    : "";
+  const currentSlideFailure = currentSlide ? inputs.beautify.failures[currentSlide.id] : "";
 
   const formatImageVersionLabel = (version: SlideImageVersion, index: number) => {
     if (version.type === "derived_textless") {
@@ -1429,97 +1408,6 @@ export function PptCanvas({
       message: tr(`正在解析 PDF... (${done}/${total})`, `Parsing PDF... (${done}/${total})`),
     });
   }, [tr]);
-
-  const extractImageDeckPages = async (file: File) => {
-    if (isPdfFile(file)) {
-      return await extractPdfPagesAsImages(file, reportPdfParseProgress);
-    }
-    throw new Error(tr("仅支持 PDF 文件。", "Only PDF files are supported."));
-  };
-
-
-
-
-  const createImageTransformSlideVersion = async (slide: SlideData, sourceUrl: string) => {
-    const persistedSourceUrl = await persistImageUrlIfNeeded(sourceUrl);
-    const versionId = pushImageVersion(
-      slide.id,
-      persistedSourceUrl,
-      "generated",
-      tr("原始上传页", "Original uploaded page"),
-    );
-    setImageTransformFailures((prev) => {
-      if (!prev[slide.id]) return prev;
-      const next = { ...prev };
-      delete next[slide.id];
-      return next;
-    });
-    return versionId;
-
-  };
-
-  const handleStartImageTransform = async () => {
-    const file = inputs.imageTransform.file;
-    if (!file) return;
-
-    resetGenerationState();
-    setBeautifyFailures({});
-    setImageTransformFailures({});
-    dispatchCreation({ type: "writing", message: tr("正在解析文件...", "Parsing file...") });
-
-    try {
-      const pageImages = await extractImageDeckPages(file);
-      if (pageImages.length === 0) {
-        alert(tr("无法解析页面图片，请确认文件格式。", "Failed to extract slide images. Please check the file format."));
-        dispatchCreation({ type: "failed" });
-        return;
-      }
-
-      const slides: SlideData[] = pageImages.map((_, i) => ({
-        id: `slide-${i + 1}`,
-        title: tr(`第 ${i + 1} 页`, `Slide ${i + 1}`),
-        content: [],
-        description: "",
-      }));
-
-      setLocalSlides(slides);
-      dispatchCreation({ type: "rendering" });
-
-      const progressTracker = createTwoStageSlideProgressTracker(
-        slides.length,
-        "正在创建原始版本...",
-        "Importing slide images...",
-        "正在重建可编辑文字层...",
-        "Finishing import...",
-      );
-      progressTracker.start();
-
-      const tasks = slides.map((slide, index) => async () => {
-        let baseReady = false;
-        try {
-          progressTracker.markBaseReady();
-          baseReady = true;
-          await createImageTransformSlideVersion(slide, pageImages[index]);
-        } catch (error) {
-          setImageTransformFailures((prev) => ({
-            ...prev,
-            [slide.id]: getErrorMessage(error),
-          }));
-        } finally {
-          progressTracker.markSlideFinished(baseReady);
-        }
-      });
-
-      await runInParallel(tasks, MODEL_CONCURRENCY);
-      dispatchCreation({ type: "finished" });
-      onPptReadyChange?.(true);
-    } catch (error) {
-      console.error("Image PPT transform failed", error);
-      alert(getErrorMessage(error));
-      dispatchCreation({ type: "failed" });
-    }
-  };
-
 
   const getErrorMessage = useCallback(
     (error: unknown) => errorText(error) || tr("未知错误", "Unknown error"),
@@ -1798,7 +1686,10 @@ export function PptCanvas({
         const name = (e as any)?.name;
         const isAbort = name === "AbortError" || name === "APIUserAbortError";
         const msg = isAbort
-          ? tr("生成大纲超时或被中断（120s）。请检查网络和模型可用性后重试。", "Outline generation timed out or was interrupted (120s). Check network/model availability and retry.")
+          ? tr(
+              `生成大纲超时或被中断（${PLAN_TIMEOUT_MS / 1000}s）。请检查网络和模型可用性后重试。`,
+              `Outline generation timed out or was interrupted (${PLAN_TIMEOUT_MS / 1000}s). Check network/model availability and retry.`,
+            )
           : e instanceof Error
             ? e.message
             : tr("生成大纲失败，请重试", "Failed to generate outline. Please retry.");
@@ -1872,12 +1763,6 @@ export function PptCanvas({
     
     setIsGeneratingImage(true);
     try {
-        if (creationMode === "image_transform") {
-          const originalVersion = getOriginalSlideVersion(currentSlide.id);
-          if (!originalVersion?.url) return;
-          await createImageTransformSlideVersion(currentSlide, originalVersion.url);
-          return;
-        }
         let imageUrl: string | null = null;
         const pages: PptPage[] = localSlides.map(s => ({
           id: s.id,
@@ -2221,9 +2106,7 @@ export function PptCanvas({
     setBeautifyRequirement("");
     setBeautifyUseTemplate(false);
     inputs.beautify.setFile(null);
-    inputs.imageTransform.setFile(null);
     setBeautifyFailures({});
-    setImageTransformFailures({});
     inputs.reference.setUploadFiles([]);
     setSlideMaterials({});
     materials.picker.close();
@@ -2306,12 +2189,6 @@ export function PptCanvas({
       delete next[slideId];
       return next;
     });
-    setImageTransformFailures((prev) => {
-      if (!(slideId in prev)) return prev;
-      const next = { ...prev };
-      delete next[slideId];
-      return next;
-    });
     setSlideMaterials((prev) => {
       const next = { ...prev };
       delete next[slideId];
@@ -2330,7 +2207,6 @@ export function PptCanvas({
         onGenerateOutline={handleGenerateOutline}
         onLoadOutline={handleLoadOutline}
         onStartBeautify={handleStartBeautify}
-        onStartImageTransform={handleStartImageTransform}
       />
     );
   }
@@ -2397,7 +2273,6 @@ export function PptCanvas({
       status={{
         currentSlideFailure,
         failedBeautifyCount,
-        failedImageTransformCount,
         isApplyingEdits,
         isGeneratingImage,
         exportProgress: editableExportProgress,
