@@ -1,4 +1,4 @@
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useEffect, useRef, useState } from "react";
 import { Monitor, Moon, Sun } from "lucide-react";
 import { AnimatePresence, MotionConfig, motion } from "motion/react";
 import { Toaster } from "sonner";
@@ -7,6 +7,7 @@ import { ErrorBoundary } from "@/app/ErrorBoundary";
 import { DEFAULT_WORKSPACE, WORKSPACES, isWorkspaceId, type WorkspaceId } from "@/app/workspaces";
 import { SettingsDialog } from "@/app/SettingsDialog";
 import { LandingPage } from "@/pages/LandingPage";
+import { TutorialsPage } from "@/pages/tutorials/TutorialsPage";
 import { cn } from "@/shared/lib/utils";
 import { setUiLanguage, t, useUiLanguage, type UiLanguage } from "@/shared/i18n";
 import { SPRING, TWEEN } from "@/shared/motion";
@@ -15,6 +16,15 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/shared/ui/tooltip";
 
 const APP_VIEW_STORAGE_KEY = "CanvasAnvil-app-view-v1";
 const APP_WORKSPACE_STORAGE_KEY = "CanvasAnvil-active-workspace-v1";
+/** The tutorials page lives at a hash so it can be linked to and left with the back button. */
+const TUTORIALS_HASH = "#tutorials";
+
+const isTutorialsHash = () => typeof window !== "undefined" && window.location.hash === TUTORIALS_HASH;
+
+/** Drop the hash without adding a history entry. */
+function clearHash() {
+  window.history.replaceState(null, "", window.location.pathname + window.location.search);
+}
 
 function readStoredWorkspace(): WorkspaceId {
   if (typeof window === "undefined") return DEFAULT_WORKSPACE;
@@ -191,6 +201,31 @@ export default function App() {
     return localStorage.getItem(APP_VIEW_STORAGE_KEY) !== "workspace";
   });
   const [activeWorkspace, setActiveWorkspace] = useState<WorkspaceId>(readStoredWorkspace);
+  const [showTutorials, setShowTutorials] = useState(isTutorialsHash);
+  // Whether this session pushed the tutorials entry, so leaving can go back
+  // to it instead of stacking another entry on top.
+  const openedTutorialsRef = useRef(false);
+
+  useEffect(() => {
+    const onHashChange = () => setShowTutorials(isTutorialsHash());
+    window.addEventListener("hashchange", onHashChange);
+    return () => window.removeEventListener("hashchange", onHashChange);
+  }, []);
+
+  const openTutorials = () => {
+    openedTutorialsRef.current = true;
+    window.location.hash = TUTORIALS_HASH;
+  };
+
+  const closeTutorials = () => {
+    if (openedTutorialsRef.current) {
+      openedTutorialsRef.current = false;
+      window.history.back();
+      return;
+    }
+    clearHash();
+    setShowTutorials(false);
+  };
 
   // The inline script in index.html sets the class before first paint; this
   // keeps it correct across a hot reload that drops the class.
@@ -206,6 +241,23 @@ export default function App() {
     localStorage.setItem(APP_WORKSPACE_STORAGE_KEY, activeWorkspace);
   }, [activeWorkspace]);
 
+  if (showTutorials) {
+    return (
+      <MotionConfig reducedMotion="user">
+        <TutorialsPage
+          onBack={closeTutorials}
+          onEnterWorkspace={(workspace) => {
+            openedTutorialsRef.current = false;
+            clearHash();
+            setShowTutorials(false);
+            setActiveWorkspace(workspace);
+            setShowLanding(false);
+          }}
+        />
+      </MotionConfig>
+    );
+  }
+
   if (showLanding) {
     return (
       <MotionConfig reducedMotion="user">
@@ -214,6 +266,7 @@ export default function App() {
             if (workspace) setActiveWorkspace(workspace);
             setShowLanding(false);
           }}
+          onOpenTutorials={openTutorials}
         />
       </MotionConfig>
     );

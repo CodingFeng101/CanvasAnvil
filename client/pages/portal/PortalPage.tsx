@@ -5,6 +5,7 @@ import {
   Blocks,
   ChartNoAxesCombined,
   CheckCircle2,
+  CirclePlay,
   Code2,
   FileText,
   Github,
@@ -29,6 +30,7 @@ import { portalCanvasItems, type PortalCanvasItem, type PortalWorkspace } from "
 
 type PortalPageProps = {
   onEnterWorkspace: (workspace: PortalWorkspace) => void;
+  onOpenTutorials: () => void;
 };
 
 type PortalSection = "home" | PortalWorkspace;
@@ -350,13 +352,15 @@ function Header({
   setActiveSection,
   setActiveCanvas,
   setUiLang,
+  onOpenTutorials,
 }: {
   uiLang: UiLanguage;
-  copy: { home: string; openRepo: string };
+  copy: { home: string; openRepo: string; tutorials: string };
   activeSection: PortalSection;
   setActiveSection: (section: PortalSection) => void;
   setActiveCanvas: (workspace: PortalWorkspace) => void;
   setUiLang: Dispatch<SetStateAction<UiLanguage>>;
+  onOpenTutorials: () => void;
 }) {
   const isChinese = uiLang === "zh";
 
@@ -365,7 +369,7 @@ function Header({
       {/* Below xl: logo and buttons share the first row, the nav takes the
           second. It used to stack all three, spending a third row -- about
           60px of an already short page -- on two small buttons. */}
-      <div className="grid grid-cols-[1fr_auto] items-center gap-x-4 gap-y-2 xl:grid-cols-[220px_minmax(0,1fr)_132px] xl:gap-3">
+      <div className="grid grid-cols-[1fr_auto] items-center gap-x-2 gap-y-2 sm:gap-x-4 xl:grid-cols-[220px_minmax(0,1fr)_220px] xl:gap-3">
         <button
           className="group col-start-1 row-start-1 flex items-center gap-3 justify-self-start text-left"
           onClick={() => {
@@ -418,10 +422,20 @@ function Header({
           </div>
         </nav>
 
-        <div className="col-start-2 row-start-1 flex justify-end gap-2 xl:col-start-3">
+        <div className="col-start-2 row-start-1 flex justify-end gap-1.5 sm:gap-2 xl:col-start-3">
+          {/* Icon only on phones, where the label pushed the GitHub button off the edge. */}
           <Button
             variant="outline"
-            className="h-9 rounded-full px-4"
+            className="h-9 w-9 rounded-full px-0 sm:w-auto sm:px-4"
+            onClick={onOpenTutorials}
+            aria-label={copy.tutorials}
+          >
+            <CirclePlay className="h-4 w-4" />
+            <span className="hidden sm:inline">{copy.tutorials}</span>
+          </Button>
+          <Button
+            variant="outline"
+            className="h-9 rounded-full px-3 sm:px-4"
             onClick={() => setUiLang((prev) => (prev === "zh" ? "en" : "zh"))}
           >
             {uiLang === "zh" ? "EN" : "\u4e2d\u6587"}
@@ -578,7 +592,7 @@ function SimpleCanvasDetailPage({
   );
 }
 
-export function PortalPage({ onEnterWorkspace }: PortalPageProps) {
+export function PortalPage({ onEnterWorkspace, onOpenTutorials }: PortalPageProps) {
   const [uiLang, setUiLang] = useState<UiLanguage>(() => getUiLanguage());
   const [activeCanvas, setActiveCanvas] = useState<PortalWorkspace>("diagram");
   const [activeSection, setActiveSection] = useState<PortalSection>("home");
@@ -664,6 +678,7 @@ export function PortalPage({ onEnterWorkspace }: PortalPageProps) {
         tagB: "\u7ed3\u6784\u5316\u751f\u6210",
         tagC: "\u5c40\u90e8\u4fee\u6539",
         openRepo: "GitHub",
+        tutorials: "教程",
         footerLicense: "\u5f00\u6e90\u534f\u8bae\uff1aMIT",
         footerContact: "\u8054\u7cfb\u65b9\u5f0f",
         hub: "CanvasAnvil",
@@ -685,6 +700,7 @@ export function PortalPage({ onEnterWorkspace }: PortalPageProps) {
         tagB: "Structured output",
         tagC: "Partial edits",
         openRepo: "GitHub",
+        tutorials: "Tutorials",
         footerLicense: "License: MIT",
         footerContact: "Contact",
         hub: "CanvasAnvil",
@@ -772,6 +788,7 @@ export function PortalPage({ onEnterWorkspace }: PortalPageProps) {
           setActiveSection={setActiveSection}
           setActiveCanvas={setActiveCanvas}
           setUiLang={setUiLang}
+          onOpenTutorials={onOpenTutorials}
         />
         </div>
 
