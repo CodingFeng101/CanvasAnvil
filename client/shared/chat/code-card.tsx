@@ -189,11 +189,20 @@ export function CodeCard({
         </>
     );
 
-    const body = (
+    const preClassName =
+        "scrollbar-thin max-h-48 overflow-y-auto overflow-x-hidden whitespace-pre-wrap break-words font-mono text-[11px] leading-relaxed";
+
+    // Highlighting re-tokenises the whole block, so doing it on every streamed
+    // chunk costs more the longer the code gets. Plain text until it settles.
+    const body = isStreaming ? (
+        <pre className={preClassName} style={{ margin: 0, padding: 0, wordBreak: "break-word" }}>
+            {displayCode}
+        </pre>
+    ) : (
         <Highlight theme={syntaxTheme} code={displayCode} language={prismLanguage}>
             {({ style, tokens, getLineProps, getTokenProps }) => (
                 <pre
-                    className="scrollbar-thin max-h-48 overflow-y-auto overflow-x-hidden whitespace-pre-wrap break-words font-mono text-[11px] leading-relaxed"
+                    className={preClassName}
                     style={{
                         ...style,
                         backgroundColor: "transparent",

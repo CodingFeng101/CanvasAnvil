@@ -1,10 +1,9 @@
 import { motion } from "motion/react";
 import { SPRING } from "@/shared/motion";
-import { FileText, Lightbulb, Loader2, Presentation, Sparkles, Upload } from "lucide-react";
+import { FileText, Lightbulb, Loader2, Sparkles, Upload } from "lucide-react";
 import { Button } from "@/shared/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/shared/ui/dialog";
 import { Textarea } from "@/shared/ui/textarea";
-import { isPdfFile } from "@/workspaces/ppt/canvas/lib/deck-source";
 import type { CreationProgress } from "@/workspaces/ppt/canvas/lib/creation-machine";
 import type { useCreationInputs } from "@/workspaces/ppt/canvas/hooks/use-creation-inputs";
 import type { useTemplateLibrary } from "@/workspaces/ppt/canvas/hooks/use-template-library";
@@ -18,12 +17,11 @@ interface CreationStartProps {
   onGenerateOutline: () => void;
   onLoadOutline: () => void;
   onStartBeautify: () => void;
-  onStartImageTransform: () => void;
 }
 
 /**
  * The first screen: pick a template, pick a flow, and give it something to
- * work from. Four flows share it because they differ only in what they take
+ * work from. Three flows share it because they differ only in what they take
  * as input -- an idea, an outline, or a PDF to rework.
  */
 export function CreationStart({
@@ -34,14 +32,12 @@ export function CreationStart({
   onGenerateOutline,
   onLoadOutline,
   onStartBeautify,
-  onStartImageTransform,
 }: CreationStartProps) {
   const { creationMode } = inputs;
     const tabs = [
       { id: 'idea', label: tr('想法', 'Idea') },
       { id: 'outline', label: tr('大纲', 'Outline') },
       { id: 'beautify', label: tr('PPT美化', 'Beautify') },
-      { id: 'image_transform', label: tr('图片PPT转化', 'Image PPT Transform') },
     ];
     const modeCopy = (() => {
         if (creationMode === "outline") {
@@ -62,12 +58,6 @@ export function CreationStart({
                 )
             };
         }
-        if (creationMode === "image_transform") {
-            return {
-                hint: tr("上传 PDF，系统会将每一页导入为一张图片幻灯片。", "Upload a PDF and each page is imported as an image slide."),
-                placeholder: "",
-            };
-        }
         return {
             hint: tr("输入你的想法，AI 将为你生成完整 PPT", "Describe your idea and AI will generate a full deck."),
             placeholder: tr("例如：生成一份关于 AI 发展史的演讲 PPT", "e.g. Create a presentation about the history of AI")
@@ -76,11 +66,6 @@ export function CreationStart({
     /** Why the start button is disabled, when it is for a reason the user can fix. */
     const blockedReason = (() => {
         if (creationMode === "beautify") return inputs.beautify.file ? "" : tr("先上传要美化的 PDF", "Upload the PDF to beautify first");
-        if (creationMode === "image_transform") {
-            const file = inputs.imageTransform.file;
-            if (!file) return tr("先上传要转化的 PDF", "Upload the PDF to transform first");
-            return isPdfFile(file) ? "" : tr("只支持 PDF 文件", "Only PDF files are supported");
-        }
         if (inputs.reference.isParsing) return tr("参考资料解析中，请稍候…", "Still reading your reference files…");
         if (creationMode === "idea") return inputs.ideaInput.trim() ? "" : tr("先在上面写下你的想法", "Write your idea above first");
         return inputs.outlineInput.trim() ? "" : tr("先在上面粘贴大纲", "Paste your outline above first");
@@ -143,7 +128,7 @@ export function CreationStart({
                             className="space-y-3"
                         >
                             <div className="flex items-center gap-2 text-sm text-foreground/80">
-                                {creationMode === "beautify" ? <Sparkles className="w-4 h-4 text-primary-strong" /> : creationMode === "image_transform" ? <Presentation className="w-4 h-4 text-primary-strong" /> : <Lightbulb className="w-4 h-4 text-primary-strong" />}
+                                {creationMode === "beautify" ? <Sparkles className="w-4 h-4 text-primary-strong" /> : <Lightbulb className="w-4 h-4 text-primary-strong" />}
                                 <span>{modeCopy.hint}</span>
                             </div>
 
@@ -196,39 +181,6 @@ export function CreationStart({
                                   className="w-full h-36 p-4 rounded-xl border border-border bg-sunken text-sm focus:ring-2 focus:ring-ring/30 focus:border-ring transition-all resize-none outline-none"
                                   placeholder={modeCopy.placeholder}
                                 />
-                              </div>
-                            ) : creationMode === "image_transform" ? (
-                              <div className="space-y-3">
-                                <input
-                                  ref={inputs.imageTransform.inputRef}
-                                  type="file"
-                                  accept=".pdf,application/pdf"
-                                  className="hidden"
-                                  onChange={inputs.imageTransform.onInputChange}
-                                />
-
-                                <div className="flex items-center justify-between gap-3 rounded-xl border border-border bg-sunken px-4 py-3">
-                                  <div className="min-w-0">
-                                    <div className="text-sm font-medium text-foreground">{tr("上传 PDF", "Upload PDF")}</div>
-                                    <div className="text-xs text-muted-foreground truncate">
-                                      {inputs.imageTransform.file ? inputs.imageTransform.file.name : tr("未选择文件", "No file selected")}
-                                    </div>
-                                  </div>
-                                  <Button
-                                    type="button"
-                                    variant="outline"
-                                    className="shrink-0"
-                                    onClick={() => inputs.imageTransform.inputRef.current?.click()}
-                                  >
-                                    <Upload className="w-4 h-4 mr-2" />
-                                    {tr("选择文件", "Choose")}
-                                  </Button>
-                                </div>
-
-                                <div className="rounded-xl border border-border bg-sunken px-4 py-3 text-xs text-muted-foreground leading-6">
-                                  <div>{tr("处理结果：", "Output:")}</div>
-                                  <div>{tr("系统会把 PDF 每一页导入为图片幻灯片。", "The system imports each PDF page as an image slide.")}</div>
-                                </div>
                               </div>
                             ) : (
                               <>
@@ -310,8 +262,8 @@ export function CreationStart({
                     </div>
 
                     <Button 
-                        onClick={creationMode === "beautify" ? onStartBeautify : creationMode === "image_transform" ? onStartImageTransform : creationMode === "idea" ? onGenerateOutline : onLoadOutline}
-                        disabled={Boolean(progress.message) || (creationMode === "beautify" ? !inputs.beautify.file : creationMode === "image_transform" ? !inputs.imageTransform.file || !isPdfFile(inputs.imageTransform.file) : inputs.reference.isParsing || (creationMode === "idea" ? !inputs.ideaInput.trim() : !inputs.outlineInput.trim()))}
+                        onClick={creationMode === "beautify" ? onStartBeautify : creationMode === "idea" ? onGenerateOutline : onLoadOutline}
+                        disabled={Boolean(progress.message) || (creationMode === "beautify" ? !inputs.beautify.file : inputs.reference.isParsing || (creationMode === "idea" ? !inputs.ideaInput.trim() : !inputs.outlineInput.trim()))}
                         size="lg"
                         // The blue-to-indigo gradient was the loudest element on
                         // the screen; the solid variant carries the same weight
@@ -322,7 +274,7 @@ export function CreationStart({
                             `[&_svg:not([class*='size-'])]:size-4` rule outranks a
                             plain width/height pair, so these icons were 16px. */}
                         {progress.message ? <Loader2 className="size-5 mr-2 animate-spin" /> : <Sparkles className="size-5 mr-2" />}
-                        {progress.message || (creationMode === "beautify" ? tr("开始渲染", "Start rendering") : creationMode === "image_transform" ? tr("开始转化", "Start transform") : creationMode === "idea" ? tr("开始生成大纲", "Generate outline") : tr("载入大纲", "Load outline"))}
+                        {progress.message || (creationMode === "beautify" ? tr("开始渲染", "Start rendering") : creationMode === "idea" ? tr("开始生成大纲", "Generate outline") : tr("载入大纲", "Load outline"))}
                     </Button>
                     {/* Says why the button is unavailable instead of leaving
                         the user to guess. */}
@@ -333,18 +285,16 @@ export function CreationStart({
                     {/* Below the button, at the user's request: the template is
                         a refinement, not the first decision. The header carries
                         the current selection so it stays visible from up there. */}
-                    {creationMode !== "image_transform" ? (
-                      <TemplatePicker
-                        templateLibrary={templateLibrary}
-                        tr={tr}
-                        heading={
-                          <label className="text-sm font-semibold text-foreground flex items-center gap-2">
-                            <span className="w-6 h-6 rounded-full bg-primary/12 text-primary-strong text-xs flex items-center justify-center font-bold">2</span>
-                            {tr("选择或上传参考模板", "Choose or upload a reference template")}
-                          </label>
-                        }
-                      />
-                    ) : null}
+                    <TemplatePicker
+                      templateLibrary={templateLibrary}
+                      tr={tr}
+                      heading={
+                        <label className="text-sm font-semibold text-foreground flex items-center gap-2">
+                          <span className="w-6 h-6 rounded-full bg-primary/12 text-primary-strong text-xs flex items-center justify-center font-bold">2</span>
+                          {tr("选择或上传参考模板", "Choose or upload a reference template")}
+                        </label>
+                      }
+                    />
                 </div>
 
                 <Dialog open={inputs.reference.previewOpen} onOpenChange={inputs.reference.setPreviewOpen}>

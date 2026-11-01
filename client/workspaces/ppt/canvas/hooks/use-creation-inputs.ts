@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { useFileProcessor } from "@/shared/files/use-file-processor";
 import type { CreationMode, ReferenceFile } from "@/workspaces/ppt/canvas/types";
 
@@ -12,12 +12,10 @@ interface PersistedInputs {
   beautifyRequirement?: unknown;
   beautifyUseTemplate?: unknown;
   beautifyFailures?: unknown;
-  imageTransformFailures?: unknown;
 }
 
 export interface CreationInputsOptions {
   initialState: PersistedInputs | undefined;
-  onCreationModeChange?: (mode: CreationMode) => void;
 }
 
 const readString = (v: unknown) => (typeof v === "string" ? v : "");
@@ -34,21 +32,19 @@ function readFailureMap(v: unknown): Record<string, string> {
 
 /**
  * Everything the user supplies before a deck exists: which flow they picked,
- * what they typed, the file they are beautifying or converting, and the
+ * what they typed, the file they are beautifying, and the
  * reference documents whose text and figures feed the prompt.
  *
  * The per-slide failure maps live here too, because they belong to the run the
  * inputs started and are cleared when a new one begins.
  */
-export function useCreationInputs({ initialState, onCreationModeChange }: CreationInputsOptions) {
+export function useCreationInputs({ initialState }: CreationInputsOptions) {
   const [creationMode, setCreationMode] = useState<CreationMode>(() => {
     const v = initialState?.creationMode;
-    return v === "idea" || v === "outline" || v === "beautify" || v === "image_transform" ? v : "idea";
+    // Anything else -- including the removed "image_transform" flow a saved
+    // workspace may still name -- falls back to the default flow.
+    return v === "idea" || v === "outline" || v === "beautify" ? v : "idea";
   });
-
-  useEffect(() => {
-    onCreationModeChange?.(creationMode);
-  }, [creationMode, onCreationModeChange]);
 
   const [ideaInput, setIdeaInput] = useState(() => readString(initialState?.ideaInput));
   const [outlineInput, setOutlineInput] = useState(() => readString(initialState?.outlineInput));
@@ -60,14 +56,10 @@ export function useCreationInputs({ initialState, onCreationModeChange }: Creati
   );
 
   const [beautifyFile, setBeautifyFile] = useState<File | null>(null);
-  const [imageTransformFile, setImageTransformFile] = useState<File | null>(null);
 
   // Which slides failed in the last run, so the user can retry just those.
   const [beautifyFailures, setBeautifyFailures] = useState<Record<string, string>>(() =>
     readFailureMap(initialState?.beautifyFailures),
-  );
-  const [imageTransformFailures, setImageTransformFailures] = useState<Record<string, string>>(() =>
-    readFailureMap(initialState?.imageTransformFailures),
   );
 
   const {
@@ -83,7 +75,6 @@ export function useCreationInputs({ initialState, onCreationModeChange }: Creati
 
   const referenceInputRef = useRef<HTMLInputElement | null>(null);
   const beautifyInputRef = useRef<HTMLInputElement | null>(null);
-  const imageTransformInputRef = useRef<HTMLInputElement | null>(null);
 
   const isParsing = Array.from(pdfData.values()).some((x) => x.isExtracting);
 
@@ -116,12 +107,6 @@ export function useCreationInputs({ initialState, onCreationModeChange }: Creati
     setBeautifyFile(file);
   };
 
-  const handleImageTransformInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0] || null;
-    e.target.value = "";
-    setImageTransformFile(file);
-  };
-
   const openPreview = (file: ReferenceFile) => {
     setPreviewFile(file);
     setPreviewOpen(true);
@@ -145,14 +130,6 @@ export function useCreationInputs({ initialState, onCreationModeChange }: Creati
       onInputChange: handleBeautifyInputChange,
       failures: beautifyFailures,
       setFailures: setBeautifyFailures,
-    },
-    imageTransform: {
-      file: imageTransformFile,
-      setFile: setImageTransformFile,
-      inputRef: imageTransformInputRef,
-      onInputChange: handleImageTransformInputChange,
-      failures: imageTransformFailures,
-      setFailures: setImageTransformFailures,
     },
     reference: {
       files: referenceFiles,

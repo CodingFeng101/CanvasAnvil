@@ -25,7 +25,13 @@ function localApiPlugin(): Plugin {
 }
 
 export default defineConfig({
-  server: { host: "0.0.0.0", port: 8001 },
+  server: {
+    host: "0.0.0.0",
+    port: 8001,
+    // Tutorial recordings write tens of thousands of frames here; watching
+    // them stalls the dev server.
+    watch: { ignored: ["**/tools/video/out/**"] },
+  },
   preview: { host: "0.0.0.0", port: 8001 },
   resolve: {
     alias: {

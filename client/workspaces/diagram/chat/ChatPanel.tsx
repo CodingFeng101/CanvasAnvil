@@ -221,6 +221,10 @@ export default function ChatPanel({
 
     const chat: any = (useChat as any)({
         api: "/api/chat",
+        // Without this every streamed token is its own render: the whole
+        // message list, the XML code block and the persistence effects below
+        // all rerun per token, and the page stutters while a reply streams.
+        experimental_throttle: 100,
         onError: (error: unknown) => {
             setIsParsingFiles(false)
             console.error('[ChatPanel] useChat error:', error)
@@ -689,15 +693,18 @@ Please fix the XML issues. Ensure cell_id values exist in the current XML and th
         }, 500)
     }, [isDrawioReady, onDisplayChart])
 
-    // Save messages to localStorage whenever they change
+    // Save messages to localStorage once a reply settles. Mid-stream saves
+    // would serialise the whole history (attachments included) on every
+    // update; the beforeunload handler below covers a reload mid-reply.
     useEffect(() => {
         if (!hasRestoredRef.current) return
+        if (status === "streaming" || status === "submitted") return
         try {
             localStorage.setItem(STORAGE_MESSAGES_KEY, JSON.stringify(messages))
         } catch (error) {
             console.error("Failed to save messages to localStorage:", error)
         }
-    }, [messages])
+    }, [messages, status])
 
     // Save diagram XML to localStorage whenever it changes
     useEffect(() => {

@@ -35,6 +35,12 @@ const CAD_WORKSPACE_STORAGE_KEY = "CanvasAnvil-cad-state-v1";
 const CAD_RENDERS_STORAGE_KEY = "CanvasAnvil-cad-renders-v1";
 const CAD_ANALYSIS_IMAGES_STORAGE_KEY = "CanvasAnvil-cad-analysis-images-v1";
 const CAD_CHAT_STORAGE_KEY = "chat_history_v2_cad";
+/**
+ * Image gateways sometimes accept a request and never answer. Without a limit
+ * that sheet spins forever and holds up the rest of its batch; with one it
+ * falls through to the retries below.
+ */
+const CAD_IMAGE_TIMEOUT_MS = 240_000;
 
 /** What the model returns for a CAD image request; every field is unverified. */
 type CadImagePrompt = { title?: unknown; prompt?: unknown };
@@ -580,7 +586,7 @@ export function CadWorkspace() {
         const generateWithRetry = async (prompt: string, maxRetries: number, retryDelayMs: number) => {
           for (let attempt = 0; attempt <= maxRetries; attempt += 1) {
             try {
-              const url = await generateImage({ prompt });
+              const url = await generateImage({ prompt }, AbortSignal.timeout(CAD_IMAGE_TIMEOUT_MS));
               if (url) return url;
             } catch (err) {
               if (attempt >= maxRetries) {
@@ -704,7 +710,7 @@ export function CadWorkspace() {
         const generateWithRetry = async (fullPrompt: string, maxRetries: number, retryDelayMs: number) => {
           for (let attempt = 0; attempt <= maxRetries; attempt += 1) {
             try {
-              const url = await generateImage({ prompt: fullPrompt });
+              const url = await generateImage({ prompt: fullPrompt }, AbortSignal.timeout(CAD_IMAGE_TIMEOUT_MS));
               if (url) return url;
             } catch (err) {
               if (attempt >= maxRetries) {
