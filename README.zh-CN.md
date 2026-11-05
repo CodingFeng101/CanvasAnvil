@@ -222,3 +222,7 @@ CanvasAnvil 采用 MIT 协议发布。
 ## 💌 联系方式
 
 - `3524962421@qq.com`
+
+## ⭐ Star 历史
+
+[![Star History Chart](https://api.star-history.com/svg?repos=CodingFeng101/CanvasAnvil&type=Date)](https://star-history.com/#CodingFeng101/CanvasAnvil&Date)

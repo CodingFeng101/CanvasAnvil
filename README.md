@@ -222,3 +222,7 @@ See [LICENSE](LICENSE) for the full license text.
 ## 💌 Contact
 
 - `3524962421@qq.com`
+
+## ⭐ Star History
+
+[![Star History Chart](https://api.star-history.com/svg?repos=CodingFeng101/CanvasAnvil&type=Date)](https://star-history.com/#CodingFeng101/CanvasAnvil&Date)
