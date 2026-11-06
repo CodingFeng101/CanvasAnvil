@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "validate": "node scripts/validate-drawio-xml.mjs",
+    "check": "node scripts/check-layout.mjs",
     "url": "node scripts/build-drawio-url.mjs"
   }
 }

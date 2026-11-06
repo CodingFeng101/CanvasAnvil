@@ -616,16 +616,34 @@ ${parsedFilesContext ? `\n\nParsed file summaries:\n"""md\n${parsedFilesContext}
 Preferred output: mxCell elements only. The app will wrap them into the full mxfile structure automatically.
 
 Rules:
-1. All mxCell elements must be direct children of root
+1. Shapes inside a group, layer, lane or boundary use that container's id as parent, with geometry relative to it; other shapes and all edges use parent "1"
 2. Every mxCell needs a unique id
 3. Every mxCell must have a valid parent attribute
 4. Edge source/target must reference existing cell ids
 5. Escape special characters inside XML attribute values`,
                             inputSchema: z.object({
+                                // First in the schema so it streams before
+                                // the XML: the chat shows it as the model's
+                                // thinking step.
+                                plan: z
+                                    .string()
+                                    .optional()
+                                    .describe(
+                                        "Write this first. One to three short sentences in the user's language: what the diagram shows, its layout, its groups and its main flow",
+                                    ),
                                 xml: z
                                     .string()
                                     .describe(
                                         "XML string to be displayed on draw.io",
+                                    ),
+                                // A plain string, not an enum: an unexpected
+                                // value must not fail the whole drawing. The
+                                // client treats anything unknown as "auto".
+                                layout: z
+                                    .string()
+                                    .optional()
+                                    .describe(
+                                        "The kind of layout you drew: flow-down, flow-right, flow-up, tree-down, tree-right, mindmap, swimlane, sequence, timeline, free, or auto if unsure",
                                     ),
                             }),
                         },
@@ -642,6 +660,15 @@ Rules:
 - The mxCell id inside new_xml must match cell_id
 - Use display_diagram instead if the change is effectively a redraw`,
                             inputSchema: z.object({
+                                // First in the schema so it streams before
+                                // the XML: the chat shows it as the model's
+                                // thinking step.
+                                plan: z
+                                    .string()
+                                    .optional()
+                                    .describe(
+                                        "Write this first. One or two short sentences in the user's language: what you are changing and why",
+                                    ),
                                 operations: z
                                     .array(
                                         z.object({

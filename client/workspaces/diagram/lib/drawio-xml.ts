@@ -221,6 +221,28 @@ export function convertToLegalXml(xmlString: string): string {
 }
 
 /**
+ * Ids "0" and "1" belong to the root and the default layer the wrapper
+ * adds. A model sometimes numbers its own shapes from 1; such a shape would
+ * clash with the layer and swallow every cell whose parent is "1". It gets
+ * a fresh id, and edges that connect to it follow. parent="1" keeps meaning
+ * the layer.
+ */
+function renameReservedIds(content: string): string {
+    for (const reserved of ["0", "1"]) {
+        const tag = new RegExp(`<mxCell\\b(?=[^>]*\\bid=["']${reserved}["'])(?=[^>]*\\b(?:vertex|edge)=["']1["'])[^>]*>`)
+        const match = content.match(tag)
+        if (!match) continue
+        let fresh = `cell-${reserved}`
+        for (let n = 2; new RegExp(`\\bid=["']${fresh}["']`).test(content); n++) fresh = `cell-${reserved}-${n}`
+        const renamed = match[0].replace(new RegExp(`\\bid=["']${reserved}["']`), `id="${fresh}"`)
+        content = content
+            .replace(match[0], renamed)
+            .replace(new RegExp(`\\b(source|target)=["']${reserved}["']`, "g"), `$1="${fresh}"`)
+    }
+    return content
+}
+
+/**
  * Wrap XML content with the full mxfile structure required by draw.io.
  * Handles cases where XML is just <root>, <mxGraphModel>, or already has <mxfile>.
  * @param xml - The XML string (may be partial or complete)
@@ -255,6 +277,7 @@ export function wrapWithMxFile(xml: string): string {
         }
     }
 
+    content = renameReservedIds(content)
     content = content
         .replace(/<mxCell[^>]*\bid=["']0["'][^>]*(?:\/>|><\/mxCell>)/g, "")
         .replace(/<mxCell[^>]*\bid=["']1["'][^>]*(?:\/>|><\/mxCell>)/g, "")

@@ -61,8 +61,13 @@ temp/
 Thumbs.db
 Desktop.ini
 
-# Large local test fixtures (see tests/ppt-vision-fixture.test.ts)
-tests/fixtures/
+# Large local test fixtures (see tests/ppt-vision-fixture.test.ts); the
+# small diagram fixtures the layout tests read are kept
+tests/fixtures/*
+!tests/fixtures/diagram-*.drawio
 
 # Tutorial video tooling and its recordings stay local
 tools/video/
+
+# Diagram evaluation runs (model outputs and scores)
+tools/eval/diagram/out/

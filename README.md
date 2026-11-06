@@ -23,6 +23,17 @@
   <a href="README.zh-CN.md">Chinese</a>
 </p>
 
+## 🆕 Latest update: straighter diagrams
+
+The Diagram canvas no longer trusts the model's pixel coordinates as-is. Each diagram now goes through four steps:
+
+- **Intent**: the model writes a short plan first and declares a layout (flow, tree, mind map, swimlane, sequence, timeline or free). Groups are real draw.io containers, and coordinates are only a sketch of the arrangement.
+- **Solve**: the app re-lays the diagram with ELK for its layout kind, with a lighter tidy pass as the fallback.
+- **Validate**: a layout check scores overlaps, shapes outside their groups, edges through shapes and text that does not fit. The corrected version is shown only when it scores at least as well as the original and keeps its order and alignment.
+- **Show**: the chat shows each diagram as a chain of steps (thinking, drawing, correction). The correction step shows the score before and after, and lets you switch back to the model's original layout.
+
+On a 48-prompt evaluation the average layout score went from 89.0 to 93.4, and from 81.8 to 95.7 on the held-out half. `diagram-skill` follows the same rules and adds `scripts/check-layout.mjs`, so coding agents check and fix a diagram before handing it over.
+
 https://github.com/user-attachments/assets/582c70ae-38df-4949-913c-c3f4369a7c8c
 
 <p align="center">

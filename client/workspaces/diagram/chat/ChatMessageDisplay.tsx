@@ -59,7 +59,12 @@ import {
     type DiagramOperation,
 } from "@/workspaces/diagram/lib/diagram-operations"
 import { convertToLegalXml, replaceNodes, validateMxCellStructure } from "@/workspaces/diagram/lib/drawio-xml"
+import { tidyIfBetter } from "@/workspaces/diagram/lib/arrange"
 import { CodeBlock } from "./code-block"
+import { DiagramSteps } from "./DiagramSteps"
+
+/** Tool calls that put a diagram on the canvas are shown as a chain of steps. */
+const DIAGRAM_TOOLS = new Set(["tool-display_diagram", "tool-append_diagram", "tool-edit_diagram"])
 
 /** Minimum gap between canvas redraws while a diagram's XML streams in. */
 const STREAM_PREVIEW_INTERVAL_MS = 400
@@ -235,7 +240,7 @@ export function ChatMessageDisplay({
     )
 
     const handleDisplayChart = useCallback(
-        (xml: string) => {
+        (xml: string, complete: boolean) => {
             const currentXml = xml || ""
             const convertedXml = convertToLegalXml(currentXml)
             if (convertedXml !== previousXML.current) {
@@ -249,8 +254,12 @@ export function ChatMessageDisplay({
                 const validationError = validateMxCellStructure(replacedXML)
                 if (!validationError) {
                     previousXML.current = convertedXml
+                    // While the XML streams in, show it as drawn; once it is
+                    // complete, show the same tidied layout the tool handler
+                    // loads, so the two never fight over the canvas.
+                    const shown = complete ? tidyIfBetter(replacedXML).xml : replacedXML
                     // Skip validation in loadDiagram since we already validated above
-                    onDisplayChart(replacedXML, true)
+                    onDisplayChart(shown, true)
                 } else {
                     console.log(
                         "[ChatMessageDisplay] XML validation failed:",
@@ -291,7 +300,7 @@ export function ChatMessageDisplay({
         const previewStreaming = (xml: string) => {
             if (!streamPreviewDue) return
             lastStreamPreviewAtRef.current = now
-            handleDisplayChart(xml)
+            handleDisplayChart(xml, false)
         }
 
         messages.forEach((message) => {
@@ -317,9 +326,9 @@ export function ChatMessageDisplay({
                             if (state === "input-streaming") {
                                 previewStreaming(xml)
                             } else if (state === "input-available") {
-                                handleDisplayChart(xml)
+                                handleDisplayChart(xml, true)
                             } else if (!processedToolCalls.current.has(toolCallId)) {
-                                handleDisplayChart(xml)
+                                handleDisplayChart(xml, true)
                                 processedToolCalls.current.add(toolCallId)
                             }
                         }
@@ -329,10 +338,10 @@ export function ChatMessageDisplay({
                             if (state === "input-streaming") {
                                 previewStreaming(combinedXml)
                             } else if (state === "input-available") {
-                                handleDisplayChart(combinedXml)
+                                handleDisplayChart(combinedXml, true)
                             } else if (!processedToolCalls.current.has(toolCallId)) {
                                 assembledXmlRef.current = combinedXml
-                                handleDisplayChart(combinedXml)
+                                handleDisplayChart(combinedXml, true)
                                 processedToolCalls.current.add(toolCallId)
                             }
                         }
@@ -341,6 +350,40 @@ export function ChatMessageDisplay({
             }
         })
     }, [messages, handleDisplayChart, processedToolCalls])
+
+    const renderToolCode = (part: ToolPartLike) => {
+        const { state, input } = part
+        if (input && typeof input.xml === "string" && input.xml) {
+            return (
+                <CodeBlock
+                    code={input.xml}
+                    language="xml"
+                    onApply={applyCodeToDiagram}
+                    framed={false}
+                    isStreaming={state === "input-streaming"}
+                />
+            )
+        }
+        if (input && Array.isArray(input.operations)) {
+            return (
+                <div className="space-y-2">
+                    <div className="flex justify-end">
+                        <ApplyCodeButton
+                            code={JSON.stringify(
+                                { type: "diagram_patch", mode: "patch", operations: input.operations },
+                                null,
+                                2,
+                            )}
+                            language="json"
+                            onApply={(code) => applyCodeToDiagram(code, "json")}
+                        />
+                    </div>
+                    <OperationsDisplay operations={input.operations} />
+                </div>
+            )
+        }
+        return null
+    }
 
     const renderToolPart = (part: ToolPartLike) => {
         const callId = part.toolCallId
@@ -539,55 +582,6 @@ export function ChatMessageDisplay({
                                     }}
                                 >
                                 <div className="max-w-[95%] min-w-0">
-                                    {/* Reasoning blocks - displayed first for assistant messages */}
-                                    {message.role === "assistant" &&
-                                        message.parts?.map(
-                                            (part, partIndex) => {
-                                                if (part.type === "reasoning") {
-                                                    const reasoningPart =
-                                                        part as {
-                                                            type: "reasoning"
-                                                            text: string
-                                                        }
-                                                    const isLastPart =
-                                                        partIndex ===
-                                                        (message.parts
-                                                            ?.length ?? 0) -
-                                                            1
-                                                    const isLastMessage =
-                                                        message.id ===
-                                                        messages[
-                                                            messages.length - 1
-                                                        ]?.id
-                                                    const isStreamingReasoning =
-                                                        status ===
-                                                            "streaming" &&
-                                                        isLastPart &&
-                                                        isLastMessage
-
-                                                    return (
-                                                        <Reasoning
-                                                            key={`${message.id}-reasoning-${partIndex}`}
-                                                            className="w-full"
-                                                            isStreaming={
-                                                                isStreamingReasoning
-                                                            }
-                                                            defaultOpen={
-                                                                isStreamingReasoning
-                                                            }
-                                                        >
-                                                            <ReasoningTrigger />
-                                                            <ReasoningContent>
-                                                                {
-                                                                    reasoningPart.text
-                                                                }
-                                                            </ReasoningContent>
-                                                        </Reasoning>
-                                                    )
-                                                }
-                                                return null
-                                            },
-                                        )}
                                     {/* Edit mode for user messages */}
                                     {isEditing && message.role === "user" ? (
                                         <div className="flex flex-col gap-2">
@@ -766,12 +760,29 @@ export function ChatMessageDisplay({
                                             })
 
                                             const groups: {
-                                                type: "content" | "tool"
+                                                type: "content" | "tool" | "reasoning"
                                                 parts: typeof parts
                                                 startIndex: number
                                             }[] = []
 
                                             parts.forEach((part, index) => {
+                                                // Thinking, drawing and the
+                                                // layout correction read as
+                                                // steps, in the order they
+                                                // happened.
+                                                if (
+                                                    message.role === "assistant" &&
+                                                    part.type === "reasoning"
+                                                ) {
+                                                    if (String(part.text ?? "").trim()) {
+                                                        groups.push({
+                                                            type: "reasoning",
+                                                            parts: [part],
+                                                            startIndex: index,
+                                                        })
+                                                    }
+                                                    return
+                                                }
                                                 const isToolPart =
                                                     part.type?.startsWith(
                                                         "tool-",
@@ -810,12 +821,84 @@ export function ChatMessageDisplay({
                                                 }
                                             })
 
+                                            // Reasoning right before a diagram
+                                            // call is that call's thinking step.
+                                            const thinkingOf = new Map<number, typeof parts>()
+                                            const consumed = new Set<number>()
+                                            groups.forEach((group, gi) => {
+                                                if (group.type !== "tool" || !DIAGRAM_TOOLS.has(group.parts[0].type)) return
+                                                const taken: typeof parts = []
+                                                for (let k = gi - 1; k >= 0 && groups[k].type === "reasoning"; k--) {
+                                                    taken.unshift(groups[k].parts[0])
+                                                    consumed.add(k)
+                                                }
+                                                thinkingOf.set(gi, taken)
+                                            })
+                                            const isLastMessage =
+                                                message.id === messages[messages.length - 1]?.id
+
                                             return groups.map(
                                                 (group, groupIndex) => {
+                                                    if (consumed.has(groupIndex)) return null
+                                                    if (group.type === "reasoning") {
+                                                        const part = group.parts[0]
+                                                        const isStreamingReasoning =
+                                                            status === "streaming" &&
+                                                            message.id === messages[messages.length - 1]?.id &&
+                                                            part === message.parts?.[message.parts.length - 1]
+                                                        return (
+                                                            <Reasoning
+                                                                key={`${message.id}-reasoning-${group.startIndex}`}
+                                                                className="w-full"
+                                                                isStreaming={isStreamingReasoning}
+                                                                defaultOpen={isStreamingReasoning}
+                                                            >
+                                                                <ReasoningTrigger />
+                                                                <ReasoningContent>
+                                                                    {String(part.text ?? "")}
+                                                                </ReasoningContent>
+                                                            </Reasoning>
+                                                        )
+                                                    }
                                                     if (group.type === "tool") {
-                                                        return renderToolPart(
-                                                            group
-                                                                .parts[0] as ToolPartLike,
+                                                        const toolPart = group.parts[0] as ToolPartLike
+                                                        if (!DIAGRAM_TOOLS.has(toolPart.type)) {
+                                                            return renderToolPart(toolPart)
+                                                        }
+                                                        const thinking = thinkingOf.get(groupIndex) ?? []
+                                                        const input = toolPart.input
+                                                        const xml = typeof input?.xml === "string" ? input.xml : undefined
+                                                        const lastPart = message.parts?.[message.parts.length - 1]
+                                                        return (
+                                                            <DiagramSteps
+                                                                key={toolPart.toolCallId}
+                                                                toolCallId={toolPart.toolCallId}
+                                                                toolName={
+                                                                    toolPart.type.replace("tool-", "") as
+                                                                        | "display_diagram"
+                                                                        | "append_diagram"
+                                                                        | "edit_diagram"
+                                                                }
+                                                                state={toolPart.state}
+                                                                reasoning={thinking.map((p) => String(p.text ?? ""))}
+                                                                reasoningStreaming={
+                                                                    status === "streaming" &&
+                                                                    isLastMessage &&
+                                                                    thinking.length > 0 &&
+                                                                    thinking[thinking.length - 1] === lastPart
+                                                                }
+                                                                plan={typeof input?.plan === "string" ? input.plan : undefined}
+                                                                xml={xml}
+                                                                operationCount={
+                                                                    Array.isArray(input?.operations) ? input.operations.length : undefined
+                                                                }
+                                                                truncated={
+                                                                    toolPart.type !== "tool-edit_diagram" &&
+                                                                    !isMxCellXmlComplete(String(xml || ""))
+                                                                }
+                                                                errorText={toolPart.output}
+                                                                code={renderToolCode(toolPart)}
+                                                            />
                                                         )
                                                     }
 

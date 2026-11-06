@@ -1,0 +1,64 @@
+{
+  "about": "Diagram generation eval set. 12 families x 4 prompts (zh/en, simple/complex). Prompts marked holdout are only used to accept a change, never to tune one.",
+  "prompts": [
+    { "id": "flow-1", "family": "flowchart", "lang": "zh", "level": "simple", "split": "holdout", "text": "画一个用户登录的流程图：输入账号密码，校验，失败三次锁定账号，成功进入首页。" },
+    { "id": "flow-2", "family": "flowchart", "lang": "zh", "level": "complex", "split": "dev", "text": "画一个电商退款审批流程图，包括用户申请、客服初审、金额是否超过 500 元的分支、财务复核、驳回后可重新提交、退款到账通知。" },
+    { "id": "flow-3", "family": "flowchart", "lang": "en", "level": "simple", "split": "dev", "text": "Draw a flowchart for making a cup of tea, including a check for whether the kettle has water." },
+    { "id": "flow-4", "family": "flowchart", "lang": "en", "level": "complex", "split": "dev", "text": "Draw a flowchart of a CI build: checkout, install, lint, unit tests, a retry loop for flaky tests up to 2 times, build, and a decision to deploy only on the main branch." },
+
+    { "id": "layer-1", "family": "layered-architecture", "lang": "zh", "level": "simple", "split": "dev", "text": "画一个三层架构图：表现层、业务逻辑层、数据访问层，每层列出两三个组件。" },
+    { "id": "layer-2", "family": "layered-architecture", "lang": "zh", "level": "complex", "split": "holdout", "text": "画一个在线教育平台的系统架构图，分为客户端层、接入层、业务服务层（课程、直播、作业、支付、消息）、数据层（MySQL、Redis、对象存储、搜索引擎），标出主要调用关系。" },
+    { "id": "layer-3", "family": "layered-architecture", "lang": "en", "level": "simple", "split": "dev", "text": "Draw the layers of the OSI model with one example protocol per layer." },
+    { "id": "layer-4", "family": "layered-architecture", "lang": "en", "level": "complex", "split": "dev", "text": "Draw the architecture of a ride-hailing backend: mobile apps, API gateway, services for riders, drivers, matching, pricing, payments and notifications, plus a message queue and databases, with the main calls between them." },
+
+    { "id": "cloud-1", "family": "cloud", "lang": "zh", "level": "simple", "split": "dev", "text": "用 AWS 图标画一个静态网站托管架构：Route 53、CloudFront、S3。" },
+    { "id": "cloud-2", "family": "cloud", "lang": "zh", "level": "complex", "split": "dev", "text": "画一个部署在 Kubernetes 上的微服务架构图，包含 Ingress、三个服务的 Deployment 和 Service、ConfigMap、一个有状态的数据库 StatefulSet 和持久卷。" },
+    { "id": "cloud-3", "family": "cloud", "lang": "en", "level": "simple", "split": "holdout", "text": "Draw an Azure architecture for a web app with App Service, Azure SQL Database and Blob Storage." },
+    { "id": "cloud-4", "family": "cloud", "lang": "en", "level": "complex", "split": "dev", "text": "Draw an AWS serverless data pipeline: S3 upload triggers Lambda, which writes to Kinesis; a second Lambda transforms records into DynamoDB, with CloudWatch alarms and an SNS topic for failures." },
+
+    { "id": "lane-1", "family": "swimlane", "lang": "zh", "level": "simple", "split": "dev", "text": "用泳道图画员工请假流程，泳道为员工、主管、人事。" },
+    { "id": "lane-2", "family": "swimlane", "lang": "zh", "level": "complex", "split": "dev", "text": "用泳道图画一个采购流程，泳道为需求部门、采购部、财务部、供应商，包含询价比价、合同审批、付款和验收入库。" },
+    { "id": "lane-3", "family": "swimlane", "lang": "en", "level": "simple", "split": "dev", "text": "Draw a swimlane diagram for an online order: customer, store, warehouse, courier." },
+    { "id": "lane-4", "family": "swimlane", "lang": "en", "level": "complex", "split": "holdout", "text": "Draw a cross-functional swimlane diagram of a software release with lanes for product, engineering, QA and operations, including a bug-fix loop between QA and engineering and a rollback path." },
+
+    { "id": "mind-1", "family": "mindmap", "lang": "zh", "level": "simple", "split": "holdout", "text": "画一个“学习 Python”的思维导图，分为基础语法、数据结构、常用库、项目实践。" },
+    { "id": "mind-2", "family": "mindmap", "lang": "zh", "level": "complex", "split": "dev", "text": "画一个新产品上市计划的思维导图，包含市场调研、产品定位、渠道、定价、推广、风险，每个分支再细分两到三个要点。" },
+    { "id": "mind-3", "family": "mindmap", "lang": "en", "level": "simple", "split": "dev", "text": "Draw a mind map of healthy habits: sleep, food, exercise, and mental health." },
+    { "id": "mind-4", "family": "mindmap", "lang": "en", "level": "complex", "split": "dev", "text": "Draw a mind map summarising machine learning: supervised, unsupervised and reinforcement learning, with two or three example algorithms and typical uses under each." },
+
+    { "id": "tree-1", "family": "org-chart", "lang": "zh", "level": "simple", "split": "dev", "text": "画一个小公司的组织架构图：CEO 下面有技术、市场、财务三个部门，每个部门两名员工。" },
+    { "id": "tree-2", "family": "org-chart", "lang": "zh", "level": "complex", "split": "holdout", "text": "画一个大学的组织结构图：校长下设教务处、科研处、学生处和四个学院，每个学院下设两到三个系。" },
+    { "id": "tree-3", "family": "org-chart", "lang": "en", "level": "simple", "split": "dev", "text": "Draw a family tree of three generations: grandparents, their two children with spouses, and four grandchildren." },
+    { "id": "tree-4", "family": "org-chart", "lang": "en", "level": "complex", "split": "dev", "text": "Draw a decision tree for approving a loan based on credit score, income, existing debt and employment length, ending in approve, review or reject." },
+
+    { "id": "seq-1", "family": "sequence", "lang": "zh", "level": "simple", "split": "dev", "text": "画一个用户扫码支付的时序图，参与者为用户、App、支付网关、银行。" },
+    { "id": "seq-2", "family": "sequence", "lang": "zh", "level": "complex", "split": "dev", "text": "画一个 OAuth 2.0 授权码模式的时序图，参与者为用户、浏览器、客户端应用、授权服务器、资源服务器，包含刷新令牌。" },
+    { "id": "seq-3", "family": "sequence", "lang": "en", "level": "simple", "split": "holdout", "text": "Draw a sequence diagram of a client fetching data through a cache that falls back to a database on a miss." },
+    { "id": "seq-4", "family": "sequence", "lang": "en", "level": "complex", "split": "dev", "text": "Draw a sequence diagram for booking a flight: user, web app, booking service, inventory service, payment service and email service, including a payment failure that releases the seat." },
+
+    { "id": "er-1", "family": "er", "lang": "zh", "level": "simple", "split": "dev", "text": "画一个图书馆系统的 ER 图：读者、图书、借阅记录，标出主键和关系。" },
+    { "id": "er-2", "family": "er", "lang": "zh", "level": "complex", "split": "dev", "text": "画一个电商数据库的 ER 图，包括用户、地址、商品、分类、订单、订单明细、支付、评价，标出字段、主外键和一对多关系。" },
+    { "id": "er-3", "family": "er", "lang": "en", "level": "simple", "split": "dev", "text": "Draw an ER diagram for a blog: users, posts, comments and tags." },
+    { "id": "er-4", "family": "er", "lang": "en", "level": "complex", "split": "holdout", "text": "Draw an ER diagram for a hospital: patients, doctors, departments, appointments, prescriptions and medicines, with keys and cardinalities." },
+
+    { "id": "class-1", "family": "uml-class", "lang": "zh", "level": "simple", "split": "holdout", "text": "画一个 UML 类图：动物基类，狗和猫继承它，各有一个方法。" },
+    { "id": "class-2", "family": "uml-class", "lang": "zh", "level": "complex", "split": "dev", "text": "画一个停车场管理系统的 UML 类图，包含停车场、楼层、车位、车辆（轿车、货车、摩托车）、停车票、收费策略接口，标出继承、组合和关联。" },
+    { "id": "class-3", "family": "uml-class", "lang": "en", "level": "simple", "split": "dev", "text": "Draw a UML class diagram of a Shape interface implemented by Circle, Rectangle and Triangle." },
+    { "id": "class-4", "family": "uml-class", "lang": "en", "level": "complex", "split": "dev", "text": "Draw a UML class diagram of the observer pattern applied to a stock ticker with three kinds of displays, including attributes and methods." },
+
+    { "id": "state-1", "family": "state-machine", "lang": "zh", "level": "simple", "split": "dev", "text": "画一个红绿灯的状态图。" },
+    { "id": "state-2", "family": "state-machine", "lang": "zh", "level": "complex", "split": "holdout", "text": "画一个订单状态机：待支付、已支付、已发货、已签收、已完成、已取消、退款中、已退款，标出每个转换的触发事件。" },
+    { "id": "state-3", "family": "state-machine", "lang": "en", "level": "simple", "split": "dev", "text": "Draw a state diagram of a door that can be open, closed or locked." },
+    { "id": "state-4", "family": "state-machine", "lang": "en", "level": "complex", "split": "dev", "text": "Draw a state machine for a TCP connection from CLOSED through the handshake to ESTABLISHED and back through the closing states." },
+
+    { "id": "net-1", "family": "network", "lang": "zh", "level": "simple", "split": "dev", "text": "画一个家庭网络拓扑图：光猫、路由器、电脑、手机、智能电视、打印机。" },
+    { "id": "net-2", "family": "network", "lang": "zh", "level": "complex", "split": "dev", "text": "画一个企业园区网络拓扑：互联网出口、防火墙、核心交换机、两台汇聚交换机、各楼层接入交换机、服务器区、无线 AP 和 DMZ 区。" },
+    { "id": "net-3", "family": "network", "lang": "en", "level": "simple", "split": "holdout", "text": "Draw a network diagram of a small office with a router, a switch, five PCs and a file server." },
+    { "id": "net-4", "family": "network", "lang": "en", "level": "complex", "split": "dev", "text": "Draw a network topology for two data centres connected by a VPN, each with load balancers, web servers, application servers and a replicated database." },
+
+    { "id": "time-1", "family": "timeline", "lang": "zh", "level": "simple", "split": "dev", "text": "画一个项目时间轴：需求、设计、开发、测试、上线，每个阶段标出月份。" },
+    { "id": "time-2", "family": "timeline", "lang": "zh", "level": "complex", "split": "holdout", "text": "画一个产品年度路线图，按四个季度分列，分为三条产品线，每条产品线每季度有一到两个里程碑。" },
+    { "id": "time-3", "family": "timeline", "lang": "en", "level": "simple", "split": "dev", "text": "Draw a timeline of the major milestones of space exploration from Sputnik to the Moon landing." },
+    { "id": "time-4", "family": "timeline", "lang": "en", "level": "complex", "split": "dev", "text": "Draw a hiring process timeline with parallel tracks for the candidate, recruiter and hiring manager across six weeks." }
+  ]
+}

@@ -169,3 +169,15 @@ test("an unknown entity is reported as an unescaped ampersand", () => {
   assert.ok(error, "expected an error");
   assert.ok(/&amp;/.test(error!), error!);
 });
+
+test("wrapWithMxFile renames a model shape that uses the reserved layer id", () => {
+  const cells =
+    '<mxCell id="1" value="Centre" style="ellipse;" vertex="1" parent="1"><mxGeometry x="100" y="100" width="120" height="60" as="geometry"/></mxCell>' +
+    '<mxCell id="2" value="Branch" style="rounded=1;" vertex="1" parent="1"><mxGeometry x="300" y="100" width="120" height="60" as="geometry"/></mxCell>' +
+    '<mxCell id="3" edge="1" parent="1" source="1" target="2"><mxGeometry relative="1" as="geometry"/></mxCell>';
+  const xml = wrapWithMxFile(cells);
+  assert.equal((xml.match(/\bid="1"/g) || []).length, 1, "only the layer keeps id 1");
+  assert.match(xml, /<mxCell id="cell-1" value="Centre"/);
+  assert.match(xml, /source="cell-1" target="2"/);
+  assert.match(xml, /<mxCell id="2" value="Branch"[^>]*parent="1"/);
+});

@@ -28,6 +28,14 @@ import { type FileData, useFileProcessor } from "@/shared/files/use-file-process
 import { useQuotaManager } from "@/workspaces/diagram/hooks/use-quota-manager"
 import { applyDiagramOperations, isMxCellXmlComplete, type DiagramOperation } from "@/workspaces/diagram/lib/diagram-operations"
 import { formatXML, validateAndFixXml, wrapWithMxFile } from "@/workspaces/diagram/lib/drawio-xml"
+import { arrangeDiagramXml, parseLayout, tidyIfBetter } from "@/workspaces/diagram/lib/arrange"
+import {
+    clearCorrections,
+    getCorrection,
+    recordCorrection,
+    updateCorrection,
+} from "@/workspaces/diagram/lib/layout-corrections"
+import type { TidyResult } from "@/workspaces/diagram/lib/tidy-layout"
 import { ChatMessageDisplay } from "./ChatMessageDisplay"
 
 // localStorage keys for persistence
@@ -64,6 +72,26 @@ const DEBUG =
     import.meta.env &&
     Boolean(import.meta.env.DEV)
 const MAX_AUTO_RETRY_COUNT = 3
+
+/**
+ * Put a diagram from the model on the canvas with its layout tidied. Should
+ * draw.io refuse the tidied XML, the model's own XML goes up instead, so the
+ * tidy pass can never be the reason a diagram fails to appear.
+ */
+function loadTidied(
+    load: (xml: string) => string | null,
+    xml: string,
+    only?: string[],
+): { error: string | null; xml: string; tidied: TidyResult | null } {
+    const tidied = tidyIfBetter(xml, only ? { only } : {})
+    if (DEBUG) console.log("[tidy-layout]", tidied.report)
+    if (tidied.report.applied) {
+        const error = load(tidied.xml)
+        if (!error) return { error: null, xml: tidied.xml, tidied }
+        console.warn("[tidy-layout] Tidied XML was refused, showing the original:", error)
+    }
+    return { error: load(xml), xml, tidied: null }
+}
 
 /**
  * Check if auto-resubmit should happen based on tool errors.
@@ -104,6 +132,60 @@ export default function ChatPanel({
     } = useDiagram()
     
     const t = useDiagramT()
+
+    // Every diagram the chat puts on the canvas bumps this, so a layout
+    // still being worked out for an older one is dropped.
+    const loadSeqRef = useRef(0)
+
+    // Each diagram the model draws gets a "layout correction" step under
+    // its tool call in the chat: what the app changed, the layout check
+    // before and after, and a switch back to the model's own layout.
+    const noteCorrection = (
+        toolCallId: string,
+        original: string,
+        shown: { xml: string; tidied: TidyResult | null },
+        working: boolean,
+        layout?: unknown,
+    ) =>
+        recordCorrection(toolCallId, {
+            original,
+            corrected: shown.xml,
+            method: shown.tidied ? "tidy" : "original",
+            working,
+            layout: typeof layout === "string" ? layout : undefined,
+            moved: shown.tidied?.report.moved,
+            straightened: shown.tidied?.report.straightened,
+        })
+
+    // After a new diagram is up with the quick tidy pass, work out in the
+    // background whether a full layout (ELK) fits it better, and swap it in
+    // if nothing else has been loaded since.
+    const arrangeLater = (toolCallId: string, original: string, layout: unknown) => {
+        const seq = ++loadSeqRef.current
+        const done = () => updateCorrection(toolCallId, { working: false })
+        arrangeDiagramXml(original, parseLayout(layout))
+            .then((arranged) => {
+                if (DEBUG) console.log("[arrange]", arranged.chosen, arranged.scores)
+                if (seq !== loadSeqRef.current || arranged.chosen === "original" || arranged.chosen === "tidy") {
+                    return done()
+                }
+                // The user switched to the model's layout meanwhile: leave it.
+                if (getCorrection(toolCallId)?.showing === "original") return done()
+                if (onDisplayChart(arranged.xml, true)) return done()
+                recordCorrection(toolCallId, {
+                    original,
+                    corrected: arranged.xml,
+                    method: arranged.chosen,
+                    layout: getCorrection(toolCallId)?.layout,
+                    moved: arranged.report.moved,
+                    straightened: arranged.report.straightened,
+                })
+            })
+            .catch((error) => {
+                console.warn("[arrange] Layout failed, keeping the tidied diagram:", error)
+                done()
+            })
+    }
 
     const onFetchChart = (saveToHistory = true) => {
         if (!isDrawioReady) {
@@ -218,6 +300,8 @@ export default function ChatPanel({
     // Persist processed tool call IDs so collapsing the chat doesn't replay old tool outputs
     const processedToolCallsRef = useRef<Set<string>>(new Set())
     const assembledDiagramXmlRef = useRef("")
+    // The layout display_diagram declared, for append_diagram to finish with.
+    const diagramLayoutRef = useRef<unknown>(undefined)
 
     const chat: any = (useChat as any)({
         api: "/api/chat",
@@ -254,7 +338,8 @@ export default function ChatPanel({
             }
 
             if (toolCall.toolName === "display_diagram") {
-                const { xml } = toolCall.input as { xml: string }
+                const { xml, layout } = toolCall.input as { xml: string; layout?: unknown }
+                diagramLayoutRef.current = layout
                 const rawXml = String(xml || "")
                 assembledDiagramXmlRef.current = rawXml
                 if (DEBUG) {
@@ -316,7 +401,8 @@ ${rawXml}
                     : wrapWithMxFile(xmlToDisplay)
 
                 // loadDiagram validates and returns error if invalid
-                const validationError = onDisplayChart(fullXml)
+                const shown = loadTidied(onDisplayChart, fullXml)
+                const validationError = shown.error
 
                 if (validationError) {
                     console.warn(
@@ -343,6 +429,8 @@ ${xml}
 \`\`\``,
                     })
                 } else {
+                    noteCorrection(toolCall.toolCallId, fullXml, shown, true, layout)
+                    arrangeLater(toolCall.toolCallId, fullXml, layout)
                     // Success - diagram will be rendered by chat-message-display
                     if (DEBUG) {
                         console.log(
@@ -436,7 +524,8 @@ Please fix the appended XML and continue only if more cells are still missing.`,
                 const fullXml = xmlToDisplay.includes("<mxfile")
                     ? xmlToDisplay
                     : wrapWithMxFile(xmlToDisplay)
-                const validationError = onDisplayChart(fullXml)
+                const shown = loadTidied(onDisplayChart, fullXml)
+                const validationError = shown.error
 
                 if (validationError) {
                     addToolOutput({
@@ -449,6 +538,8 @@ ${isMxCellXmlComplete(combinedXml) ? "Please fix the appended XML and continue o
                     })
                 } else {
                     assembledDiagramXmlRef.current = ""
+                    noteCorrection(toolCall.toolCallId, fullXml, shown, true, diagramLayoutRef.current)
+                    arrangeLater(toolCall.toolCallId, fullXml, diagramLayoutRef.current)
                     addToolOutput({
                         tool: "append_diagram",
                         toolCallId: toolCall.toolCallId,
@@ -484,10 +575,18 @@ ${isMxCellXmlComplete(combinedXml) ? "Please fix the appended XML and continue o
                         )
                     }
 
-                    const editedXml = applyDiagramOperations(currentXml, operations)
-
-                    // Reload edited XML and validate.
-                    const validationError = onDisplayChart(editedXml)
+                    // Only the rows holding the added or updated cells are
+                    // tidied; the rest of the diagram, including anything
+                    // the user moved by hand, stays where it is.
+                    const changedIds = operations
+                        .filter((op) => op.operation !== "delete")
+                        .map((op) => op.cell_id)
+                    // A full layout still pending for the previous diagram
+                    // must not land on top of this edit.
+                    loadSeqRef.current++
+                    const editedOriginal = applyDiagramOperations(currentXml, operations)
+                    const shown = loadTidied(onDisplayChart, editedOriginal, changedIds)
+                    const { error: validationError, xml: editedXml } = shown
                     if (validationError) {
                         // If XML is invalid, surface the error in chat.
                         console.warn(
@@ -506,6 +605,7 @@ Please fix the XML issues. Ensure cell_id values exist in the current XML and th
                         // Success: update cache and log completion.
                         chartXMLRef.current = editedXml
                         assembledDiagramXmlRef.current = ""
+                        noteCorrection(toolCall.toolCallId, editedOriginal, shown, false)
                         addToolOutput({
                             tool: "edit_diagram",
                             toolCallId: toolCall.toolCallId,
@@ -1368,6 +1468,7 @@ Please fix the XML issues. Ensure cell_id values exist in the current XML and th
                     onChange={handleInputChange}
                     onClearChat={() => {
                         setMessages([])
+                        clearCorrections()
                         clearDiagram()
                         const newSessionId = `session-${Date.now()}-${Math.random()
                             .toString(36)
