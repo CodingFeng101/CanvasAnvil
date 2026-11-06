@@ -236,11 +236,11 @@ function CorrectionStep({
     load: (xml: string, skipValidation?: boolean) => string | null
 }) {
     const t = useDiagramT()
-    const changed = correction.corrected !== correction.original
+    const changed = correction.changed
     const { fixed, left } = issueChanges(correction)
     const layout = parseLayout(correction.layout)
     const show = (which: "corrected" | "original") => {
-        if (which === correction.showing) return
+        if (which === correction.showing || !correction.original) return
         const error = load(which === "corrected" ? correction.corrected : correction.original, true)
         if (!error) updateCorrection(toolCallId, { showing: which })
     }
@@ -291,7 +291,7 @@ function CorrectionStep({
                         {issues(left)}
                     </p>
                 )}
-                {changed && canSwitch && !correction.working && (
+                {changed && canSwitch && !correction.working && correction.original && (
                     <div className="flex items-center gap-1 pt-1.5">
                         {(["corrected", "original"] as const).map((which) => (
                             <button
