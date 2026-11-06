@@ -28,6 +28,14 @@ import { useTemplateLibrary } from "./hooks/use-template-library";
 import { useSlideMaterials } from "./hooks/use-slide-materials";
 import { useCreationInputs } from "./hooks/use-creation-inputs";
 import { useDeckExport } from "./hooks/use-deck-export";
+import { useEditableExport } from "./hooks/use-editable-export";
+
+/**
+ * Editable export runs the server's slide-alchemy agent pipeline. The older
+ * in-browser rebuild (handleDownloadEditablePpt, vision/) is kept intact
+ * behind this switch.
+ */
+const EDITABLE_EXPORT_VIA_AGENT = true;
 import { useSlideshow } from "./hooks/use-slideshow";
 import { buildBeautifyInstruction } from "./lib/beautify-instruction";
 import { describeRebuildEvent, type RebuildLogEntry } from "./lib/rebuild-log";
@@ -1208,6 +1216,7 @@ export function PptCanvas({
 
 
   const exporter = useDeckExport();
+  const editableExport = useEditableExport(tr);
 
 
 
@@ -2254,6 +2263,12 @@ export function PptCanvas({
         templateImage,
       }}
       exporter={exporter}
+      editable={{
+        exporter: editableExport,
+        slides: activeSlides
+          .map((slide) => ({ id: slide.id, title: slide.title || "", imageUrl: getSlideImageUrl(slide.id) || "" }))
+          .filter((slide) => slide.imageUrl),
+      }}
       materials={materials}
       inputs={inputs}
       slideshow={slideshow}
@@ -2265,7 +2280,8 @@ export function PptCanvas({
         confirmBackToStart: resetToStart,
         downloadPpt: () => void handleDownloadPpt(),
         downloadPdf: () => void handleDownloadPdf(),
-        downloadEditablePpt: () => void handleDownloadEditablePpt(),
+        downloadEditablePpt: () =>
+          EDITABLE_EXPORT_VIA_AGENT ? editableExport.setDialogOpen(true) : void handleDownloadEditablePpt(),
         generateAiImage: () => void handleGenerateAiImage(),
         retryFailedBeautify: () => void handleRetryFailedBeautify(),
         dismissExportLog: () => setEditableExportLog([]),

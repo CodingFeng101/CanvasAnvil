@@ -1,5 +1,10 @@
 import { GET as getConfig } from "../routes/config";
 import { POST as postChat } from "../routes/chat";
+import {
+  GET as getEditableExportFile,
+  GET_ARTIFACT as getEditableExportArtifact,
+  POST as postEditableExport,
+} from "../routes/editable-export";
 import { POST as postLogFileParser } from "../routes/log-file-parser";
 import { POST as postLogSave } from "../routes/log-save";
 import { POST as postPptAi } from "../routes/ppt-ai";
@@ -21,6 +26,9 @@ export const API_ROUTES: Record<string, RouteHandler> = {
   "POST /api/third-party-parser": postThirdPartyParser,
   "POST /api/chat": postChat,
   "POST /api/ppt-ai": postPptAi,
+  "POST /api/editable-export": postEditableExport,
+  "GET /api/editable-export/file": getEditableExportFile,
+  "GET /api/editable-export/artifact": getEditableExportArtifact,
 };
 
 export function routeKey(method: string | undefined, pathname: string) {

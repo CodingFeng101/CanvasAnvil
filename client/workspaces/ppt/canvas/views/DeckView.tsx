@@ -40,6 +40,9 @@ import {
 } from "@/features/ppt-editor";
 import type { RebuildLogEntry } from "@/workspaces/ppt/canvas/lib/rebuild-log";
 import { RebuildLogPanel } from "@/workspaces/ppt/canvas/views/RebuildLogPanel";
+import { EditableExportDialog } from "@/workspaces/ppt/canvas/views/EditableExportDialog";
+import { EditableExportRunPanel } from "@/workspaces/ppt/canvas/views/EditableExportRunPanel";
+import type { EditableExport, EditableExportSlide } from "@/workspaces/ppt/canvas/hooks/use-editable-export";
 import {
   PPT_REFERENCE_SLIDE_HEIGHT,
   PPT_REFERENCE_SLIDE_WIDTH,
@@ -58,12 +61,10 @@ import type { useSlideMaterials } from "@/workspaces/ppt/canvas/hooks/use-slide-
 import type { useSlideshow } from "@/workspaces/ppt/canvas/hooks/use-slideshow";
 
 /**
- * The editable-PPTX export is hidden from the menu for now. Only the entry is
- * gone: the export itself (PptCanvas's handleDownloadEditablePpt and the
- * vision/ rebuild behind it) is untouched, so flipping this back is all it
- * takes to bring it back.
+ * The editable-PPTX entry in the export menu. It opens the export settings;
+ * the run itself is the server's slide-alchemy pipeline (see PptCanvas).
  */
-const SHOW_EDITABLE_EXPORT = false;
+const SHOW_EDITABLE_EXPORT = true;
 
 /** The deck as this screen needs to see it: the slides, and how to resolve one. */
 export interface DeckViewModel {
@@ -88,6 +89,8 @@ export interface DeckViewModel {
 interface DeckViewProps {
   deck: DeckViewModel;
   exporter: ReturnType<typeof useDeckExport>;
+  /** The editable export: its run, and the pages it can export. */
+  editable: { exporter: EditableExport; slides: EditableExportSlide[] };
   materials: ReturnType<typeof useSlideMaterials>;
   inputs: ReturnType<typeof useCreationInputs>;
   slideshow: ReturnType<typeof useSlideshow>;
@@ -136,6 +139,7 @@ interface DeckViewProps {
 export function DeckView({
   deck,
   exporter,
+  editable,
   materials,
   inputs,
   slideshow,
@@ -177,6 +181,7 @@ export function DeckView({
         tr={tr}
         uiLang={uiLang === "zh" ? "zh" : "en"}
       />
+      <EditableExportDialog editable={editable.exporter} slides={editable.slides} tr={tr} />
       {/* Toolbar */}
       <div className="relative z-50 h-14 px-4 bg-card border-b border-border flex justify-between items-center shadow-sm">
         <div className="flex items-center gap-4">
@@ -199,7 +204,7 @@ export function DeckView({
                 <Presentation className="w-3.5 h-3.5" />
                 <span>{tr("放映", "Present")}</span>
             </button>
-            <div ref={exporter.menuRef} className="relative z-[60]">
+            <div ref={exporter.menuRef} className="relative z-[60] flex items-center gap-2">
               <button
                 onClick={() => exporter.setMenuOpen((open) => !open)}
                 disabled={deck.slides.length === 0 || !!exporter.isExporting}
@@ -243,17 +248,19 @@ export function DeckView({
                   {SHOW_EDITABLE_EXPORT && (
                     <button
                       type="button"
-                      className="flex w-full items-center rounded-lg px-3 py-2 text-left text-xs text-foreground/80 transition-colors hover:bg-accent"
+                      disabled={editable.exporter.busy || editable.slides.length === 0}
+                      className="flex w-full items-center rounded-lg px-3 py-2 text-left text-xs text-foreground/80 transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
                       onClick={() => {
                         exporter.setMenuOpen(false);
                         void actions.downloadEditablePpt();
                       }}
                     >
-                      {tr("导出可编辑 PPTX", "Export Editable PPTX")}
+                      {editable.exporter.busy ? tr("可编辑 PPTX 导出中…", "Editable PPTX exporting...") : tr("导出可编辑 PPTX", "Export Editable PPTX")}
                     </button>
                   )}
                 </motion.div>
               ) : null}
+              <EditableExportRunPanel editable={editable.exporter} tr={tr} uiLang={uiLang} />
             </div>
             {creationMode === "beautify" && (
               <button

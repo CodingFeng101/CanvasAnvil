@@ -71,3 +71,7 @@ tools/video/
 
 # Diagram evaluation runs (model outputs and scores)
 tools/eval/diagram/out/
+
+# slide-agent experiment
+scripts/slide-agent/.env.local
+runs/
