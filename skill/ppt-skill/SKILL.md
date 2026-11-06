@@ -1,6 +1,6 @@
 ---
 name: ppt-skill
-description: Generate PPT templates, full presentation slide sets, and export deliverables. Use for template-only requests, full presentation generation from idea or outline, and PPT delivery in PDF or image-based PPT form.
+description: Generate PPT templates, full presentation slide sets, and export deliverables. Use for template-only requests, full presentation generation from idea or outline, and PPT delivery as PDF, image-based PPT, or editable PPTX.
 ---
 
 # PPT Skill
@@ -12,7 +12,7 @@ Use when the task requires:
 - one or more PPT template backgrounds
 - a full presentation from idea, outline, or source documents
 - slide-image-based presentation rendering
-- export delivery as `pdf` or `image_ppt`
+- export delivery as `pdf`, `image_ppt` or `editable_pptx`
 
 ## First-Use Reminder
 
@@ -77,8 +77,17 @@ Supported delivery modes:
 
 - `pdf`
 - `image_ppt`
+- `editable_pptx`
 
 If the user does not specify an export mode, recommend `pdf` and `image_ppt` first.
+
+`editable_pptx` rebuilds each rendered slide into editable layers (clean base,
+native shapes, generated icons, editable text) through the slide-alchemy agent
+pipeline, the same run as the app's "Export Editable PPTX". It takes 10+
+minutes: say so before starting. Rework rounds per page are 3 to 10 (default
+3). Its requirements and steps are in `references/export-modes.md`. Its image
+model comes from `config/image-provider.json` like the other modes; it also
+needs a chat model, set in the environment or `scripts/slide-agent/.env.local`.
 
 ## Image Contract
 
@@ -101,6 +110,7 @@ If the user does not specify an export mode, recommend `pdf` and `image_ppt` fir
 - `scripts/generate-ppt-deck-images.mjs`
 - `scripts/export-pdf.mjs`
 - `scripts/build-image-ppt.mjs`
+- `scripts/export-editable-pptx.mjs` -- `--manifest-file`, `--output`, `--qa-rounds` (3-10), optional `--run-dir`
 
 If the user specifies an output directory or file path, write artifacts there.
 
@@ -113,7 +123,7 @@ Do not write generated artifacts into the skill folder.
 Preferred:
 
 - `pdf`
-- `pptx`
+- `pptx` (image-based, or editable when `editable_pptx` is asked for)
 - metadata JSON
 
 Optional on request:

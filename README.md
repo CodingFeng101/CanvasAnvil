@@ -171,6 +171,7 @@ CanvasAnvil includes dedicated local skills for each canvas so workflows stay op
   Enforces outline review before generation and supports editable PPT, PDF, and image-based PPT output.
 
 All skills use the host text model by default. Only image generation requires explicit provider configuration.
+Editable PPTX export is the exception: it rebuilds slides through the slide-alchemy agent pipeline, which also needs its own chat model, the slide-alchemy skill, Python and PowerPoint (see `skill/ppt-skill/references/export-modes.md`).
 
 ## 🚀 Quick Start
 

@@ -22,4 +22,4 @@ Map revision feedback to existing slide ids and classify edit types.
 
 ## `export_only`
 
-Take existing rendered slides or prepared deck data and export in one or more supported delivery modes.
+Take existing rendered slides or prepared deck data and export in one or more supported delivery modes (`pdf`, `image_ppt`, `editable_pptx`; see `references/export-modes.md`).

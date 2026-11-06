@@ -171,6 +171,7 @@ CanvasAnvil 为每个画布都提供了专用本地 skill，用来保证工作�
   强制先确认大纲，再生成整套演示稿，并导出可编辑 PPT、PDF 或图片版 PPT。
 
 所有 skill 默认使用宿主文本模型。只有生图能力需要单独配置图片生成供应商。
+可编辑 PPTX 导出例外：它通过 slide-alchemy agent 流程逐页重建，还需要单独配置一个对话模型，并依赖 slide-alchemy skill、Python 和 PowerPoint（见 `skill/ppt-skill/references/export-modes.md`）。
 
 ## 🚀 快速开始
 

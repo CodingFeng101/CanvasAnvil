@@ -1,7 +1,7 @@
 interface:
   display_name: "PPT Skill"
-  short_description: "Generate PPT templates, presentation slide sets, and exportable PDF or PPT deliverables."
-  default_prompt: "Use $ppt-skill to generate a PPT template or a full presentation and export it as PDF or PPT."
+  short_description: "Generate PPT templates, presentation slide sets, and exportable PDF, image PPT or editable PPTX deliverables."
+  default_prompt: "Use $ppt-skill to generate a PPT template or a full presentation and export it as PDF, PPT, or editable PPTX."
 
 policy:
   allow_implicit_invocation: true
