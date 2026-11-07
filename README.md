@@ -23,18 +23,65 @@
   <a href="README.zh-CN.md">Chinese</a>
 </p>
 
-## 🆕 Latest update: straighter diagrams
+## 🗓️ Recent updates
 
-The Diagram canvas no longer trusts the model's pixel coordinates as-is. Each diagram now goes through four steps:
+### 2026-11-06
 
-- **Intent**: the model writes a short plan first and declares a layout (flow, tree, mind map, swimlane, sequence, timeline or free). Groups are real draw.io containers, and coordinates are only a sketch of the arrangement.
-- **Solve**: the app re-lays the diagram with ELK for its layout kind, with a lighter tidy pass as the fallback.
-- **Validate**: a layout check scores overlaps, shapes outside their groups, edges through shapes and text that does not fit. The corrected version is shown only when it scores at least as well as the original and keeps its order and alignment.
-- **Show**: the chat shows each diagram as a chain of steps (thinking, drawing, correction). The correction step shows the score before and after, and lets you switch back to the model's original layout.
+**✨ New**
 
-On a 48-prompt evaluation the average layout score went from 89.0 to 93.4, and from 81.8 to 95.7 on the held-out half. `diagram-skill` follows the same rules and adds `scripts/check-layout.mjs`, so coding agents check and fix a diagram before handing it over.
+- **Editable PPTX export for the PPT canvas**
+  - The export menu has a new "Export Editable PPTX", next to "Export PDF" and "Export Image PPT".
+  - Exported decks used to be one picture per slide. Now every slide comes back as layers you can edit, from bottom to top:
+    - **Clean base**: the background with text, cards and icons removed; gradients, waves, buildings and other background art stay in this layer;
+    - **Native shapes**: card frames, dividers, dots, rings, bars and arrows are PowerPoint's own shapes, so their colour, size and corner radius can be changed directly;
+    - **Icons and illustrations**: redrawn by the image model after the original, on transparent backgrounds, to move, resize or replace one by one;
+    - **Editable text**: titles, body text and lists sit in text boxes, keeping their position, size, colour and weight.
+  - Slides in one style share a single base, and icons and cards repeated across slides are drawn once, so the whole deck stays consistent.
 
-https://github.com/user-attachments/assets/582c70ae-38df-4949-913c-c3f4369a7c8c
+- **Export settings**
+  - **Pages**: lists every slide by number and title; select all, none or page by page to export only what you need.
+  - **Rework rounds**: up to 3–10 per page, default 3. Each finished page is checked against the original (overall similarity, local differences, text position and size, green fringes left from cut-outs); a page that fails is fixed and checked again, and a page that passes stops early instead of using up its rounds.
+  - A count out of range snaps to the nearest allowed value.
+
+- **Export run panel**
+  - Once started, a fixed-height panel opens under the export button and scrolls through the whole run as it happens, like an agent at work.
+  - Seven steps in order: read text → plan backgrounds → draw clean backgrounds → analyse elements → draw icons and illustrations → rebuild pages → write the PPTX, each with its state (waiting, running, done or failed) and time taken.
+  - Under each step, timestamped details such as "page 1: 12 text blocks read", "base g1 shared by pages 1 and 2", "page 2: round 1 failed (similarity 78.5, 6 problems), fixing".
+  - "Rebuild pages" is grouped by page, so pages built side by side keep their progress apart.
+  - The step and page in progress open by themselves and fold away when done; anything you opened or closed yourself stays as you left it. When the panel is full it scrolls, following the newest line unless you have scrolled up to read.
+  - **Intermediate results open with a click**: the clean bases, icon sheets, every sliced icon and illustration, every page's preview after each round and the check images with problem areas marked all show as thumbnails that open full size.
+
+- **`editable_pptx` export mode in `ppt-skill`**
+  - Coding agents such as Claude Code and Codex can export a deck as editable PPTX, through the same run and the same checks as the app.
+  - New script `scripts/export-editable-pptx.mjs` (`npm run export:editable-pptx`) reads the same slide manifest as the image PPT, with options for rework rounds and where intermediate files go; JPG, WebP and other formats are converted automatically.
+  - The terminal shows each step and the path of every intermediate picture; afterwards a `<name>.editable-run/` folder next to the output keeps the bases, asset sheets and every round's previews and checks.
+  - The image model comes from the skill's `config/image-provider.json`, the same file the other export modes use.
+  - `SKILL.md` and `references/export-modes.md` describe when to use the mode, its steps, settings and requirements, and the agent warns the user up front that it takes a while.
+
+**⚡ Improved**
+
+- During an export, collapse the run panel to a timer pill beside the export button (showing the time so far) and keep editing; click the pill to open it again.
+- When the export finishes the panel closes and the file downloads; if it fails, the panel stays open with the step that failed and why.
+- A page refresh, closing and reopening the page, or a server restart picks a running export back up, with its earlier steps and pictures still there, and the file still downloads when it is done.
+- Better background detection: elements are analysed with the clean base alongside, so gradients, waves and buildings in the background are no longer drawn a second time as elements.
+- A base whose aspect ratio is off from the original is redrawn, never stretched.
+- An icon sheet with the wrong number of drawings is thrown away and redrawn, so misaligned icons never end up in the deck.
+- Starting an export while one is running says "another export is running; wait for it to finish" instead of the two getting in each other's way.
+
+**📌 Notes**
+
+- Editable export builds and checks every page, so it is slow: usually 10+ minutes, and one export runs at a time.
+- Icons and illustrations are redrawn after the original: the same design, not pixel for pixel.
+- It needs the slide-alchemy skill, Python and Microsoft PowerPoint (previews for the checks), plus a chat model and an image model; see `skill/ppt-skill/references/export-modes.md`.
+
+### 2026-11-05
+
+**🐛 Fixed**
+
+- **The Diagram canvas lost its correction step after a reload**: the canvas corrects the model's layout and shows each diagram as thinking → drawing → correction in the chat, but corrections lived only in memory, so a refresh dropped the third step.
+  - Every diagram's correction is now saved locally with the chat, so after a refresh the correction step and the layout scores before and after are still there;
+  - the latest diagram also keeps both versions, so you can still switch between the model's original and the corrected layout.
+- **A correction running at reload hung**: one that had not finished when the page was refreshed now comes back as finished instead of staying "in progress".
 
 <p align="center">
   <strong>⭐ If CanvasAnvil helps your workflow, please star the repo and fork it for your own canvas experiments.</strong>
