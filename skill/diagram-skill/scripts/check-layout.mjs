@@ -12,8 +12,9 @@
  * Exits 1 when there are errors, so it can gate a pipeline; --json prints
  * the report as JSON instead.
  *
- * No dependencies. Mirrors the check the CanvasAnvil app runs on every
- * generated diagram (client/workspaces/diagram/lib/layout-lint.ts).
+ * No dependencies: only Node's built-in modules, so it runs wherever the
+ * skill folder is copied. Mirrors the layout check the CanvasAnvil app
+ * runs on every generated diagram.
  */
 
 import fs from "node:fs";

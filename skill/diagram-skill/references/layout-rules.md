@@ -54,7 +54,7 @@ When nothing fits, use `flow-down`. Pick the direction that keeps the drawing cl
 After writing the XML, run:
 
 ```powershell
-node skill/diagram-skill/scripts/check-layout.mjs --input path\to\diagram.drawio
+node <skill-dir>/scripts/check-layout.mjs --input path\to\diagram.drawio
 ```
 
 It reports, with the ids involved:

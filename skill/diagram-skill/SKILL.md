@@ -91,7 +91,7 @@ There is no automatic layout after you: the coordinates you write are the layout
 2. Build the editor URL:
 
    ```powershell
-   node skill/diagram-skill/scripts/build-drawio-url.mjs --input path\to\diagram.drawio
+   node <skill-dir>/scripts/build-drawio-url.mjs --input path\to\diagram.drawio
    ```
 
    The script prints a self-contained `https://app.diagrams.net/?offline=1#R...` URL with the diagram compressed inside it.
@@ -103,6 +103,8 @@ There is no automatic layout after you: the coordinates you write are the layout
 8. Do not ask the user to log in. `app.diagrams.net` works without an account.
 
 ## Scripts
+
+The scripts live in this skill's own folder and need only Node, with no install step. In the commands, `<skill-dir>` is the folder that holds this `SKILL.md`. Use its absolute path, so the commands work from any working directory.
 
 - `scripts/validate-drawio-xml.mjs`: structure (root cells, unique ids, parents, edge ends)
 - `scripts/check-layout.mjs`: layout (overlaps, groups, edges through shapes, text fit); prints a score and exits 1 on errors

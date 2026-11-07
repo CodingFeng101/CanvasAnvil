@@ -71,8 +71,8 @@ See `references/layout-rules.md`. In short: decide the layout kind first, place 
 For new diagrams or non-trivial edits, run both:
 
 ```powershell
-node skill/diagram-skill/scripts/validate-drawio-xml.mjs --input path\to\diagram.drawio
-node skill/diagram-skill/scripts/check-layout.mjs --input path\to\diagram.drawio
+node <skill-dir>/scripts/validate-drawio-xml.mjs --input path\to\diagram.drawio
+node <skill-dir>/scripts/check-layout.mjs --input path\to\diagram.drawio
 ```
 
 The first checks the structure. The second checks the layout and exits 1 on errors; fix what it reports (see `references/layout-rules.md`).
@@ -82,7 +82,7 @@ The first checks the structure. The second checks the layout and exits 1 on erro
 After validation, build a self-contained editor URL:
 
 ```powershell
-node skill/diagram-skill/scripts/build-drawio-url.mjs --input path\to\diagram.drawio
+node <skill-dir>/scripts/build-drawio-url.mjs --input path\to\diagram.drawio
 ```
 
 Open the printed URL in the agent's built-in browser. Do not export images.
