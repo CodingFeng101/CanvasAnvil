@@ -2,7 +2,12 @@
  * Editable PPTX pipeline: a code skeleton with model judgment nodes,
  * pages rebuilt in parallel.
  *
- *   npx tsx scripts/slide-agent/pipeline.ts --run <dir> <slide.png> [...]
+ *   npx tsx pipeline.ts --run <dir> <slide.png> [...]
+ *   node --experimental-strip-types pipeline.ts --run <dir> <slide.png> [...]   (Node 22.6+)
+ *
+ * Self-contained: it needs only this folder (lib.ts, qa_check.py,
+ * slice_blobs.py, tools/, requirements.txt). Run by the app's editable export
+ * (server/routes/editable-export.ts).
  *
  * Code does the mechanical steps (OCR, image calls, slicing, edge checks,
  * composition, PowerPoint export, QA). The model is asked only for judgment:
@@ -13,7 +18,6 @@
  *      skill's validator checks the merged element_analysis.json. PNG
  *      components are generated once, shared by all pages, with the skill's
  *      sheet template
- *   Run by the app's editable export (server/routes/editable-export.ts).
  *   3. per page, in parallel: place the page's instances (compose spec),
  *      regenerate only missing or wrong assets, fix what QA reports
  * Bases off the source's aspect ratio are regenerated, never stretched.
@@ -27,7 +31,7 @@
  */
 import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync, appendFileSync } from "node:fs";
 import { dirname, extname, isAbsolute, join, relative, resolve } from "node:path";
-import { chat, clip, exec, HERE, imagePart, mutex, MODEL, parseJsonReply, PYTHON, requireConfig, runNode, script, SKILL, skillRef, usage, type Tool } from "./lib";
+import { chat, clip, exec, HERE, imagePart, mutex, MODEL, parseJsonReply, PYTHON, requireConfig, runNode, script, SKILL, skillRef, usage, type Tool } from "./lib.ts";
 
 requireConfig();
 const args = process.argv.slice(2);

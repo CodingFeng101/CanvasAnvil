@@ -52,11 +52,12 @@
   - **中间产物可以点开看**：生成的干净底图、图标素材表、切出来的每个图标和插图、每页每一轮的成品图，以及标出问题区域的检查对比图，都以缩略图显示，点击直接放大查看。
 
 - **`ppt-skill` 新增 `editable_pptx` 导出模式**
-  - Claude Code、Codex 等编程助手也能把整套幻灯片导出为可编辑 PPTX，和应用里的导出走同一套流程、同样的检查标准。
-  - 新增脚本 `scripts/export-editable-pptx.mjs`（`npm run export:editable-pptx`），读取和图片版 PPT 相同的幻灯片清单，可以设置每页返工次数和中间文件目录；JPG、WebP 等格式的幻灯片会自动转换。
-  - 运行时在终端逐步打印进度和每张中间图的路径；完成后，输出文件旁边的 `<文件名>.editable-run/` 目录保留底图、素材表、每轮成品和检查图。
-  - 生图模型和其他导出模式一样，读 skill 里的 `config/image-provider.json`，配置方式保持一致。
-  - `SKILL.md` 和 `references/export-modes.md` 补充了这个模式的适用场景、完整步骤、设置和依赖，助手会在开始前提醒用户导出耗时较长。
+  - Claude Code、Codex 等编程助手也能把整套幻灯片导出为可编辑 PPTX，步骤和检查标准与应用里的导出一致。
+  - 由宿主助手自己完成需要判断的环节：看图规划底图分组、分析每页元素、写每页的合成说明、根据检查结果返工，不用另外配置对话模型。
+  - 机械步骤由 `editable/editable_run.py` 完成（识别文字、生图和重试、比例检查、按图形切图、合成、PowerPoint 导出预览、检查、合并），按 `init → base → analysis → assets → page / check → merge` 依次执行；完整步骤写在 `references/editable-pptx-workflow.md`。
+  - 读取和图片版 PPT 相同的幻灯片清单，JPG、WebP 等格式会自动转换；运行目录保留底图、素材表、每轮成品和检查图。
+  - skill 自带所需的全部脚本和规则文档，不依赖应用代码，单独拿走也能用。
+  - 生图模型和其他导出模式一样，读 skill 里的 `config/image-provider.json`。
 
 **⚡ 改进**
 
@@ -72,8 +73,8 @@
 
 - 可编辑导出需要逐页生成和检查，比较慢，通常需要 10 分钟以上；同一时间只运行一个导出任务。
 - 图标和插图是按原图重新绘制的，设计一致，但不会和原图逐像素相同。
-- 运行环境：需要安装 Microsoft PowerPoint（用于导出预览做检查），Python 依赖用 `pip install -r skill/ppt-skill/editable/requirements.txt` 安装；所需的脚本和规则文档都在仓库里，不用另外安装。
-- 模型配置：在 `scripts/slide-agent/.env.local` 或环境变量里配置一个对话模型（`SLIDE_AGENT_API_KEY` / `SLIDE_AGENT_BASE_URL` / `SLIDE_AGENT_MODEL`）和一个生图模型（`SLIDE_AGENT_IMAGE_API_KEY` / `SLIDE_AGENT_IMAGE_BASE_URL` / `SLIDE_AGENT_IMAGE_MODEL`），详见 `skill/ppt-skill/references/export-modes.md`。
+- 运行环境：需要安装 Microsoft PowerPoint（用于导出预览做检查），Python 依赖用 `pip install -r scripts/slide-agent/requirements.txt` 安装；所需的脚本和规则文档都在 `scripts/slide-agent/` 里，不用另外安装。
+- 模型配置：在 `scripts/slide-agent/.env.local` 或环境变量里配置一个对话模型（`SLIDE_AGENT_API_KEY` / `SLIDE_AGENT_BASE_URL` / `SLIDE_AGENT_MODEL`）和一个生图模型（`SLIDE_AGENT_IMAGE_API_KEY` / `SLIDE_AGENT_IMAGE_BASE_URL` / `SLIDE_AGENT_IMAGE_MODEL`）。
 
 ### 2026-11-05
 
@@ -219,7 +220,7 @@ CanvasAnvil 为每个画布都提供了专用本地 skill，用来保证工作�
   强制先确认大纲，再生成整套演示稿，并导出可编辑 PPT、PDF 或图片版 PPT。
 
 所有 skill 默认使用宿主文本模型。只有生图能力需要单独配置图片生成供应商。
-可编辑 PPTX 导出例外：它逐页重建幻灯片，还需要单独配置一个对话模型，并需要 PowerPoint 和 Python 依赖（`skill/ppt-skill/editable/requirements.txt`），见 `skill/ppt-skill/references/export-modes.md`。
+可编辑 PPTX 导出同样用宿主模型：助手按 `skill/ppt-skill/references/editable-pptx-workflow.md` 逐步重建幻灯片，所需脚本都在 skill 的 `editable/` 目录里；另外需要 PowerPoint 和 Python 依赖（`editable/requirements.txt`）。
 
 ## 🚀 快速开始
 

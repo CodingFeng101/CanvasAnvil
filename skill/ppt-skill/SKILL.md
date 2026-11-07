@@ -49,6 +49,7 @@ must not be committed.
 - `references/image-rules.md`
 - `references/export-modes.md`
 - `references/image-provider-config.md`
+- `references/editable-pptx-workflow.md` (only for `editable_pptx`)
 
 Read only the references needed for the current task type.
 
@@ -82,13 +83,13 @@ Supported delivery modes:
 If the user does not specify an export mode, recommend `pdf` and `image_ppt` first.
 
 `editable_pptx` rebuilds each rendered slide into editable layers (clean base,
-native shapes, generated icons, editable text) through the repository's
-editable export pipeline, the same run as the app's "Export Editable PPTX"; the
-Python tools and rule docs it uses are in this skill's `editable/` folder. It takes 10+
-minutes: say so before starting. Rework rounds per page are 3 to 10 (default
-3). Its requirements and steps are in `references/export-modes.md`. Its image
-model comes from `config/image-provider.json` like the other modes; it also
-needs a chat model, set in the environment or `scripts/slide-agent/.env.local`.
+native shapes, generated icons, editable text). You run it yourself, following
+`references/editable-pptx-workflow.md`: you make the judgments by looking at
+the images, and `editable/editable_run.py` does the mechanical steps. It takes
+10+ minutes: say so before starting. Rework rounds per page are 3 to 10
+(default 3). Its requirements are in `references/export-modes.md`; its image
+model comes from `config/image-provider.json` like the other modes, and it
+needs no other model.
 
 ## Image Contract
 
@@ -111,7 +112,7 @@ needs a chat model, set in the environment or `scripts/slide-agent/.env.local`.
 - `scripts/generate-ppt-deck-images.mjs`
 - `scripts/export-pdf.mjs`
 - `scripts/build-image-ppt.mjs`
-- `scripts/export-editable-pptx.mjs` -- `--manifest-file`, `--output`, `--qa-rounds` (3-10), optional `--run-dir`
+- `editable/editable_run.py` -- the mechanical steps of `editable_pptx` (`init`, `base`, `analysis`, `assets`, `page`, `sheet`, `check`, `merge`); see `references/editable-pptx-workflow.md`
 
 If the user specifies an output directory or file path, write artifacts there.
 

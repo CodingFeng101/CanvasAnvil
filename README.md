@@ -52,9 +52,11 @@
   - **Intermediate results open with a click**: the clean bases, icon sheets, every sliced icon and illustration, every page's preview after each round and the check images with problem areas marked all show as thumbnails that open full size.
 
 - **`editable_pptx` export mode in `ppt-skill`**
-  - Coding agents such as Claude Code and Codex can export a deck as editable PPTX, through the same run and the same checks as the app.
-  - New script `scripts/export-editable-pptx.mjs` (`npm run export:editable-pptx`) reads the same slide manifest as the image PPT, with options for rework rounds and where intermediate files go; JPG, WebP and other formats are converted automatically.
-  - The terminal shows each step and the path of every intermediate picture; afterwards a `<name>.editable-run/` folder next to the output keeps the bases, asset sheets and every round's previews and checks.
+  - Coding agents such as Claude Code and Codex can export a deck as editable PPTX, with the same steps and checks as the app.
+  - The host agent makes the judgments itself: planning the base groups, analysing each page's elements, writing each page's compose spec and fixing what the checks find. No separate chat model to configure.
+  - `editable/editable_run.py` does the mechanical steps (OCR, image calls with retries, aspect checks, slicing by drawings, composition, PowerPoint previews, checks, merge), run in order `init → base → analysis → assets → page / check → merge`; the full workflow is in `references/editable-pptx-workflow.md`.
+  - It reads the same slide manifest as the image PPT, converting JPG, WebP and other formats; the run folder keeps the bases, asset sheets and every round's previews and checks.
+  - The skill carries every script and rule doc it needs, independent of the app's code, so it works on its own.
   - The image model comes from the skill's `config/image-provider.json`, the same file the other export modes use.
   - `SKILL.md` and `references/export-modes.md` describe when to use the mode, its steps, settings and requirements, and the agent warns the user up front that it takes a while.
 
@@ -72,8 +74,8 @@
 
 - Editable export builds and checks every page, so it is slow: usually 10+ minutes, and one export runs at a time.
 - Icons and illustrations are redrawn after the original: the same design, not pixel for pixel.
-- Needs Microsoft PowerPoint (previews for the checks); install the Python packages with `pip install -r skill/ppt-skill/editable/requirements.txt`. The scripts and rule docs it uses are all in the repository; nothing else to install.
-- Models: set a chat model (`SLIDE_AGENT_API_KEY` / `SLIDE_AGENT_BASE_URL` / `SLIDE_AGENT_MODEL`) and an image model (`SLIDE_AGENT_IMAGE_API_KEY` / `SLIDE_AGENT_IMAGE_BASE_URL` / `SLIDE_AGENT_IMAGE_MODEL`) in `scripts/slide-agent/.env.local` or the environment; see `skill/ppt-skill/references/export-modes.md`.
+- Needs Microsoft PowerPoint (previews for the checks); install the Python packages with `pip install -r scripts/slide-agent/requirements.txt`. The scripts and rule docs it uses are all in `scripts/slide-agent/`; nothing else to install.
+- Models: set a chat model (`SLIDE_AGENT_API_KEY` / `SLIDE_AGENT_BASE_URL` / `SLIDE_AGENT_MODEL`) and an image model (`SLIDE_AGENT_IMAGE_API_KEY` / `SLIDE_AGENT_IMAGE_BASE_URL` / `SLIDE_AGENT_IMAGE_MODEL`) in `scripts/slide-agent/.env.local` or the environment.
 
 ### 2026-11-05
 
@@ -219,7 +221,7 @@ CanvasAnvil includes dedicated local skills for each canvas so workflows stay op
   Enforces outline review before generation and supports editable PPT, PDF, and image-based PPT output.
 
 All skills use the host text model by default. Only image generation requires explicit provider configuration.
-Editable PPTX export is the exception: it rebuilds slides page by page and also needs its own chat model, PowerPoint, and the Python packages in `skill/ppt-skill/editable/requirements.txt` (see `skill/ppt-skill/references/export-modes.md`).
+Editable PPTX export uses the host model too: the agent rebuilds the slides step by step following `skill/ppt-skill/references/editable-pptx-workflow.md`, with the scripts in the skill's `editable/` folder; it also needs PowerPoint and the Python packages in `editable/requirements.txt`.
 
 ## 🚀 Quick Start
 

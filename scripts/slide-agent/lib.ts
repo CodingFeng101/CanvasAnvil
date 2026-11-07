@@ -25,8 +25,8 @@ for (const k of ["API_KEY", "BASE_URL", "MODEL"]) {
   if (legacy && !process.env[`SLIDE_AGENT_IMAGE_${k}`]) process.env[`SLIDE_AGENT_IMAGE_${k}`] = legacy;
 }
 
-/** The Python tools and rule docs the pipeline runs on, kept in the repo with the PPT skill. */
-export const SKILL = resolve(HERE, "..", "..", "skill", "ppt-skill", "editable");
+/** The Python tools (tools/scripts) and rule docs (tools/references) the pipeline runs on, next to this file. */
+export const SKILL = resolve(HERE, "tools");
 export const PYTHON = process.env.PYTHON || "python";
 const API_KEY = process.env.SLIDE_AGENT_API_KEY || "";
 const BASE_URL = (process.env.SLIDE_AGENT_BASE_URL || "https://api.openai.com/v1").replace(/\/+$/, "");
@@ -34,7 +34,7 @@ export const MODEL = process.env.SLIDE_AGENT_MODEL || "";
 
 export function requireConfig() {
   if (!API_KEY || !MODEL) {
-    console.error("Set SLIDE_AGENT_API_KEY and SLIDE_AGENT_MODEL (and SLIDE_AGENT_BASE_URL) in the environment or scripts/slide-agent/.env.local.");
+    console.error("Set SLIDE_AGENT_API_KEY and SLIDE_AGENT_MODEL (and SLIDE_AGENT_BASE_URL) in the environment or in .env.local next to lib.ts.");
     process.exit(1);
   }
   if (!existsSync(join(SKILL, "scripts", "compose_component_pptx.py"))) {

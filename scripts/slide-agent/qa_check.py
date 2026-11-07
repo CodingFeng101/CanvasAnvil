@@ -104,7 +104,7 @@ def text_check(run, slide_no, src_full, prev_path, skill, expected_texts):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("run")
-    ap.add_argument("--skill", default=str(Path(__file__).resolve().parents[2] / "skill" / "ppt-skill" / "editable"))
+    ap.add_argument("--skill", default=str(Path(__file__).resolve().parent / "tools"))
     ap.add_argument("--no-text", action="store_true")
     a = ap.parse_args()
     run, skill = Path(a.run), Path(a.skill)
