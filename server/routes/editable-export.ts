@@ -5,7 +5,7 @@ import path from "node:path";
 import { z } from "zod";
 
 /**
- * Editable PPTX export: the slide-alchemy agent pipeline, run as a job.
+ * Editable PPTX export: the editable PPTX pipeline (scripts/slide-agent), run as a job.
  *
  * The pipeline (scripts/slide-agent/pipeline.ts) needs Python, the skill's
  * scripts and PowerPoint for previews, so it runs here rather than in the

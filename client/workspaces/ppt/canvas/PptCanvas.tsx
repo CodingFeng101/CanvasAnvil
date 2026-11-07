@@ -31,7 +31,7 @@ import { useDeckExport } from "./hooks/use-deck-export";
 import { useEditableExport } from "./hooks/use-editable-export";
 
 /**
- * Editable export runs the server's slide-alchemy agent pipeline. The older
+ * Editable export runs the server's editable PPTX pipeline. The older
  * in-browser rebuild (handleDownloadEditablePpt, vision/) is kept intact
  * behind this switch.
  */

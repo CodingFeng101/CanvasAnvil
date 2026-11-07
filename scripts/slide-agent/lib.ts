@@ -1,10 +1,10 @@
 /**
- * Shared plumbing for the slide-alchemy experiments: config, processes,
+ * Shared plumbing for the editable PPTX pipeline: config, processes,
  * images for the model, OpenAI-compatible chat, and a small agent-node runner.
  */
 import { spawn } from "node:child_process";
 import { appendFileSync, existsSync, mkdirSync, readFileSync } from "node:fs";
-import { homedir, tmpdir } from "node:os";
+import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { randomUUID } from "node:crypto";
 
@@ -19,7 +19,14 @@ if (existsSync(envFile)) {
   }
 }
 
-export const SKILL = resolve(process.env.SLIDE_ALCHEMY_DIR || join(homedir(), ".claude", "skills", "slide-alchemy"));
+// Older .env.local files name the image model SLIDE_ALCHEMY_IMAGE_*; read them as SLIDE_AGENT_IMAGE_*.
+for (const k of ["API_KEY", "BASE_URL", "MODEL"]) {
+  const legacy = process.env[`SLIDE_ALCHEMY_IMAGE_${k}`];
+  if (legacy && !process.env[`SLIDE_AGENT_IMAGE_${k}`]) process.env[`SLIDE_AGENT_IMAGE_${k}`] = legacy;
+}
+
+/** The Python tools and rule docs the pipeline runs on, kept in the repo with the PPT skill. */
+export const SKILL = resolve(HERE, "..", "..", "skill", "ppt-skill", "editable");
 export const PYTHON = process.env.PYTHON || "python";
 const API_KEY = process.env.SLIDE_AGENT_API_KEY || "";
 const BASE_URL = (process.env.SLIDE_AGENT_BASE_URL || "https://api.openai.com/v1").replace(/\/+$/, "");
@@ -30,8 +37,8 @@ export function requireConfig() {
     console.error("Set SLIDE_AGENT_API_KEY and SLIDE_AGENT_MODEL (and SLIDE_AGENT_BASE_URL) in the environment or scripts/slide-agent/.env.local.");
     process.exit(1);
   }
-  if (!existsSync(join(SKILL, "SKILL.md"))) {
-    console.error(`slide-alchemy not found at ${SKILL}`);
+  if (!existsSync(join(SKILL, "scripts", "compose_component_pptx.py"))) {
+    console.error(`Editable export tools missing at ${SKILL}`);
     process.exit(1);
   }
 }

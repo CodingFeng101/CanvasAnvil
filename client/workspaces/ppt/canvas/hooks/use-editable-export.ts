@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 
 /**
- * Editable PPTX export through the server's slide-alchemy agent pipeline.
+ * Editable PPTX export through the server's editable PPTX pipeline.
  *
  * The run happens on the server (POST /api/editable-export) and takes
  * minutes: this uploads the chosen slides one request each, starts the job,

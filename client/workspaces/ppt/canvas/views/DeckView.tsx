@@ -62,7 +62,7 @@ import type { useSlideshow } from "@/workspaces/ppt/canvas/hooks/use-slideshow";
 
 /**
  * The editable-PPTX entry in the export menu. It opens the export settings;
- * the run itself is the server's slide-alchemy pipeline (see PptCanvas).
+ * the run itself is the server's editable PPTX pipeline (see PptCanvas).
  */
 const SHOW_EDITABLE_EXPORT = true;
 

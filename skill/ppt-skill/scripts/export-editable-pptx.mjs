@@ -3,7 +3,7 @@
 /**
  * Editable PPTX export: the same run as CanvasAnvil's "Export Editable PPTX".
  *
- * It hands the deck's slide images to the slide-alchemy agent pipeline
+ * It hands the deck's slide images to the editable export pipeline
  * (scripts/slide-agent/pipeline.ts in this repository) and copies the deck it
  * writes to --output. The pipeline rebuilds every slide as a clean base,
  * editable geometry, generated PNG assets and editable text, checking each
@@ -11,10 +11,11 @@
  *
  *   node scripts/export-editable-pptx.mjs --manifest-file slides.manifest.json --output deck.pptx [--qa-rounds 3] [--run-dir <dir>]
  *
- * Needs: the slide-alchemy skill (SLIDE_ALCHEMY_DIR, default ~/.claude/skills/slide-alchemy),
- * Python with its requirements, Microsoft PowerPoint (previews for the checks),
+ * The Python tools and rule docs it runs on live next to this script, in
+ * ../editable/. Needs: Microsoft PowerPoint (previews for the
+ * checks), Python with ../editable/requirements.txt installed,
  * a chat model (SLIDE_AGENT_API_KEY / _BASE_URL / _MODEL) and an image model
- * (this skill's config/image-provider.json, or SLIDE_ALCHEMY_IMAGE_API_KEY /
+ * (this skill's config/image-provider.json, or SLIDE_AGENT_IMAGE_API_KEY /
  * _BASE_URL / _MODEL), from the environment or scripts/slide-agent/.env.local.
  */
 
@@ -71,18 +72,18 @@ function parseArgs(argv) {
  */
 function pipelineEnv() {
   const env = { ...process.env };
-  if (!env.SLIDE_ALCHEMY_IMAGE_API_KEY && fs.existsSync(DEFAULT_IMAGE_CONFIG_FILE)) {
+  if (!env.SLIDE_AGENT_IMAGE_API_KEY && fs.existsSync(DEFAULT_IMAGE_CONFIG_FILE)) {
     const config = readJson(DEFAULT_IMAGE_CONFIG_FILE);
     if (String(config.apiKey || "").trim() && String(config.model || "").trim()) {
-      env.SLIDE_ALCHEMY_IMAGE_API_KEY = String(config.apiKey).trim();
-      env.SLIDE_ALCHEMY_IMAGE_MODEL = String(config.model).trim();
-      if (String(config.baseUrl || "").trim()) env.SLIDE_ALCHEMY_IMAGE_BASE_URL = String(config.baseUrl).trim();
+      env.SLIDE_AGENT_IMAGE_API_KEY = String(config.apiKey).trim();
+      env.SLIDE_AGENT_IMAGE_MODEL = String(config.model).trim();
+      if (String(config.baseUrl || "").trim()) env.SLIDE_AGENT_IMAGE_BASE_URL = String(config.baseUrl).trim();
     }
   }
   return env;
 }
 
-/** The pipeline reads PNG headers; any other format is converted with Pillow, which slide-alchemy already needs. */
+/** The pipeline reads PNG headers; any other format is converted with Pillow, which the pipeline already needs. */
 function copyAsPng(source, target) {
   if (path.extname(source).toLowerCase() === ".png") {
     fs.copyFileSync(source, target);

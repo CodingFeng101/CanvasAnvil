@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Deterministic QA for a slide-alchemy rebuild: source pages vs exported previews.
+"""Deterministic QA for an editable PPTX rebuild: source pages vs exported previews.
 
-  python qa_check.py <run_dir> [--skill <slide-alchemy dir>] [--no-text]
+  python qa_check.py <run_dir> [--skill <tools dir>] [--no-text]
 
 Writes <run_dir>/out/qa/qa_report.json and one annotated image per slide
 (out/qa/slide_XXX_qa.png: source | preview, worst regions boxed in red).
@@ -104,7 +104,7 @@ def text_check(run, slide_no, src_full, prev_path, skill, expected_texts):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("run")
-    ap.add_argument("--skill", default=str(Path.home() / ".claude" / "skills" / "slide-alchemy"))
+    ap.add_argument("--skill", default=str(Path(__file__).resolve().parents[2] / "skill" / "ppt-skill" / "editable"))
     ap.add_argument("--no-text", action="store_true")
     a = ap.parse_args()
     run, skill = Path(a.run), Path(a.skill)

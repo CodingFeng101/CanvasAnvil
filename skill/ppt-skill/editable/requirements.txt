@@ -1,0 +1,6 @@
+Pillow
+python-pptx
+numpy
+opencv-python-headless
+rapidocr>=3
+onnxruntime

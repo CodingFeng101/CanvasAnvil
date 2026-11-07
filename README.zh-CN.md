@@ -72,7 +72,8 @@
 
 - 可编辑导出需要逐页生成和检查，比较慢，通常需要 10 分钟以上；同一时间只运行一个导出任务。
 - 图标和插图是按原图重新绘制的，设计一致，但不会和原图逐像素相同。
-- 需要安装 slide-alchemy skill、Python 和 Microsoft PowerPoint（用于导出预览做检查），并配置一个对话模型和一个生图模型，详见 `skill/ppt-skill/references/export-modes.md`。
+- 运行环境：需要安装 Microsoft PowerPoint（用于导出预览做检查），Python 依赖用 `pip install -r skill/ppt-skill/editable/requirements.txt` 安装；所需的脚本和规则文档都在仓库里，不用另外安装。
+- 模型配置：在 `scripts/slide-agent/.env.local` 或环境变量里配置一个对话模型（`SLIDE_AGENT_API_KEY` / `SLIDE_AGENT_BASE_URL` / `SLIDE_AGENT_MODEL`）和一个生图模型（`SLIDE_AGENT_IMAGE_API_KEY` / `SLIDE_AGENT_IMAGE_BASE_URL` / `SLIDE_AGENT_IMAGE_MODEL`），详见 `skill/ppt-skill/references/export-modes.md`。
 
 ### 2026-11-05
 
@@ -218,7 +219,7 @@ CanvasAnvil 为每个画布都提供了专用本地 skill，用来保证工作�
   强制先确认大纲，再生成整套演示稿，并导出可编辑 PPT、PDF 或图片版 PPT。
 
 所有 skill 默认使用宿主文本模型。只有生图能力需要单独配置图片生成供应商。
-可编辑 PPTX 导出例外：它通过 slide-alchemy agent 流程逐页重建，还需要单独配置一个对话模型，并依赖 slide-alchemy skill、Python 和 PowerPoint（见 `skill/ppt-skill/references/export-modes.md`）。
+可编辑 PPTX 导出例外：它逐页重建幻灯片，还需要单独配置一个对话模型，并需要 PowerPoint 和 Python 依赖（`skill/ppt-skill/editable/requirements.txt`），见 `skill/ppt-skill/references/export-modes.md`。
 
 ## 🚀 快速开始
 

@@ -82,8 +82,9 @@ Supported delivery modes:
 If the user does not specify an export mode, recommend `pdf` and `image_ppt` first.
 
 `editable_pptx` rebuilds each rendered slide into editable layers (clean base,
-native shapes, generated icons, editable text) through the slide-alchemy agent
-pipeline, the same run as the app's "Export Editable PPTX". It takes 10+
+native shapes, generated icons, editable text) through the repository's
+editable export pipeline, the same run as the app's "Export Editable PPTX"; the
+Python tools and rule docs it uses are in this skill's `editable/` folder. It takes 10+
 minutes: say so before starting. Rework rounds per page are 3 to 10 (default
 3). Its requirements and steps are in `references/export-modes.md`. Its image
 model comes from `config/image-provider.json` like the other modes; it also

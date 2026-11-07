@@ -72,7 +72,8 @@
 
 - Editable export builds and checks every page, so it is slow: usually 10+ minutes, and one export runs at a time.
 - Icons and illustrations are redrawn after the original: the same design, not pixel for pixel.
-- It needs the slide-alchemy skill, Python and Microsoft PowerPoint (previews for the checks), plus a chat model and an image model; see `skill/ppt-skill/references/export-modes.md`.
+- Needs Microsoft PowerPoint (previews for the checks); install the Python packages with `pip install -r skill/ppt-skill/editable/requirements.txt`. The scripts and rule docs it uses are all in the repository; nothing else to install.
+- Models: set a chat model (`SLIDE_AGENT_API_KEY` / `SLIDE_AGENT_BASE_URL` / `SLIDE_AGENT_MODEL`) and an image model (`SLIDE_AGENT_IMAGE_API_KEY` / `SLIDE_AGENT_IMAGE_BASE_URL` / `SLIDE_AGENT_IMAGE_MODEL`) in `scripts/slide-agent/.env.local` or the environment; see `skill/ppt-skill/references/export-modes.md`.
 
 ### 2026-11-05
 
@@ -218,7 +219,7 @@ CanvasAnvil includes dedicated local skills for each canvas so workflows stay op
   Enforces outline review before generation and supports editable PPT, PDF, and image-based PPT output.
 
 All skills use the host text model by default. Only image generation requires explicit provider configuration.
-Editable PPTX export is the exception: it rebuilds slides through the slide-alchemy agent pipeline, which also needs its own chat model, the slide-alchemy skill, Python and PowerPoint (see `skill/ppt-skill/references/export-modes.md`).
+Editable PPTX export is the exception: it rebuilds slides page by page and also needs its own chat model, PowerPoint, and the Python packages in `skill/ppt-skill/editable/requirements.txt` (see `skill/ppt-skill/references/export-modes.md`).
 
 ## 🚀 Quick Start
 

@@ -1,5 +1,5 @@
 /**
- * Experimental v2: slide-alchemy as a code skeleton with model judgment nodes,
+ * Editable PPTX pipeline: a code skeleton with model judgment nodes,
  * pages rebuilt in parallel.
  *
  *   npx tsx scripts/slide-agent/pipeline.ts --run <dir> <slide.png> [...]
@@ -240,7 +240,7 @@ type Group = { id: string; slides: number[]; reference_slide: number; prompt: st
 const groupsP: Promise<Group[]> = MERGE_ONLY ? Promise.resolve([]) : stage("grouping", async () => {
   const images: any[] = [];
   for (let i = 1; i <= N; i++) images.push(...(await imagePart(join(RUN, sourceRel(i)), 900, `slide ${i}`)));
-  const system = `You plan clean base backgrounds for the slide-alchemy workflow. Unattended run: decide yourself.
+  const system = `You plan clean base backgrounds for the editable PPTX rebuild. Unattended run: decide yourself.
 
 <base-grouping>
 ${skillRef("base-grouping.md")}
@@ -313,7 +313,7 @@ function normalisePage(raw: any, page: number, w: number, h: number) {
   return { components, slide: { slide: page, instances, notes: String(raw.notes || "") } };
 }
 
-const pageAnalysisSystem = `You analyse ONE slide page for the slide-alchemy workflow: every non-text visual element that is NOT part of the clean base.
+const pageAnalysisSystem = `You analyse ONE slide page for the editable PPTX rebuild: every non-text visual element that is NOT part of the clean base.
 
 <element-classification>
 ${skillRef("element-classification.md")}
@@ -459,7 +459,7 @@ const sharedAssets: Promise<SharedAsset[]> = MERGE_ONLY
 const [layout, , deckAnalysis, shared] = await Promise.all([ocr, bases, analysis, sharedAssets]);
 
 // ---------- 3. pages: one agent each, in parallel ----------
-const pageSystem = `You rebuild ONE slide page into an editable PPTX slide, following the slide-alchemy workflow. The clean base is already generated and the text is already extracted by OCR; code handles image generation, slicing, edge checks, composition, PowerPoint export and QA through your tools.
+const pageSystem = `You rebuild ONE slide page into an editable PPTX slide. The clean base is already generated and the text is already extracted by OCR; code handles image generation, slicing, edge checks, composition, PowerPoint export and QA through your tools.
 
 Binding rules (from the skill):
 - Layer order: base PNG -> editable geometry -> PNG icons -> editable text.
