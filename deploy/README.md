@@ -97,3 +97,5 @@ docker run --rm -p 8001:8080 canvasanvil/app:latest
 | `PORT` | `8080` | Service listen port inside the container or host process |
 | `API_BODY_LIMIT` | `25mb` | Maximum API request body size |
 | `WEB_DIST_DIR` | `./dist` | Static web assets directory |
+| `PYTHON` | `python3` (`python` on Windows) | Python for floorplan recognition and the CAD delivery check (needs `server/recognizer/requirements.txt`) |
+| `CHROME_PATH` | auto-detected | Chrome / Edge / Chromium for the CAD delivery check |

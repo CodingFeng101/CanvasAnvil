@@ -253,8 +253,8 @@ npm run build
 **📌 Notes**
 
 - Removed: the analysis boards, the AI material list, AI-drawn renders and the old SVG drawing flow. Every drawing now comes from the designer.
-- Floorplan upload needs the recognizer service (`services/floorplan-recognizer`) and `RECOGNIZER_URL`; without it the upload button stays hidden.
-- The CAD "Delivery check" button runs the designer's acceptance (`skill/cad-skill/designer/scripts/qa.mjs --lite --quick`, then `qa_files.py`) on the server; it needs Chrome / Edge / Chromium there (or `CHROME_PATH`) and Python with the recognizer's requirements, and stays hidden without a browser.
+- Floorplan upload runs the designer's recognition scripts on the server (`server/recognizer/recognize.py`, using `skill/cad-skill/designer/scripts`); it needs Python with `pip install -r server/recognizer/requirements.txt` (or `PYTHON` pointing at one). Without it the upload button stays hidden. The Docker image includes it.
+- The CAD "Delivery check" button runs the designer's acceptance (`skill/cad-skill/designer/scripts/qa.mjs --lite --quick`, then `qa_files.py`) on the server; it needs Chrome / Edge / Chromium there (or `CHROME_PATH`) and Python with the recognizer's requirements, and stays hidden without a browser. The Docker image includes Chromium.
 - The MEP audit reports problems but does not move points; adjust them under MEP in the designer.
 - In `cad-skill`, starting from an existing floor plan needs Python with `numpy pillow opencv-python pymupdf ezdxf pypdf`; designing from a brief needs only Node 18+.
 

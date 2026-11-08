@@ -4,6 +4,7 @@ import { appendFileSync, existsSync, mkdirSync, readFileSync, readdirSync, statS
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { z } from "zod";
+import { pythonCommand } from "./cad-python";
 
 /**
  * The CAD delivery check (交付检查): the designer's own acceptance run, as the skill's run-designer --qa does it.
@@ -56,8 +57,6 @@ function designerPage(preset: Record<string, unknown>): string {
   return html.replace(anchor[0], `${anchor[0]}${script}`);
 }
 
-const python = () => process.env.PYTHON || (process.platform === "win32" ? "python" : "python3");
-
 function run(command: string, args: string[], log: string, timeout: number): Promise<number> {
   return new Promise((resolve) => {
     const child = spawn(command, args, { cwd: SCRIPTS, env: { ...process.env, PYTHONIOENCODING: "utf-8" }, windowsHide: true });
@@ -80,7 +79,7 @@ async function start(job: Job, preset: Record<string, unknown>) {
     Object.assign(job, { state: "failed", error: `qa.mjs exited ${pages} without a report`, finishedAt: Date.now() });
     return;
   }
-  const files = await run(python(), [path.join(SCRIPTS, "qa_files.py"), qaDir], path.join(job.dir, "files.log"), 300000);
+  const files = await run(pythonCommand(), [path.join(SCRIPTS, "qa_files.py"), qaDir], path.join(job.dir, "files.log"), 300000);
   writeFileSync(path.join(job.dir, "files.json"), JSON.stringify({ ok: files === 0, exit: files }));
   Object.assign(job, { state: "done", finishedAt: Date.now() });
 }

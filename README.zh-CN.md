@@ -253,8 +253,8 @@ npm run build
 **📌 说明**
 
 - 已移除：分析图板、AI 生成的材料清单、AI 绘制的效果图，以及旧的 SVG 绘图流程。所有图纸现在都来自设计器。
-- 上传户型图需要启动识别服务（`services/floorplan-recognizer`）并配置 `RECOGNIZER_URL`，否则上传按钮不显示。
-- CAD 的「交付检查」按钮在服务器上跑设计器的验收（`skill/cad-skill/designer/scripts/qa.mjs --lite --quick`，再跑 `qa_files.py`）；服务器上要有 Chrome / Edge / Chromium（或设置 `CHROME_PATH`）和装好识别服务依赖的 Python，找不到浏览器时按钮不显示。
+- 上传户型图时，服务器直接运行设计器的识别脚本（`server/recognizer/recognize.py`，调用 `skill/cad-skill/designer/scripts`），不用另开服务；服务器上要有 Python 并执行 `pip install -r server/recognizer/requirements.txt`（或用 `PYTHON` 指定解释器），否则上传按钮不显示。Docker 镜像已自带。
+- CAD 的「交付检查」按钮在服务器上跑设计器的验收（`skill/cad-skill/designer/scripts/qa.mjs --lite --quick`，再跑 `qa_files.py`）；服务器上要有 Chrome / Edge / Chromium（或设置 `CHROME_PATH`）和装好识别服务依赖的 Python，找不到浏览器时按钮不显示。Docker 镜像已自带 Chromium。
 - 水电审计只报告问题，不会自动挪点位；请在设计器的「水电」里调整。
 - `cad-skill` 从原始户型图开始时需要 Python 和 `numpy pillow opencv-python pymupdf ezdxf pypdf`；只用需求设计时只要 Node 18 以上。
 

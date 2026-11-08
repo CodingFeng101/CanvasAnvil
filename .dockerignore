@@ -8,3 +8,5 @@ dist
 coverage
 .trae
 .tmp-superpowers
+runs
+**/__pycache__

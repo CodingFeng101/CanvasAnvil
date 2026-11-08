@@ -97,3 +97,5 @@ docker run --rm -p 8001:8080 canvasanvil/app:latest
 | `PORT` | `8080` | 容器内或主机进程的服务监听端口 |
 | `API_BODY_LIMIT` | `25mb` | API 请求体大小限制 |
 | `WEB_DIST_DIR` | `./dist` | 前端静态资源目录 |
+| `PYTHON` | `python3`（Windows 为 `python`） | 户型识别和 CAD 交付检查用的 Python（需装 `server/recognizer/requirements.txt`） |
+| `CHROME_PATH` | 自动查找 | CAD 交付检查用的 Chrome / Edge / Chromium |

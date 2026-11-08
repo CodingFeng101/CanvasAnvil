@@ -1,8 +1,9 @@
-"""Floorplan recognizer: the house designer's recognition scripts (MIT, vendor/hpd_scripts, synced from
-skill/cad-skill/designer/scripts by scripts/sync-cad-skill.mjs), routed by input as the designer's
-GUIDE section 1 does.
+"""Floorplan recognition: the house designer's recognition scripts (skill/cad-skill/designer/scripts, MIT),
+routed by input as the designer's GUIDE section 1 does. The Node server runs this script for each upload
+(server/routes/cad-recognize.ts); there is no separate service.
 
-POST /recognize  multipart: file, file2?, route?, totalWidth?, totalHeight?, scale?, names?
+python recognize.py --file plan.jpg [--file2 layout.jpg] [--route R] [--total-width mm] [--total-height mm]
+                    [--scale mm/px] [--names a,b]
   route (picked from the input when not given):
   image       bitmap plan, screenshot, scan, bitmap-only PDF (rendered at 200 dpi)   -> analyze.py
   cadshot     black CAD screenshot (model space, coloured lines)                    -> cadshot.py + analyze.py --wall-color cyan
@@ -11,35 +12,32 @@ POST /recognize  multipart: file, file2?, route?, totalWidth?, totalHeight?, sca
   building    several floors side by side on one sheet, outlined walls (SVG / DXF / PDF) -> cadsplit.py
   dxf-layout  a decoration company's furniture-layout DXF (blocks in blocks)       -> cadvec.py + dxfinventory.py
   dual        original plan + furnished layout plan (file2)                         -> the plan's route + dimticks.py on file2
-  dwg         -> 415 (save as DXF or PDF first)
-Returns {route, draft, underlay, underlays, overlayPng, warnings, notes, inventory?, layoutImage?}.
-`draft` is a HouseSpec (walls with openings, a building has floors); `underlay` / `underlays` (one per
-floor) are ready for the designer preset.
+Prints one JSON line: {route, draft, underlay, underlays, overlayPng, warnings, notes, inventory?, layoutImage?},
+or {error, status} when the drawing cannot be read. `draft` is a HouseSpec (walls with openings, a building has
+floors); `underlay` / `underlays` (one per floor) are ready for the designer preset.
 """
-import base64, io, json, os, re, subprocess, sys, tempfile
+import argparse, base64, io, json, os, subprocess, sys, tempfile
 from typing import Optional
 
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from PIL import Image
 
-SCRIPTS = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'vendor', 'hpd_scripts')
+ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+SCRIPTS = os.environ.get('HPD_SCRIPTS') or os.path.join(ROOT, 'skill', 'cad-skill', 'designer', 'scripts')
 sys.path.insert(0, SCRIPTS)
 from imgio import open_upright  # noqa: E402  (the designer's EXIF-aware image reader)
+
+
+class RecognizeError(Exception):
+    """A drawing that cannot be read; `status` is the HTTP status the server answers with."""
+    def __init__(self, status: int, message: str):
+        super().__init__(message)
+        self.status = status
+
 
 BITMAP = {'.png', '.jpg', '.jpeg', '.webp', '.bmp'}
 VECTOR = {'.pdf', '.dxf', '.svg'}
 ROUTES = {'image', 'cadshot', 'cad', 'cadpair', 'building', 'dxf-layout', 'dual'}
-MAX_BYTES = 25 * 1024 * 1024
 TIMEOUT = int(os.environ.get('RECOGNIZE_TIMEOUT', '180'))
-
-app = FastAPI(title='floorplan-recognizer')
-
-
-def data_url(path: str) -> str:
-    ext = os.path.splitext(path)[1].lower().lstrip('.') or 'png'
-    mime = 'image/jpeg' if ext in ('jpg', 'jpeg') else f'image/{ext}'
-    with open(path, 'rb') as f:
-        return f'data:{mime};base64,' + base64.b64encode(f.read()).decode()
 
 
 def jpeg_url(path: str, longest: int = 1600, rotate: int = 0):
@@ -93,12 +91,12 @@ class Run:
             proc = subprocess.run(cmd, cwd=SCRIPTS, env=env, capture_output=True, text=True,
                                   encoding='utf-8', errors='replace', timeout=TIMEOUT)
         except subprocess.TimeoutExpired:
-            raise HTTPException(504, f'识别超时（{name}）')
+            raise RecognizeError(504, f'识别超时（{name}）')
         self.steps.append({'script': name, 'exit': proc.returncode})
         self.warnings += [line for line in (proc.stderr or '').splitlines() if line.strip() and 'Traceback' not in line][-5:]
         if check and proc.returncode != 0:
             tail = (proc.stderr or proc.stdout or '').strip().splitlines()[-5:]
-            raise HTTPException(422, f'识别失败（{name} exit {proc.returncode}）：' + (' | '.join(tail) or '没有识别到墙体'))
+            raise RecognizeError(422, f'识别失败（{name} exit {proc.returncode}）：' + (' | '.join(tail) or '没有识别到墙体'))
         return proc
 
 
@@ -106,7 +104,7 @@ def is_dark(path: str) -> bool:
     """A black CAD screenshot: most of the picture is near black."""
     with Image.open(path) as im:
         small = im.convert('L').resize((160, 160))
-    pixels = list(small.getdata())
+    pixels = small.tobytes()
     return sum(1 for p in pixels if p < 40) > len(pixels) * 0.55
 
 
@@ -177,7 +175,7 @@ def read_draft(out: str):
         if os.path.exists(path):
             with open(path, encoding='utf-8') as f:
                 return json.load(f)
-    raise HTTPException(422, '识别失败：没有生成户型初稿')
+    raise RecognizeError(422, '识别失败：没有生成户型初稿')
 
 
 def recognize_plan(run: Run, route: str, src: str, ext: str, sizes: dict, names: Optional[str]):
@@ -223,12 +221,12 @@ def recognize_plan(run: Run, route: str, src: str, ext: str, sizes: dict, names:
         return recognize_plan(run, 'cadpair' if ext == '.pdf' else 'building', src, ext, sizes, names)
     if route == 'cadpair':
         if ext != '.pdf':
-            raise HTTPException(422, 'cadpair 路线只接受矢量 PDF')
+            raise RecognizeError(422, 'cadpair 路线只接受矢量 PDF')
         out = os.path.join(tmp, 'pair')
         args = ['--out', out]
         if sizes.get('scale'): args += ['--scale', sizes['scale']]
         elif sizes.get('totalWidth'): args += ['--total-width', sizes['totalWidth']]
-        else: raise HTTPException(422, '这份 PDF 要走 cadpair 路线，需要外墙外皮总宽（mm）定比例')
+        else: raise RecognizeError(422, '这份 PDF 要走 cadpair 路线，需要外墙外皮总宽（mm）定比例')
         if names: args += ['--names', names]
         run.script('cadpair.py', src, *args)
         return read_draft(out), out, os.path.join(out, 'pair0.png'), src
@@ -238,7 +236,7 @@ def recognize_plan(run: Run, route: str, src: str, ext: str, sizes: dict, names:
         if ext == '.pdf':
             if sizes.get('scale'): args += ['--scale', sizes['scale']]
             elif sizes.get('totalWidth'): args += ['--ref-dim', sizes['totalWidth']]
-            else: raise HTTPException(422, '多层 PDF 要走 cadsplit 路线，需要第一张平面最外道总尺寸（mm）')
+            else: raise RecognizeError(422, '多层 PDF 要走 cadsplit 路线，需要第一张平面最外道总尺寸（mm）')
         if names: args += ['--names', names]
         run.script('cadsplit.py', src, *args)
         return read_draft(out), out, os.path.join(out, 'check0.png'), os.path.join(out, 'floor0.png')
@@ -254,7 +252,7 @@ def recognize_plan(run: Run, route: str, src: str, ext: str, sizes: dict, names:
                 run.notes.append(f'家具布置图 DXF：{inserts} 个块，块清单随初稿给 AI 读（对应 key、位置、朝向）')
         run.inventory = inventory
         return draft, out, overlay, fallback
-    raise HTTPException(400, f'未知路线：{route}')
+    raise RecognizeError(400, f'未知路线：{route}')
 
 
 def summarize_inventory(folder: str):
@@ -271,42 +269,25 @@ def summarize_inventory(folder: str):
     return {'blocks': items[:80], 'texts': texts[:200] if isinstance(texts, list) else texts}
 
 
-@app.get('/healthz')
-def healthz():
-    return {'ok': True}
-
-
-@app.post('/recognize')
-async def recognize(
-    file: UploadFile = File(...),
-    file2: Optional[UploadFile] = File(None),
-    route: Optional[str] = Form(None),
-    totalWidth: Optional[float] = Form(None),
-    totalHeight: Optional[float] = Form(None),
-    scale: Optional[float] = Form(None),
-    names: Optional[str] = Form(None),
-):
-    ext = os.path.splitext(file.filename or '')[1].lower()
+def recognize(file: str, file2: Optional[str] = None, route: Optional[str] = None, totalWidth: Optional[float] = None,
+              totalHeight: Optional[float] = None, scale: Optional[float] = None, names: Optional[str] = None):
+    ext = os.path.splitext(file)[1].lower()
     if ext == '.dwg':
-        raise HTTPException(415, 'DWG 暂不支持，请在 CAD 里另存为 DXF（最准）或导出 PDF / SVG 后上传')
+        raise RecognizeError(415, 'DWG 暂不支持，请在 CAD 里另存为 DXF（最准）或导出 PDF / SVG 后上传')
     if ext not in BITMAP | VECTOR:
-        raise HTTPException(415, f'不支持的文件类型：{ext or "未知"}')
+        raise RecognizeError(415, f'不支持的文件类型：{ext or "未知"}')
     if route and route not in ROUTES:
-        raise HTTPException(400, f'路线只能是 {"、".join(sorted(ROUTES))}')
-    body = await file.read()
-    if len(body) > MAX_BYTES:
-        raise HTTPException(413, '文件超过 25MB')
-    second = await file2.read() if file2 is not None else b''
-    ext2 = os.path.splitext(file2.filename or '')[1].lower() if file2 is not None else ''
-    if second and ext2 not in BITMAP | {'.pdf'}:
-        raise HTTPException(415, '第二张图（装修平面布置图）请用图片或 PDF')
+        raise RecognizeError(400, f'路线只能是 {"、".join(sorted(ROUTES))}')
+    ext2 = os.path.splitext(file2)[1].lower() if file2 else ''
+    if file2 and ext2 not in BITMAP | {'.pdf'}:
+        raise RecognizeError(415, '第二张图（装修平面布置图）请用图片或 PDF')
+    second = bool(file2)
 
+    # The scripts' working files go to a temporary folder; the uploads themselves are the caller's.
     with tempfile.TemporaryDirectory() as tmp:
-        src = os.path.join(tmp, 'input' + ext)
-        with open(src, 'wb') as f:
-            f.write(body)
+        src = file
         run = Run(tmp)
-        chosen = route or pick_route(ext, src, bool(second))
+        chosen = route or pick_route(ext, src, second)
         plan_route = pick_route(ext, src, False) if chosen == 'dual' else chosen
         sizes = {'totalWidth': totalWidth, 'totalHeight': totalHeight, 'scale': scale}
         draft, out, overlay, fallback = recognize_plan(run, plan_route, src, ext, sizes, names)
@@ -315,9 +296,7 @@ async def recognize(
         if chosen == 'dual' and second:
             # route-dual.md: walls from the original, furniture from the layout plan; its dimension chains
             # (dimticks.py) let the model place what it reads there in the original's coordinates.
-            src2 = os.path.join(tmp, 'layout' + ext2)
-            with open(src2, 'wb') as f:
-                f.write(second)
+            src2 = file2
             image2 = render_pdf(src2, os.path.join(tmp, 'layout.png')) if ext2 == '.pdf' else src2
             ticks = os.path.join(tmp, 'ticksB')
             run.script('dimticks.py', image2, '--out', ticks, check=False)
@@ -350,3 +329,27 @@ async def recognize(
                 'warnings': warnings, 'notes': run.notes, 'steps': run.steps,
                 **({'inventory': run.inventory} if run.inventory else {}),
                 **({'layoutImage': layout_image} if layout_image else {})}
+
+
+def main():
+    parser = argparse.ArgumentParser(description='Read a floor plan into a HouseSpec draft (one JSON line on stdout).')
+    parser.add_argument('--file', required=True)
+    parser.add_argument('--file2')
+    parser.add_argument('--route')
+    parser.add_argument('--total-width', type=float)
+    parser.add_argument('--total-height', type=float)
+    parser.add_argument('--scale', type=float)
+    parser.add_argument('--names')
+    a = parser.parse_args()
+    try:
+        result = recognize(a.file, a.file2, a.route, a.total_width, a.total_height, a.scale, a.names)
+    except RecognizeError as error:
+        result = {'error': str(error), 'status': error.status}
+    # UTF-8 bytes whatever the console code page is (the server parses the last line).
+    sys.stdout.flush()
+    sys.stdout.buffer.write((json.dumps(result, ensure_ascii=False) + '\n').encode('utf-8'))
+    sys.stdout.buffer.flush()
+
+
+if __name__ == '__main__':
+    main()
