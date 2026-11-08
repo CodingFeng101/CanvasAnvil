@@ -166,12 +166,13 @@ test('validation handles unknown input and oversized units', () => {
   assert.match(validateSpec(unknown).find(i => i.code === 'furniture_key')!.msg, /候选.*bed/);
 });
 
-test('repair loop stops at three improving rounds and passes scoped error-only context', async () => {
+test('repair loop stops at six improving rounds and passes scoped error and warning context', async () => {
   let count = 0;
   const result = await reviseUntilClean({ initial,
-    issuesOf: async p => [...issues(5 - Number(p.round ?? 0)), { level: 'warn', code: 'warn', msg: 'warning' }],
+    issuesOf: async p => [...issues(8 - Number(p.round ?? 0)), { level: 'warn', code: 'warn', msg: 'warning' }, { level: 'info', code: 'info', msg: 'note' }],
     askModel: async (errors, summary) => {
-      assert.ok(errors.every(issue => issue.level === 'error'));
+      assert.ok(errors.every(issue => issue.level === 'error' || issue.level === 'warn'));
+      assert.ok(errors.some(issue => issue.level === 'warn'));
       const context = JSON.parse(summary);
       assert.ok(context.rooms.length < plan.rooms.length);
       return [];
@@ -179,9 +180,9 @@ test('repair loop stops at three improving rounds and passes scoped error-only c
     apply: async (_, current) => ({ ...current, plan: { ...plan, round: ++count }, revision: count }),
     maxRounds: 9,
   });
-  assert.equal(result.rounds, 3);
+  assert.equal(result.rounds, 6);
   assert.equal(result.issues.filter(i => i.level === 'error').length, 2);
-  assert.equal(result.design.revision, 3);
+  assert.equal(result.design.revision, 6);
 });
 
 test('repair loop restores the best applied plan after a plateau', async () => {
@@ -198,9 +199,17 @@ test('repair loop restores the best applied plan after a plateau', async () => {
   assert.equal(result.rounds, 2);
 });
 
-test('repair loop ignores warnings and restores a plan after partial apply failure', async () => {
-  const result = await reviseUntilClean({ initial, issuesOf: async () => [{ level: 'warn', code: 'warn', msg: 'warning' }], askModel: async () => { throw new Error('must not call'); }, apply: async () => initial });
-  assert.equal(result.rounds, 0);
+test('repair loop works warnings down to zero, never trades a warning for an error, and restores a plan after partial apply failure', async () => {
+  const warn = (n: number): DesignIssue[] => Array.from({ length: n }, (_, i) => ({ level: 'warn', code: 'warn', msg: `warning ${i}` }));
+  let round = 0;
+  const cleared = await reviseUntilClean({ initial, issuesOf: async p => warn(2 - Number(p.round ?? 0)), askModel: async () => [], apply: async (_, current) => ({ ...current, plan: { ...plan, round: ++round } }) });
+  assert.equal(cleared.rounds, 2);
+  assert.equal(cleared.issues.length, 0);
+  const traded = await reviseUntilClean({ initial, issuesOf: async p => p.name === 'traded' ? issues(1) : warn(3), askModel: async () => [], apply: async (_, current) => ({ ...current, plan: { ...plan, name: 'traded' } }) });
+  assert.ok(traded.rolledBack);
+  assert.equal(traded.issues.length, 3);
+  const quiet = await reviseUntilClean({ initial, issuesOf: async () => [{ level: 'info', code: 'info', msg: 'note' }], askModel: async () => { throw new Error('must not call'); }, apply: async () => initial });
+  assert.equal(quiet.rounds, 0);
   let loaded = 0;
   await assert.rejects(reviseUntilClean({ initial, issuesOf: async () => { loaded++; return issues(1); }, askModel: async () => [], apply: async () => { throw new Error('partial apply'); } }), /partial apply/);
   assert.equal(loaded, 2);

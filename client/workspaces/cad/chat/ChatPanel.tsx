@@ -463,7 +463,7 @@ export function ChatPanel(props: ChatPanelProps) {
           : mepRun.skipped === "manual"
             ? tr("水电点位之前手动调过，这次没有重新布置；要按新户型重新布置，就说“重新布置水电”。", " MEP points were edited by hand, so they were not laid out again; say \"redo the MEP layout\" to start them over.")
             : "";
-        // The room-by-room MEP audit; what it finds goes back to the model once or twice as MEP operations.
+        // The room-by-room MEP audit; what it finds goes back to the model as MEP operations until none is left or a round fixes nothing.
         let mepFixed = 0;
         if ((mep || result.touched.elec) && session.getSnapshot().audit?.problems.length) {
           showStage(tr(`水电审计发现 ${session.getSnapshot().audit!.problems.length} 个问题，让 AI 修…`, "Asking the model to fix the MEP audit problems…"));

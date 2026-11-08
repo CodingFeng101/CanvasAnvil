@@ -14,7 +14,7 @@ import { isValidKey } from './catalog';
 import { summarizePlan } from './plan-summary';
 import { planToSpec, carryOver } from './plan-to-spec';
 import { applySpecPatch, patchTouches, type SpecPatchOp } from './spec-patch';
-import { reviseUntilClean } from './revise-loop';
+import { reviseUntilClean, MAX_REVISE_ROUNDS } from './revise-loop';
 
 export type DesignerPreset = { plan: InternalPlan; underlay?: CadDesign['underlay'] } | { spec: HouseSpec; underlay?: CadDesign['underlay'] };
 export type DesignResult = { applied: number; errors: number; warnings: number; rounds: number; touched: OpsTouched };
@@ -229,9 +229,10 @@ export class CadDesignSession {
   }
   /**
    * Fix what the room-by-room MEP audit finds: the model answers with MEP operations (add_elec /
-   * move_elec / link_elec / remove of a point), a round is kept only when it leaves fewer problems.
+   * move_elec / link_elec / remove of a point), a round is kept only when it leaves fewer problems,
+   * and rounds go on until nothing is left or a round fixes nothing (the cap only guards a runaway).
    */
-  async repairMep(ask: (problems: string[], summary: string) => Promise<unknown>, maxRounds = 2): Promise<MepRepair> {
+  async repairMep(ask: (problems: string[], summary: string) => Promise<unknown>, maxRounds = 8): Promise<MepRepair> {
     const design = this.snapshot.design;
     const audit = this.auditNow();
     const result: MepRepair = { rounds: 0, fixed: 0, problems: audit?.problems ?? [] };
@@ -436,7 +437,7 @@ export class CadDesignSession {
       this.update({ design: candidate });
       const revised = await reviseUntilClean({
         initial: candidate,
-        maxRounds: retry ? 3 - validationRounds : 0,
+        maxRounds: retry ? MAX_REVISE_ROUNDS - validationRounds : 0,
         issuesOf: async plan => { checkAbort(); bridge.replacePlan(plan); return bridge.runChecks(); },
         askModel: async (issues, summary) => {
           checkAbort();

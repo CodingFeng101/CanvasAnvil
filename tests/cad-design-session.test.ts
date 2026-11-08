@@ -158,16 +158,16 @@ test('undo serializes engine restoration and persistence against polling', async
   assert.equal(busyDuringWrite, true);
 });
 
-test('JSON-format repair consumes the same three-round design repair budget', async () => {
+test('JSON-format repair consumes the same six-round design repair budget', async () => {
   const { session, bridge, plan } = setup();
   let calls = 0;
-  bridge.runChecks = () => Array.from({ length: 3 - calls }, () => ({ level: 'error' as const, code: 'test', msg: 'test' }));
+  bridge.runChecks = () => Array.from({ length: 6 - calls }, () => ({ level: 'error' as const, code: 'test', msg: 'test' }));
   const result = await session.applyModelOutput({ type: 'cad_spec', spec: validSpec() }, async () => {
     calls++;
     return { type: 'cad_ops', ops: [{ op: 'resize_furniture', id: plan().furniture[0].id, w: 1500 - calls }] };
   }, { initialRepairRounds: 1 });
-  assert.equal(calls, 2);
-  assert.equal(result.rounds, 3);
+  assert.equal(calls, 5);
+  assert.equal(result.rounds, 6);
   assert.equal(result.errors, 1);
 });
 
