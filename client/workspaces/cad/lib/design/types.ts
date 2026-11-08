@@ -41,12 +41,38 @@ export type Underlay = {
   y: number;
 };
 
+/** A line of the 「图上符号 → 建模」 list (GUIDE section 2): what the drawing shows and how it was modelled. */
+export type SymbolRow = { symbol: string; where?: string; count?: number; model: string };
+
+/** How an uploaded floorplan was read (GUIDE sections 0–2), kept with the design until delivery. */
+export type Recognition = {
+  route: string;
+  notes?: string[];
+  warnings?: string[];
+  /** The recognizer's check image (walls and openings drawn over the original). */
+  overlay?: string;
+  /** Route "dual": the furnished layout plan the furniture is read from. */
+  layoutImage?: string;
+  /** Route "dxf-layout": the drawing's blocks and texts. */
+  inventory?: unknown;
+  /** The user's answers to the 待确认清单, by topic. */
+  answers?: Record<string, string[]>;
+  symbols?: SymbolRow[];
+  /** What is still to be confirmed (estimated storey height, unsure sills, inferred bearing walls, unknown symbols…). */
+  confirm?: string[];
+  /** The draft has been completed from the drawing (later messages are ordinary edits). */
+  completed?: boolean;
+};
+
 export type CadDesign = {
   plan: InternalPlan;
   revision: number;
   lastSource: 'ai' | 'user' | 'recognize';
   status: 'draft' | 'confirmed';
   underlay?: Underlay;
+  /** A building's underlays, one per floor (the designer preset's `underlays`). */
+  underlays?: Array<Underlay | null>;
+  recognition?: Recognition;
   /** MEP points were edited by hand (in the designer or on request): later layout edits leave them alone. */
   mepManual?: boolean;
   updatedAt: number;

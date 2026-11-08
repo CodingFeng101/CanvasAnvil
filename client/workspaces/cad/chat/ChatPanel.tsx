@@ -17,7 +17,7 @@ import {
 } from "@/shared/chat";
 import { ChatMessageDisplay, type UIMessage } from "./ChatMessageDisplay";
 import { DesignHistoryDialog } from "./DesignHistoryDialog";
-import { CAD_CONFIRM, applyPicks, describeSpecStream, generateMessage, parsePartialJson, planMessage, stripCadMarkers, takePicks, validDecisions } from "./CadSteps";
+import { CAD_CONFIRM, applyPicks, describeSpecStream, generateMessage, parsePartialJson, planMessage, recognitionLines, stripCadMarkers, takePicks, validDecisions } from "./CadSteps";
 import { useUiLanguage } from "@/shared/i18n";
 import {
   chatStorageKey,
@@ -29,7 +29,9 @@ import {
   CAD_DESIGN_CREATE_PROMPT,
   CAD_DESIGN_EDIT_PROMPT,
   CAD_DESIGN_FIX_PROMPT,
+  CAD_DESIGN_FROM_DRAFT_PROMPT,
   designerReferences,
+  routeReference,
 } from "../lib/agents";
 import { retryCadTextRequest } from "../lib/design/model-request";
 import { describeJsonError, parseCadPayload } from "../lib/design/model-output";
@@ -83,7 +85,8 @@ interface ChatPanelProps {
   };
   onClearWorkspace?: () => void;
   designSession: CadDesignSession;
-  composerRequest?: { id: number; text: string; send?: boolean };
+  /** Fill (or send) the composer; `assistant` instead posts that text as an assistant message (no model call). */
+  composerRequest?: { id: number; text: string; send?: boolean; assistant?: string };
 }
 
 export function ChatPanel(props: ChatPanelProps) {
@@ -368,27 +371,64 @@ export function ChatPanel(props: ChatPanelProps) {
         ];
         return { role: "user", content: parts as any } as ChatMessage;
       };
+      /**
+       * Completing a recognized draft (the designer's GUIDE sections 2–5): the user's answers to the 待确认清单,
+       * the route's notes, the draft as a HouseSpec, and the drawing itself (original, check overlay, layout plan).
+       */
+      const draftRequest = (designValue: NonNullable<typeof current>, planValue: unknown): ChatMessage => {
+        const recognition = designValue.recognition;
+        const answers = takePicks(text).picks ?? recognition?.answers ?? null;
+        if (answers) void session.noteRecognition({ answers });
+        const images = [
+          designValue.underlay?.src,
+          ...(designValue.underlays ?? []).map((item) => item?.src),
+          recognition?.overlay,
+          recognition?.layoutImage,
+        ].filter((url): url is string => typeof url === "string" && url.startsWith("data:image/"));
+        const parts: any[] = [
+          {
+            type: "text",
+            text: [
+              plain,
+              `待确认清单的回答：${answers ? Object.entries(answers).map(([topic, picked]) => `${topic}：${picked.join("、") || "都不要"}`).join("；") : "用户没有逐项回答，按常规默认处理并写进 confirm"}`,
+              `识别路线：${recognition?.route ?? "未知"}${recognition?.notes?.length ? `；${recognition.notes.join("；")}` : ""}${recognition?.warnings?.length ? `\n识别提示：${recognition.warnings.join("；")}` : ""}`,
+              `图片依次是：原图（底图）${designValue.underlays?.length ? "（每层一张）" : ""}${recognition?.overlay ? "、识别叠图（认出的墙和门窗画在原图上）" : ""}${recognition?.layoutImage ? "、装修平面布置图（家具按它读）" : ""}`,
+              JSON.stringify({ designSpec: JSON.parse(session.spec() || "null"), cad_plan: planValue ?? undefined }),
+              recognition?.inventory ? `家具布置图 DXF 的块清单：${JSON.stringify(recognition.inventory).slice(0, 20000)}` : "",
+              buildContextAttachments(attachments),
+              ...uploadedTexts,
+            ].filter(Boolean).join("\n\n"),
+          },
+          ...images.map((url) => ({ type: "image_url", image_url: { url } })),
+          ...content.filter((part) => part.type === "image_url"),
+        ];
+        return { role: "user", content: parts as any } as ChatMessage;
+      };
       const generateDesign = async (
         planValue: unknown,
-        options: { replace?: boolean; prefix?: string } = {},
+        options: { replace?: boolean; prefix?: string; fromDraft?: boolean } = {},
       ) => {
         const designValue = await session.sync();
         const editing = !!designValue && !options.replace;
         const prefix = options.prefix ? `${options.prefix}\n\n` : "";
-        const progress = editing
-          ? tr("正在修改户型…", "Updating the floorplan…")
-          : tr("正在生成户型…", "Generating the floorplan…");
+        const progress = options.fromDraft
+          ? tr("正在读原图、补全户型（符号清单、房间、门窗、家具）…", "Reading the drawing and completing the floorplan…")
+          : editing
+            ? tr("正在修改户型…", "Updating the floorplan…")
+            : tr("正在生成户型…", "Generating the floorplan…");
         // Finished stages stay listed above the one in progress, so the block reads as a log.
         const log: string[] = [];
         generateLog = log;
         const showStage = (stage: string, detail = "") =>
           updateAssistant(generateMessage("running", [prefix + [...log, stage].join("\n\n"), detail].filter(Boolean).join("\n\n")));
         showStage(progress);
-        const prompt = [
-          editing ? CAD_DESIGN_EDIT_PROMPT : CAD_DESIGN_CREATE_PROMPT,
-          catalogPromptTable(),
-          ...(editing ? [designerReferences(plain)] : []),
-        ].join("\n\n");
+        const prompt = options.fromDraft
+          ? [CAD_DESIGN_FROM_DRAFT_PROMPT, catalogPromptTable(), designerReferences(plain, { all: true }), routeReference(designValue?.recognition?.route, `${plain}\n${(designValue?.recognition?.notes ?? []).join("\n")}`)].filter(Boolean).join("\n\n")
+          : [
+              editing ? CAD_DESIGN_EDIT_PROMPT : CAD_DESIGN_CREATE_PROMPT,
+              catalogPromptTable(),
+              ...(editing ? [designerReferences(plain)] : []),
+            ].join("\n\n");
         // Edits refer back to the conversation ("阳台加一个窗花" after "阳台没有窗户啊"), so the last turns go along as text.
         const recent: ChatMessage[] = editing
           ? history.slice(-6).flatMap((message) => {
@@ -397,7 +437,7 @@ export function ChatPanel(props: ChatPanelProps) {
               return body ? [{ role: message.role, content: body.length > 800 ? `${body.slice(0, 800)}…` : body } as ChatMessage] : [];
             })
           : [];
-        const request = [...recent, designRequest(planValue, editing ? designValue : null)];
+        const request = options.fromDraft && designValue ? [draftRequest(designValue, planValue)] : [...recent, designRequest(planValue, editing ? designValue : null)];
         const streamed = (text: string) => showStage(progress, describeSpecStream(text, language === "zh"));
         const response = await callPayload(prompt, request, streamed);
         let payload = response.payload;
@@ -494,7 +534,8 @@ export function ChatPanel(props: ChatPanelProps) {
               `户型已生成：${result.errors} 个错误，${result.warnings} 个警告。可以在设计器里查看、直接拖动修改，或继续告诉我要改哪里；满意后点“确认户型”。`,
               `Floorplan generated: ${result.errors} errors, ${result.warnings} warnings. Review it in the designer, drag to adjust, or tell me what to change; press Confirm design when you are happy.`,
             );
-        updateAssistant(generateMessage("done", `${prefix}${[...log, reply, `**${summaryLine}${mepLine}**`, fixedLine, auditLine].filter(Boolean).join("\n\n")}`));
+        const recognized = options.fromDraft ? recognitionLines(session.getSnapshot().design?.recognition) : "";
+        updateAssistant(generateMessage("done", `${prefix}${[...log, reply, recognized, `**${summaryLine}${mepLine}**`, fixedLine, auditLine].filter(Boolean).join("\n\n")}`));
         return result;
       };
       const generatePlan = async () => {
@@ -578,6 +619,10 @@ export function ChatPanel(props: ChatPanelProps) {
             ? tr("户型已确认。报价单、施工图 PDF、DXF、彩平图和 3D 效果图都在设计器顶栏的导出按钮里，直接下载即可。", "The design is confirmed. The quote, drawing PDF, DXF, colour plan and 3D render are in the designer's export buttons.")
             : blocked,
         );
+      } else if (current?.recognition && !current.recognition.completed && !wantsPlan) {
+        // An uploaded drawing that is still the recognizer's draft: the next message (normally the
+        // 待确认清单's confirm) completes it from the drawing, replacing the draft.
+        await generateDesign(plan, { replace: true, fromDraft: true });
       } else if (!current) {
         if (plan && wantsGenerate) await generateDesign(plan);
         else {
@@ -622,7 +667,8 @@ export function ChatPanel(props: ChatPanelProps) {
     const request = props.composerRequest;
     if (!request || request.id === composerHandled.current) return;
     composerHandled.current = request.id;
-    if (request.send) void sendRef.current(request.text);
+    if (request.assistant) setMessages((list) => [...list, { role: "assistant", content: request.assistant! }]);
+    else if (request.send) void sendRef.current(request.text);
     else {
       setInput(request.text);
       setFocusTick((value) => value + 1);

@@ -1,7 +1,7 @@
 import { cadStore } from '../../storage';
 import type { WorkspaceStore } from '@/shared/storage/indexed-db-store';
 import type { DesignerBridge } from '../../designer/designer-bridge';
-import type { CadDesign, DesignIssue, HouseSpec, InternalPlan, SinglePlan } from './types';
+import type { CadDesign, DesignIssue, HouseSpec, InternalPlan, SinglePlan, SymbolRow } from './types';
 import { applyElecPrefs, type ElecPrefs } from './elec-prefs';
 import type { ElecAudit } from './elec-audit';
 import { isBuilding } from './types';
@@ -16,7 +16,10 @@ import { planToSpec, carryOver } from './plan-to-spec';
 import { applySpecPatch, patchTouches, type SpecPatchOp } from './spec-patch';
 import { reviseUntilClean, MAX_REVISE_ROUNDS } from './revise-loop';
 
-export type DesignerPreset = { plan: InternalPlan; underlay?: CadDesign['underlay'] } | { spec: HouseSpec; underlay?: CadDesign['underlay'] };
+type Underlays = { underlay?: CadDesign['underlay']; underlays?: CadDesign['underlays'] };
+export type DesignerPreset = ({ plan: InternalPlan } | { spec: HouseSpec }) & Underlays;
+/** The underlay fields of a design, for a preset. */
+const underlaysOf = (design: Pick<CadDesign, 'underlay' | 'underlays'>): Underlays => ({ underlay: design.underlay, ...(design.underlays ? { underlays: design.underlays } : {}) });
 export type DesignResult = { applied: number; errors: number; warnings: number; rounds: number; touched: OpsTouched };
 export type MepRun = { placed: number; skipped?: 'manual' };
 export type MepRepair = { rounds: number; fixed: number; problems: string[] };
@@ -105,11 +108,11 @@ export class CadDesignSession {
     if (!this.snapshot.design) throw new Error('请先生成户型 / Generate a design first');
     this.loading ??= (async () => {
       const current = this.snapshot.design!;
-      try { return await this.load({ plan: current.plan, underlay: current.underlay }); }
+      try { return await this.load({ plan: current.plan, ...underlaysOf(current) }); }
       catch (reason) {
         const fallback = this.history.at(-1);
         if (!fallback) throw reason;
-        const bridge = await this.load({ plan: fallback.plan, underlay: fallback.underlay }, true);
+        const bridge = await this.load({ plan: fallback.plan, ...underlaysOf(fallback) }, true);
         const design: CadDesign = { ...clone(fallback), revision: current.revision + 1, status: 'draft', updatedAt: Date.now() };
         const history = this.history.slice(0, -1);
         await this.persist(design, history, null);
@@ -282,15 +285,26 @@ export class CadDesignSession {
     this.update({ design: next, issues: this.bridge.runChecks() });
     return result.notes;
   }
-  /** Loads a recognized floorplan draft (walls + openings) with the original image as underlay. */
-  async loadDraft(spec: HouseSpec, underlay?: CadDesign['underlay']) {
+  /** Record more of how the uploaded drawing was read (the user's answers to the 待确认清单…) on the current design. */
+  async noteRecognition(update: Partial<NonNullable<CadDesign['recognition']>>) {
+    const design = this.snapshot.design;
+    if (!design?.recognition) return;
+    const next: CadDesign = { ...design, recognition: { ...design.recognition, ...update } };
+    await this.persist(next, this.history, this.undo);
+    this.update({ design: next });
+  }
+  /** Loads a recognized floorplan draft (walls + openings) with the original image as underlay (one per floor for a building). */
+  async loadDraft(spec: HouseSpec, underlay?: CadDesign['underlay'], extra: { underlays?: CadDesign['underlays']; recognition?: CadDesign['recognition'] } = {}) {
     const before = await this.sync();
     if (this.snapshot.busy) throw new Error('请等待户型更新结束 / Wait for design updates');
     if (before?.lastSource === 'user' && !await this.confirmReplace()) throw new Error('已取消 / Cancelled');
     this.update({ busy: true });
     try {
-      const bridge = await this.load({ spec, underlay });
-      const design: CadDesign = { plan: bridge.readPlan(), underlay, revision: (before?.revision ?? 0) + 1, status: 'draft', lastSource: 'recognize', updatedAt: Date.now() };
+      const bridge = await this.load({ spec, underlay, ...(extra.underlays ? { underlays: extra.underlays } : {}) });
+      const design: CadDesign = {
+        plan: bridge.readPlan(), underlay, ...(extra.underlays ? { underlays: extra.underlays } : {}), ...(extra.recognition ? { recognition: extra.recognition } : {}),
+        revision: (before?.revision ?? 0) + 1, status: 'draft', lastSource: 'recognize', updatedAt: Date.now(),
+      };
       const history = before ? [...this.history, before].slice(-20) : this.history;
       await this.persist(design, history, before);
       this.history = history;
@@ -400,7 +414,7 @@ export class CadDesignSession {
       const scope = patchTouches(ops);
       for (const key of Object.keys(touched) as Array<keyof OpsTouched>) touched[key] ||= scope[key];
       reloaded = true;
-      const bridge = await this.load({ spec: next, underlay: current.underlay });
+      const bridge = await this.load({ spec: next, ...underlaysOf(current) });
       bridge.replacePlan(carryOver(current.plan, bridge.readPlan(), { comments: !scope.comments }));
       applied += ops.length;
       return { ...current, plan: bridge.readPlan(), revision: current.revision + 1, status: 'draft', lastSource: 'ai', updatedAt: Date.now() };
@@ -416,9 +430,11 @@ export class CadDesignSession {
         const spec = await validatedSpec(payload.spec);
         checkAbort();
         reloaded = true;
-        const bridge = await this.load({ spec });
+        // Completing a recognized draft keeps the original drawing under it, and what was read from it.
+        const kept: Partial<CadDesign> = before?.recognition ? { ...underlaysOf(before), recognition: before.recognition } : {};
+        const bridge = await this.load({ spec, ...kept });
         checkAbort();
-        candidate = { plan: bridge.readPlan(), revision: (before?.revision ?? 0) + 1, status: 'draft', lastSource: 'ai', updatedAt: Date.now() };
+        candidate = { plan: bridge.readPlan(), ...kept, revision: (before?.revision ?? 0) + 1, status: 'draft', lastSource: 'ai', updatedAt: Date.now() };
         applied = 1;
         touched.layout = true;
       } else if (payload.type === 'cad_ops') {
@@ -463,6 +479,14 @@ export class CadDesignSession {
       }
       // Points the user asked for by hand stay through later layout edits; a full relayout starts over.
       if (touched.elec && !touched.relayoutElec) revised.design = { ...revised.design, mepManual: true };
+      // The 「图上符号 → 建模」 list and what is still to be confirmed, listed again at delivery.
+      const symbols = Array.isArray(payload.symbols) ? (payload.symbols as unknown[]).filter((row): row is SymbolRow => !!row && typeof row === 'object' && typeof (row as SymbolRow).symbol === 'string') : null;
+      const confirm = Array.isArray(payload.confirm) ? (payload.confirm as unknown[]).map(String).filter(Boolean) : null;
+      if (payload.type === 'cad_spec' && revised.design.recognition && !revised.design.recognition.completed) {
+        revised.design = { ...revised.design, recognition: { ...revised.design.recognition, completed: true, ...(symbols ? { symbols } : {}), ...(confirm ? { confirm } : {}) } };
+      } else if ((symbols || confirm) && revised.design.recognition) {
+        revised.design = { ...revised.design, recognition: { ...revised.design.recognition, ...(symbols ? { symbols } : {}), ...(confirm ? { confirm } : {}) } };
+      }
       const history = before ? [...this.history, before].slice(-20) : this.history;
       await this.persist(revised.design, history, before);
       this.history = history;
@@ -474,7 +498,7 @@ export class CadDesignSession {
       if (before) {
         if (reloaded) {
           this.bridge = undefined;
-          try { await this.load({ plan: before.plan, underlay: before.underlay }, true); }
+          try { await this.load({ plan: before.plan, ...underlaysOf(before) }, true); }
           catch (recoveryError) { console.error('[CAD designer] Previous design reload failed', recoveryError); }
         } else if (this.bridge) this.bridge.replacePlan(before.plan);
       }

@@ -13,6 +13,8 @@ import type { ChatMessage } from "@/ai/client";
 import { HouseDesignerFrame } from "@/workspaces/cad/designer/HouseDesignerFrame";
 import { ChatPanel as CadChatPanel } from "@/workspaces/cad/chat/ChatPanel";
 import { layoutToSpec } from "@/workspaces/cad/lib/design/layout";
+import { floorplanQuestions, recognitionSummary } from "@/workspaces/cad/lib/design/floorplan-check";
+import { checkMessage } from "@/workspaces/cad/chat/CadSteps";
 
 type Attachment = {
   id: string;
@@ -71,7 +73,7 @@ export function CadWorkspace() {
   const [chatHistory, setChatHistory] = useState<ChatMessage[]>([]);
   const [isChatCollapsed, setIsChatCollapsed] = useState(false);
   const [cadResetTick, setCadResetTick] = useState(0);
-  const [composerRequest, setComposerRequest] = useState<{ id: number; text: string; send?: boolean }>();
+  const [composerRequest, setComposerRequest] = useState<{ id: number; text: string; send?: boolean; assistant?: string }>();
   const [designSession] = useState(() => new CadDesignSession());
   useEffect(() => {
     void designSession.hydrate().catch((error) => console.error("CAD design restore failed", error));
@@ -89,15 +91,18 @@ export function CadWorkspace() {
   const uploadFloorplan = () => {
     const input = document.createElement("input");
     input.type = "file";
-    input.accept = ".png,.jpg,.jpeg,.webp,.bmp,.pdf,.dxf,.dwg";
+    input.multiple = true;
+    input.accept = ".png,.jpg,.jpeg,.webp,.bmp,.pdf,.dxf,.svg,.dwg";
     input.onchange = async () => {
-      const file = input.files?.[0];
+      // Two files: the original plan and the furnished layout plan (the designer's route-dual: walls from the first, furniture from the second).
+      const [file, layout] = Array.from(input.files ?? []);
       if (!file) return;
-      const width = window.prompt(tr("外墙外皮总宽（mm，用来定比例；不知道可留空）", "Overall outer width in mm (sets the scale; leave blank if unknown)"), "");
+      const width = window.prompt(tr("外墙外皮总宽（mm，用来定比例；CAD 图纸有尺寸标注可留空）", "Overall outer width in mm (sets the scale; leave blank for CAD drawings with dimensions)"), "");
       if (width === null) return;
       const height = window.prompt(tr("外墙外皮总深（mm，可留空）", "Overall outer depth in mm (optional)"), "");
       const form = new FormData();
       form.append("file", file);
+      if (layout) form.append("file2", layout);
       if (Number(width) > 0) form.append("totalWidth", String(Number(width)));
       if (Number(height) > 0) form.append("totalHeight", String(Number(height)));
       const id = toast.loading(tr("正在识别原始户型…", "Recognizing the floorplan…"));
@@ -111,17 +116,30 @@ export function CadWorkspace() {
             : value && typeof value === "object"
               ? Object.fromEntries(Object.entries(value).filter(([key]) => !key.startsWith("_")).map(([key, item]) => [key, strip(item)]))
               : value;
-        await designSession.loadDraft(strip(result.draft) as never, result.underlay ?? undefined);
+        const draft = strip(result.draft) as { walls?: Array<{ openings?: unknown[] }>; floors?: Array<{ walls?: Array<{ openings?: unknown[] }> }> };
+        await designSession.loadDraft(draft as never, result.underlay ?? undefined, {
+          ...(Array.isArray(result.underlays) ? { underlays: result.underlays } : {}),
+          recognition: {
+            route: String(result.route ?? ""),
+            notes: result.notes ?? [],
+            warnings: result.warnings ?? [],
+            ...(result.overlayPng ? { overlay: result.overlayPng } : {}),
+            ...(result.layoutImage ? { layoutImage: result.layoutImage } : {}),
+            ...(result.inventory ? { inventory: result.inventory } : {}),
+          },
+        });
+        const floors = Array.isArray(draft.floors) ? draft.floors : [draft];
+        const walls = floors.reduce((sum, floor) => sum + (floor.walls?.length ?? 0), 0);
+        const openings = floors.reduce((sum, floor) => sum + (floor.walls ?? []).reduce((count, wall) => count + (wall.openings?.length ?? 0), 0), 0);
         toast.success(
-          tr(`已识别 ${result.draft?.walls?.length ?? 0} 面墙，原图已作为底图。`, `Recognized ${result.draft?.walls?.length ?? 0} walls; the original is shown as underlay.`),
+          tr(`已识别 ${walls} 面墙，原图已作为底图。`, `Recognized ${walls} walls; the original is shown as underlay.`),
           { id, description: (result.warnings ?? []).slice(-2).join("；") || undefined },
         );
+        // The designer's GUIDE section 0: what to settle before reconstructing, as clickable options.
         setComposerRequest({
           id: Date.now(),
-          text: tr(
-            "这是我家的原始户型（已识别墙体和门窗）。请保留现有墙体和门窗，补上房间名称，并按我的需求摆放家具。",
-            "This is my existing floorplan (walls and openings recognized). Keep the walls and openings, name the rooms and furnish them for my needs.",
-          ),
+          text: "",
+          assistant: checkMessage(recognitionSummary(result, walls, openings, floors.length, uiLang === "zh"), floorplanQuestions(!!layout, floors.length > 1, uiLang === "zh")),
         });
       } catch (error) {
         toast.error(tr("识别失败：", "Recognition failed: ") + (error as Error).message, { id });

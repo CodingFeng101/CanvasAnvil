@@ -48,7 +48,8 @@ try {
   await json('tests/fixtures/hpd/runtime-probe.json', data.runtime);
   await writeFile('tests/fixtures/hpd/example-spec.json', specText);
   // The designer's own references go to the model with every edit (spec format) or when the request needs them.
-  for (const name of ['spec-format', 'furnishing', 'mep-rules', 'cad-conventions']) await writeFile(`resources/hpd/${name}.md`, await readFile(join(upstream, `reference/${name}.md`)));
+  // resources/hpd/*.md (the designer's references attached to prompts) come from scripts/sync-cad-skill.mjs,
+  // which copies them from the skill's scrubbed designer/reference.
   console.log(JSON.stringify({ commit, catalogKeys: Object.keys(data.catalog).length, dxfBytes: data.runtime.dxfBytes }));
 } finally {
   await browser?.close();

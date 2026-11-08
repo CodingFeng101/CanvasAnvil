@@ -5,10 +5,13 @@
  *   boards   — the two analysis boards as thumbnails (click to enlarge)
  *   confirm  — open: write changes right here, or confirm and move on
  *   generate — a separate block for generating / editing the floorplan
+ *   check    — after a floorplan upload: what was recognized and the 待确认清单 (the designer's GUIDE section 0)
+ *              as clickable options; confirming completes the draft
  *
  * Messages carry their step state in a marker line so it survives the saved chat:
  *   [[CAD_STEPS|plan|drafting|images|ready(|regen)]]  …plan markdown…  [[CAD_IMAGES]]  …image tags…
  *   [[CAD_STEPS|generate|running|done]]  …progress or result…
+ *   [[CAD_STEPS|check|ready]]  …recognition summary…  [[CAD_CHOICES]]…
  * Pressing confirm sends a user message starting with [[CAD_CONFIRM]], which the chat hides.
  * Open decisions travel after the plan body as one line, [[CAD_CHOICES]] + JSON, and show as clickable options;
  * the confirm message carries the user's picks as [[CAD_PICKS]] + JSON.
@@ -48,12 +51,28 @@ export function takePicks(text: string): { text: string; picks: Record<string, s
 export function applyPicks(plan: any, picks: Record<string, string[]>): any {
   return { ...plan, decisions: validDecisions(plan?.decisions).map((decision) => (picks[decision.topic] ? { ...decision, choice: decision.multi ? picks[decision.topic] : picks[decision.topic][0] ?? "" } : decision)) };
 }
-const HEADER = /^\[\[CAD_STEPS\|(plan|generate)\|(\w+)(\|regen)?\]\]\n?/;
+const HEADER = /^\[\[CAD_STEPS\|(plan|generate|check)\|(\w+)(\|regen)?\]\]\n?/;
 
 export type PlanState = "drafting" | "images" | "ready";
 export const planMessage = (state: PlanState, body: string, images = "", regen = false, decisions: PlanDecision[] = []) =>
   `[[CAD_STEPS|plan|${state}${regen ? "|regen" : ""}]]\n${body}${state !== "drafting" && decisions.length ? `\n${CHOICES}${JSON.stringify(decisions)}` : ""}${state === "drafting" ? "" : `\n${IMAGES}\n${images}`}`;
 export const generateMessage = (state: "running" | "done" | "error", body: string) => `[[CAD_STEPS|generate|${state}]]\n${body}`;
+/** After a floorplan upload: what was recognized, then the 待确认清单 as clickable options. */
+export const checkMessage = (body: string, decisions: PlanDecision[]) =>
+  `[[CAD_STEPS|check|ready]]\n${body}${decisions.length ? `\n${CHOICES}${JSON.stringify(decisions)}` : ""}`;
+/** The 「图上符号 → 建模」 list and the items still to confirm, as markdown (after completing a draft and at delivery). */
+export function recognitionLines(recognition: { symbols?: Array<{ symbol: string; where?: string; count?: number; model: string }>; confirm?: string[] } | undefined): string {
+  if (!recognition) return "";
+  const cell = (value: unknown) => String(value ?? "").replace(/\|/g, "/").replace(/\n/g, " ");
+  const symbols = recognition.symbols?.length
+    ? ["**图上符号 → 建模**", "", "| 图上符号 | 位置 | 数量 | 建模 |", "|---|---|---|---|", ...recognition.symbols.map((row) => `| ${cell(row.symbol)} | ${cell(row.where)} | ${cell(row.count ?? "")} | ${cell(row.model)} |`)].join("\n")
+    : "";
+  const confirm = recognition.confirm?.length ? `**待确认**\n${recognition.confirm.map((item) => `- ${item}`).join("\n")}` : "";
+  return [symbols, confirm].filter(Boolean).join("\n\n");
+}
+/** The confirm text that completes a recognized draft (the chat routes on it). */
+export const CHECK_CONFIRM_ZH = "按待确认清单补全户型";
+export const CHECK_CONFIRM_EN = "Complete the floorplan with these answers";
 
 /** Readable live summary of a floorplan JSON (cad_spec or cad_ops) while the model is still writing it. */
 export function describeSpecStream(text: string, zh: boolean): string {
@@ -144,7 +163,7 @@ export function parseCadSteps(text: string) {
     body = body.slice(0, choicesAt);
   }
   return {
-    kind: match[1] as "plan" | "generate",
+    kind: match[1] as "plan" | "generate" | "check",
     state: match[2],
     regen: !!match[3],
     decisions,
@@ -243,7 +262,10 @@ export function CadSteps({ text, followUp, canAct, onAction }: {
     setFeedback("");
     send([value ? tr(`修改方案：${value}`, `Revise the plan: ${value}`) : tr("修改方案：按我选的更新待定事项", "Revise the plan with my choices"), changed ? tr(`已定事项：${picksLine}`, `Decisions: ${picksLine}`) : ""].filter(Boolean).join("\n"));
   };
-  const confirmText = parsed.regen
+  const checking = parsed.kind === "check";
+  const confirmText = checking
+    ? tr(CHECK_CONFIRM_ZH, CHECK_CONFIRM_EN)
+    : parsed.regen
     ? tr("按新方案重新生成户型", "Regenerate the floorplan from the new plan")
     : tr("确认方案，根据当前方案生成户型", "Confirm plan: generate the floorplan from the current plan");
   const picksPayload = decisions.length ? `\n${PICKS}${JSON.stringify(Object.fromEntries(decisions.map((decision, index) => [decision.topic, pickOf(index)])))}` : "";
@@ -253,13 +275,15 @@ export function CadSteps({ text, followUp, canAct, onAction }: {
   const confirmBlock = asking ? (
     <div className="mt-3 space-y-2 border-t pt-3">
       <p className="text-sm text-muted-foreground">
-        {parsed.regen
+        {checking
+          ? tr("开工前先确认这几项（已按常规预选，点一下就能改）。还有要说明的写在下面，然后点确认，AI 会读原图补全房间、门窗、家具和水电。", "Confirm these first (common choices are preselected; click to change). Add any notes below, then confirm: the model reads the drawing and completes rooms, openings, furniture and MEP.")
+          : parsed.regen
           ? tr("方案已按你的意见更新。还有要改的直接写在下面；没问题就重新生成户型（会替换当前户型）。", "The plan is updated. Write any further changes below, or regenerate the floorplan (replaces the current one).")
           : tr("方案有没有要改的？有就直接写在下面；没有就点确认，进入下一步生成户型。", "Anything to change in the plan? Write it below, or confirm to generate the floorplan.")}
       </p>
       {decisions.length > 0 && (
         <div className="space-y-2.5 rounded-lg bg-muted/40 p-2.5" data-testid="cad-plan-decisions">
-          <p className="text-xs font-medium text-foreground/85">{tr("待定事项：已按推荐预选，点一下就能改", "Open decisions: the recommendation is preselected; click to change")}</p>
+          <p className="text-xs font-medium text-foreground/85">{checking ? tr("待确认清单", "To confirm") : tr("待定事项：已按推荐预选，点一下就能改", "Open decisions: the recommendation is preselected; click to change")}</p>
           {decisions.map((decision, index) => (
             <div key={`${decision.topic}-${index}`}>
               {/* A small heading where a new group starts (布局 / 硬装 / 设备 / 电器 / 智能). */}
@@ -290,14 +314,14 @@ export function CadSteps({ text, followUp, canAct, onAction }: {
       <textarea value={feedback} disabled={!canAct} rows={2}
         onChange={event => setFeedback(event.target.value)}
         onKeyDown={event => { if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); submitFeedback(); } }}
-        placeholder={tr("例如：主卧再大一点，厨房改成开放式", "e.g. a bigger main bedroom, an open kitchen")}
+        placeholder={checking ? tr("例如：层高 2750，次卧那个圆圈是地漏，三口之家要书房", "e.g. ceiling 2750, the circle in the second bedroom is a floor drain, we need a study") : tr("例如：主卧再大一点，厨房改成开放式", "e.g. a bigger main bedroom, an open kitchen")}
         className="w-full resize-none rounded-lg border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring/30 disabled:opacity-60" />
       <div className="flex flex-wrap gap-2">
-        <button type="button" disabled={!canAct || (!feedback.trim() && !changed)} onClick={submitFeedback}
-          className="rounded-md border px-3 py-1.5 text-xs hover:bg-muted disabled:opacity-50">{tr("提交意见", "Send changes")}</button>
-        <button type="button" disabled={!canAct} onClick={() => send(`${CAD_CONFIRM}${confirmText}${picksPayload}`)}
+        {!checking && <button type="button" disabled={!canAct || (!feedback.trim() && !changed)} onClick={submitFeedback}
+          className="rounded-md border px-3 py-1.5 text-xs hover:bg-muted disabled:opacity-50">{tr("提交意见", "Send changes")}</button>}
+        <button type="button" disabled={!canAct} onClick={() => send(`${CAD_CONFIRM}${confirmText}${checking && feedback.trim() ? `${tr("：", ": ")}${feedback.trim()}` : ""}${picksPayload}`)}
           className="rounded-md bg-primary px-3 py-1.5 text-xs text-primary-foreground hover:bg-primary/90 disabled:opacity-50">
-          {parsed.regen ? tr("按新方案重新生成户型", "Regenerate floorplan") : tr("确认方案，生成户型", "Confirm and generate")}
+          {checking ? tr("确认，补全户型", "Confirm and complete") : parsed.regen ? tr("按新方案重新生成户型", "Regenerate floorplan") : tr("确认方案，生成户型", "Confirm and generate")}
         </button>
       </div>
     </div>
@@ -310,7 +334,7 @@ export function CadSteps({ text, followUp, canAct, onAction }: {
           folded to one line once confirmed or revised (the key remounts it). */}
       <Step key={drafting ? "plan-drafting" : asking ? "plan-asking" : "plan-done"} icon={!drafting && followUp === "confirmed" ? <Check className="h-3.5 w-3.5" /> : <ClipboardList className="h-3.5 w-3.5" />}
         state={drafting ? "running" : "done"} last={!hasBoards} defaultOpen={drafting || asking}
-        title={drafting ? <Shimmer duration={1}>{tr("设计方案", "Design plan")}</Shimmer> : tr(parsed.regen ? "设计方案（已更新）" : "设计方案", "Design plan")}
+        title={checking ? tr("识别结果与待确认清单", "Recognized plan and questions") : drafting ? <Shimmer duration={1}>{tr("设计方案", "Design plan")}</Shimmer> : tr(parsed.regen ? "设计方案（已更新）" : "设计方案", "Design plan")}
         meta={drafting ? tr("正在输出…", "Writing…") : [status, summary].filter(Boolean).join(" · ")}>
         <Markdown>{parsed.body}</Markdown>
         {confirmBlock}

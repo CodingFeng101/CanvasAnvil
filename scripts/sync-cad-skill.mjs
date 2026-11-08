@@ -14,6 +14,8 @@
  *   scripts/lib/cad-core.mjs                  ← layout program, autofix and validation (Node, ESM)
  *   scripts/lib/designer-kit.js               ← auto-nudge, wiring preferences, edit operations, the plan summary, spec export and spec patches
  *                                               (injected into the designer page)
+ *   ../../services/floorplan-recognizer/vendor/hpd_scripts ← designer/scripts/*.py + LICENSE (the app's recognizer, route A)
+ *   ../../resources/hpd/*.md                   ← designer/reference: spec format, furnishing, MEP rules, CAD conventions, routes (app prompts)
  *
  * Run from the repository root after changing any of those sources:
  *
@@ -135,3 +137,20 @@ await bundle(
   `export { nudgeFurniture } from "./auto-nudge"; export { applyElecPrefs, elecPrefsFromDecisions } from "./elec-prefs"; export { applyOps } from "./plan-ops"; export { summarizePlan } from "./plan-summary"; export { planToSpec, carryOver } from "./plan-to-spec"; export { applySpecPatch, patchTouches } from "./spec-patch"; export { validateSpec } from "./spec-validate";`,
   { format: "iife", globalName: "CadKit", platform: "browser", target: "es2020" },
 );
+
+// The app's floorplan recognizer runs the same recognition scripts as route A: every Python script of
+// designer/scripts (the copy above, already scrubbed) and the designer's LICENSE (MIT).
+const RECOGNIZER = path.join(ROOT, "services", "floorplan-recognizer", "vendor", "hpd_scripts");
+fs.rmSync(RECOGNIZER, { recursive: true, force: true });
+fs.mkdirSync(RECOGNIZER, { recursive: true });
+const scriptsDir = path.join(SKILL, "designer", "scripts");
+const pythonScripts = fs.readdirSync(scriptsDir).filter((file) => file.endsWith(".py"));
+for (const file of pythonScripts) fs.copyFileSync(path.join(scriptsDir, file), path.join(RECOGNIZER, file));
+fs.copyFileSync(path.join(SKILL, "designer", "LICENSE"), path.join(RECOGNIZER, "LICENSE"));
+console.log(`✓ services/floorplan-recognizer/vendor/hpd_scripts (${pythonScripts.length} scripts)`);
+
+// The app attaches the designer's references to its prompts (spec format, furnishing, MEP rules, CAD conventions,
+// the recognition routes); taken from the scrubbed copy above, so the upstream name never reaches resources/.
+const REFERENCES = ["spec-format", "furnishing", "mep-rules", "cad-conventions", "route-image", "route-cad", "route-building", "route-dxf-layout", "route-dual", "route-villa", "route-office"];
+for (const name of REFERENCES) fs.copyFileSync(path.join(SKILL, "designer", "reference", `${name}.md`), path.join(ROOT, "resources", "hpd", `${name}.md`));
+console.log(`✓ resources/hpd (${REFERENCES.length} designer references)`);

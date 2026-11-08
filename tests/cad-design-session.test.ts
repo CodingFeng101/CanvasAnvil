@@ -191,3 +191,22 @@ test('restoring an incompatible stored plan falls back to the previous version',
   assert.equal(restored.getSnapshot().design!.revision, record.design.revision + 1);
   assert.deepEqual(recoveries, [false, true]);
 });
+
+test('completing a recognized draft keeps the original underlay and records the symbol list once', async () => {
+  const { session } = setup();
+  const underlay = { src: 'data:image/png;base64,AA==', imgW: 10, imgH: 10, mmPerPx: 10, x: 0, y: 0 };
+  await session.loadDraft(validSpec() as never, underlay, { recognition: { route: 'image', notes: ['比例来源：总宽'] } });
+  assert.equal(session.getSnapshot().design!.lastSource, 'recognize');
+  await session.noteRecognition({ answers: { 层高: ['2900'] } });
+  await session.applyModelOutput({
+    type: 'cad_spec', replace: true, spec: validSpec(),
+    symbols: [{ symbol: '双人床', where: '主卧', count: 1, model: 'bed18' }, { nope: true }],
+    confirm: ['层高按 2900'],
+  }, undefined, { allowReplace: true });
+  const design = session.getSnapshot().design!;
+  assert.deepEqual(design.underlay, underlay);
+  assert.equal(design.recognition!.completed, true);
+  assert.deepEqual(design.recognition!.answers, { 层高: ['2900'] });
+  assert.deepEqual(design.recognition!.symbols, [{ symbol: '双人床', where: '主卧', count: 1, model: 'bed18' }]);
+  assert.deepEqual(design.recognition!.confirm, ['层高按 2900']);
+});

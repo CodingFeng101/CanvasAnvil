@@ -48,3 +48,16 @@ test('CAD repair prompt specifies the supported operation envelope and operation
   assert.ok(prompt.includes('{"type":"cad_ops","ops":['));
   for (const op of ['add_furniture','move_furniture','resize_furniture','replace_furniture','remove','add_opening','update_opening','add_wall','move_node','update_wall','set_room','set_plan']) assert.ok(prompt.includes(`"op":"${op}"`), op);
 });
+
+test("the floorplan check message carries the GUIDE's questions as clickable decisions", async () => {
+  const { checkMessage, parseCadSteps, recognitionLines } = await import("../client/workspaces/cad/chat/CadSteps");
+  const { floorplanQuestions, recognitionSummary } = await import("../client/workspaces/cad/lib/design/floorplan-check");
+  const questions = floorplanQuestions(true, true);
+  assert.ok(questions.some((item) => item.topic === "两张图以谁为准") && questions.some((item) => item.topic === "楼板厚"));
+  assert.equal(floorplanQuestions(false, false).length, questions.length - 2);
+  const parsed = parseCadSteps(checkMessage(recognitionSummary({ route: "cad", notes: ["比例来源：DXF 单位"] }, 20, 9, 1), questions));
+  assert.equal(parsed?.kind, "check");
+  assert.equal(parsed?.decisions.length, questions.length);
+  assert.match(parsed!.body, /CAD 矢量图纸.*\n[\s\S]*墙 20 面，门窗洞口 9 个/);
+  assert.match(recognitionLines({ symbols: [{ symbol: "烟道", where: "厨房", count: 1, model: "flue" }], confirm: ["层高估算"] }), /\| 烟道 \| 厨房 \| 1 \| flue \|[\s\S]*- 层高估算/);
+});
