@@ -155,6 +155,18 @@ export class CadDesignSession {
     const design = this.snapshot.design;
     return design ? summarizePlan(design.plan, this.bridge?.roomAreas() ?? [], this.snapshot.issues) : '';
   }
+  /** The current design as the designer's preset (plan and underlays), with what is still open for the delivery check. */
+  async deliveryPreset(): Promise<{ preset: DesignerPreset; errors: string[]; warnings: string[]; audit: string[] } | null> {
+    const design = await this.sync();
+    if (!design) return null;
+    const { issues, audit } = this.snapshot;
+    return {
+      preset: { plan: design.plan, ...underlaysOf(design) },
+      errors: issues.filter(issue => issue.level === 'error').map(issue => issue.msg),
+      warnings: issues.filter(issue => issue.level === 'warn').map(issue => issue.msg),
+      audit: audit?.problems ?? [],
+    };
+  }
   /** The current design as a HouseSpec (spec-format.md): what cad_spec_patch paths point into. */
   spec(): string {
     const design = this.snapshot.design;

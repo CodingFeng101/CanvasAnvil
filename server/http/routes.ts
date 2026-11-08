@@ -1,5 +1,6 @@
 import { GET as getConfig } from "../routes/config";
 import { POST as postCadRecognize } from "../routes/cad-recognize";
+import { GET_SHOT as getCadQaShot, POST as postCadQa } from "../routes/cad-qa";
 import { POST as postChat } from "../routes/chat";
 import {
   GET as getEditableExportFile,
@@ -29,6 +30,8 @@ export const API_ROUTES: Record<string, RouteHandler> = {
   "POST /api/ppt-ai": postPptAi,
   "POST /api/ppt-ai/stream": postPptAiStream,
   "POST /api/cad/recognize": postCadRecognize,
+  "POST /api/cad/qa": postCadQa,
+  "GET /api/cad/qa/shot": getCadQaShot,
   "POST /api/editable-export": postEditableExport,
   "GET /api/editable-export/file": getEditableExportFile,
   "GET /api/editable-export/artifact": getEditableExportArtifact,

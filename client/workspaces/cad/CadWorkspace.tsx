@@ -14,7 +14,8 @@ import { HouseDesignerFrame } from "@/workspaces/cad/designer/HouseDesignerFrame
 import { ChatPanel as CadChatPanel } from "@/workspaces/cad/chat/ChatPanel";
 import { layoutToSpec } from "@/workspaces/cad/lib/design/layout";
 import { floorplanQuestions, recognitionSummary } from "@/workspaces/cad/lib/design/floorplan-check";
-import { checkMessage } from "@/workspaces/cad/chat/CadSteps";
+import { checkMessage, recognitionLines } from "@/workspaces/cad/chat/CadSteps";
+import { deliveryMessage, type QaStatus } from "@/workspaces/cad/lib/design/delivery-check";
 
 type Attachment = {
   id: string;
@@ -81,12 +82,58 @@ export function CadWorkspace() {
   const chatPanelRef = useRef<PanelImperativeHandle | null>(null);
 
   const [canRecognize, setCanRecognize] = useState(false);
+  const [canQa, setCanQa] = useState(false);
+  const [qaRunning, setQaRunning] = useState(false);
   useEffect(() => {
     fetch("/api/config")
       .then((response) => response.json())
-      .then((config) => setCanRecognize(!!config?.cadRecognizer))
+      .then((config) => {
+        setCanRecognize(!!config?.cadRecognizer);
+        setCanQa(!!config?.cadQa);
+      })
       .catch(() => {});
   }, []);
+
+  /**
+   * The delivery check: the server runs the designer's acceptance (qa.mjs --lite --quick, qa_files.py) on the
+   * current design; the result, with the design's open warnings, MEP audit, symbol list and items to confirm,
+   * goes into the chat.
+   */
+  const deliveryCheck = async () => {
+    const zh = uiLang === "zh";
+    const toastId = "cad-qa";
+    setQaRunning(true);
+    try {
+      const current = await designSession.deliveryPreset();
+      if (!current) throw new Error(tr("请先生成户型", "Generate a design first"));
+      const post = async (body: unknown) => {
+        const response = await fetch("/api/cad/qa", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok && !(response.status === 409 && data?.jobId)) throw new Error(String(data?.error || response.statusText));
+        return data;
+      };
+      const started = await post({ action: "start", preset: current.preset });
+      const jobId = String(started.jobId);
+      toast.loading(tr("交付检查中：设计器逐项操作（几分钟）…", "Delivery check: operating the designer (a few minutes)…"), { id: toastId });
+      // A check already running (409) is joined: its job is polled like a new one.
+      let status: QaStatus = { ...started, jobId, state: started.state ?? "running" };
+      while (status.state === "running") {
+        await new Promise((resolve) => setTimeout(resolve, 5000));
+        status = await post({ action: "status", jobId });
+        if (status.state === "running") toast.loading(tr(`交付检查中… ${status.seconds ?? 0} 秒`, `Delivery check… ${status.seconds ?? 0}s`), { id: toastId });
+      }
+      // Replacing the loading toast (rather than dismissing it) closes it reliably, the page hidden or not.
+      if (status.state === "done") toast.success(tr("交付检查完成，结果在对话里", "Delivery check finished; the result is in the chat"), { id: toastId });
+      else toast.error(tr("交付检查没跑完", "The delivery check did not finish"), { id: toastId });
+      const recognition = recognitionLines(designSession.getSnapshot().design?.recognition);
+      setComposerRequest({ id: Date.now(), text: "", assistant: deliveryMessage(status, { ...current, recognition }, zh) });
+      if (isChatCollapsed) toggleCollapse();
+    } catch (reason) {
+      toast.error(String((reason as Error)?.message ?? reason), { id: toastId });
+    } finally {
+      setQaRunning(false);
+    }
+  };
 
   const uploadFloorplan = () => {
     const input = document.createElement("input");
@@ -223,6 +270,9 @@ export function CadWorkspace() {
             }}
             canRecognize={canRecognize}
             onUpload={uploadFloorplan}
+            canQa={canQa}
+            qaRunning={qaRunning}
+            onQa={() => void deliveryCheck()}
           />
         </div>
       </ResizablePanel>

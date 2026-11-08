@@ -47,6 +47,7 @@
     "pdf-lib": "^1.17.1",
     "pptxgenjs": "^4.0.1",
     "prism-react-renderer": "^2.4.1",
+    "puppeteer-core": "^23.11.1",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-drawio": "^1.0.7",

@@ -1,3 +1,5 @@
+import { cadQaAvailable } from "./cad-qa"
+
 export async function GET() {
     return Response.json({
         accessCodeRequired: !!process.env.ACCESS_CODE_LIST,
@@ -9,6 +11,8 @@ export async function GET() {
         defaultModel: process.env.AI_MODEL || "gpt-4o",
         defaultBaseUrl: process.env.AI_BASE_URL || "",
         cadRecognizer: !!process.env.RECOGNIZER_URL,
+        // The delivery check (交付检查) runs the designer's qa in a headless Chrome / Edge on this server.
+        cadQa: await cadQaAvailable(),
     })
 }
 

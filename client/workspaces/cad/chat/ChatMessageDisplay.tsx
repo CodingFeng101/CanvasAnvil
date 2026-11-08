@@ -664,6 +664,8 @@ export function ChatMessageDisplay({
                                                                     if (!u) return "";
                                                                     if (u.startsWith("http://") || u.startsWith("https://")) return u;
                                                                     if (u.startsWith("data:image")) return u;
+                                                                    // The delivery check's step screenshots, served by this app.
+                                                                    if (u.startsWith("/api/cad/qa/shot?")) return u;
                                                                     return "";
                                                                 }}
                                                                 components={{

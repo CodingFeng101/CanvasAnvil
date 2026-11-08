@@ -8,9 +8,9 @@ import type { DesignIssue } from '../lib/design/types';
 
 type DesignerWindow = Window & { __designer?: DesignerApi; __CA_HPD_ERRORS__?: string[]; __CA_HPD_PRESET__?: object };
 type LoadRequest = { id: number; preset: DesignerPreset; resolve(bridge: DesignerBridge): void; reject(reason: unknown): void };
-type Props = { session: CadDesignSession; onFocus(): void; onFixIssue(issue: DesignIssue): void; canRecognize?: boolean; onUpload?(): void; hasPlan?: boolean };
+type Props = { session: CadDesignSession; onFocus(): void; onFixIssue(issue: DesignIssue): void; canRecognize?: boolean; onUpload?(): void; hasPlan?: boolean; canQa?: boolean; qaRunning?: boolean; onQa?(): void };
 
-export function HouseDesignerFrame({ session, onFocus, onFixIssue, canRecognize = false, onUpload, hasPlan = false }: Props) {
+export function HouseDesignerFrame({ session, onFocus, onFixIssue, canRecognize = false, onUpload, hasPlan = false, canQa = false, qaRunning = false, onQa }: Props) {
   const language = useUiLanguage();
   const tr = (zh: string, en: string) => language === 'zh' ? zh : en;
   const snapshot = useSyncExternalStore(session.subscribe, session.getSnapshot);
@@ -149,6 +149,7 @@ export function HouseDesignerFrame({ session, onFocus, onFixIssue, canRecognize 
       <button className="rounded border px-2 py-1" disabled={!snapshot.ready || snapshot.busy} onClick={() => run(() => session.recheck())}>{tr('重新检查', 'Recheck')}</button>
       <button className="rounded bg-primary px-2 py-1 text-primary-foreground disabled:opacity-50" title={errors > 0 ? tr('请先解决全部错误', 'Resolve all errors first') : ''} disabled={!snapshot.ready || snapshot.busy || errors > 0} onClick={() => run(() => session.confirm())}>{snapshot.design?.status === 'confirmed' ? tr('户型已确认', 'Design confirmed') : tr('确认户型', 'Confirm design')}</button>
       {snapshot.design?.status === 'confirmed' && deliveries.map(([text, label]) => <button key={label} className="rounded border px-2 py-1" disabled={!snapshot.ready || snapshot.busy} onClick={() => engineAction(label)}>{text}</button>)}
+      {canQa && snapshot.design && <button className="rounded border px-2 py-1 disabled:opacity-50" title={tr('设计器逐项操作验收 + 导出文件检查（几分钟）', 'Operate every button, panel and export, then open the exported files (a few minutes)')} disabled={!snapshot.ready || snapshot.busy || qaRunning} onClick={onQa}>{qaRunning ? tr('交付检查中…', 'Checking delivery…') : tr('交付检查', 'Delivery check')}</button>}
       {runtimeError && <span role="status" className="flex items-center gap-2 text-destructive" title={runtimeError}>{tr('设计器运行出错', 'Designer runtime error')}<button aria-label={tr('关闭错误提示', 'Dismiss error')} onClick={() => setRuntimeError('')}>×</button></span>}
     </div>
     {showIssues && <div className="max-h-48 overflow-auto border-b p-3 text-xs">{snapshot.issues.map((issue, index) => <div key={`${issue.code}-${index}`} className="flex items-center justify-between gap-3 py-1"><span>{issue.level} · {issue.msg}</span><button className="shrink-0 rounded border px-2 py-1" onClick={() => onFixIssue(issue)}>{tr('发给 AI 修复', 'Ask AI to fix')}</button></div>)}</div>}
