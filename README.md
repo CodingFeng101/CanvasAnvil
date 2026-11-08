@@ -49,7 +49,7 @@ Turn structured prompts into clear diagrams for research, systems, delivery plan
 
 ## 🏠 Interior Design Canvas
 
-Move from concept framing to drawable outputs by combining planning boards, 2D layouts, render briefs, and material-list delivery in one workflow.
+Describe the home you want, settle the plan with clickable decisions, and get an editable floorplan in a full house designer (2D, 3D, furniture, MEP, ceilings), checked and audited, with the quote, drawing set, DXF, colour plan and renders exported from it. You can also start from your own floorplan.
 
 ### Showcase
 
@@ -154,7 +154,7 @@ CanvasAnvil includes dedicated local skills for each canvas so workflows stay op
 - `diagram-skill` · Diagram generation and packaging
   Outputs clean diagram assets and skips standalone HTML preview by default.
 - `cad-skill` · Interior-delivery workflow
-  Exports drawing bundles and a CSV material list for downstream delivery.
+  From a floor plan or a brief (decisions settled with clickable options), builds an offline designer page, checks and MEP-audits it, and exports the quote, drawing PDF, DXF, colour plan and render. Runs on its own in any project.
 - `ppt-skill` · Full presentation production
   Enforces outline review before generation and supports editable PPT, PDF, and image-based PPT output.
 
@@ -215,6 +215,47 @@ npm run build
 - Deployment guide: [deploy/README.md](deploy/README.md)
 
 ## 🗓️ Recent updates
+
+### 2026-11-08
+
+**✨ New**
+
+- **The Interior Design canvas is rebuilt around an editable house designer**
+  - The canvas now holds a full interactive house designer: 2D plan, 3D bird's-eye view and walk-through, furniture, MEP, ceilings, floor finishes, demolition layers, quote and drawing set, in the site's own theme. Every floorplan the AI makes opens there, and you can drag, edit and keep designing by hand.
+  - **Plan first**: describe what you need and the AI writes a design plan (rooms, areas, orientation, zoning, entry). It streams readably in the chat as a chain of steps, and the floorplan is drawn only after you confirm the plan.
+  - **Decisions as clickable options**: the plan lists everything there is to decide, grouped as layout / finishes / equipment / appliances / smart home / wiring: kitchen type and counter shape, floors per room, wall colours, skirting, ceilings, doors and windows, air conditioning, fresh air, heating, hot water, smart toilet, smart lighting and curtains, socket count, network points, where the panel and network box go, bedside USB, floor sockets. Each comes with a recommendation already picked; click to change any of them and confirm at the bottom of the plan, with nothing to type again.
+  - **The model describes, the program draws**: the AI only writes the layout (a grid, rooms, doors, windows, furniture by intent, finishes) and a program computes walls, openings and furniture positions. Furniture that does not fit is shrunk or swapped for a smaller model, and every adjustment is listed.
+  - **Finished for you**: furniture pushed slightly into walls or curtains is moved clear, MEP points are laid out in one go, then your wiring choices are applied (more sockets, network points, boxes by the entry door, floor sockets under the dining or coffee table, bedside USB).
+  - **Room-by-room MEP audit**: lights, switches, sockets, which switch controls which light, mounting heights, switches on the handle side of doors, double control in bedrooms, the hood socket and gas alarm in the kitchen, splash-proof sockets in bathrooms, both boxes present. Problems are listed in the chat and in a collapsible list under it.
+  - **Start from your own floorplan**: upload a photo, screenshot, PDF or DXF; walls and openings are recognized, the original is kept as an underlay, and the AI names the rooms and furnishes them.
+  - **Change it by chat**: "make the master bedroom bigger", "add a window to the balcony". The AI reads the recent conversation and says what it changed, or why it changed nothing.
+  - **Version history**: the history button under the chat shows every floorplan version as a thumbnail (AI, manual edit, recognized); restore any of them, and the restore can be undone the same way.
+  - **Delivery from the designer itself**: quote, A3 drawing-set PDF, DXF (layout, MEP, demolition), colour plan and 3D renders.
+
+- **`cad-skill` follows the same flow and runs on its own**
+  - Copy the folder into any project. From an existing floor plan it builds the designer page; from a brief it settles the plan and decisions with you first (with the host's option picker when it has one), then lays out and draws the floorplan.
+  - It then finishes the design without help: furniture nudged clear, MEP laid out, wiring choices applied, checks and the MEP audit run, and the quote CSV, drawing-set PDF, DXF, colour plan and 3D render exported.
+  - It hands over `<name>-装修设计器.html`: the whole designer as one offline file with your design inside, opened in your browser. Double-click it to open again; edits made there are kept in that browser.
+  - Before delivery it runs a full-feature acceptance pass over the page.
+  - It uses the Chrome or Edge already on your machine, so no browser is downloaded: run `npm run setup` once in the skill folder. No API key or image model is needed.
+
+**⚡ Improved**
+
+- The floorplan is generated as a stream; output the model cut off midway is continued instead of failing, slipped JSON brackets are repaired, a failed step retries from where it stopped, and failures are shown in that step.
+- Streamed AI calls log the time to the first token and the total time.
+
+**🐛 Fixed**
+
+- Switching away from the designer no longer crashes the workspace.
+- A design survives a runtime error in the designer.
+- Renaming a room replaces its label instead of stacking a second one on top.
+
+**📌 Notes**
+
+- Removed: the analysis boards, the AI material list, AI-drawn renders and the old SVG drawing flow. Every drawing now comes from the designer.
+- Floorplan upload needs the recognizer service (`services/floorplan-recognizer`) and `RECOGNIZER_URL`; without it the upload button stays hidden.
+- The MEP audit reports problems but does not move points; adjust them under MEP in the designer.
+- In `cad-skill`, starting from an existing floor plan needs Python with `numpy pillow opencv-python pymupdf ezdxf pypdf`; designing from a brief needs only Node 18+.
 
 ### 2026-11-06
 

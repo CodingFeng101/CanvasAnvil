@@ -197,6 +197,61 @@ export async function streamChatMessage(
   return content;
 }
 
+/**
+ * Real streaming through `/api/ppt-ai/stream`. `onText` receives the whole text so far.
+ * Returns the text and why the model stopped: "length" means it ran out of output tokens.
+ */
+export async function streamChatText(
+  messages: ChatMessage[],
+  onText: (text: string) => void,
+  model?: string,
+  options?: GenerateChatMessageOptions,
+): Promise<{ text: string; finish: string; error?: string }> {
+  return await withCancellation(options, async (signal) => {
+    const { config, channel } = requireTextChannel();
+    const response = await fetch("/api/ppt-ai/stream", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ kind: "chat", aiConfig: config, messages: applyUiLanguagePolicy(messages), model: model || channel.model }),
+      signal,
+    });
+    if (!response.ok || !response.body) {
+      const detail = await response.text().catch(() => "");
+      let message = detail;
+      try { message = JSON.parse(detail)?.error || detail; } catch { /* plain text */ }
+      throw new Error(message || `Stream request failed with status ${response.status}`);
+    }
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    let text = "";
+    let finish = "";
+    while (true) {
+      let chunk: ReadableStreamReadResult<Uint8Array>;
+      try { chunk = await reader.read(); }
+      catch (error) {
+        if (isAbort(error) || signal?.aborted) throw error;
+        return { text, finish: "interrupted", error: error instanceof Error ? error.message : String(error) };
+      }
+      const { value, done } = chunk;
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split("\n");
+      buffer = lines.pop() ?? "";
+      for (const line of lines) {
+        if (!line.trim()) continue;
+        const event = JSON.parse(line) as { delta?: string; finish?: string; error?: string };
+        // The upstream connection dropped mid-answer ("terminated", reset sockets): hand back what
+        // arrived so the caller can resume instead of losing it.
+        if (event.error) return { text, finish: "interrupted", error: event.error };
+        if (event.delta) { text += event.delta; onText(text); }
+        if (event.finish) finish = event.finish;
+      }
+    }
+    return { text, finish: finish || "stop" };
+  });
+}
+
 export async function generateImage(request: ImageGenerationRequest, signal?: AbortSignal) {
   return await limitModelCall(async () => {
     const config = getAIConfig();

@@ -23,6 +23,8 @@ const distDir = process.env.WEB_DIST_DIR
 const indexHtmlPath = path.join(distDir, "index.html");
 
 const app = express();
+// Floorplan uploads are forwarded as-is to the recognizer.
+app.use("/api/cad/recognize", express.raw({ type: "multipart/form-data", limit: BODY_LIMIT }));
 app.use(express.json({ limit: BODY_LIMIT }));
 
 /**

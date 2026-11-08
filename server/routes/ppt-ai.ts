@@ -1,5 +1,5 @@
 import { generateImage } from "../ai/image"
-import { generateText } from "../ai/text"
+import { generateText, streamText } from "../ai/text"
 import { IMAGE_QUALITIES, IMAGE_SIZES, getImageChannel, getTextChannel, normalizeAIConfig } from "../../contracts/ai"
 import type { AIConfig, ImageQuality, ImageSize, MultimodalMessage } from "../../contracts/ai"
 
@@ -82,4 +82,61 @@ export async function POST(req: Request) {
             { status: 500, headers: jsonHeaders },
         )
     }
+}
+
+/**
+ * Streaming text for the CAD workspace: newline-delimited JSON, one event per line —
+ * {"delta": "..."} as the model writes, then {"finish": "stop" | "length"}, or {"error": "..."}.
+ */
+export async function POST_STREAM(req: Request) {
+    let body: RequestBody
+    try {
+        body = (await req.json()) as RequestBody
+    } catch {
+        return badRequest("Invalid JSON body.")
+    }
+    if (body?.kind !== "chat") return badRequest("Only chat requests stream.")
+    const config = normalizeAIConfig(body.aiConfig)
+    const messages = Array.isArray(body.messages) ? body.messages : []
+    const channel = { ...getTextChannel(config), model: String(body.model || config.textModel || "").trim() }
+    if (!channel.apiKey || !channel.model || messages.length === 0) {
+        return badRequest("Missing text model, API key, or messages.")
+    }
+    const encoder = new TextEncoder()
+    const abort = new AbortController()
+    const stream = new ReadableStream<Uint8Array>({
+        async start(controller) {
+            const send = (event: object) => controller.enqueue(encoder.encode(JSON.stringify(event) + "\n"))
+            const started = Date.now()
+            let chars = 0
+            let firstAt = 0
+            let finish = ""
+            const inputChars = JSON.stringify(messages).length
+            try {
+                for await (const event of streamText({ channel, messages, signal: abort.signal })) {
+                    if (event.delta && !firstAt) firstAt = Date.now()
+                    chars += event.delta?.length ?? 0
+                    if (event.finish) finish = event.finish
+                    send(event)
+                }
+                const seconds = (at: number) => ((at - started) / 1000).toFixed(1)
+                console.log(`[ai] stream ${channel.model} ${finish}: input ${inputChars} chars, first token ${firstAt ? seconds(firstAt) : "-"}s, total ${seconds(Date.now())}s, ${chars} chars out`)
+            } catch (error) {
+                const message = error instanceof Error ? error.message : String(error)
+                const rawCause = (error as { cause?: { message?: string } } | null)?.cause
+                const cause = rawCause ? ` (${rawCause.message ?? String(rawCause)})` : ""
+                // "terminated" = the provider or a proxy closed the connection mid-answer.
+                console.error(`[ai] stream ${channel.model} interrupted after ${Math.round((Date.now() - started) / 1000)}s, ${chars} chars: ${message}${cause}`)
+                send({ error: message })
+            } finally {
+                controller.close()
+            }
+        },
+        cancel() {
+            abort.abort()
+        },
+    })
+    return new Response(stream, {
+        headers: { "Content-Type": "application/x-ndjson; charset=utf-8", "Cache-Control": "no-cache", "X-Accel-Buffering": "no" },
+    })
 }

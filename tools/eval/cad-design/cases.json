@@ -1,0 +1,135 @@
+{
+  "version": 1,
+  "about": "P3 验收用的 10 个户型需求。每条从空白 CAD 会话开始，按 prompt 走 ②方案 → ③户型 → ④自动修复；再依次执行 edits。判定规则见 docs/plans/cad-house-designer-integration.md 附录 A。",
+  "rules": {
+    "maxFixRounds": 3,
+    "areaTolerance": 0.15,
+    "bedroomNeedsAnyOf": ["bed18", "bed15", "bed12", "bed20", "kingBed", "kidsBed", "bunkBed", "tatami", "dayBed", "roundBed"],
+    "bathroomNeedsAnyOf": ["toilet", "wallToilet", "smartToilet", "squatToilet"],
+    "kitchenNeedsAnyOf": ["counter", "lCounter", "uCounter", "cabBase", "integratedStove"],
+    "minDoorPassage": 700
+  },
+  "cases": [
+    {
+      "id": "c01-studio",
+      "prompt": "35 平米的单身公寓，一个开间加独立卫生间，要有开放式厨房、一张 1.5 米的床、一个小餐桌和一张书桌。层高 2.8 米。",
+      "expect": {
+        "totalArea": 35,
+        "rooms": [["卫生间", "卫浴", "卫"], ["厨房", "开间", "起居", "客厅"]],
+        "mustHaveKeysAnyOf": [["bed15"], ["desk", "standingDesk", "officeDesk"], ["diningTable", "diningTable4", "roundTable", "barTable"]]
+      },
+      "edits": [
+        { "say": "床换成 1.8 米的", "expectOnlyChanged": "furniture:bed*", "expectKeys": ["bed18"] }
+      ]
+    },
+    {
+      "id": "c02-1b1l",
+      "prompt": "一室一厅一卫，50 平米左右，年轻夫妻住。客厅要三人沙发和电视柜，卧室要双人床和衣柜，卫生间干湿分离。",
+      "expect": {
+        "totalArea": 50,
+        "rooms": [["客厅", "起居"], ["卧室", "主卧"], ["卫生间", "卫浴", "卫"], ["厨房"]],
+        "mustHaveKeysAnyOf": [["sofa", "lSofa", "fourSofa", "modularSofa"], ["tvCabinet", "cabTV"], ["wardrobe", "wardrobe2", "wardrobe3", "cabWardrobe", "cabSlide"], ["showerScreen", "shower", "showerSet"]]
+      },
+      "edits": [
+        { "say": "卧室的衣柜改成 1.5 米宽", "expectOnlyChanged": "furniture:wardrobe*|cab*", "expectSize": { "w": 1500 } }
+      ]
+    },
+    {
+      "id": "c03-2b1l-80",
+      "prompt": "两室一厅一卫 80 平米，三口之家，孩子 6 岁。主卧要 1.8 米床，儿童房要单人床、书桌和玩具柜。客餐厅一体。",
+      "expect": {
+        "totalArea": 80,
+        "rooms": [["主卧"], ["儿童房", "次卧"], ["客厅", "客餐厅"], ["厨房"], ["卫生间", "卫"]],
+        "mustHaveKeysAnyOf": [["bed18", "kingBed"], ["bed12", "kidsBed", "bunkBed"], ["desk", "kidsDesk"], ["toyCabinet", "bookshelf", "bookshelfLow"]]
+      },
+      "edits": [
+        { "say": "主卧床换成 1.8 米的（已经是就换成 2 米）", "expectOnlyChanged": "furniture:bed*" },
+        { "manualBefore": "把客厅沙发往东拖 300mm", "say": "儿童房的书桌靠窗放", "expectPreserved": "furniture:sofa*" }
+      ]
+    },
+    {
+      "id": "c04-3b2l-110",
+      "prompt": "三室两厅两卫 110 平米。主卧带独立卫生间和衣帽区，次卧给老人住，第三间做书房兼客房。南向大客厅，厨房要 L 形橱柜和双门冰箱。",
+      "expect": {
+        "totalArea": 110,
+        "rooms": [["主卧"], ["次卧", "老人房"], ["书房"], ["客厅"], ["餐厅"], ["厨房"], ["主卫"], ["卫生间", "公卫", "次卫"]],
+        "mustHaveKeysAnyOf": [["lCounter"], ["fridgeDouble", "fridgeFrench"], ["dayBed", "bed12", "sofa"]],
+        "minBathrooms": 2
+      },
+      "edits": [
+        { "say": "书房里加一个 1.2 米的书架", "expectAddedKeys": ["bookshelf"] }
+      ]
+    },
+    {
+      "id": "c05-elderly",
+      "prompt": "60 平米一室一厅给独居老人住：通道宽、卫生间要淋浴不要浴缸、马桶旁边留扶手空间，卧室床两侧都能下床，家具尽量少。",
+      "expect": {
+        "totalArea": 60,
+        "rooms": [["卧室"], ["客厅"], ["厨房"], ["卫生间", "卫"]],
+        "mustNotHaveKeys": ["bathtub", "freeTub"],
+        "mustHaveKeysAnyOf": [["shower", "showerSet", "showerScreen"]],
+        "minDoorPassage": 900
+      },
+      "edits": []
+    },
+    {
+      "id": "c06-home-office",
+      "prompt": "两室一厅 75 平米，夫妻都在家办公，需要一间能放两张工位的书房，另一间是卧室。客厅小一点没关系。",
+      "expect": {
+        "totalArea": 75,
+        "rooms": [["书房", "工作室"], ["卧室", "主卧"], ["客厅"], ["厨房"], ["卫生间", "卫"]],
+        "mustHaveKeysAnyOf": [["desk", "officeDesk", "standingDesk", "deskBench2", "lDesk"], ["officeChair", "gamingChair"]],
+        "minCountOfKeys": { "keys": ["desk", "officeDesk", "standingDesk", "lDesk"], "min": 2, "orKeys": ["deskBench2"] }
+      },
+      "edits": [
+        { "say": "把书房和卧室的隔墙往卧室方向挪 300mm", "expectOnlyChanged": "walls|nodes|openings" }
+      ]
+    },
+    {
+      "id": "c07-narrow",
+      "prompt": "老房子，进深很长开间很窄：总开间 4.2 米，总进深 13 米，一室一厅一厨一卫。从入户门到卧室要能走通。",
+      "expect": {
+        "outline": { "w": 4200, "d": 13000, "tolerance": 300 },
+        "rooms": [["卧室"], ["客厅"], ["厨房"], ["卫生间", "卫"]],
+        "mustHaveKeysAnyOf": [["bed15", "bed12", "bed18"]]
+      },
+      "edits": []
+    },
+    {
+      "id": "c08-pets",
+      "prompt": "两室一厅 70 平米，养两只猫一只狗。客厅要有猫爬架，阳台放宠物窝和洗衣机烘干机，卫生间放猫砂盆的位置（用小柜子代替）。",
+      "expect": {
+        "totalArea": 70,
+        "rooms": [["阳台"], ["客厅"], ["主卧", "卧室"], ["次卧"], ["卫生间", "卫"], ["厨房"]],
+        "mustHaveKeysAnyOf": [["catTree"], ["petBed", "dogHouse"], ["washer", "washerTower"], ["dryer", "washerTower"]]
+      },
+      "edits": [
+        { "say": "把猫爬架挪到窗边", "expectOnlyChanged": "furniture:catTree" }
+      ]
+    },
+    {
+      "id": "c09-kitchen-dense",
+      "prompt": "90 平米三室一厅一卫，喜欢做饭：厨房要 U 形橱柜、洗碗机、嵌入式烤箱，餐厅要 6 人餐桌。其余两间卧室一间书房。",
+      "expect": {
+        "totalArea": 90,
+        "rooms": [["厨房"], ["餐厅"], ["客厅"], ["主卧"], ["次卧"], ["书房"], ["卫生间", "卫"]],
+        "mustHaveKeysAnyOf": [["uCounter"], ["dishwasher"], ["tallOven"], ["diningTable6", "longTable"]]
+      },
+      "edits": [
+        { "say": "餐桌换成圆桌", "expectKeys": ["roundTable"] }
+      ]
+    },
+    {
+      "id": "c10-mep",
+      "prompt": "两室一厅一卫 65 平米，标准装修，需要自动排好强弱电和给排水点位，卫生间和厨房要有地漏和下水口。",
+      "expect": {
+        "totalArea": 65,
+        "rooms": [["客厅"], ["主卧"], ["次卧"], ["厨房"], ["卫生间", "卫"]],
+        "specMustHave": ["autoElec"],
+        "structsAnyOf": [["drain"], ["sewer"]],
+        "mepIssuesErrorMax": 0
+      },
+      "edits": []
+    }
+  ]
+}

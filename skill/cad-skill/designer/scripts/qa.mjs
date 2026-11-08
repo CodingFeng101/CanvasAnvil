@@ -1,0 +1,902 @@
+// 交付前全功能验收：真显卡打开生成的设计器，把每个按钮、工具、图层、面板、弹窗、导出都实际操作一遍，
+// 检查：页面报错、界面上出现 NaN / undefined、操作后状态有没有真的变、导出的文件能不能打开（另由 qa_files.py 校验）。
+// 用法：node scripts/qa.mjs <设计器.html> <输出目录> [--quick] [--lite] [--only 组或关键词,...] [--retry 上次的report.json]
+//   --quick  跳过 PDF 和光线追踪
+//   --lite   电脑性能一般时用：窗口 1280×800、3D 用快速画质、每项超时放宽一倍（结果判定不变）
+//   --only   只跑某几组：2d（编辑 / 家具库 / 管线 / 导出）、3d（鸟瞰 / 风格 / 出图 / 楼层）、walk（漫游）、smart（中控）、screen（各种屏幕尺寸 / 手机）；
+//            也可以写步骤名里的关键词，如 --only 管线,漫游
+//   --retry  只重跑上次报告里失败项所在的组（失败项常是连锁的，整组重跑最稳）
+//   --soft   强制按“无显卡慢速模式”跑（默认自动检测：WebGL 是 SwiftShader / llvmpipe 时自动进入）
+//            慢速模式：每项超时放宽 4 倍；3D / 漫游 / 中控 / 日照这类纯渲染步骤超时记“⚠ 未验证”（截图人工看），不算失败
+//   验收进程默认以“低于正常”优先级运行，电脑可以照常用；不要和视频渲染、别的验收同时跑，抢显卡会大面积超时
+// 输出：<输出目录>/report.md（每项 通过 / 失败 + 原因）、shots/*.png（每一步截图，人工过一遍）、downloads/（导出的文件）
+import { launch, gpuInfo, setDownloadDir } from './browser.mjs';
+import fs from 'fs';
+import path from 'path';
+import { pathToFileURL } from 'url';
+import os from 'os';
+
+const [, , FILE, OUTARG, ...flags] = process.argv;
+if (!FILE || !OUTARG) { console.log('用法：node qa.mjs <设计器.html> <输出目录> [--quick]'); process.exit(1); }
+const QUICK = flags.includes('--quick'), LITE = flags.includes('--lite');
+const argOf = k => { const i = flags.indexOf(k); return i >= 0 ? flags[i + 1] : null; };
+let ONLY = argOf('--only') ? argOf('--only').split(/[,，]/).map(x => x.trim()).filter(Boolean) : null;
+if (argOf('--retry')) {
+  const old = JSON.parse(fs.readFileSync(argOf('--retry'), 'utf8')).results.filter(r => !r.ok);
+  ONLY = [...new Set(old.map(r => r.group || r.name))];
+  console.log('重跑上次失败的组：' + (ONLY.join('、') || '（上次没有失败项）'));
+  if (!ONLY.length) process.exit(0);
+}
+// 低优先级：Windows 上 Chrome 子进程会继承“低于正常”，验收时电脑不卡
+try { os.setPriority(0, os.constants.priority.PRIORITY_BELOW_NORMAL); } catch { }
+const VW = LITE ? { width: 1280, height: 800 } : { width: 1600, height: 960 };
+let TMUL = LITE ? 2 : 1;
+const OUT = path.resolve(OUTARG), SHOTS = path.join(OUT, 'shots'), DL = path.join(OUT, 'downloads');
+fs.rmSync(OUT, { recursive: true, force: true }); for (const d of [SHOTS, DL]) fs.mkdirSync(d, { recursive: true });
+const b = await launch({ gpu: true, headless: 'new', viewport: VW, protocolTimeout: 900000 });
+const page = await b.newPage();
+const errs = [];
+page.on('pageerror', e => errs.push('pageerror: ' + e.message));
+page.on('console', m => { if (m.type() === 'error' && !/favicon|ERR_FILE_NOT_FOUND.*\.ico/.test(m.text())) errs.push('console: ' + m.text()); });
+page.on('dialog', d => d.dismiss());
+await setDownloadDir(b, page, DL);
+// 没有显卡（云端容器、远程桌面、虚拟机）：软件渲染 3D 慢 10 倍以上，进慢速模式，纯渲染步骤超时不算失败
+const GPU = await gpuInfo(page);
+const SOFT = flags.includes('--soft') || GPU.software;
+if (SOFT) { TMUL *= 4; console.log(`没有检测到显卡（${GPU.renderer}）：慢速模式，超时放宽 4 倍，3D / 漫游 / 中控 / 日照步骤超时记“未验证”`); }
+else console.log('显卡：' + GPU.renderer);
+// 第一次打开前清掉本地保存的方案（同一会话里之后刷新不再清，用来测“保存 → 刷新还在”）
+await page.evaluateOnNewDocument(() => { try { if (sessionStorage.getItem('qa-init')) return; sessionStorage.setItem('qa-init', '1'); for (const k of Object.keys(localStorage)) if (k.startsWith('house-designer') || k.startsWith('hd-')) localStorage.removeItem(k); } catch { } });
+await page.goto(pathToFileURL(path.resolve(FILE)).href + '?debug', { waitUntil: 'load' });
+await page.waitForFunction(() => window.__designer, { timeout: 60000 });
+
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+const ev = (fn, ...a) => page.evaluate(fn, ...a);
+const results = [];
+let shotN = 0;
+/** DOM 里能看到的文字有没有 NaN / undefined / [object Object] / Infinity */
+const domBad = () => ev(() => {
+  const bad = [], seen = new Set();
+  const w = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+  for (let n = w.nextNode(); n; n = w.nextNode()) {
+    const t = n.textContent; if (!t || !/NaN|undefined|Infinity|\[object |null ?(m|㎡|mm|元|个|盏)/.test(t)) continue;
+    const el = n.parentElement; if (!el || el.closest('script,style,template')) continue;
+    const r = el.getBoundingClientRect(), cs = getComputedStyle(el);
+    if (!r.width || !r.height || cs.visibility === 'hidden' || cs.display === 'none' || +cs.opacity === 0) continue;
+    const s = t.trim().slice(0, 80); if (!seen.has(s)) { seen.add(s); bad.push(s); }
+  }
+  for (const i of document.querySelectorAll('input')) if (/NaN|undefined/.test(i.value) && i.offsetParent) bad.push('input=' + i.value);
+  return bad;
+});
+let GROUP = '2d';
+const wanted = name => !ONLY || ONLY.includes(GROUP) || ONLY.some(k => name.includes(k));
+/** 进入下一组；这组要在 3D 里跑、而前面的 3D 组被 --only 跳过时，先切到 3D */
+async function group(g, need3d) {
+  GROUP = g;
+  if (need3d && (!ONLY || ONLY.includes(g)) && await ev(() => __designer.app.view !== '3d')) { await ev(async () => { await __designer.setView('3d'); }); await sleep(3500); }
+  if (LITE && need3d) await ev(() => document.querySelector('#lookQ [data-q="fast"]')?.click());
+}
+async function step(name, fn, { shot = true, timeout = 120000 } = {}) {
+  if (!wanted(name)) return true;
+  timeout *= TMUL;
+  const e0 = errs.length, t0 = Date.now(); let ok = true, msg = '';
+  try {
+    const r = await Promise.race([fn(), sleep(timeout).then(() => { throw new Error('超时'); })]);
+    if (typeof r === 'string') msg = r;
+  } catch (e) { ok = false; msg = String(e && e.message || e).slice(0, 300); }
+  await sleep(150);
+  const ne = errs.slice(e0);
+  if (ne.length) { ok = false; msg += (msg ? '；' : '') + '页面报错：' + ne.slice(0, 3).join(' | ').slice(0, 400); }
+  let bad = []; try { bad = await domBad(); } catch { }
+  if (bad.length) { ok = false; msg += (msg ? '；' : '') + '界面异常文字：' + bad.slice(0, 4).join(' / '); }
+  let file = '';
+  if (shot) { file = `${String(++shotN).padStart(3, '0')}_${name.replace(/[\\/:*?"<>| ]+/g, '_').slice(0, 40)}.png`; try { await page.screenshot({ path: path.join(SHOTS, file) }); } catch { } }
+  // 慢速模式：渲染类分组只因超时失败（没有页面报错、没有异常文字）= 软件渲染太慢，不是设计器坏了 → 记“未验证”，交给人工看截图
+  let unverified = false;
+  if (!ok && SOFT && ['3d', 'walk', 'smart'].includes(GROUP) && /超时|Timeout|timed out/i.test(msg) && !ne.length && !bad.length) { ok = true; unverified = true; msg = '未验证（无显卡，渲染超时，看截图）：' + msg; }
+  results.push({ name, group: GROUP, ok, unverified, msg, ms: Date.now() - t0, shot: file });
+  console.log(`${unverified ? 'SKIP' : ok ? 'PASS' : 'FAIL'}  ${name}${msg ? '  —  ' + msg : ''}`);
+  return ok;
+}
+const must = (c, m) => { if (!c) throw new Error(m); };
+/** 等页面里某个条件成立（慢电脑上别死等固定秒数）：最多 ms 毫秒（--lite 再放宽一倍） */
+async function until(fn, ms = 20000, ...a) { const t0 = Date.now(); while (Date.now() - t0 < ms * TMUL) { if (await ev(fn, ...a)) return true; await sleep(250); } return false; }
+const dlCount = () => fs.readdirSync(DL).filter(f => !f.endsWith('.crdownload') && !f.endsWith('.tmp')).length;
+async function expectDownload(trigger, { wait = 30000, n = 1 } = {}) {
+  const snap = () => Object.fromEntries(fs.readdirSync(DL).map(f => [f, fs.statSync(path.join(DL, f)).mtimeMs]));
+  const before = snap(); await trigger();
+  const t0 = Date.now();
+  while (Date.now() - t0 < wait) {
+    const now = Object.entries(snap()).filter(([f, m]) => !/\.(crdownload|tmp)$/.test(f) && before[f] !== m).map(([f]) => f);
+    if (now.length >= n) { await sleep(500); return now; }
+    await sleep(250);
+  }
+  throw new Error('没有下载到文件');
+}
+const toastText = () => ev(() => document.querySelector('#toast')?.textContent || '');
+const click = sel => ev(s => { const e = document.querySelector(s); if (!e) throw new Error('找不到 ' + s); e.click(); }, sel);
+const clickText = (scope, text) => ev((s, t) => { const e = [...document.querySelectorAll(s)].find(x => x.textContent.trim().includes(t)); if (!e) throw new Error(`找不到“${t}”`); e.click(); }, scope, text);
+const modalOk = () => ev(() => { const m = document.querySelector('.modal [data-ok]'); if (m) m.click(); return !!m; });
+const closeModals = () => ev(() => document.querySelectorAll('.modal').forEach(m => m.remove()));
+const st = () => ev(() => { const a = __designer.app, p = a.plan; return { walls: p.walls.length, open: p.openings.length, furn: p.furniture.length, elec: p.elec.length, meas: p.measures.length, com: (p.comments || []).length, rooms: a.rooms.regions.length, tool: a.tool, layer: a.layer, view: a.view, sel: a.sel.kind, phase: p.phase }; });
+/** 平面 mm → 页面像素 */
+const px = (x, y) => ev((x, y) => { const v = __designer.view, r = document.querySelector('#c2d').getBoundingClientRect(); return [r.x + x * v.s + v.ox, r.y + y * v.s + v.oy]; }, x, y);
+/** 把视图拉近到 (x, y)（大平面缩到全图时墙、门、管线只有几个像素，用户也是放大了再点） */
+async function focusMM(x, y, s = .1) { await ev((x, y, s) => { const D = __designer, v = D.view; v.s = s; v.ox = v.W / 2 - x * v.s; v.oy = v.H / 2 - y * v.s; D.emit('view'); D.requestDraw(); }, x, y, s); await sleep(250); }
+async function clickMM(x, y, opt = {}) { const [X, Y] = await px(x, y); await page.mouse.click(X, Y, opt); await sleep(120); }
+const multi = await ev(() => !!(__designer.bld && __designer.bld.floors && __designer.bld.floors.length > 1));
+const info = await ev(() => ({ name: __designer.app.plan.name, floors: __designer.bld?.floors?.length || 1 }));
+console.log('==', info.name, multi ? `${info.floors} 层` : '单层');
+// 多层：2D 默认各层平铺，点选测试统一切到“单层”显示（平铺另有专门的测试）
+if (multi) { await ev(() => { const b = document.querySelector('#floorDock [data-v2="one"]'); b && b.click(); __designer.fit2D(); }); await sleep(600); }
+
+/* ============================== 2D ============================== */
+await step('打开：无报错、平面已画出', async () => {
+  await sleep(1500); const s = await st(); must(s.walls > 0, '没有墙'); must(s.rooms > 0, '没有房间');
+  const area = await ev(() => document.querySelector('#stArea').textContent); must(/㎡/.test(area), '状态栏面积缺失');
+  const r = await ev(() => __designer.runChecks()); const errsN = r.issues.filter(i => i.level === 'error');
+  return `墙 ${s.walls} · 门窗 ${s.open} · 家具 ${s.furn} · 点位 ${s.elec}；检查：${r.issues.length} 条提示（其中错误 ${errsN.length}）`;
+});
+for (const [k, n] of [['layout', '布置'], ['mep', '水电'], ['ceiling', '顶面'], ['floor', '铺装'], ['demolition', '拆改']])
+  await step(`图层：${n}`, async () => { await click(`#layerSeg [data-layer="${k}"]`); await sleep(400); must((await st()).layer === k, '图层没切过去'); });
+await click('#layerSeg [data-layer="layout"]');
+await step('缩放：放大 / 缩小 / 适应窗口', async () => {
+  const s0 = await ev(() => __designer.view.s); await click('#zoomIn'); const s1 = await ev(() => __designer.view.s); await click('#zoomOut'); await click('#fitBtn');
+  must(s1 > s0, '放大没生效'); const z = await ev(() => document.querySelector('#stZoom').textContent); must(/\d+%/.test(z), '缩放比例显示异常');
+});
+for (const t of ['plan', 'mep', 'furn']) await step(`左侧面板：${{ plan: '户型', mep: '水电', furn: '家具' }[t]}`, async () => {
+  await click(`#leftPanel .tabs [data-tab="${t}"]`); await sleep(400);
+  const n = await ev(() => document.querySelector('#leftPanel').innerText.length); must(n > 30, '面板是空的');
+});
+// 家具库：每一类点一个加进方案
+await step('家具库：点击添加 / 撤销 / 重做', async () => {
+  await click('#leftPanel .tabs [data-tab="furn"]'); await sleep(300);
+  const n0 = (await st()).furn;
+  const items = await ev(() => [...document.querySelectorAll('#leftPanel .cat > *')].length); must(items > 20, `家具库只有 ${items} 项`);
+  await ev(() => document.querySelector('#leftPanel .cat > *').click()); await sleep(400);
+  must((await st()).furn === n0 + 1, '添加家具没生效'); must((await st()).sel === 'furn', '新家具没被选中');
+  const insp = await ev(() => document.querySelector('#inspector').innerText); must(insp.length > 20, '属性面板是空的');
+  await click('#undoBtn'); await sleep(300); must((await st()).furn === n0, '撤销没生效');
+  await click('#redoBtn'); await sleep(300); must((await st()).furn === n0 + 1, '重做没生效');
+  await click('#undoBtn'); await sleep(300);
+  return `家具库 ${items} 项`;
+});
+await step('家具库：全部家具类型 2D + 3D 都能画出来', async () => {
+  const r = await ev(async () => {
+    const D = __designer, p = D.app.plan, n0 = p.furniture.length; window.__qaSnap = JSON.stringify(D.app.plan);
+    const cats = [...document.querySelectorAll('#leftPanel .lib-cats [data-lc]')].map(b => b.dataset.lc);
+    for (const c of cats) {
+      document.querySelector(`#leftPanel .lib-cats [data-lc="${c}"]`).click(); await new Promise(r => setTimeout(r, 120));
+      for (const it of [...document.querySelectorAll('#leftPanel .cat > *')]) it.click();
+    }
+    await new Promise(r => setTimeout(r, 300));
+    return { n0, added: p.furniture.length - n0, types: [...new Set(p.furniture.slice(n0).map(f => f.type))].length };
+  });
+  must(r.added > 20, '没加进去');
+  await ev(async () => { await __designer.setView('split'); }); await sleep(3500);
+  const bad = await ev(() => { const S = __designer.S3, fm = S.sceneRefs().furnMap, out = []; const T = S.sceneRefs().camera.position.constructor; for (const f of __designer.app.plan.furniture) { const e = fm.get(f.id); if (!e) { out.push(f.type + ':无模型'); continue; } let n = 0; e.g.traverse(o => { if (o.isMesh) n++; }); if (!n) out.push(f.type + ':空'); } return out; });
+  await sleep(500);
+  // 撤销历史有上限（200 步），加了 250 件家具撤不回去：直接还原到加家具之前的方案
+  await ev(() => { __designer.replacePlan(JSON.parse(window.__qaSnap)); }); await sleep(1500);
+  must((await st()).furn === r.n0, '还原方案后家具数不对');
+  await ev(async () => { await __designer.setView('2d'); }); await sleep(1500);
+  must(!bad.length, '3D 没画出来：' + bad.slice(0, 8).join('、'));
+  return `${r.added} 件 / ${r.types} 种`;
+}, { timeout: 420000 });
+
+// 家具库：分类 / 搜索 / 风格
+await step('家具库：一级二级分类、搜索、风格款', async () => {
+  await click('#leftPanel .tabs [data-tab="furn"]'); await sleep(300);
+  const cats = await ev(() => document.querySelectorAll('#leftPanel .lib-cats [data-lc]').length); must(cats >= 15, `一级分类只有 ${cats} 个`);
+  await ev(() => { const i = document.querySelector('#libQ'); i.value = '床'; i.dispatchEvent(new Event('input', { bubbles: true })); }); await sleep(400);
+  const hits = await ev(() => document.querySelectorAll('#leftPanel .cat > *').length); must(hits >= 5, `搜“床”只有 ${hits} 个结果`);
+  await ev(() => { const i = document.querySelector('#libQ'); i.value = ''; i.dispatchEvent(new Event('input', { bubbles: true })); }); await sleep(300);
+  await ev(() => { const s = document.querySelector('#libStyle'); s.value = 'chinese'; s.dispatchEvent(new Event('change', { bubbles: true })); }); await sleep(300);
+  const n0 = (await st()).furn;
+  await ev(() => { document.querySelector('#leftPanel [data-lc="客厅"]').click(); }); await sleep(200);
+  await ev(() => document.querySelector('#leftPanel .cat > *').click()); await sleep(500);
+  const f = await ev(() => __designer.app.plan.furniture.at(-1)); must((await st()).furn === n0 + 1, '没加进来');
+  must(f.opt?.style === 'chinese', `新放的家具没用所选风格（${f.opt?.style}）`);
+  const ins = await ev(() => !!document.querySelector('#fStyle')); must(ins, '属性面板没有风格款式');
+  await ev(() => { const s = document.querySelector('#fStyle'); s.value = 'cream'; s.dispatchEvent(new Event('change', { bubbles: true })); }); await sleep(400);
+  must((await ev(() => __designer.app.plan.furniture.at(-1).opt?.style)) === 'cream', '单件换风格没生效');
+  await click('#undoBtn'); await sleep(200); await click('#undoBtn'); await sleep(300);
+  await ev(() => { const s = document.querySelector('#libStyle'); s.value = ''; s.dispatchEvent(new Event('change', { bubbles: true })); }); await sleep(200);
+  return `${cats} 个一级分类，搜“床” ${hits} 件`;
+});
+// 家具库布局：家具网格占满左栏剩下的高度（筛选区不能挤掉列表）；左栏拖宽后列数变多；大图浏览窗口能挑家具
+await step('家具库：列表高度、拖宽左栏、大图浏览', async () => {
+  await click('#leftPanel .tabs [data-tab="furn"]'); await sleep(300);
+  const m = await ev(() => { const p = document.querySelector('#leftPanel'), l = p.querySelector('.lib-list'), t = p.querySelector('.lib-top'); return { P: p.clientHeight, L: l.clientHeight, T: t.offsetHeight, cols: getComputedStyle(l.querySelector('.cat')).gridTemplateColumns.split(' ').length, W: p.offsetWidth }; });
+  must(m.L >= m.P * .5, `家具列表只有 ${m.L}px 高（左栏 ${m.P}px，筛选区 ${m.T}px）`);
+  const g = await page.$('.lw-grip'); must(g, '左栏没有拖宽手柄'); const bb = await g.boundingBox();
+  await page.mouse.move(bb.x + 2, bb.y + 200); await page.mouse.down(); await page.mouse.move(bb.x + 182, bb.y + 200, { steps: 6 }); await page.mouse.up(); await sleep(400);
+  const m2 = await ev(() => { const p = document.querySelector('#leftPanel'), l = p.querySelector('.lib-list'); return { W: p.offsetWidth, cols: getComputedStyle(l.querySelector('.cat')).gridTemplateColumns.split(' ').length }; });
+  must(m2.W > m.W + 120 && m2.cols > m.cols, `拖宽左栏没生效：宽 ${m.W}→${m2.W}，列数 ${m.cols}→${m2.cols}`);
+  await page.mouse.click(bb.x + 182 + 2, bb.y + 200, { clickCount: 2 }); await sleep(300);
+  await ev(() => { const p = document.querySelector('#leftPanel'); p.style.width = ''; try { localStorage.removeItem('hd-leftw'); } catch { } window.dispatchEvent(new Event('resize')); }); await sleep(300);
+  await click('#libExpand'); await sleep(500);
+  const w = await ev(() => ({ open: !!document.querySelector('.lib-modal'), rail: document.querySelectorAll('.lib-modal .lib-rail [data-lc]').length, items: document.querySelectorAll('.lib-modal .cat .item').length }));
+  must(w.open && w.rail >= 15 && w.items > 0, `大图浏览窗口不对：${JSON.stringify(w)}`);
+  await page.screenshot({ path: path.join(SHOTS, `${String(++shotN).padStart(3, '0')}_家具库大图浏览.png`) });
+  const n0 = (await st()).furn; await ev(() => document.querySelector('.lib-modal .cat .item').click()); await sleep(500);
+  must((await st()).furn === n0 + 1 && !(await ev(() => !!document.querySelector('.lib-modal'))), '大图浏览里点家具没放进方案 / 窗口没关');
+  await click('#undoBtn'); await sleep(300);
+  return `列表 ${m.L}/${m.P}px，${m.cols}→${m2.cols} 列，大图 ${w.rail} 类`;
+});
+// 选墙 → 属性 → 改厚度 → 撤销
+// 选一段非承重墙上没有门窗的实墙部分（点中点）
+const wall = await ev(() => { for (const g of __designer.app.geo.active) { if (g.w.bearing) continue; const q = (g.solids || []).find(q => q.s1 - q.s0 > 900); if (q) { const s = (q.s0 + q.s1) / 2; return { id: g.w.id, x: g.a.x + g.u.x * s, y: g.a.y + g.u.y * s, t: g.w.t }; } } const g = __designer.app.geo.active[0]; return { id: g.w.id, x: g.a.x + g.u.x * g.len / 2, y: g.a.y + g.u.y * g.len / 2, t: g.w.t }; });
+await step('选择墙：属性面板 / 改墙厚 / 撤销', async () => {
+  await ev(() => __designer.fit2D()); await sleep(300);
+  await click('#layerSeg [data-layer="layout"]'); await ev(() => __designer.setTool('select'));
+  await focusMM(wall.x, wall.y); await clickMM(wall.x, wall.y); must((await st()).sel === 'wall', '没选中墙');
+  const ins = await ev(() => document.querySelector('#inspector').innerText); must(/墙/.test(ins), '属性面板没显示墙');
+  const ok = await ev(() => { const i = [...document.querySelectorAll('#inspector input[type=number], #inspector select')].find(x => /厚/.test(x.closest('label')?.textContent || '')); if (!i) return false; i.value = i.tagName === 'SELECT' ? i.options[0].value : String(+i.value + 20); i.dispatchEvent(new Event('input', { bubbles: true })); i.dispatchEvent(new Event('change', { bubbles: true })); return true; });
+  must(ok, '找不到墙厚输入'); await sleep(300);
+  const t1 = await ev(id => __designer.app.plan.walls.find(w => w.id === id).t, wall.id); must(t1 !== wall.t, '墙厚没改');
+  await click('#undoBtn'); await sleep(300);
+  const t2 = await ev(id => __designer.app.plan.walls.find(w => w.id === id).t, wall.id); must(t2 === wall.t, '撤销后墙厚没恢复');
+});
+await step('立面图（墙）', async () => {
+  await focusMM(wall.x, wall.y); await clickMM(wall.x, wall.y); await sleep(200);
+  const has = await ev(() => !!document.querySelector('#wElev')); if (!has) return '这面墙没有立面按钮';
+  await click('#wElev'); await sleep(800); const m = await ev(() => !!document.querySelector('.modal canvas')); must(m, '立面图没打开');
+});
+await closeModals();
+// 画墙 / 画房间：在户型外面空白处
+const bb = await ev(() => { const b = __designer.app.geo.bounds; return b; });
+const ox = bb.x1 + 1500, oy = bb.y + 500;
+await step('画墙（两段）+ Esc 结束 + 撤销', async () => {
+  const s0 = await st(); await click('#toolSeg [data-tool="wall"]'); must((await st()).tool === 'wall', '工具没切换');
+  await ev(() => __designer.fit2D()); const [X, Y] = await px(ox, oy); const r = await ev(() => { const q = document.querySelector('#c2d').getBoundingClientRect(); return { x: q.x, y: q.y, right: q.right, bottom: q.bottom }; });
+  const x0 = Math.min(X, r.right - 200), y0 = Math.min(Math.max(Y, r.y + 100), r.bottom - 200);
+  await page.mouse.click(x0, y0); await page.mouse.click(x0 + 120, y0); await page.mouse.click(x0 + 120, y0 + 100); await page.keyboard.press('Escape'); await sleep(300);
+  const s1 = await st(); must(s1.walls >= s0.walls + 2, `墙没画出来（${s0.walls} → ${s1.walls}）`);
+  await click('#undoBtn'); await click('#undoBtn'); await sleep(300); await ev(() => __designer.setTool('select'));
+  const s2 = await st(); must(s2.walls === s0.walls, `撤销后墙数不对（${s2.walls}）`);
+});
+await step('画房间 + 撤销', async () => {
+  const s0 = await st(); await click('#toolSeg [data-tool="rect"]');
+  const r = await ev(() => { const q = document.querySelector('#c2d').getBoundingClientRect(); return { x: q.x, y: q.y, right: q.right, bottom: q.bottom }; });
+  const x0 = r.right - 220, y0 = r.y + 140; await page.mouse.click(x0, y0); await page.mouse.click(x0 + 140, y0 + 110); await sleep(400);
+  const s1 = await st(); must(s1.walls >= s0.walls + 4, `房间没画出来（${s0.walls} → ${s1.walls}）`);
+  await click('#undoBtn'); await sleep(300); await ev(() => __designer.setTool('select'));
+  must((await st()).walls === s0.walls, '撤销没恢复');
+});
+await step('门窗工具：在墙上放一扇门 + 撤销', async () => {
+  const s0 = await st(); await click('#toolSeg [data-tool="opening"]'); await sleep(300);
+  await ev(() => { const b = document.querySelector('#leftPanel [data-op="door"]'); b && b.click(); });
+  // 找一段够长、没有门窗的墙段
+  const g = await ev(() => { const A = __designer.app; for (const g of A.geo.active) { if (g.len < 2400) continue; const free = g.solids?.find(q => q.s1 - q.s0 > 1300); if (free) { const s = (free.s0 + free.s1) / 2; return { x: g.a.x + g.u.x * s, y: g.a.y + g.u.y * s }; } } return null; });
+  must(g, '找不到能放门的墙'); await clickMM(g.x, g.y); await sleep(300);
+  const s1 = await st(); must(s1.open === s0.open + 1, `门没放上（${s0.open} → ${s1.open}）`);
+  await click('#undoBtn'); await sleep(200); await ev(() => __designer.setTool('select'));
+});
+const room = await ev(() => { const r = __designer.app.rooms.regions.filter(r => r.labels.length && r.area > 6).sort((a, b) => b.area - a.area)[0]; return { x: r.interior.x, y: r.interior.y, name: r.labels[0].name }; });
+// 自由模型：画轮廓 → 拉伸体 → 改高度 / 材质 → 拖顶点 → 撤销
+await step('自由模型：画轮廓生成拉伸体 / 改参数 / 改轮廓', async () => {
+  await ev(() => __designer.fit2D()); await sleep(300);
+  const n0 = (await st()).furn; await ev(() => { window.__qaSnap3 = JSON.stringify(__designer.app.plan); });
+  await ev(() => __designer.startSolid('freeExtrude', { h: 300, z: 0, mat: 'paint', color: '#eeeae3' })); await sleep(300); must((await st()).tool === 'free', '画轮廓工具没切换');
+  await focusMM(room.x, room.y, .1);
+  await clickMM(room.x - 600, room.y - 400); await clickMM(room.x + 600, room.y - 400); await clickMM(room.x + 600, room.y + 400); await clickMM(room.x - 600, room.y + 500, { shift: true });
+  await page.keyboard.press('Enter'); await sleep(500);
+  const f = await ev(() => __designer.app.plan.furniture.at(-1)); must((await st()).furn === n0 + 1 && f.type === 'free' && f.opt?.shape === 'extrude', '没生成拉伸体');
+  must(String(f.opt.outline).split('|').length >= 4, '轮廓点不对');
+  const ok = await ev(() => { const s = document.querySelector('#frMat'); if (!s) return false; s.value = 'wood'; s.dispatchEvent(new Event('change', { bubbles: true })); return true; }); must(ok, '属性面板没有自由模型参数'); await sleep(300);
+  must((await ev(() => __designer.app.plan.furniture.at(-1).opt.mat)) === 'wood', '改材质没生效');
+  await ev(() => { const i = document.querySelector('#frRx'); i.value = '10'; i.dispatchEvent(new Event('change', { bubbles: true })); }); await sleep(300);
+  await ev(() => { document.querySelector('#frAn').value = '3'; document.querySelector('#frArr').click(); }); await sleep(400);
+  must((await st()).furn === n0 + 3, '阵列复制没生效');
+  await click('#undoBtn'); await sleep(400); must((await st()).furn === n0 + 1, '撤销阵列没生效');
+  await ev(() => { __designer.replacePlan(JSON.parse(window.__qaSnap3)); }); await sleep(1000);
+  must((await st()).furn === n0, '还原后家具数不对');
+  await ev(() => __designer.setTool('select'));
+});
+// 自由造型工作台：真鼠标画矩形 → 推拉 → 挖洞部件 → 完成放进方案 → 再进工作台编辑
+await step('自由造型工作台：草图推拉 / 挖洞 / 完成 / 再编辑', async () => { try {
+  await ev(() => { window.__qaSnap4 = JSON.stringify(__designer.app.plan); });
+  const n0 = (await st()).furn;
+  await click('#toolSeg [data-tool="free"]'); must(await until(() => !!document.querySelector('.fm-wrap canvas') && !!window.__fm), '工作台没打开');
+  await sleep(600);
+  // 地面上 (−400, −300) 和 (400, 300)mm 两个角投到屏幕上点（矩形按世界坐标轴对齐，屏幕上是斜的）
+  const P = await ev(() => { const c = __fm.camera, cv = __fm.renderer.domElement, b = cv.getBoundingClientRect(); c.updateMatrixWorld();
+    const sc = (x, y, z) => { const v = new c.position.constructor(x, y, z).project(c); return { x: b.left + (v.x + 1) / 2 * b.width, y: b.top + (1 - v.y) / 2 * b.height }; };
+    return [sc(-.4, 0, -.3), sc(.4, 0, .3), sc(.4, .35, .3)]; });
+  await ev(() => __fm.setTool('rect'));
+  await page.mouse.move(P[0].x, P[0].y); await page.mouse.click(P[0].x, P[0].y); await sleep(150);
+  await page.mouse.move(P[1].x, P[1].y, { steps: 4 }); await page.mouse.click(P[1].x, P[1].y); await sleep(200);
+  await page.mouse.move(P[2].x, P[2].y, { steps: 6 }); await sleep(200); await page.mouse.click(P[2].x, P[2].y); await sleep(300);
+  const p1 = await ev(() => __fm.model.parts.map(p => ({ k: p.kind, h: p.h, sk: p.sk })));
+  must(p1.length === 1 && p1[0].k === 'extrude' && p1[0].sk.type === 'rect' && Math.abs(p1[0].sk.w - 800) < 40 && Math.abs(p1[0].sk.d - 600) < 40 && p1[0].h > 150, `画矩形推拉没生成 800×600 的实体：${JSON.stringify(p1)}`);
+  // 挖洞：在顶面上往下推的圆
+  const holed = await ev(() => { const m = __fm.model, b = m.parts[0]; m.parts.push({ id: 'qh', name: '孔', kind: 'extrude', sk: { type: 'circle', r: 60 }, h: -Math.max(20, Math.abs(b.h) / 2), pos: [b.pos[0], b.pos[1] + Math.abs(b.h), b.pos[2]], rot: b.rot.slice(), scl: [1, 1, 1], mat: 'paint', color: '#fff', op: 'sub' }); __fm.rebuild();
+    const g = __fm.scene.children.find(c => c.type === 'Group' && c.children.some(x => x.userData.part === b.id)); const mesh = g.children.find(x => x.userData.part === b.id); return mesh.geometry.getAttribute('position').count; });
+  must(holed > 40, `布尔挖洞没生效（顶点数 ${holed}）`);
+  await ev(() => __fm.addPrim('cyl')); must((await ev(() => __fm.model.parts.length)) === 3, '加圆柱没生效');
+  await click('.fm-wrap [data-a="done"]'); await sleep(600);
+  must(!(await ev(() => !!document.querySelector('.fm-wrap'))), '点完成后工作台没关');
+  const f = await ev(() => __designer.app.plan.furniture.at(-1)); must((await st()).furn === n0 + 1 && f.opt?.shape === 'model' && f.w > 50, '造型没放进方案');
+  must(await ev(() => !!document.querySelector('#frWB')), '属性面板没有“进入工作台编辑”');
+  await ev(() => document.querySelector('#frWB').click()); must(await until(() => !!document.querySelector('.fm-wrap')), '再编辑没打开工作台');
+  must((await ev(() => __fm.model.parts.length)) === 3, '再编辑时部件没带回来');
+  await click('.fm-wrap [data-a="cancel"]'); await sleep(300);
+  } finally { // 失败也要关掉工作台、还原方案，不然后面的步骤全被它挡住
+    await ev(() => { if (document.querySelector('.fm-wrap')) window.__fm?.close(); if (window.__qaSnap4) __designer.replacePlan(JSON.parse(window.__qaSnap4)); }); await sleep(800);
+  }
+});
+// 吊顶：叠级 + 灯槽灯带 + 窗帘盒 + 石膏线；顶面图层；报价
+await step('吊顶：叠级 / 悬浮 / 灯槽灯带 / 窗帘盒 / 报价', async () => {
+  await ev(() => { window.__qaSnap5 = JSON.stringify(__designer.app.plan); });
+  const r = await ev(() => {
+    const D = __designer, A = D.app, R = A.rooms.regions.filter(q => q.labels.length && q.area > 8).sort((a, b) => b.area - a.area);
+    R[0].labels.forEach(l => (l.ceil = { type: 'tray', drop: 280, edgeW: 400, drop2: 150, edgeW2: 300, cove: true, curtain: 200, cornice: true }));
+    if (R[1]) R[1].labels.forEach(l => (l.ceil = { type: 'float', drop: 220, edgeW: 150, cove: true }));
+    D.commit(); D.setLayer('ceiling');
+    return { strips: A.plan.elec.filter(e => e.auto && e.auto.startsWith('cove:')).length };
+  });
+  must(r.strips >= 2, `灯槽没自动放灯带（${r.strips} 条）`);
+  await sleep(500);
+  await click('#quoteBtn'); await sleep(800);
+  const q = await ev(() => document.querySelector('.modal')?.innerText || ''); must(/叠级/.test(q) && /灯槽/.test(q), '报价单里没有叠级吊顶 / 灯槽');
+  await closeModals();
+  await ev(() => { __designer.replacePlan(JSON.parse(window.__qaSnap5)); __designer.setLayer('layout'); }); await sleep(800);
+});
+// 灯带：沿线画 → 属性（色温 / 安装位置）
+await step('灯带：画线 / 属性', async () => {
+  await ev(() => { window.__qaSnap6 = JSON.stringify(__designer.app.plan); });
+  await ev(() => __designer.startLine('strip')); await sleep(300); must((await st()).layer === 'ceiling', '画灯带没切到顶面图层');
+  await focusMM(room.x, room.y, .1);
+  await clickMM(room.x - 700, room.y - 300); await clickMM(room.x + 700, room.y - 300); await clickMM(room.x + 700, room.y + 400);
+  await page.keyboard.press('Enter'); await sleep(500);
+  const e = await ev(() => __designer.app.plan.elec.at(-1)); must(e.kind === 'strip' && e.pts?.length >= 3, '灯带没生成');
+  must(await ev(() => !!document.querySelector('#llCct')), '灯带属性面板没出来');
+  await ev(() => { const s = document.querySelector('#llCct'); s.value = '4000'; s.dispatchEvent(new Event('change', { bubbles: true })); }); await sleep(300);
+  must((await ev(() => __designer.app.plan.elec.at(-1).cct)) === 4000, '改色温没生效');
+  await ev(() => { __designer.replacePlan(JSON.parse(window.__qaSnap6)); __designer.setTool('select'); __designer.setLayer('layout'); }); await sleep(800);
+});
+// 侧栏收起 / 展开；选中家具时家具库自动定位
+await step('侧栏收起展开 / 选中家具自动定位到家具库', async () => {
+  await ev(() => __designer.toggleSide('left')); await sleep(400); must(await ev(() => document.body.classList.contains('hide-left') && getComputedStyle(document.querySelector('#leftPanel')).display === 'none'), '左栏没收起');
+  await ev(() => __designer.toggleSide('left')); await sleep(400); must(await ev(() => !document.body.classList.contains('hide-left')), '左栏没展开');
+  await ev(() => __designer.toggleSide('right')); await sleep(300); must(await ev(() => document.body.classList.contains('hide-right')), '右栏没收起');
+  await ev(() => __designer.toggleSide('right')); await sleep(300);
+  const ok = await ev(async () => { const D = __designer, f = D.app.plan.furniture.find(q => D.CAT[q.key] && !q.opt?.zone); if (!f) return 'nofurn'; D.select(null); D.select('furn', f.id); await new Promise(r => setTimeout(r, 400)); return !!document.querySelector(`#leftPanel .lib-list .item.cur[data-key="${f.key}"]`) || f.key; });
+  must(ok === true || ok === 'nofurn', `选中家具后家具库没定位到它（${ok}）`);
+  await ev(() => __designer.select(null));
+});
+// 管线编辑：画一段 → 纠错 → 一键纠错 → 删除自动走线 → 恢复
+await step('管线编辑：手画管线 / 纠错 / 一键纠错 / 删除与恢复', async () => {
+  await click('#layerSeg [data-layer="mep"]'); await ev(() => __designer.fit2D()); await sleep(300);
+  const nf0 = (await st()).furn; await ev(() => { window.__qaSnap2 = JSON.stringify(__designer.app.plan); });
+  await click('#toolSeg [data-tool="pipe"]'); await sleep(400); must((await st()).tool === 'pipe', '管线工具没切换');
+  must(await ev(() => !!document.querySelector('#pipeSys [data-ps="weak"]')), '水电面板没有画管线的系统按钮');
+  await ev(() => document.querySelector('#pipeSys [data-ps="power"]').click()); await sleep(200);
+  // 起点 / 终点要离所有点位、已有管线都远（点位密的户型里，房间中心 ±700 常正好落在别的回路上，就不算悬空了）
+  const free = await ev((rx, ry) => {
+    const D = __designer, P = D.app.plan, runs = D.mep().runs, R = D.app.rooms.regions.find(q => q.labels.length && Math.hypot(q.interior.x - rx, q.interior.y - ry) < 1);
+    const dSeg = (p, a, b) => { const dx = b.x - a.x, dy = b.y - a.y, L = dx * dx + dy * dy || 1, t = Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / L)); return Math.hypot(p.x - a.x - dx * t, p.y - a.y - dy * t); };
+    const clear = p => P.elec.every(e => Math.hypot(e.x - p.x, e.y - p.y) > 450) && runs.every(r => r.pts.every((q, i) => !i || dSeg(p, r.pts[i - 1], q) > 350));
+    const inR = p => { const g = D.app.rooms; return !R || g.regions.indexOf(R) === g.regions.findIndex(q => q.rects.some(t => p.x >= t.x && p.x <= t.x + t.w && p.y >= t.y && p.y <= t.y + t.h)); };
+    for (let k = 0; k < 400; k++) {
+      const a = { x: rx + (Math.random() - .5) * 3000, y: ry + (Math.random() - .5) * 3000 }, b = { x: a.x + 1400, y: a.y }, c = { x: b.x, y: b.y + 600 };
+      if ([a, b, c].every(p => inR(p) && clear(p))) return [a, b, c];
+    }
+    return [{ x: rx - 700, y: ry }, { x: rx + 700, y: ry }, { x: rx + 700, y: ry + 600 }];
+  }, room.x, room.y);
+  await focusMM(free[1].x, free[1].y, .1);
+  for (const p of free) await clickMM(p.x, p.y); await page.keyboard.press('Enter'); await sleep(800);
+  const c = await ev(() => (__designer.app.plan.mep?.custom || []).length); must(c === 1, '手画管线没生成');
+  must((await st()).sel === 'run', '画完没选中这段管线');
+  const iss = await ev(() => __designer.mepIssues().filter(i => i.key && i.key.startsWith('U:')).length); must(iss >= 1, '悬空的手画管线没报错');
+  await ev(() => __designer.setTool('select')); await click('#leftPanel .tabs [data-tab="mep"]'); await sleep(300);
+  await ev(() => document.querySelector('#mepFixAll')?.click()); await sleep(1200);
+  const left = await ev(() => __designer.mepIssues().filter(i => i.key && i.key.startsWith('U:') && i.lv === 'error').length); must(left === 0, `一键纠错后还有 ${left} 个错误`);
+  const key = await ev(() => __designer.mep().runs.find(r => !r.custom && r.sys === 'power')?.key); must(!!key, '没有自动排的强电线');
+  await ev(k => { __designer.select('run', k); }, key); await page.keyboard.press('Delete'); await sleep(600);
+  must((await ev(() => (__designer.app.plan.mep?.removed || []).length)) === 1, '删除自动走线没生效');
+  const cut = await ev(() => __designer.mepIssues().some(i => /断了|没有接线/.test(i.msg))); must(cut, '删了走线后没提示下游断电 / 漏接');
+  await ev(() => document.querySelector('#mepRestoreRm')?.click()); await sleep(500);
+  must((await ev(() => (__designer.app.plan.mep?.removed || []).length)) === 0, '恢复删掉的走线没生效');
+  // 一键纠错会提交好几次，撤销次数不固定：直接还原到这一步之前的方案
+  await ev(() => { __designer.replacePlan(JSON.parse(window.__qaSnap2)); }); await sleep(1200);
+  must(!(await ev(() => (__designer.app.plan.mep?.custom || []).length)) && (await st()).furn === nf0, '还原后方案不对');
+  await click('#layerSeg [data-layer="layout"]');
+});
+await step('水电工具：在墙边放一个插座 + 撤销', async () => {
+  const s0 = await st(); await click('#toolSeg [data-tool="elec"]'); await sleep(300);
+  must((await st()).layer === 'mep', '没切到水电图层');
+  // 插座要贴墙放：在一段实墙两侧离墙面 80mm 处各试一次
+  const g = await ev(id => { const g = __designer.app.geo.active.find(g => g.w.id === id); return { ax: g.a.x, ay: g.a.y, ux: g.u.x, uy: g.u.y, len: g.len, t: g.w.t }; }, wall.id);
+  await focusMM(wall.x, wall.y, .12);
+  for (const sd of [1, -1]) {
+    const nx = -g.uy * sd, ny = g.ux * sd, d = g.t / 2 + 80;
+    await clickMM(wall.x + nx * d, wall.y + ny * d); await sleep(250);
+    if ((await st()).elec > s0.elec) break;
+  }
+  const s1 = await st(); must(s1.elec === s0.elec + 1, `点位没放上（${s0.elec} → ${s1.elec}）：${await toastText()}`);
+  await click('#undoBtn'); await sleep(200); await ev(() => __designer.setTool('select'));
+});
+await step('批注：放一条 + 回复面板', async () => {
+  await ev(() => { try { localStorage.setItem('house-designer-author', '验收'); } catch { } });
+  await ev(() => __designer.setView('2d')); await sleep(600); await focusMM(room.x, room.y, .05);
+  const s0 = await st(); await click('#toolSeg [data-tool="comment"]'); await clickMM(room.x - 200, room.y - 200); await sleep(500);
+  const hasModal = await ev(() => { const t = document.querySelector('.modal textarea, .modal input'); if (t) { t.value = '验收留言'; t.dispatchEvent(new Event('input')); } return !!t; });
+  if (hasModal) { await modalOk(); await sleep(400); }
+  const s1 = await st(); must(s1.com === s0.com + 1, `批注没加上（${s0.com} → ${s1.com}）`);
+  await ev(() => __designer.setTool('select')); await click('#undoBtn'); await sleep(200);
+});
+await step('测量：两点 + 清除全部测量', async () => {
+  await focusMM(room.x, room.y, .05);
+  const s0 = await st(); await click('#toolSeg [data-tool="measure"]'); await clickMM(room.x - 800, room.y); await clickMM(room.x + 800, room.y); await sleep(300);
+  const s1 = await st(); must(s1.meas === s0.meas + 1, '测量没生成');
+  await ev(() => __designer.setTool('select'));
+  await click('#moreMenu > button'); await click('#moreMenu [data-act="clearMeasure"]'); await sleep(200);
+  must((await st()).meas === 0, '清除测量没生效');
+});
+await step('拆墙：拆除 ↔ 恢复（承重墙不能拆）', async () => {
+  if ((await st()).phase === 'original') { await ev(() => document.querySelector('#leftPanel .tabs [data-tab="plan"]').click()); await ev(() => document.querySelector('#leftPanel [data-ph="renovate"]')?.click()); }
+  const namesBefore = await ev(() => __designer.app.plan.rooms.map(r => r.name).sort().join('|'));
+  const w = await ev(() => { const g = __designer.app.geo.active.find(g => !g.w.bearing && g.w.status !== 'new' && g.len > 1200); return g && { id: g.w.id, x: g.a.x + g.u.x * g.len / 2, y: g.a.y + g.u.y * g.len / 2 }; });
+  if (!w) return '没有可拆的墙';
+  await click('#toolSeg [data-tool="demolish"]'); await focusMM(w.x, w.y, .12); await clickMM(w.x, w.y); await sleep(300);
+  const s1 = await ev(id => __designer.app.plan.walls.find(q => q.id === id).status, w.id); must(s1 === 'removed', '没拆掉：' + s1);
+  await ev(() => __designer.setTool('select'));
+  await click('#moreMenu > button'); await click('#moreMenu [data-act="restoreWalls"]'); await sleep(300); await modalOk(); await sleep(300);
+  const s2 = await ev(id => __designer.app.plan.walls.find(q => q.id === id).status, w.id); must(s2 === 'existing', '恢复没生效：' + s2);
+  const namesAfter = await ev(() => __designer.app.plan.rooms.map(r => r.name).sort().join('|')); must(namesAfter === namesBefore, `恢复后房间名变了：${namesBefore} → ${namesAfter}`);
+  const bw = await ev(() => { const g = __designer.app.geo.active.find(g => g.w.bearing && g.len > 1200); return g && { id: g.w.id, x: g.a.x + g.u.x * g.len / 2, y: g.a.y + g.u.y * g.len / 2 }; });
+  if (bw) { await click('#toolSeg [data-tool="demolish"]'); await focusMM(bw.x, bw.y, .12); await clickMM(bw.x, bw.y); await sleep(200); const s3 = await ev(id => __designer.app.plan.walls.find(q => q.id === id).status, bw.id); must(s3 !== 'removed', '承重墙被拆了'); await ev(() => __designer.setTool('select')); }
+});
+// 家具：选中 / 拖动 / 旋转 / 复制 / 删除
+// 找一件点得中的家具（中心点没被别的东西盖住）
+await ev(() => { __designer.setLayer('layout'); __designer.setTool('select'); __designer.fit2D(); });
+let furn = null;
+for (const f of await ev(() => __designer.app.plan.furniture.filter(f => f.w > 500 && f.d > 400 && !/curtain|rug|carpet/.test(f.type)).slice(0, 25).map(f => ({ id: f.id, x: f.x, y: f.y, rot: f.rot })))) {
+  await ev(() => { __designer.setLayer('layout'); __designer.setTool('select'); }); await focusMM(f.x, f.y, .08); // 和后面点选时同一个缩放（缩放不同时房间名标签可能正好盖住这件家具）
+  await clickMM(f.x, f.y); const sel = await ev(() => __designer.app.sel); if (sel.kind === 'furn' && sel.id === f.id) { furn = f; break; }
+}
+await ev(() => __designer.select(null));
+if (furn) await step('家具：点选 / 拖动 / R 旋转 / Ctrl+D 复制 / Delete 删除', async () => {
+  await click('#layerSeg [data-layer="layout"]'); await ev(() => __designer.setTool('select')); await focusMM(furn.x, furn.y, .08);
+  await clickMM(furn.x, furn.y); must((await st()).sel === 'furn', '没选中家具');
+  const [X, Y] = await px(furn.x, furn.y); await page.mouse.move(X, Y); await page.mouse.down(); await page.mouse.move(X + 20, Y + 10, { steps: 5 }); await page.mouse.up(); await sleep(200);
+  const f1 = await ev(id => { const f = __designer.app.plan.furniture.find(q => q.id === id); return { x: f.x, y: f.y }; }, furn.id); must(Math.hypot(f1.x - furn.x, f1.y - furn.y) > 50, '拖动没生效');
+  await page.keyboard.press('KeyR'); await sleep(150); const r1 = await ev(id => __designer.app.plan.furniture.find(q => q.id === id).rot, furn.id); must(r1 !== furn.rot, '旋转没生效');
+  const n0 = (await st()).furn; await page.keyboard.down('Control'); await page.keyboard.press('KeyD'); await page.keyboard.up('Control'); await sleep(200);
+  must((await st()).furn === n0 + 1, '复制没生效');
+  await page.keyboard.press('Delete'); await sleep(200); must((await st()).furn === n0, '删除没生效');
+  for (let k = 0; k < 4; k++) await click('#undoBtn').catch(() => { }); await sleep(300);
+  const f2 = await ev(id => __designer.app.plan.furniture.find(q => q.id === id), furn.id); must(f2 && Math.abs(f2.x - furn.x) < 2 && f2.rot === furn.rot, '撤销没恢复到原位');
+});
+// 家具改尺寸：四边只改一个方向（对边不动）、四角两个方向（Shift 等比）、尺寸牌点数字输入宽 / 深 / 高、拖 ↕ 改高度
+if (furn) await step('家具：拖四边 / 四角改宽深、尺寸牌输入宽深高、拖动改高度', async () => {
+  await click('#layerSeg [data-layer="layout"]'); await ev(() => __designer.setTool('select')); await focusMM(furn.x, furn.y, .08);
+  await clickMM(furn.x, furn.y); must((await st()).sel === 'furn', '没选中家具');
+  const get = () => ev(id => { const f = __designer.app.plan.furniture.find(q => q.id === id); return { x: f.x, y: f.y, w: f.w, d: f.d, h: f.h, rot: f.rot }; }, furn.id);
+  // 局部 (u, v) mm → 屏幕；拖手柄沿局部方向走 px 个像素
+  const at = (f, u, v) => { const a = f.rot * Math.PI / 180; return px(f.x + u * Math.cos(a) - v * Math.sin(a), f.y + u * Math.sin(a) + v * Math.cos(a)); };
+  const dragLocal = async (f, sx, sy, dist, shift = false) => {
+    const [X, Y] = await at(f, sx * f.w / 2, sy * f.d / 2), a = f.rot * Math.PI / 180, n = Math.hypot(sx, sy);
+    const dx = (sx * Math.cos(a) - sy * Math.sin(a)) / n * dist, dy = (sx * Math.sin(a) + sy * Math.cos(a)) / n * dist;
+    if (shift) await page.keyboard.down('Shift');
+    await page.mouse.move(X, Y); await sleep(60); await page.mouse.down(); await page.mouse.move(X + dx, Y + dy, { steps: 6 }); await page.mouse.up(); await sleep(200);
+    if (shift) await page.keyboard.up('Shift');
+  };
+  const f0 = await get();
+  await dragLocal(f0, 1, 0, 30); const f1 = await get();
+  must(f1.w > f0.w + 100 && f1.d === f0.d, `拖右边：宽 ${f0.w}→${f1.w}、深 ${f0.d}→${f1.d}（应只改宽）`);
+  const left = f => { const a = f.rot * Math.PI / 180; return [f.x - f.w / 2 * Math.cos(a), f.y - f.w / 2 * Math.sin(a)]; };
+  must(Math.hypot(left(f1)[0] - left(f0)[0], left(f1)[1] - left(f0)[1]) < 15, '拖右边时左边跟着动了');
+  await dragLocal(f1, 0, 1, 20); const f2 = await get();
+  must(f2.d > f1.d + 100 && f2.w === f1.w, `拖下边：深 ${f1.d}→${f2.d}、宽 ${f1.w}→${f2.w}（应只改深）`);
+  await dragLocal(f2, 1, 1, 30); const f3 = await get(); must(f3.w > f2.w && f3.d > f2.d, '拖角没有同时改宽深');
+  await dragLocal(f3, 1, 1, 30, true); const f4 = await get();
+  must(Math.abs(f4.d / f4.w - f3.d / f3.w) < .03, `Shift 拖角没等比：${f3.w}×${f3.d} → ${f4.w}×${f4.d}`);
+  const ui = await ev(() => __designer.sizeUi()), r = await ev(() => { const b = document.querySelector('#c2d').getBoundingClientRect(); return [b.x, b.y]; });
+  must(ui.grip && ui.hits.length === 3, '尺寸牌上没有宽 / 深 / 高三个可点数字或高度拖动手柄');
+  await page.mouse.move(r[0] + ui.grip.x, r[1] + ui.grip.y); await page.mouse.down(); await page.mouse.move(r[0] + ui.grip.x, r[1] + ui.grip.y - 20, { steps: 5 }); await page.mouse.up(); await sleep(200);
+  const f5 = await get(); must(f5.h >= f4.h + 80, `往上拖 ↕ 高度没变高：${f4.h}→${f5.h}`);
+  const hh = (await ev(() => __designer.sizeUi())).hits.find(q => q.title.startsWith('高'));
+  await page.mouse.click(r[0] + hh.x, r[1] + hh.y); await sleep(150); await page.keyboard.down('Control'); await page.keyboard.press('KeyA'); await page.keyboard.up('Control');
+  await page.keyboard.type('1234'); await page.keyboard.press('Enter'); await sleep(250);
+  must((await get()).h === 1234, '尺寸牌输入高度没生效');
+  for (let k = 0; k < 6; k++) await click('#undoBtn').catch(() => { }); await sleep(300);
+  const f6 = await get(); must(f6.w === f0.w && f6.d === f0.d && f6.h === f0.h, `撤销没恢复尺寸：${f6.w}×${f6.d}×${f6.h}`);
+});
+await step('选择房间：属性面板 + 立面图', async () => {
+  await click('#layerSeg [data-layer="layout"]'); await ev(() => __designer.select(null));
+  const lab = await ev(() => { const R = __designer.app.rooms.regions.filter(r => r.labels.length === 1 && r.area > 8).sort((a, b) => a.area - b.area); const l = R[0]?.labels[0]; return l && { id: l.id, x: l.x, y: l.y }; });
+  if (!lab) return '方案里没有房间标签';
+  await focusMM(lab.x, lab.y, .08); await clickMM(lab.x, lab.y); await sleep(300);
+  const s = await st(); must(s.sel === 'room' || s.sel === 'roomLabel' || s.sel, '没选中房间');
+  const ins = await ev(() => document.querySelector('#inspector').innerText); must(ins.length > 30, '属性面板空');
+  const has = await ev(() => !!document.querySelector('#rElev')); if (has) { await click('#rElev'); await sleep(800); must(await ev(() => !!document.querySelector('.modal canvas')), '立面图没打开'); await ev(() => document.querySelectorAll('.modal [data-i]').forEach(b => b.click())); }
+});
+await closeModals();
+/* ---------------- 编辑细节：定制柜、门窗、房间材质、点位、楼层、方案 ---------------- */
+async function selectFurn(pred) {
+  await ev(() => { __designer.setLayer('layout'); __designer.setTool('select'); __designer.fit2D(); }); await sleep(200);
+  const cands = await ev(src => __designer.app.plan.furniture.filter(eval(src)).map(f => ({ id: f.id, x: f.x, y: f.y })), pred);
+  for (const f of cands.slice(0, 8)) { await clickMM(f.x, f.y); const sel = await ev(() => __designer.app.sel); if (sel.kind === 'furn' && sel.id === f.id) return f; }
+  return null;
+}
+await step('定制橱柜：一字 / L / U 造型切换', async () => {
+  const f = await selectFurn("f => ['counter', 'lCounter', 'uCounter'].includes(f.type)"); if (!f) return '方案里没有橱柜';
+  const has = await ev(() => !!document.querySelector('#kShape')); must(has, '属性面板没有橱柜定制');
+  const s0 = await ev(id => JSON.stringify(__designer.app.plan.furniture.find(q => q.id === id)), f.id);
+  for (const v of ['L', 'U', 'I']) { await ev(v => { const e = document.querySelector('#kShape'); if (!e) return; e.value = v; e.dispatchEvent(new Event('change', { bubbles: true })); }, v); await sleep(400); if (v === 'U') await page.screenshot({ path: path.join(SHOTS, `${String(++shotN).padStart(3, '0')}_定制橱柜_U形.png`) }); }
+  const s1 = await ev(id => JSON.stringify(__designer.app.plan.furniture.find(q => q.id === id)), f.id); must(s1 !== s0, '改造型没生效');
+  for (let k = 0; k < 3; k++) await click('#undoBtn'); await sleep(300);
+});
+await step('定制柜：属性面板改分格', async () => {
+  const f = await selectFurn("f => f.type === 'cabinet' && f.cab"); if (!f) return '方案里没有定制柜';
+  const n = await ev(() => document.querySelectorAll('#inspector .cust select, #inspector .cust input').length); must(n > 2, '定制区没有选项');
+  const ok = await ev(() => { const e = document.querySelector('#inspector .cust select'); if (!e || e.options.length < 2) return false; e.value = e.options[(e.selectedIndex + 1) % e.options.length].value; e.dispatchEvent(new Event('change', { bubbles: true })); return true; }); await sleep(400);
+  must(ok, '改不了'); await page.screenshot({ path: path.join(SHOTS, `${String(++shotN).padStart(3, '0')}_定制柜.png`) }); await click('#undoBtn'); await sleep(200);
+});
+await step('门窗属性：改类型 / 开向 + 撤销', async () => {
+  await ev(() => { __designer.setLayer('layout'); __designer.setTool('select'); __designer.fit2D(); });
+  const o = await ev(() => { const A = __designer.app; for (const g of A.geo.active) for (const q of g.ops || []) if (q.o.type === 'door') { const s = (q.s0 + q.s1) / 2; return { id: q.o.id, x: g.a.x + g.u.x * s, y: g.a.y + g.u.y * s }; } return null; });
+  if (!o) return '没有门';
+  // 大平面（整层办公）缩到全图时门只有几个像素：先把视图拉近到这扇门（用户也是放大了再点）
+  await focusMM(o.x, o.y, .12);
+  await clickMM(o.x, o.y); must((await st()).sel === 'opening', '没选中门');
+  const t0 = await ev(id => JSON.stringify(__designer.app.plan.openings.find(q => q.id === id)), o.id);
+  await ev(() => { const e = document.querySelector('#oType'); if (e) { e.value = [...e.options].map(x => x.value).find(v => v === 'double') || e.options[1].value; e.dispatchEvent(new Event('change', { bubbles: true })); } }); await sleep(300);
+  const t1 = await ev(id => JSON.stringify(__designer.app.plan.openings.find(q => q.id === id)), o.id); must(t1 !== t0, '属性没改动');
+  await page.screenshot({ path: path.join(SHOTS, `${String(++shotN).padStart(3, '0')}_门窗属性.png`) });
+  await click('#undoBtn'); await sleep(300);
+  const t2 = await ev(id => JSON.stringify(__designer.app.plan.openings.find(q => q.id === id)), o.id); must(t2 === t0, '撤销没恢复');
+});
+await step('房间属性：地面材质 / 吊顶 + 撤销', async () => {
+  await ev(() => { __designer.setLayer('layout'); __designer.setTool('select'); __designer.select(null); });
+  const lab = await ev(() => { const R = __designer.app.rooms.regions.filter(r => r.labels.length === 1 && r.area > 8).sort((a, b) => a.area - b.area); const l = R[0].labels[0]; return { id: l.id, x: l.x, y: l.y }; });
+  await focusMM(lab.x, lab.y, .08); await clickMM(lab.x, lab.y); await sleep(200);
+  const sel = await ev(() => __designer.app.sel); must(sel.kind === 'room', '没选中房间：' + sel.kind); lab.id = sel.id;
+  const m0 = await ev(id => JSON.stringify(__designer.app.plan.rooms.find(q => q.id === id)), lab.id);
+  await ev(() => { const e = document.querySelector('#rCeil'); if (e) { e.value = e.options[(e.selectedIndex + 1) % e.options.length].value; e.dispatchEvent(new Event('change', { bubbles: true })); } }); await sleep(300);
+  const m1 = await ev(id => JSON.stringify(__designer.app.plan.rooms.find(q => q.id === id)), lab.id); must(m1 !== m0, '吊顶没改动');
+  await page.screenshot({ path: path.join(SHOTS, `${String(++shotN).padStart(3, '0')}_房间属性.png`) });
+  await click('#undoBtn'); await sleep(300);
+});
+await step('水电点位属性：改类型 + 撤销', async () => {
+  await ev(() => { __designer.setLayer('mep'); __designer.setTool('select'); });
+  const e = await ev(() => { const e = __designer.app.plan.elec.find(e => e.kind === 'socket'); return e && { id: e.id, x: e.x, y: e.y }; }); if (!e) return '没有插座';
+  await clickMM(e.x, e.y); const sel = await st(); if (sel.sel !== 'elec') return '点位被别的元素盖住，跳过';
+  e.id = await ev(() => __designer.app.sel.id);
+  const k0 = await ev(id => __designer.app.plan.elec.find(q => q.id === id).kind, e.id);
+  await ev(() => { const s = document.querySelector('#eKind'); if (s) { s.value = [...s.options].map(o => o.value).find(v => v !== s.value); s.dispatchEvent(new Event('change', { bubbles: true })); } }); await sleep(300);
+  const k1 = await ev(id => __designer.app.plan.elec.find(q => q.id === id)?.kind, e.id); must(k1 !== k0, '类型没改'); await click('#undoBtn'); await sleep(200);
+});
+if (!multi) await step('楼层：复制本层为二层 → 楼层面板出现 → 撤销', async () => {
+  await click('#leftPanel .tabs [data-tab="plan"]'); await sleep(300);
+  await ev(() => document.querySelector('#leftPanel [data-addf="copy"]').click()); await sleep(1200);
+  const n = await ev(() => __designer.bld.floors.length); must(n === 2, `楼层数 ${n}`); must(await ev(() => document.querySelector('#floorDock').style.display !== 'none'), '楼层面板没出现');
+  await page.screenshot({ path: path.join(SHOTS, `${String(++shotN).padStart(3, '0')}_加楼层.png`) });
+  await click('#undoBtn'); await sleep(800); const n2 = await ev(() => __designer.bld.floors?.length || 1); must(n2 === 1, `撤销后还有 ${n2} 层`);
+});
+await step('方案管理：复制当前方案 → 对比 → 关闭', async () => {
+  await click('#schemeBtn'); await sleep(800);
+  const n0 = await ev(() => document.querySelectorAll('.modal .sccard').length);
+  await ev(() => document.querySelector('.modal [data-new="copy"]').click());
+  for (let k = 0; k < 20 && !/已新建并切换/.test(await toastText()); k++) await sleep(500); // 大方案存储 + 重建要几秒
+  must(/已新建并切换/.test(await toastText()), '复制后没切换：' + await toastText());
+  await closeModals(); await click('#schemeBtn'); await sleep(1200);
+  const n1 = await ev(() => document.querySelectorAll('.modal .sccard').length); must(n1 === n0 + 1, `方案数 ${n0} → ${n1}`);
+  await ev(() => { const cs = [...document.querySelectorAll('.modal .sccard .pick input')].slice(0, 2); cs.forEach(c => { c.checked = true; c.dispatchEvent(new Event('change')); }); }); await sleep(200);
+  await click('#scCmp'); await sleep(1500); must(await ev(() => !!document.querySelector('#cmX')), '对比页没打开');
+  await page.screenshot({ path: path.join(SHOTS, `${String(++shotN).padStart(3, '0')}_方案对比.png`) });
+  await click('#cmX'); await closeModals(); await sleep(300);
+});
+
+await step('层高 / 方案名 / 阶段切换', async () => {
+  await click('#leftPanel .tabs [data-tab="plan"]'); await sleep(300);
+  const ph0 = (await st()).phase; await ev(p => document.querySelector(`#leftPanel [data-ph="${p === 'original' ? 'renovate' : 'original'}"]`)?.click(), ph0); await sleep(300);
+  must((await st()).phase !== ph0, '阶段没切换'); await ev(p => document.querySelector(`#leftPanel [data-ph="${p}"]`)?.click(), ph0); await sleep(300);
+  const tag = await ev(() => document.querySelector('#phaseTag').textContent); must(tag.length, '顶栏阶段标签空');
+});
+/* ---------------- 水电 ---------------- */
+await step('一键布置水电（确认后点位数合理）', async () => {
+  await click('#leftPanel .tabs [data-tab="mep"]'); await sleep(300);
+  const e0 = (await st()).elec; await click('#autoElec'); await sleep(400); await modalOk(); await sleep(1500);
+  const e1 = (await st()).elec; must(e1 > 10, `点位太少：${e1}`); return `${e0} → ${e1} 个点位`;
+});
+await step('自动关联开关', async () => { await click('#autoLink'); await sleep(300); const t = await toastText(); must(/关联/.test(t), '没有提示：' + t); return t; });
+for (const v of ['all', 'power', 'light', 'weak', 'water', 'drain'])
+  await step(`管线视图：${v}`, async () => { await click('#layerSeg [data-layer="mep"]'); await ev(id => document.querySelector(`#mepPreset [data-p="${id}"]`).click(), v); await sleep(500); must(await ev(id => document.querySelector(`#mepPreset [data-p="${id}"]`)?.classList.contains('on'), v), '按钮没高亮'); });
+await step('管线：回路表 / 材料清单数值正常', async () => {
+  const r = await ev(() => { const m = __designer.mep(); return { c: m.circuits.length, runs: m.runs.length, bad: m.runs.filter(x => !isFinite(x.len) || x.pts.some(p => !isFinite(p.x))).length, bom: m.bom.filter(b => !(b.qty >= 0)).length }; });
+  must(r.runs > 0, '没有管线'); must(!r.bad, `${r.bad} 段管线坐标异常`); must(!r.bom, '材料清单有异常数量'); return `${r.c} 个回路、${r.runs} 段管线`;
+});
+await step('管线：点中一段 → 属性；拖动；恢复自动走线', async () => {
+  await ev(() => document.querySelector('#mepPreset [data-p="power"]').click()); await ev(() => __designer.setTool('select')); await sleep(300);
+  await ev(() => { const D = __designer, v = D.view; v.s = Math.max(v.s, .1); D.emit('view'); }); await sleep(200);
+  const seg0 = await ev(() => { const m = __designer.mep(); for (const r of m.runs) if (r.sys === 'power') for (let k = 0; k + 1 < r.pts.length; k++) { const a = r.pts[k], b = r.pts[k + 1]; if (Math.abs(a.y - b.y) < 1 && Math.abs(a.x - b.x) > 1200) return { x: (a.x + b.x) / 2, y: a.y }; } return null; });
+  if (seg0) await focusMM(seg0.x, seg0.y, .1);
+  const seg = await ev(() => { const m = __designer.mep(); for (const r of m.runs) if (r.sys === 'power') for (let k = 0; k + 1 < r.pts.length; k++) { const a = r.pts[k], b = r.pts[k + 1]; if (Math.abs(a.y - b.y) < 1 && Math.abs(a.x - b.x) > 1200) { const x = (a.x + b.x) / 2, y = a.y, tol = 20 / __designer.view.s; if (!__designer.app.plan.nodes.some(n => Math.hypot(n.x - x, n.y - y) < tol) && !__designer.app.plan.elec.some(e => Math.hypot(e.x - x, e.y - y) < tol)) return { x, y, key: r.key }; } } return null; });
+  must(seg, '找不到能拖的线段');
+  const [X, Y] = await px(seg.x, seg.y); await page.mouse.click(X, Y); await sleep(300);
+  const sel = await st(); must(sel.sel === 'run', '没选中管线：' + sel.sel);
+  await page.mouse.move(X, Y); await page.mouse.down(); await page.mouse.move(X, Y + 25, { steps: 6 }); await page.mouse.up(); await sleep(400);
+  const ed = await ev(() => Object.keys(__designer.app.plan.mep?.edits || {}).length); must(ed > 0, '拖动没记录');
+  await click('#leftPanel .tabs [data-tab="mep"]'); await sleep(200); await click('#mepReset'); await sleep(300);
+  must(await ev(() => !Object.keys(__designer.app.plan.mep?.edits || {}).length), '恢复自动走线没生效');
+});
+await step('管线：插座走顶 / 给水走地 切换', async () => {
+  for (const [id, v] of [['#mepPower', 'ceil'], ['#mepWater', 'floor'], ['#mepPower', 'floor'], ['#mepWater', 'ceil']]) {
+    await ev((id, v) => { const s = document.querySelector(id); s.value = v; s.dispatchEvent(new Event('change', { bubbles: true })); }, id, v); await sleep(400);
+  }
+});
+await step('导出：当前视图图片', async () => { await ev(() => document.querySelector('#mepPreset [data-p="all"]').click()); const f = await expectDownload(() => click('#mepPng')); return f.join(','); });
+await step('导出：当前视图 CAD', async () => { const f = await expectDownload(() => click('#mepDxf')); return f.join(','); });
+await step('导出：5 类管线分别导出 CAD', async () => { const f = await expectDownload(() => click('#mepDxfAll'), { n: 5, wait: 30000 }); return f.length + ' 个'; });
+await step('导出：回路表 + 材料清单 CSV', async () => { const f = await expectDownload(() => click('#mepCsv')); return f.join(','); });
+/* ---------------- 报价 / 方案 ---------------- */
+await step('报价：打开、合计正常、导出 CSV', async () => {
+  await click('#quoteBtn'); await sleep(800);
+  const t = await ev(() => document.querySelector('.modal')?.innerText || ''); must(/合计|总计/.test(t), '报价里没有合计');
+  await page.screenshot({ path: path.join(SHOTS, `${String(++shotN).padStart(3, '0')}_报价单.png`) });
+  const f = await expectDownload(() => click('#qCsv')); await click('#qX'); return f.join(',');
+});
+await step('方案管理：打开 / 关闭', async () => { await click('#schemeBtn'); await sleep(600); must(await ev(() => !!document.querySelector('.modal .scgrid')), '方案管理没打开'); await page.screenshot({ path: path.join(SHOTS, `${String(++shotN).padStart(3, '0')}_方案管理.png`) }); await click('#scX'); });
+await closeModals();
+/* ---------------- 导出菜单 ---------------- */
+for (const [k, n] of [['original', '原始结构图'], ['demolition', '拆改图'], ['layout', '平面布置图'], ['floor', '地面铺装图'], ['ceiling', '顶面布置图'], ['mep', '水电点位图'], ['dxf', 'CAD 国标'], ['dxf-deco', 'CAD 装修'], ['dxf-mep', 'CAD 水电'], ['share', '分享文件']])
+  await step(`导出菜单：${n}`, async () => {
+    const f = await expectDownload(async () => { await click('#exportMenu > button'); await click(`#exportMenu [data-exp="${k}"]`); });
+    if (k === 'share') { // 分享文件要能单独打开：载入方案、显示分享横幅、没有报错
+      const m = await b.newPage(); const e2 = []; m.on('pageerror', e => e2.push(e.message));
+      await m.goto(pathToFileURL(path.join(DL, f[0])).href, { waitUntil: 'load' }); await sleep(3500);
+      const r = await m.evaluate(() => ({ area: document.querySelector('#stArea')?.textContent || '', banner: getComputedStyle(document.querySelector('#shareBanner')).display !== 'none' && document.querySelector('#shareBanner').innerText.length > 0 }));
+      await m.screenshot({ path: path.join(SHOTS, `${String(++shotN).padStart(3, '0')}_分享文件打开.png`) }); await m.close();
+      must(!e2.length, '分享文件打开报错：' + e2[0]); must(/㎡/.test(r.area), '分享文件没载入方案'); must(r.banner, '没有分享横幅');
+    }
+    return f.join(',');
+  });
+if (!QUICK) await step('导出菜单：整套施工图 PDF', async () => { const f = await expectDownload(async () => { await click('#exportMenu > button'); await click('#exportMenu [data-exp="pdf"]'); }, { wait: 240000 }); return f.join(',') + ' · ' + await toastText(); }, { timeout: 260000 });
+await step('更多：导出方案 JSON → 再导入', async () => {
+  const f = await expectDownload(async () => { await click('#moreMenu > button'); await click('#moreMenu [data-act="exportJson"]'); });
+  const inp = await page.$('#fileIn'); await inp.uploadFile(path.join(DL, f[0])); await sleep(1500);
+  const t = await toastText(); must(/导入/.test(t) && !/不正确/.test(t), '导入失败：' + t); return f[0];
+});
+await step('保存 → 刷新页面 → 方案还在', async () => {
+  const n0 = (await st()).furn; await click('#saveBtn'); await sleep(500);
+  await page.reload({ waitUntil: 'load' }); await page.waitForFunction(() => window.__designer, { timeout: 60000 }); await sleep(2000);
+  const n1 = (await st()).furn; must(n1 === n0, `刷新后家具数 ${n0} → ${n1}`); const t = await toastText(); return t;
+});
+/* ============================== 3D ============================== */
+const to3d = async v => { await ev(async v => { await __designer.setView(v); }, v); await sleep(3200); };
+await group('3d');
+await step('分屏视图', async () => { await click('#viewSeg [data-view="split"]'); must(await until(() => __designer.app.view === 'split'), '没进分屏'); await sleep(2500); });
+await step('3D 视图：鸟瞰', async () => { await click('#viewSeg [data-view="3d"]'); must(await until(() => __designer.app.view === '3d'), '没进 3D'); must(await until(() => __designer.S3.ready, 60000), '3D 没准备好'); await sleep(2000); });
+const canvasStd = () => ev(() => { const S = __designer.S3; S.renderNow(); const c = document.querySelector('#c3d'), t = document.createElement('canvas'); t.width = 160; t.height = 90; const x = t.getContext('2d'); x.drawImage(c, 0, 0, 160, 90); const d = x.getImageData(0, 0, 160, 90).data; let s = 0, s2 = 0, n = 0; for (let i = 0; i < d.length; i += 4) { const v = (d[i] + d[i + 1] + d[i + 2]) / 3; s += v; s2 += v * v; n++; } const m = s / n; return { mean: m, std: Math.sqrt(s2 / n - m * m) }; });
+await step('3D 画面不是空白', async () => { const s = await canvasStd(); must(s.std > 12, `画面像是空的（std ${s.std.toFixed(1)}）`); return `亮度 ${s.mean.toFixed(0)}，起伏 ${s.std.toFixed(0)}`; });
+await step('重置视角 / 锁定开关', async () => { await click('#camReset'); await sleep(1200); await click('#lockBtn'); await sleep(200); const t1 = await ev(() => document.querySelector('#lockBtn').textContent); await click('#lockBtn'); must(t1 === '🔒', '锁定按钮没变'); });
+await step('管线透视 开 / 关', async () => { await click('#mepBtn'); await sleep(1500); must(await ev(() => document.querySelector('#mepBtn').classList.contains('on')), '没打开'); await page.screenshot({ path: path.join(SHOTS, `${String(++shotN).padStart(3, '0')}_管线透视_开.png`) }); await click('#mepBtn'); await sleep(800); });
+await step('光照面板：城市 / 月份 / 时间 / 正北 / 开灯', async () => {
+  await click('#lightBtn'); await sleep(300); must(await ev(() => document.querySelector('#lightPop').classList.contains('open')), '面板没打开');
+  await ev(() => { const s = document.querySelector('#cityIn'); s.value = s.options[Math.min(3, s.options.length - 1)].value; s.dispatchEvent(new Event('change')); });
+  for (const [id, v] of [['#monthIn', '12'], ['#timeIn', '20'], ['#northIn', '30'], ['#timeIn', '10'], ['#northIn', '0']]) await ev((id, v) => { const i = document.querySelector(id); i.value = v; i.dispatchEvent(new Event('input')); i.dispatchEvent(new Event('change')); }, id, v);
+  await ev(() => { const c = document.querySelector('#lampIn'); c.checked = true; c.dispatchEvent(new Event('change')); }); await sleep(600);
+  const info = await ev(() => document.querySelector('#sunInfo').innerText); must(/日出|月亮|太阳/.test(info), '太阳信息异常：' + info);
+  await ev(() => { const c = document.querySelector('#lampIn'); c.checked = false; c.dispatchEvent(new Event('change')); }); return info;
+});
+await step('日照演示：播放后回到原来的时间', async () => {
+  const t0 = await ev(() => __designer.S3.lighting.time); await click('#sunDemo'); await sleep(3000); must(await ev(() => __designer.S3.demoActive()), '演示没开始');
+  await sleep(15500); const t1 = await ev(() => ({ on: __designer.S3.demoActive(), t: __designer.S3.lighting.time }));
+  must(!t1.on, '演示没结束'); must(Math.abs(t1.t - t0) < .05, `演示后时间没回到 ${t0}（现在 ${t1.t.toFixed(2)}）`);
+}, { timeout: 40000 });
+await ev(() => { document.querySelector('#lightPop').classList.remove('open'); const i = document.querySelector('#timeIn'); i.value = '15'; i.dispatchEvent(new Event('input')); });
+await click('#lookBtn'); await sleep(300);
+for (const s of ['diorama', 'colorplan', 'real']) await step(`风格：${{ real: '写实', diorama: '沙盘', colorplan: '彩平图' }[s]}`, async () => { await click(`#lookStyle [data-style="${s}"]`); await sleep(2500); must(await ev(() => __designer.S3.look().style), ''); const c = await canvasStd(); must(c.std > 8, '画面空白'); });
+const pals = await ev(() => [...document.querySelectorAll('#lookPal button')].map(b => b.dataset.pal));
+for (const p of (QUICK ? pals.slice(0, 3) : pals)) await step(`配色：${p}`, async () => { await ev(p => document.querySelector(`#lookPal [data-pal="${p}"]`).click(), p); await sleep(1200); must(await ev(() => __designer.S3.look().palette), ''); });
+await ev(p => document.querySelector(`#lookPal [data-pal="${p}"]`).click(), pals[0]);
+for (const q of (LITE ? ['high', 'balanced', 'fast'] : ['fast', 'balanced', 'high'])) await step(`画质：${q}`, async () => { await click(`#lookQ [data-q="${q}"]`); await sleep(1500); must(await ev(() => __designer.S3.qualityLevel()) === q, '没切换'); must((await canvasStd()).std > 8, '画面空白'); });
+await step('沙盘选项：辉光 / 房间名 / 圆润 / 景深 + 沙盘俯视', async () => {
+  await click('#lookStyle [data-style="diorama"]'); await sleep(2000);
+  for (const o of ['glow', 'labels', 'round', 'tilt']) { await ev(o => { const i = document.querySelector(`#lookOpts [data-opt="${o}"]`); i.checked = !i.checked; i.dispatchEvent(new Event('change')); }, o); await sleep(600); await ev(o => { const i = document.querySelector(`#lookOpts [data-opt="${o}"]`); i.checked = !i.checked; i.dispatchEvent(new Event('change')); }, o); }
+  await click('#lookPose'); await sleep(1500);
+});
+await step('彩平图：尺寸 不标 / 简洁 / 完整', async () => { await click('#lookStyle [data-style="colorplan"]'); await sleep(2500); for (const d of ['none', 'full', 'simple']) { await click(`#cpDims [data-d="${d}"]`); await sleep(1200); } });
+await step('导出：彩平图 PNG', async () => { const f = await expectDownload(async () => { await click('#exportMenu > button'); await click('#exportMenu [data-exp="colorplan"]'); }, { wait: 60000 }); return f.join(','); });
+await click('#lookStyle [data-style="real"]'); await sleep(2500); await ev(() => document.querySelector('#lookPop').classList.remove('open'));
+await step('导出：当前 3D 画面', async () => { const f = await expectDownload(async () => { await click('#exportMenu > button'); await click('#exportMenu [data-exp="3d"]'); }); return f.join(','); });
+await step('渲染出图：实时 1920×1080', async () => {
+  await ev(() => { document.querySelector('#rendMode').value = 'raster'; document.querySelector('#resIn').value = '1920x1080'; });
+  const f = await expectDownload(() => click('#renderBtn'), { wait: 90000 }); return f.join(',');
+}, { timeout: 120000 });
+/* 漫游 */
+await group('walk', true);
+await step('漫游：进入 / 走动 / 转向 / 退出', async () => {
+  await ev(r => { const S = __designer.S3; S.enterFP({ x: r.x, y: r.y }); }, room);
+  must(await until(() => __designer.S3.fp.active, 90000), '没进漫游'); await sleep(1200);
+  const p0 = await ev(() => ({ x: __designer.S3.fp.x, y: __designer.S3.fp.y }));
+  await page.keyboard.down('KeyW'); await sleep(900); await page.keyboard.up('KeyW');
+  await page.keyboard.down('KeyD'); await sleep(500); await page.keyboard.up('KeyD'); await sleep(300);
+  const p1 = await ev(() => ({ x: __designer.S3.fp.x, y: __designer.S3.fp.y })); must(Math.hypot(p1.x - p0.x, p1.y - p0.y) > 100, '按 W 没走动');
+  must((await canvasStd()).std > 6, '漫游画面空白');
+  await page.screenshot({ path: path.join(SHOTS, `${String(++shotN).padStart(3, '0')}_漫游画面.png`) });
+});
+await step('漫游：视高 / 视距 / 视角调节', async () => {
+  must(await ev(() => document.querySelector('#walkCtl').classList.contains('show')), '漫游时没出现视角面板');
+  await ev(() => document.querySelector('#wcEyePre [data-eh="1100"]').click()); await sleep(500);
+  must((await ev(() => __designer.S3.walkCam.eyeH)) === 1100, '视高没变');
+  const yOk = await until(() => __designer.S3.sceneRefs().camera.position.y < 1.45, 8000);
+  const y = await ev(() => __designer.S3.sceneRefs().camera.position.y); must(yOk, `相机高度 ${y.toFixed(2)} 没跟着视高变`);
+  await ev(() => document.querySelector('#wcDistPre [data-cd="1500"]').click()); await sleep(900);
+  must((await ev(() => __designer.S3.walkCam.dist)) === 1500, '视距没变');
+  await ev(() => { const i = document.querySelector('#wcFov'); i.value = '75'; i.dispatchEvent(new Event('input', { bubbles: true })); }); await sleep(600);
+  must((await ev(() => __designer.S3.walkCam.fov)) === 75, '视角没变');
+  must((await canvasStd()).std > 6, '跟随视角画面空白');
+  await page.screenshot({ path: path.join(SHOTS, `${String(++shotN).padStart(3, '0')}_漫游跟随视角.png`) });
+  await ev(() => { __designer.S3.setWalkCam({ eyeH: 1600, dist: 0, fov: 62 }); }); await sleep(500);
+});
+await step('720° 全景（漫游中）', async () => {
+  await click('#panoBtn'); must(await until(() => !!document.querySelector('.modal'), 60000), '全景预览没打开（等了 60 秒）'); await sleep(800);
+  const f = await expectDownload(() => ev(() => { const b = [...document.querySelectorAll('.modal button')].find(x => /下载|保存/.test(x.textContent)); if (!b) throw new Error('全景预览里没有下载按钮'); b.click(); })); await closeModals(); return f.join(',');
+}, { timeout: 90000 });
+await closeModals();
+await step('3D 里点门 / 开关（射线点中可交互物体）', async () => {
+  const r = await ev(async () => {
+    const S = __designer.S3, D = __designer, op = D.app.plan.openings.find(o => o.type === 'door');
+    if (!op) return 'no door';
+    const before = S.doorOpen.get(op.id); S.toggleDoor(op.id); await new Promise(r => setTimeout(r, 900)); const after = S.doorOpen.get(op.id); S.toggleDoor(op.id);
+    return before !== after ? 'ok' : 'door state unchanged';
+  });
+  must(r === 'ok' || r === 'no door', r);
+});
+// 夜里走到一个开关跟前：点位标记要出现、准星对准、按空格灯要亮（每盏灯都要有光源，以前只有前 22 盏有）
+await step('漫游：夜里点位标记 + 空格开关灯', async () => {
+  const sw = await ev(() => {
+    const D = __designer, P = D.app.plan;
+    const s = P.elec.find(e => /^switch|dimmer/.test(e.kind) && e.links?.some(l => P.elec.some(q => q.id === l)) && D.app.rooms.regions.some(r => r.area > 4 && r.labels.length));
+    if (!s) return null;
+    // 它控制的灯的中心：先站到灯下面（和灯同一个房间），这样开灯后整间屋子应该亮起来
+    const L = s.links.map(l => P.elec.find(q => q.id === l)).filter(Boolean);
+    return { id: s.id, x: s.x, y: s.y, lx: L.reduce((a, e) => a + e.x, 0) / L.length, ly: L.reduce((a, e) => a + e.y, 0) / L.length };
+  });
+  if (!sw) return '方案里没有关联了灯的开关';
+  // 站到开关前面 1.2m，面朝开关：四个方向依次试，哪边能看到开关标记（没被墙挡住）就站哪边；先把所有灯关掉
+  await ev(() => { const S = __designer.S3; S.lighting.time = 22; S.setLighting(); });
+  let seen = false;
+  for (const a of [null, 0, Math.PI / 2, Math.PI, -Math.PI / 2]) {
+    await ev(() => __designer.S3.exitFP(true)); await sleep(300);
+    await ev((sw, a) => __designer.S3.enterFP(a === null ? { x: sw.lx, y: sw.ly } : { x: sw.x + Math.cos(a) * 1200, y: sw.y + Math.sin(a) * 1200 }), sw, a);
+    await page.waitForFunction(() => __designer.S3.fp.active, { timeout: 120000 * TMUL });
+    await ev(sw => { const S = __designer.S3; S.setAllLamps(false); S.fp.yaw = Math.atan2(sw.y - S.fp.y, sw.x - S.fp.x); S.fp.pitch = Math.atan2(1.35 - 1.6, Math.max(.3, Math.hypot(sw.x - S.fp.x, sw.y - S.fp.y) / 1000)); }, sw);
+    await sleep(2000);
+    if (await ev(() => !!document.querySelector('.pt-hud .pt-switch'))) { seen = true; break; }
+  }
+  must(seen, '站在开关四周都看不到开关标记');
+  const n = await ev(() => document.querySelectorAll('.pt-hud .pt').length); must(n > 0, '漫游里没有出现点位标记');
+  // 插座 / 网口也要有标记：原地转四个方向，至少一个方向能看到
+  let sockets = 0;
+  for (let k = 0; k < 4 && !sockets; k++) { await ev(k => { const S = __designer.S3; S.fp.yaw += Math.PI / 2 * (k ? 1 : 0); S.fp.pitch = -.15; }, k); await sleep(900); sockets = await ev(() => document.querySelectorAll('.pt-hud .pt-socket').length); }
+  must(sockets > 0 || !(await ev(() => __designer.app.plan.elec.some(e => /^socket|^net$|^tv$/.test(e.kind)))), '漫游里看不到插座 / 网口标记');
+  await ev(sw => { const S = __designer.S3; S.fp.yaw = Math.atan2(sw.y - S.fp.y, sw.x - S.fp.x); S.fp.pitch = Math.atan2(1.35 - 1.6, Math.max(.3, Math.hypot(sw.x - S.fp.x, sw.y - S.fp.y) / 1000)); }, sw); await sleep(1500);
+  const lv = () => ev(id => { const D = __designer, s = D.app.plan.elec.find(e => e.id === id); return Math.max(...s.links.map(l => D.S3.lampLevel.get(l) || 0)); }, sw.id);
+  const aimed = await ev(() => !!document.querySelector('.pt.aim'));
+  if (aimed) { await page.keyboard.press('Space'); await sleep(1500); }
+  else { const b = await page.$('.pt-hud .pt-switch'); must(b, '附近没有开关标记'); await b.click(); await sleep(1500); }
+  must(await until(id => { const D = __designer, s = D.app.plan.elec.find(e => e.id === id); return s.links.some(l => (D.S3.lampLevel.get(l) || 0) > 0); }, 10000, sw.id) || (await lv()) > 0, `${aimed ? '按空格' : '点开关标记'}后灯没亮`);
+  await page.screenshot({ path: path.join(SHOTS, `${String(++shotN).padStart(3, '0')}_漫游夜里开关灯.png`) });
+  await page.keyboard.press('KeyT'); await sleep(400); must(await ev(() => document.querySelectorAll('.pt-hud .pt').length === 0), '按 T 没隐藏点位标记'); await page.keyboard.press('KeyT');
+  await ev(() => { const S = __designer.S3; S.lighting.time = 15; S.setLighting(); });
+}, { timeout: 200000 });
+await step('退出漫游', async () => { await closeModals(); await page.keyboard.press('Escape'); must(await until(() => !__designer.S3.fp.active, 15000), '没退出'); await sleep(800); });
+await group('3d', true);
+if (!QUICK) await step('光线追踪出图（提前结束保存）', async () => {
+  await ev(() => { document.querySelector('#rendMode').value = 'pt'; document.querySelector('#resIn').value = '1920x1080'; });
+  const f = await expectDownload(async () => {
+    await click('#renderBtn');
+    const t0 = Date.now(); while (Date.now() - t0 < 300000) { const s = await ev(() => document.querySelector('#ptProg span').textContent); if (/已采样 ([2-9]\d|\d{3})/.test(s)) break; await sleep(2000); }
+    await ev(() => document.querySelector('#ptProg button').click());
+  }, { wait: 360000 });
+  await ev(() => { document.querySelector('#rendMode').value = 'raster'; }); return f.join(',');
+}, { timeout: 400000 });
+/* 智能中控 */
+await group('smart', true);
+await step('智能中控：进入', async () => { await click('#smartBtn'); must(await until(() => !!document.querySelector('#smExit') && getComputedStyle(document.querySelector('#smExit')).display !== 'none', 40000), '没进入中控'); await sleep(1500); });
+for (const t of ['light', 'env', 'dev', 'robot', 'sec']) await step(`中控分类：${t}`, async () => {
+  const has = await ev(t => { const b = document.querySelector(`#smTabs [data-tab="${t}"]`); if (b) b.click(); return !!b; }, t); if (!has) return '没有这个分类';
+  await sleep(1500);
+  const pins = await ev(() => [...document.querySelectorAll('.sm-pin')].filter(p => p.style.visibility !== 'hidden' && p.offsetParent).length);
+  if (pins) { await ev(() => [...document.querySelectorAll('.sm-pin')].find(p => p.style.visibility !== 'hidden' && p.offsetParent).click()); await sleep(2200); const card = await ev(() => document.querySelector('#smCard')?.innerText || ''); must(card.length > 4, '控制卡片是空的'); await page.screenshot({ path: path.join(SHOTS, `${String(++shotN).padStart(3, '0')}_中控卡片_${t}.png`) });
+    await ev(() => { const r = document.querySelector('#smCard input[type=range]'); if (r) { r.value = String((+r.min + +r.max) / 2); r.dispatchEvent(new Event('input', { bubbles: true })); r.dispatchEvent(new Event('change', { bubbles: true })); } const b = [...document.querySelectorAll('#smCard button')][0]; b && b.click(); }); await sleep(800); }
+  return `${pins} 个设备图标`;
+});
+if (multi) await step('中控：切换楼层', async () => { const n = await ev(() => document.querySelectorAll('#smFloors button').length); for (let i = 0; i < n; i++) { await ev(i => document.querySelectorAll('#smFloors button')[i].click(), i); await sleep(1800); } return `${n} 个楼层按钮`; });
+await step('智能中控：退出', async () => { await click('#smExit'); await sleep(2500); });
+/* 多层 */
+await group('3d');
+if (multi) {
+  await step('楼层：楼层面板逐层切换（2D）', async () => {
+    await to3d('2d'); const n = await ev(() => document.querySelectorAll('#floorDock [data-f]').length); must(n > 1, '楼层面板没有楼层');
+    for (let i = 0; i < n; i++) { await ev(i => document.querySelectorAll('#floorDock [data-f]')[i].click(), i); await sleep(900); }
+    for (const v of ['all', 'one']) { await ev(v => document.querySelector(`#floorDock [data-v2="${v}"]`)?.click(), v); await sleep(1200); }
+    return `${n} 层`;
+  });
+  await step('楼层：3D 楼层视图按钮', async () => {
+    await to3d('3d'); const bs = await ev(() => [...document.querySelectorAll('#floor3d button, #floor3d input')].length); must(bs > 0, '3D 楼层面板没有按钮');
+    const n = await ev(() => document.querySelectorAll('#floor3d button').length); for (let i = 0; i < n; i++) { await ev(i => document.querySelectorAll('#floor3d button')[i].click(), i); await sleep(1600); must((await canvasStd()).std > 6, `第 ${i + 1} 个楼层视图画面空白`); }
+    return `${n} 个按钮`;
+  });
+}
+/* 手机 */
+/* 夜里打开中控：左侧文字要看得清 */
+await group('smart');
+await step('夜里打开智能中控（文字对比度）', async () => {
+  await to3d('3d'); await ev(() => { const i = document.querySelector('#timeIn'); i.value = '21'; i.dispatchEvent(new Event('input')); }); await sleep(800);
+  await click('#smartBtn'); await sleep(4000);
+  const low = await ev(() => {
+    // 文字颜色和它所在底板（往上找第一个不透明背景，找不到就取 3D 画面在那一点的颜色）的对比度
+    const lum = c => { const m = c.match(/[\d.]+/g).map(Number); const f = v => { v /= 255; return v <= .03928 ? v / 12.92 : ((v + .055) / 1.055) ** 2.4; }; return .2126 * f(m[0]) + .7152 * f(m[1]) + .0722 * f(m[2]); };
+    const cv = document.querySelector('#c3d'), t = document.createElement('canvas'); t.width = cv.width; t.height = cv.height; __designer.S3.renderNow(); t.getContext('2d').drawImage(cv, 0, 0);
+    const cr = cv.getBoundingClientRect(), out = [];
+    for (const el of document.querySelectorAll('.sm-left *, .sm-tabs button, #smFloors button, .sm-exit')) {
+      if (!el.childNodes.length || ![...el.childNodes].some(n => n.nodeType === 3 && n.textContent.trim())) continue;
+      const r = el.getBoundingClientRect(); if (!r.width) continue;
+      let bg = null; for (let p = el; p; p = p.parentElement) { const b = getComputedStyle(p).backgroundColor; const a = b.match(/[\d.]+/g); if (a && (a.length < 4 || +a[3] > .5)) { bg = b; break; } if (p.id === 'pane3d') break; }
+      if (!bg) { const x = Math.round((r.x + r.width / 2 - cr.x) / cr.width * cv.width), y = Math.round((r.y + r.height / 2 - cr.y) / cr.height * cv.height); const d = t.getContext('2d').getImageData(Math.max(0, x), Math.max(0, y), 1, 1).data; bg = `rgb(${d[0]},${d[1]},${d[2]})`; }
+      const L1 = lum(getComputedStyle(el).color), L2 = lum(bg), cr2 = (Math.max(L1, L2) + .05) / (Math.min(L1, L2) + .05);
+      if (cr2 < 2.2) out.push(el.textContent.trim().slice(0, 12) + ' ' + cr2.toFixed(1));
+    }
+    return out;
+  });
+  await page.screenshot({ path: path.join(SHOTS, `${String(++shotN).padStart(3, '0')}_夜里的中控.png`) });
+  await click('#smExit'); await sleep(2000); await ev(() => { const i = document.querySelector('#timeIn'); i.value = '15'; i.dispatchEvent(new Event('input')); });
+  must(!low.length, '看不清的文字：' + low.slice(0, 6).join('、'));
+});
+/* 常见屏幕尺寸：按钮不能被挤出、不能互相压住 */
+await group('screen');
+const LAYOUT_FN = () => {
+  const out = [];
+  const groups = [['header', 'header > *:not(.grow):not(.sep)'], ['3D 工具栏', '#pane3d .overlay.ov-tl > *, #floor3d'], ['2D 图层', '#layerSeg > button'], ['2D 缩放', '#pane2d .ov-br > *']];
+  for (const [name, sel] of groups) {
+    const els = [...document.querySelectorAll(sel)].filter(e => e.offsetParent && getComputedStyle(e).display !== 'none');
+    const host = els[0]?.closest('header, .pane'); const hr = host?.getBoundingClientRect();
+    const rs = els.map(e => ({ e, r: e.getBoundingClientRect(), t: (e.textContent || e.title || e.id).trim().slice(0, 8) }));
+    for (const a of rs) {
+      if (hr && (a.r.right > hr.right + 1 || a.r.left < hr.left - 1 || a.r.bottom > hr.bottom + 1)) out.push(`${name}「${a.t}」超出边界`);
+      if (a.e.scrollWidth > a.e.clientWidth + 2 && a.e.tagName === 'BUTTON') out.push(`${name}「${a.t}」文字被截断`);
+    }
+    for (let i = 0; i < rs.length; i++) for (let j = i + 1; j < rs.length; j++) { const a = rs[i].r, b = rs[j].r; const ox = Math.min(a.right, b.right) - Math.max(a.left, b.left), oy = Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top); if (ox > 2 && oy > 2) out.push(`${name}「${rs[i].t}」和「${rs[j].t}」重叠`); }
+  }
+  return [...new Set(out)];
+};
+const layoutBad = (pg = page) => pg.evaluate(LAYOUT_FN);
+for (const [w, h] of [[1280, 720], [1366, 768], [1440, 900], [1920, 1080]]) await step(`屏幕 ${w}×${h}：2D / 3D 按钮不挤不叠`, async () => {
+  await page.setViewport({ width: w, height: h }); await sleep(800);
+  const bad = []; for (const v of ['2d', '3d']) { await to3d(v); bad.push(...(await layoutBad()).map(x => v + '：' + x)); await page.screenshot({ path: path.join(SHOTS, `${String(++shotN).padStart(3, '0')}_屏幕${w}x${h}_${v}.png`) }); }
+  must(!bad.length, bad.slice(0, 6).join('；'));
+}, { shot: false });
+await step('手机：直接用手机尺寸打开（平面在屏幕内、抽屉面板）', async () => {
+  const m = await b.newPage(); const e0 = errs.length; m.on('pageerror', e => errs.push('pageerror(手机): ' + e.message));
+  await m.emulate({ viewport: { width: 390, height: 844, isMobile: true, hasTouch: true, deviceScaleFactor: 2 }, userAgent: 'Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 Chrome/120 Mobile Safari/537.36' });
+  await m.goto(pathToFileURL(path.resolve(FILE)).href + '?debug', { waitUntil: 'load' }); await m.waitForFunction(() => window.__designer, { timeout: 60000 }); await sleep(2500);
+  const r = await m.evaluate(() => { const D = __designer, v = D.view, c = document.querySelector('#c2d').getBoundingClientRect(), bb = D.app.geo.bounds; return { over: document.documentElement.scrollWidth > innerWidth + 2, x0: c.x + bb.x * v.s + v.ox, x1: c.x + bb.x1 * v.s + v.ox, W: innerWidth }; });
+  await m.screenshot({ path: path.join(SHOTS, `${String(++shotN).padStart(3, '0')}_手机_打开.png`) });
+  await m.evaluate(() => document.querySelector('#leftToggle').click()); await sleep(500); await m.screenshot({ path: path.join(SHOTS, `${String(++shotN).padStart(3, '0')}_手机_左面板.png`) });
+  await m.evaluate(() => { document.querySelector('#leftToggle').click(); document.querySelector('#rightToggle').click(); }); await sleep(500); await m.screenshot({ path: path.join(SHOTS, `${String(++shotN).padStart(3, '0')}_手机_右面板.png`) });
+  await m.evaluate(() => document.querySelector('#rightToggle').click());
+  await m.evaluate(async () => { await __designer.setView('3d'); }); await sleep(5000); const mobBad = await m.evaluate(LAYOUT_FN); await m.screenshot({ path: path.join(SHOTS, `${String(++shotN).padStart(3, '0')}_手机_3D.png`) });
+  await m.close();
+  must(!r.over, '页面横向溢出'); must(!mobBad.length, '手机 3D：' + mobBad.slice(0, 4).join('；')); must(r.x0 > -20 && r.x1 < r.W + 20, `平面超出屏幕（${Math.round(r.x0)} ~ ${Math.round(r.x1)} / ${r.W}）`);
+}, { shot: false });
+await page.setViewport(VW); await to3d('2d');
+
+/* ============================== 报告 ============================== */
+const fail = results.filter(r => !r.ok), unv = results.filter(r => r.unverified);
+const md = [`# 设计器验收报告：${info.name}`, '', `文件：${FILE}`, ...(ONLY ? [`只跑了：${ONLY.join('、')}（不是完整验收）`] : []), ...(LITE ? ['模式：--lite（1280×800、快速画质）'] : []), ...(SOFT ? [`模式：无显卡慢速模式（${GPU.renderer}）；⚠ = 渲染超时未验证，必须人工看截图`] : []),
+  `结果：**${results.length - fail.length} / ${results.length} 通过**${fail.length ? `，${fail.length} 项失败` : ''}${unv.length ? `，其中 ${unv.length} 项未验证` : ''}`, '',
+  '| # | 项目 | 结果 | 说明 | 截图 |', '|---|---|---|---|---|',
+  ...results.map((r, i) => `| ${i + 1} | ${r.name} | ${r.unverified ? '⚠' : r.ok ? '✅' : '❌'} | ${(r.msg || '').replace(/\|/g, '/')} | ${r.shot ? `shots/${r.shot}` : ''} |`), '',
+  '导出的文件在 downloads/，用 `python scripts/qa_files.py <输出目录>/downloads` 检查能不能打开。'].join('\n');
+fs.writeFileSync(path.join(OUT, 'report.md'), md);
+fs.writeFileSync(path.join(OUT, 'report.json'), JSON.stringify({ file: FILE, gpu: GPU, soft: SOFT, results, errors: errs }, null, 1));
+console.log(`\n${results.length - fail.length} / ${results.length} 通过` + (fail.length ? `\n失败：\n${fail.map(r => ' - ' + r.name + '：' + r.msg).join('\n')}` : ''));
+await b.close();
+process.exit(fail.length ? 2 : 0);

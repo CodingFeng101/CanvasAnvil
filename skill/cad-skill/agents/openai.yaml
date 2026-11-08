@@ -1,7 +1,7 @@
 interface:
   display_name: "CAD Skill"
-  short_description: "Run staged interior-design workflows across plan, 2D SVG, BOM, and image outputs."
-  default_prompt: "Use $cad-skill to produce the next CAD workflow artifact and save local outputs when needed."
+  short_description: "An interactive house designer page from a floor plan, or from a brief with clickable decisions; checks, MEP audit and exports done for you."
+  default_prompt: "Use $cad-skill to design this home: settle the plan and decisions with me first, then build and check the floorplan and export the delivery files."
 
 policy:
   allow_implicit_invocation: true

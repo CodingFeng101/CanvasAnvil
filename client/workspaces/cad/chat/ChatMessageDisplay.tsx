@@ -1,10 +1,11 @@
 import React, { useRef, useEffect, useState, useCallback } from 'react';
-import { Check, ChevronDown, ChevronUp, Copy, Cpu, FileCode, FileText, Minus, Pencil, Plus, Play, RotateCcw } from "lucide-react";
+import { Check, ChevronDown, ChevronUp, Copy, FileCode, FileText, Pencil, RotateCcw } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from 'remark-gfm';
 import { MessageAttachments, MessageImage, Reasoning, ReasoningContent, ReasoningTrigger, Shimmer } from "@/shared/chat";
 import { ScrollArea } from "@/shared/ui/scroll-area";
 import { CodeBlock } from "@/workspaces/cad/chat/code-block";
+import { CAD_CONFIRM, CadSteps, parseCadSteps } from "@/workspaces/cad/chat/CadSteps";
 import { useUiLanguage } from "@/shared/i18n";
 import { cn } from "@/shared/lib/utils";
 import {
@@ -34,55 +35,8 @@ interface ChatMessageDisplayProps {
     onEditMessage?: (messageIndex: number, newText: string) => void;
     status?: "streaming" | "submitted" | "idle" | "error" | "ready";
     onDisplayChart?: (xml: string) => void; // Callback for diagram display
-}
-
-// Helper to split text content into regular text and file sections
-interface CadPatchEdit {
-    search: string;
-    replace: string;
-}
-
-interface CadPatchToolPayload {
-    type: "cad_patch";
-    target: "2d_svg";
-    mode: "patch";
-    edits: CadPatchEdit[];
-}
-
-function isCadAutoApplyCodeCandidate(language: string, code: string): boolean {
-    const lang = String(language || "").toLowerCase();
-    const text = String(code || "").trim();
-    if (!text) return false;
-
-    if (lang === "json") {
-        try {
-            const parsed = JSON.parse(text);
-            return (
-                String(parsed?.type || "").trim().toLowerCase() === "cad_patch" &&
-                String(parsed?.target || "").trim().toLowerCase() === "2d_svg"
-            );
-        } catch {
-            return false;
-        }
-    }
-
-    return false;
-}
-
-function AutoApplyCodeOnce({
-    onApplyCode,
-    code,
-    language,
-}: {
-    onApplyCode?: (code: string, language?: string) => void | boolean | Promise<void | boolean>;
-    code: string;
-    language?: string;
-}) {
-    useEffect(() => {
-        if (!onApplyCode) return;
-        void onApplyCode(code, language);
-    }, [onApplyCode, code, language]);
-    return null;
+    /** Buttons inside the interior-design step chain send their text here. */
+    onCadAction?: (text: string) => void;
 }
 
 type MarkdownSegment =
@@ -145,87 +99,14 @@ function splitMarkdownAndCodeBlocks(text: string): MarkdownSegment[] {
     return segments;
 }
 
-function extractCadPatchToolPayload(text: string): CadPatchToolPayload | null {
-    const raw = String(text || "").trim();
-    if (!raw) return null;
-    const fenced = raw.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
-    const candidate = String(fenced?.[1] ?? raw).trim();
-    let parsed: any;
-    try {
-        parsed = JSON.parse(candidate);
-    } catch {
-        return null;
-    }
-    if (!parsed || typeof parsed !== "object") return null;
-    if (String(parsed?.type || "").trim() !== "cad_patch") return null;
-    if (String(parsed?.target || "").trim() !== "2d_svg") return null;
-    if (String(parsed?.mode || "").trim() !== "patch") return null;
-    const edits = Array.isArray(parsed?.edits)
-        ? parsed.edits
-              .filter(
-                  (e: any) =>
-                      e &&
-                      typeof e === "object" &&
-                      typeof e.search === "string" &&
-                      typeof e.replace === "string"
-              )
-              .map((e: any) => ({ search: String(e.search), replace: String(e.replace) }))
-        : [];
-    if (edits.length === 0) return null;
-    return { type: "cad_patch", target: "2d_svg", mode: "patch", edits };
-}
-
-function CadPatchEditsDisplay({ edits, uiLang }: { edits: CadPatchEdit[]; uiLang: "zh" | "en" }) {
-    const tr = (zh: string, en: string) => (uiLang === "zh" ? zh : en);
-    return (
-        <div className="space-y-3">
-            {edits.map((edit, index) => (
-                <div
-                    key={`${(edit.search || "").slice(0, 40)}-${(edit.replace || "").slice(0, 40)}-${index}`}
-                    className="rounded-lg border border-border/50 overflow-hidden bg-background/50"
-                >
-                    <div className="px-3 py-1.5 bg-muted/40 border-b border-border/30 flex items-center gap-2">
-                        <span className="text-xs font-medium text-muted-foreground">
-                            {tr(`修改 ${index + 1}`, `Change ${index + 1}`)}
-                        </span>
-                    </div>
-                    <div className="divide-y divide-border/30">
-                        <div className="px-3 py-2">
-                            <div className="flex items-center gap-1.5 mb-1.5">
-                                <Minus className="w-3 h-3 text-destructive" />
-                                <span className="text-[10px] font-medium text-destructive uppercase tracking-wide">
-                                    {tr("删除", "Remove")}
-                                </span>
-                            </div>
-                            <pre className="text-[11px] font-mono text-destructive bg-destructive/[0.08] rounded px-2 py-1.5 overflow-x-auto whitespace-pre-wrap break-all">
-                                {edit.search}
-                            </pre>
-                        </div>
-                        <div className="px-3 py-2">
-                            <div className="flex items-center gap-1.5 mb-1.5">
-                                <Plus className="w-3 h-3 text-success" />
-                                <span className="text-[10px] font-medium text-success uppercase tracking-wide">
-                                    {tr("新增", "Add")}
-                                </span>
-                            </div>
-                            <pre className="text-[11px] font-mono text-success bg-success/[0.08] rounded px-2 py-1.5 overflow-x-auto whitespace-pre-wrap break-all">
-                                {edit.replace}
-                            </pre>
-                        </div>
-                    </div>
-                </div>
-            ))}
-        </div>
-    );
-}
-
 export function ChatMessageDisplay({
     messages,
     onApplyCode,
     onRegenerate,
     onEditMessage,
     status = "idle",
-    onDisplayChart
+    onDisplayChart,
+    onCadAction,
 }: ChatMessageDisplayProps) {
     const uiLang = useUiLanguage();
     const tr = (zh: string, en: string) => (uiLang === "zh" ? zh : en);
@@ -237,13 +118,11 @@ export function ChatMessageDisplay({
     const [editText, setEditText] = useState<string>("");
     const [expandedPdfSections, setExpandedPdfSections] = useState<Record<string, boolean>>({});
     const [expandedSlideCards, setExpandedSlideCards] = useState<Record<string, boolean>>({});
-    const [expandedCadPatchCards, setExpandedCadPatchCards] = useState<Record<string, boolean>>({});
     const [isAtBottom, setIsAtBottom] = useState(true);
     const scrollRafRef = useRef<number | null>(null);
     const userScrolledUpRef = useRef(false);
     const lastScrollTopRef = useRef(0);
     const lastMessageCountRef = useRef(0);
-    const autoAppliedCadPatchCardRef = useRef<Set<string>>(new Set());
 
     const copyMessageToClipboard = async (messageId: string, text: string) => {
         try {
@@ -437,9 +316,28 @@ export function ChatMessageDisplay({
                     const showPendingIndicator =
                         message.role === "user" &&
                         isLastUserMessage &&
-                        (status === "submitted" || status === "streaming");
+                        (status === "submitted" || status === "streaming") &&
+                        // A step chain shows its own progress.
+                        !parseCadSteps(messages[messageIndex + 1] ? getMessageTextContent(messages[messageIndex + 1]) : "");
 
                     if (isAssistantEmpty) return null;
+                    // The step chain's confirm button sends a hidden message; the chain shows it as "confirmed".
+                    if (message.role === "user" && messageText.startsWith(CAD_CONFIRM)) return null;
+                    if (message.role === "assistant" && parseCadSteps(messageText)) {
+                        const next = messages[messageIndex + 1];
+                        const nextText = next ? getMessageTextContent(next) : "";
+                        return (
+                            // The scroll area's content grows to fit its widest child; clip so a long summary truncates.
+                            <div key={message.id} className="w-full min-w-0 max-w-full overflow-hidden [contain:inline-size] animate-message-in">
+                                <CadSteps
+                                    text={messageText}
+                                    followUp={!next ? "none" : nextText.startsWith(CAD_CONFIRM) ? "confirmed" : "feedback"}
+                                    canAct={!next && status !== "streaming" && status !== "submitted"}
+                                    onAction={onCadAction}
+                                />
+                            </div>
+                        );
+                    }
 
                     return (
                         <React.Fragment key={message.id}>
@@ -860,127 +758,7 @@ export function ChatMessageDisplay({
                                                                 const code = seg.code || "";
                                                                 if (!code.trim()) return null;
                                                                 const ordinal = codeBlockOrdinal++;
-                                                                const cadPatchPayload = language === "json"
-                                                                    ? extractCadPatchToolPayload(code)
-                                                                    : null;
-                                                                if (cadPatchPayload && cadPatchPayload.edits.length > 0) {
-                                                                    const cardKey = `${message.id}-cad-patch-${idx}-${segIdx}-${ordinal}`;
-                                                                    const expanded = expandedCadPatchCards[cardKey] ?? true;
-                                                                    const isStreamingPatch = status === "streaming" && isLastAssistantMessage;
-                                                                    const autoApplyCode = JSON.stringify(cadPatchPayload, null, 2);
-                                                                    const shouldAutoApply =
-                                                                        !!onApplyCode &&
-                                                                        message.role === "assistant" &&
-                                                                        isLastAssistantMessage &&
-                                                                        !isStreamingPatch &&
-                                                                        !autoAppliedCadPatchCardRef.current.has(cardKey);
-                                                                    if (shouldAutoApply) {
-                                                                        autoAppliedCadPatchCardRef.current.add(cardKey);
-                                                                    }
-                                                                    return (
-                                                                        <div
-                                                                            key={`cad-patch-card-${message.id}-${idx}-${segIdx}-${ordinal}`}
-                                                                            className="my-1 rounded-xl border border-border/60 bg-muted/30 overflow-hidden"
-                                                                        >
-                                                                            {shouldAutoApply && (
-                                                                                <AutoApplyCodeOnce
-                                                                                    onApplyCode={onApplyCode}
-                                                                                    code={autoApplyCode}
-                                                                                    language="json"
-                                                                                />
-                                                                            )}
-                                                                            <div className="flex items-center justify-between px-4 py-3 bg-muted/50">
-                                                                                <div className="flex items-center gap-2">
-                                                                                    <div className="w-6 h-6 rounded-md bg-primary/10 flex items-center justify-center">
-                                                                                        <Cpu className="w-3.5 h-3.5 text-primary-strong" />
-                                                                                    </div>
-                                                                                    <span className="text-sm font-medium text-foreground/80">
-                                                                                        {tr("编辑图纸", "Edit Diagram")}
-                                                                                    </span>
-                                                                                </div>
-                                                                                <div className="flex items-center gap-2">
-                                                                                    {isStreamingPatch ? (
-                                                                                        <div className="h-4 w-4 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-                                                                                    ) : (
-                                                                                        <span className="text-xs font-medium text-success bg-success/[0.08] px-2 py-0.5 rounded-full">
-                                                                                            {tr("完成", "Complete")}
-                                                                                        </span>
-                                                                                    )}
-                                                                                    {onApplyCode && (
-                                                                                        <button
-                                                                                            type="button"
-                                                                                            onClick={() =>
-                                                                                                onApplyCode(
-                                                                                                    JSON.stringify(cadPatchPayload, null, 2),
-                                                                                                    "json"
-                                                                                                )
-                                                                                            }
-                                                                                            className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[10px] text-muted-foreground hover:bg-muted transition-colors"
-                                                                                        >
-                                                                                            <Play className="h-3 w-3" />
-                                                                                            <span>{tr("应用", "Apply")}</span>
-                                                                                        </button>
-                                                                                    )}
-                                                                                    <button
-                                                                                        type="button"
-                                                                                        onClick={() =>
-                                                                                            setExpandedCadPatchCards((prev) => ({
-                                                                                                ...prev,
-                                                                                                [cardKey]: !expanded,
-                                                                                            }))
-                                                                                        }
-                                                                                        className="p-1 rounded hover:bg-muted transition-colors"
-                                                                                    >
-                                                                                        {expanded ? (
-                                                                                            <ChevronUp className="w-4 h-4 text-muted-foreground" />
-                                                                                        ) : (
-                                                                                            <ChevronDown className="w-4 h-4 text-muted-foreground" />
-                                                                                        )}
-                                                                                    </button>
-                                                                                </div>
-                                                                            </div>
-                                                                            {expanded && (
-                                                                                <div className="px-4 py-3 border-t border-border/40 bg-muted/20">
-                                                                                    <CadPatchEditsDisplay edits={cadPatchPayload.edits} uiLang={uiLang} />
-                                                                                </div>
-                                                                            )}
-                                                                        </div>
-                                                                    );
-                                                                }
-                                                                return (
-                                                                    (() => {
-                                                                        const autoApplyKey = `${message.id}-code-auto-${idx}-${segIdx}-${language}-${ordinal}`;
-                                                                        const shouldAutoApply =
-                                                                            !!onApplyCode &&
-                                                                            message.role === "assistant" &&
-                                                                            isLastAssistantMessage &&
-                                                                            status !== "streaming" &&
-                                                                            isCadAutoApplyCodeCandidate(language, code) &&
-                                                                            !autoAppliedCadPatchCardRef.current.has(autoApplyKey);
-                                                                        if (shouldAutoApply) {
-                                                                            autoAppliedCadPatchCardRef.current.add(autoApplyKey);
-                                                                        }
-                                                                        return (
-                                                                            <React.Fragment key={`codeblock-wrap-${message.id}-${idx}-${segIdx}-${language}-${ordinal}`}>
-                                                                                {shouldAutoApply && (
-                                                                                    <AutoApplyCodeOnce
-                                                                                        onApplyCode={onApplyCode}
-                                                                                        code={code}
-                                                                                        language={language}
-                                                                                    />
-                                                                                )}
-                                                                                <CodeBlock
-                                                                                    key={`codeblock-${message.id}-${idx}-${segIdx}-${language}-${ordinal}`}
-                                                                                    blockId={`${message.id}:${idx}:${segIdx}:${language}:${ordinal}`}
-                                                                                    code={code}
-                                                                                    language={language}
-                                                                                    isStreaming={status === "streaming" && isLastAssistantMessage}
-                                                                                    onApply={onApplyCode}
-                                                                                />
-                                                                            </React.Fragment>
-                                                                        );
-                                                                    })()
-                                                                );
+                                                                return <CodeBlock key={`${message.id}-${idx}-${segIdx}-${ordinal}`} blockId={`${message.id}:${idx}:${segIdx}:${ordinal}`} code={code} language={language} isStreaming={status === "streaming" && isLastAssistantMessage} onApply={onApplyCode} />;
                                                             })}
                                                         </div>
                                                     );

@@ -59,6 +59,8 @@ export async function sendWebResponse(webResponse: Response, res: ServerResponse
   (res as ServerResponse & { flushHeaders?: () => void }).flushHeaders?.();
 
   const reader = webResponse.body.getReader();
+  // A client that goes away (stop button, closed tab) cancels the stream, so the model call stops too.
+  res.on("close", () => { if (!res.writableEnded) void reader.cancel().catch(() => {}); });
   while (true) {
     const { done, value } = await reader.read();
     if (done) break;

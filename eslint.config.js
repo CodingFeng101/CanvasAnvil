@@ -9,7 +9,7 @@ export default tseslint.config(
   // this every file gets linted once per live worktree.
   // Vendored builds are someone else's minified code; their inline
   // eslint-disable comments name plugins this project does not load.
-  { ignores: ['dist', '.claude', 'public/vendor', 'skill/*/vendor'] },
+  { ignores: ['dist', '.claude', 'public/vendor', 'skill/*/vendor', 'skill/*/assets', 'skill/cad-skill/scripts/lib'] },
   {
     extends: [js.configs.recommended, ...tseslint.configs.recommended],
     files: ['**/*.{ts,tsx}'],

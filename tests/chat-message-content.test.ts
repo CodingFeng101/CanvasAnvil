@@ -167,7 +167,7 @@ test("a naked array of slides counts as an edit payload", () => {
 test("anything that is not a slide edit is refused", () => {
   assert.equal(extractPptToolPayload(""), null);
   assert.equal(extractPptToolPayload("just prose"), null);
-  assert.equal(extractPptToolPayload('{"type":"cad_patch","edits":[]}'), null, "another tool's payload");
+  assert.equal(extractPptToolPayload('{"type":"unrelated_tool","edits":[]}'), null, "another tool's payload");
   assert.equal(extractPptToolPayload('{"type":"ppt_edit","slides":[]}'), null, "nothing to apply");
 });
 

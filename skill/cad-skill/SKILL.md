@@ -1,138 +1,50 @@
 ---
 name: cad-skill
-description: Generate interior design planning artifacts, 2D SVG floorplans, BOM outputs, analysis boards, and renovation image sets from structured requirements. Use for staged interior-design work that moves through plan, 2D drafting, BOM, and image outputs.
+description: Home interior design delivered as an interactive house designer page (one offline HTML, 2D / 3D / furniture / MEP / ceilings / quote / drawing set). From an existing floor plan (image, PDF, DXF, CAD) it reconstructs the plan in the designer. From a brief with no plan, the model first settles a design plan with the user (rooms, finishes, equipment, smart home, wiring preferences as clickable decisions), describes the layout as a grid with intent, and programs draw it; then the designer lays out MEP, the wiring preferences are applied, checks and a room-by-room MEP audit run, and the quote, drawing-set PDF, DXF, colour plan and 3D render are exported automatically. Use for home layout, renovation design, floor plan to designer.
 ---
 
 # CAD Skill
 
-## Trigger
+Everything the user ends up with is the house designer in `designer/`: its page, its checks, its exports. Two routes lead there: reconstructing an existing floor plan, or designing from a brief.
 
-Use when the task requires one step in an interior-design workflow.
+Never write wall or furniture coordinates by hand: on route A the designer's reconstruction scripts produce them, on route B the layout program does.
 
-## First-Use Reminder
+## Pick the route
 
-On the first use of this skill in a conversation, remind the user that image generation reads `config/image-provider.json` in this skill folder, and that it must be filled in before any image can be produced. If it does not exist, they copy `config/image-provider.example.json` to it; the filled file is git-ignored and must not be committed.
+| The user has | Route |
+|---|---|
+| An existing floor plan: image, screenshot, scan, CAD PDF, DXF, black CAD screenshot, two plans (original + layout) | **A — reconstruct.** Read `designer/GUIDE.md` and follow it from section 0 to 6 (its paths are relative to `designer/`). |
+| Only a brief ("90 平两室两厅，三口之家") | **B — design from a brief**, below. It ends in the same designer page and the same checks. |
 
-The 2D preview export (`scripts/export-cad-2d-image.mjs`) needs Playwright's Chromium. If it reports that Chromium cannot launch, tell the user to run `npx playwright install chromium` once.
+## Route B — design from a brief
 
-## Order
+1. **Plan** — read `prompts/plan.md` and write one `cad_plan` (save it as `cad_plan.json`).
+2. **Decide with the user** — show the plan, then every entry of `plan.decisions` as a question with its options, grouped (布局 / 硬装 / 设备 / 电器 / 智能 / 水电), the recommended `choice` marked. When your host has a question or option tool, use it so the user picks with a click; otherwise list them numbered. Write the user's picks into each decision's `choice` and save `cad_plan.json` again. If the user changes rooms or wants something new, revise the plan (step 1 with "已定事项") before going on. Do not continue until the user confirms the plan.
+3. **Layout** — read `prompts/layout.md` and `references/furniture-catalog.md`; write one `cad_layout` from the confirmed plan (`cad_layout.json`). The decisions' choices decide equipment, finishes and kitchen / door / window types as that prompt lays out.
+4. **Build the HouseSpec** — `node scripts/build-house-spec.mjs --layout cad_layout.json --output house-spec.json`. The output is the designer's HouseSpec (`designer/reference/spec-format.md`). It prints what the program adjusted (smaller furniture, items left out). On errors (exit 1), fix the layout and run again; never patch coordinates in the spec.
+5. **Finish in the designer** — `node scripts/run-designer.mjs --spec house-spec.json --plan cad_plan.json --out-dir <dir>`. It nudges colliding furniture, runs the one-click MEP layout, applies the wiring preferences from the plan, runs the designer's checks, writes `<name>-装修设计器.html` (the designer template with the finished design, MEP included, as its preset), runs the room-by-room MEP audit (`designer/scripts/elecaudit.mjs`) on it, exports the quote, drawing-set PDF, MEP DXF and colour plan (add `--exports all` for the plan DXF and the 3D render), and opens the page in the user's browser. If `report.json` lists errors, change the layout (move a door, resize a room, drop a secondary item) and repeat steps 4–5.
+6. **Delivery checks** — as `designer/GUIDE.md` section 6 and `designer/reference/delivery.md` say: `node designer/scripts/qa.mjs <page> <dir>/qa --lite --quick` (several minutes; look through `qa/shots/`), and `python designer/scripts/qa_files.py <dir>/qa` when Python is available. The MEP audit already ran in step 5 (`report.json` → `elecAudit`).
+7. **Report** — tell the user the designer page is open (give its path: double-click it to open again; edits made there stay in that browser), the room areas, what the program adjusted, the remaining warnings, the wiring changes, every MEP audit problem (the user fixes those under 水电 in the designer page; the layout cannot), the qa result and the files written. Show `plan2d.png` or the colour plan when the host can display images.
 
-1. Confirm the task is an interior-design task.
-2. Route the task to one step only: `plan`, `2d_svg`, `bom`, or `images`.
-3. Collect missing required context for that step.
-4. Read the required references.
-5. Produce the step artifact.
-6. Export preview artifacts when requested.
-7. Bundle artifacts when requested.
+For a change after delivery ("主卧再大一点", "阳台加窗"), edit `cad_layout.json` and run steps 4–5 again; a new designer page opens with the change. Keep everything the user did not mention.
 
-## Classification
+## What the user can decide (route B)
 
-- `plan`
-  - design strategy
-  - requirement analysis
-  - zoning logic
-  - room program
-- `2d_svg`
-  - new floorplan drafting
-  - floorplan edits
-  - redraw requests
-- `bom`
-  - bill of materials
-  - procurement-ready lists
-- `images`
-  - analysis boards
-  - renovation drawing boards
-  - render sheets
+Only what the designer can build; `references/workflow.md` lists it. Socket counts, network points, panel and network box location, bedside USB and floor sockets are applied after the designer's automatic MEP layout; exact switch positions and lighting circuits are left to the designer.
 
-## Required References
+## Requirements
 
-- `references/task-types.md`
-- `references/output-contract.md`
-- `references/image-provider-config.md`
-- `references/image-agents/*.md`
-- `prompts/router.md`
-- `prompts/plan.md`
-- `prompts/svg-router.md`
-- `prompts/svg-patch.md`
-- `prompts/svg-replace.md`
-- `prompts/bom.md`
-- `prompts/overall-analysis-board.md`
-- `prompts/key-strategy-board.md`
-- `prompts/master-renovation-scheme.md`
-- `prompts/renovation-plan-layout.md`
-- `prompts/floor-finish-plan.md`
-- `prompts/reflected-ceiling-plan.md`
-- `prompts/wall-setting-out-plan.md`
-- `prompts/mep-plan.md`
-- `prompts/elevation-index-and-interior-elevations.md`
-- `prompts/detail-drawings.md`
+- The skill folder is self-contained and can sit in any project. Script paths are relative to this skill folder; data files can live anywhere (pass their paths).
+- Once: `npm run setup` in this folder. It installs `designer/scripts` (only `puppeteer-core`, which drives the user's own Chrome / Edge / Chromium, found by `designer/scripts/browser.mjs`; no browser is downloaded). If no browser is found, ask the user to install Chrome or Edge, or set `CHROME_PATH`.
+- Node 18 or newer. Route B needs nothing else (`scripts/build-house-spec.mjs` has no dependencies).
+- Route A, and `qa_files.py` on route B, need Python with: `pip install numpy pillow opencv-python pymupdf ezdxf pypdf`.
+- No API key or image model is needed: every drawing and render comes from the designer.
 
-## Routing Contract
+## Layout of this folder
 
-- Route one step at a time.
-- Prefer `plan` when no usable plan exists.
-- Use `2d_svg` for drawing, redrawing, and localized floorplan edits.
-- Use `bom` only when a plan exists.
-- Use `images` only when the task is to produce analysis boards, drawing boards, or render images.
+- `designer/` — the house designer: template, reconstruction and check scripts, references, `GUIDE.md` (route A).
+- `prompts/plan.md`, `prompts/layout.md` — route B's plan (with the decision menu) and layout prompts.
+- `references/furniture-catalog.md` — every valid furniture key; `references/workflow.md` — route B in detail; `references/output-contract.md` — the files each step writes.
+- `scripts/build-house-spec.mjs`, `scripts/run-designer.mjs` — route B's two scripts; `scripts/lib/` — the layout program and in-page helpers, bundled.
 
-## Plan Contract
-
-- Output one `cad_plan` artifact only.
-- Keep assumptions explicit.
-- Keep room names, functional needs, and constraints executable.
-- Do not output SVG, BOM, or image tasks in the same step.
-
-## 2D SVG Contract
-
-- Output one `cad_patch` artifact or one full SVG result.
-- Use patch for small precise edits.
-- Use replace for broad redraws or unstable patch cases.
-- Keep output limited to the 2D floorplan step.
-- Export a local preview image when requested.
-
-## BOM Contract
-
-- Output one `cad_bom.csv` artifact only.
-- Base BOM on the current plan and 2D SVG.
-- Keep columns normalized and machine-readable.
-
-## Images Contract
-
-- Use `prompts/overall-analysis-board.md` to generate the text-model prompt for the overall analysis board.
-- Use `prompts/key-strategy-board.md` to generate the text-model prompt for the key strategy board.
-- Use `prompts/master-renovation-scheme.md` first to generate the text-model prompt for the master renovation scheme, then lock that JSON as the source of truth.
-- After the master scheme, use one dedicated prompt file per sheet to generate seven different text-model prompts:
-  - `prompts/renovation-plan-layout.md`
-  - `prompts/floor-finish-plan.md`
-  - `prompts/reflected-ceiling-plan.md`
-  - `prompts/wall-setting-out-plan.md`
-  - `prompts/mep-plan.md`
-  - `prompts/elevation-index-and-interior-elevations.md`
-  - `prompts/detail-drawings.md`
-- Do not reuse one prompt for all seven outputs.
-- For every analysis board or sheet, first produce a dedicated image prompt with the host model, then pass that image prompt to the configured image model.
-- Require `config/image-provider.json` before image generation.
-- Do not ask the user to paste API keys into chat.
-- Stop and tell the user to fill `config/image-provider.json` when apiKey or model is missing.
-
-## Scripts
-
-- `scripts/generate-cad-image.mjs`
-- `scripts/export-cad-2d-image.mjs`
-- `scripts/build-cad-bundle.mjs`
-
-## Deliverables
-
-Preferred:
-
-- `cad_plan.json`
-- `floorplan.svg`
-- `floorplan.png`
-- `cad_bom.csv`
-- generated image files
-- metadata JSON
-
-Optional on request:
-
-- `floorplan.jpg`
-- prompt text files
+Everything except `SKILL.md`, `references/workflow.md`, `references/output-contract.md`, `agents/` and the two scripts is generated by CanvasAnvil's `scripts/sync-cad-skill.mjs`; do not edit it here.

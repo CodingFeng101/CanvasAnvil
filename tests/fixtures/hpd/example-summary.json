@@ -1,0 +1,1086 @@
+{
+  "name": "户型图2 · 三室两卫",
+  "height": 2800,
+  "rooms": [
+    {
+      "name": "次卧",
+      "at": [
+        10420,
+        1480
+      ]
+    },
+    {
+      "name": "厨房",
+      "at": [
+        5580,
+        3600
+      ]
+    },
+    {
+      "name": "卫生间",
+      "at": [
+        3350,
+        4480
+      ]
+    },
+    {
+      "name": "主卫",
+      "at": [
+        1010,
+        5100
+      ]
+    },
+    {
+      "name": "客餐厅",
+      "at": [
+        7940,
+        5630
+      ]
+    },
+    {
+      "name": "主卧",
+      "at": [
+        1890,
+        8280
+      ]
+    },
+    {
+      "name": "次卧",
+      "at": [
+        5000,
+        8280
+      ]
+    },
+    {
+      "name": "阳台",
+      "at": [
+        6920,
+        11020
+      ]
+    }
+  ],
+  "walls": [
+    {
+      "id": "walls_0",
+      "aNode": "nodes_0",
+      "bNode": "nodes_15",
+      "a": [
+        6430,
+        140
+      ],
+      "b": [
+        8630,
+        140
+      ],
+      "t": 240,
+      "bearing": true,
+      "status": "existing"
+    },
+    {
+      "id": "walls_1",
+      "aNode": "nodes_1",
+      "bNode": "nodes_2",
+      "a": [
+        12220,
+        140
+      ],
+      "b": [
+        12220,
+        3040
+      ],
+      "t": 240,
+      "bearing": true,
+      "status": "existing"
+    },
+    {
+      "id": "walls_2",
+      "aNode": "nodes_3",
+      "bNode": "nodes_4",
+      "a": [
+        8630,
+        3040
+      ],
+      "b": [
+        10420,
+        3040
+      ],
+      "t": 200,
+      "bearing": false,
+      "status": "existing"
+    },
+    {
+      "id": "walls_3",
+      "aNode": "nodes_4",
+      "bNode": "nodes_2",
+      "a": [
+        10420,
+        3040
+      ],
+      "b": [
+        12220,
+        3040
+      ],
+      "t": 200,
+      "bearing": false,
+      "status": "existing"
+    },
+    {
+      "id": "walls_4",
+      "aNode": "nodes_4",
+      "bNode": "nodes_25",
+      "a": [
+        10420,
+        3040
+      ],
+      "b": [
+        10420,
+        10130
+      ],
+      "t": 240,
+      "bearing": true,
+      "status": "existing"
+    },
+    {
+      "id": "walls_5",
+      "aNode": "nodes_6",
+      "bNode": "nodes_5",
+      "a": [
+        3440,
+        11830
+      ],
+      "b": [
+        10420,
+        11830
+      ],
+      "t": 240,
+      "bearing": true,
+      "status": "existing"
+    },
+    {
+      "id": "walls_6",
+      "aNode": "nodes_7",
+      "bNode": "nodes_9",
+      "a": [
+        3440,
+        10130
+      ],
+      "b": [
+        3440,
+        10730
+      ],
+      "t": 240,
+      "bearing": true,
+      "status": "existing"
+    },
+    {
+      "id": "walls_7",
+      "aNode": "nodes_9",
+      "bNode": "nodes_6",
+      "a": [
+        3440,
+        10730
+      ],
+      "b": [
+        3440,
+        11830
+      ],
+      "t": 240,
+      "bearing": true,
+      "status": "existing"
+    },
+    {
+      "id": "walls_8",
+      "aNode": "nodes_8",
+      "bNode": "nodes_9",
+      "a": [
+        120,
+        10730
+      ],
+      "b": [
+        3440,
+        10730
+      ],
+      "t": 240,
+      "bearing": true,
+      "status": "existing"
+    },
+    {
+      "id": "walls_9",
+      "aNode": "nodes_10",
+      "bNode": "nodes_20",
+      "a": [
+        120,
+        3740
+      ],
+      "b": [
+        120,
+        6640
+      ],
+      "t": 240,
+      "bearing": true,
+      "status": "existing"
+    },
+    {
+      "id": "walls_10",
+      "aNode": "nodes_10",
+      "bNode": "nodes_18",
+      "a": [
+        120,
+        3740
+      ],
+      "b": [
+        1940,
+        3740
+      ],
+      "t": 240,
+      "bearing": true,
+      "status": "existing"
+    },
+    {
+      "id": "walls_11",
+      "aNode": "nodes_12",
+      "bNode": "nodes_11",
+      "a": [
+        4630,
+        2050
+      ],
+      "b": [
+        4630,
+        3740
+      ],
+      "t": 240,
+      "bearing": true,
+      "status": "existing"
+    },
+    {
+      "id": "walls_12",
+      "aNode": "nodes_11",
+      "bNode": "nodes_13",
+      "a": [
+        4630,
+        3740
+      ],
+      "b": [
+        4630,
+        5440
+      ],
+      "t": 240,
+      "bearing": true,
+      "status": "existing"
+    },
+    {
+      "id": "walls_13",
+      "aNode": "nodes_12",
+      "bNode": "nodes_14",
+      "a": [
+        4630,
+        2050
+      ],
+      "b": [
+        6430,
+        2050
+      ],
+      "t": 200,
+      "bearing": false,
+      "status": "existing"
+    },
+    {
+      "id": "walls_14",
+      "aNode": "nodes_0",
+      "bNode": "nodes_14",
+      "a": [
+        6430,
+        140
+      ],
+      "b": [
+        6430,
+        2050
+      ],
+      "t": 200,
+      "bearing": false,
+      "status": "existing"
+    },
+    {
+      "id": "walls_15",
+      "aNode": "nodes_15",
+      "bNode": "nodes_1",
+      "a": [
+        8630,
+        140
+      ],
+      "b": [
+        12220,
+        140
+      ],
+      "t": 240,
+      "bearing": true,
+      "status": "existing"
+    },
+    {
+      "id": "walls_16",
+      "aNode": "nodes_15",
+      "bNode": "nodes_3",
+      "a": [
+        8630,
+        140
+      ],
+      "b": [
+        8630,
+        3040
+      ],
+      "t": 200,
+      "bearing": false,
+      "status": "existing"
+    },
+    {
+      "id": "walls_17",
+      "aNode": "nodes_14",
+      "bNode": "nodes_16",
+      "a": [
+        6430,
+        2050
+      ],
+      "b": [
+        6430,
+        5440
+      ],
+      "t": 120,
+      "bearing": false,
+      "status": "existing"
+    },
+    {
+      "id": "walls_18",
+      "aNode": "nodes_17",
+      "bNode": "nodes_21",
+      "a": [
+        1940,
+        5440
+      ],
+      "b": [
+        3440,
+        5440
+      ],
+      "t": 200,
+      "bearing": false,
+      "status": "existing"
+    },
+    {
+      "id": "walls_19",
+      "aNode": "nodes_13",
+      "bNode": "nodes_16",
+      "a": [
+        4630,
+        5440
+      ],
+      "b": [
+        6430,
+        5440
+      ],
+      "t": 200,
+      "bearing": false,
+      "status": "existing"
+    },
+    {
+      "id": "walls_20",
+      "aNode": "nodes_18",
+      "bNode": "nodes_11",
+      "a": [
+        1940,
+        3740
+      ],
+      "b": [
+        4630,
+        3740
+      ],
+      "t": 240,
+      "bearing": true,
+      "status": "existing"
+    },
+    {
+      "id": "walls_21",
+      "aNode": "nodes_18",
+      "bNode": "nodes_17",
+      "a": [
+        1940,
+        3740
+      ],
+      "b": [
+        1940,
+        5440
+      ],
+      "t": 120,
+      "bearing": false,
+      "status": "existing"
+    },
+    {
+      "id": "walls_22",
+      "aNode": "nodes_17",
+      "bNode": "nodes_19",
+      "a": [
+        1940,
+        5440
+      ],
+      "b": [
+        1940,
+        6640
+      ],
+      "t": 120,
+      "bearing": false,
+      "status": "existing"
+    },
+    {
+      "id": "walls_23",
+      "aNode": "nodes_20",
+      "bNode": "nodes_8",
+      "a": [
+        120,
+        6640
+      ],
+      "b": [
+        120,
+        10730
+      ],
+      "t": 240,
+      "bearing": true,
+      "status": "existing"
+    },
+    {
+      "id": "walls_24",
+      "aNode": "nodes_20",
+      "bNode": "nodes_19",
+      "a": [
+        120,
+        6640
+      ],
+      "b": [
+        1940,
+        6640
+      ],
+      "t": 120,
+      "bearing": false,
+      "status": "existing"
+    },
+    {
+      "id": "walls_25",
+      "aNode": "nodes_21",
+      "bNode": "nodes_13",
+      "a": [
+        3440,
+        5440
+      ],
+      "b": [
+        4630,
+        5440
+      ],
+      "t": 200,
+      "bearing": false,
+      "status": "existing"
+    },
+    {
+      "id": "walls_26",
+      "aNode": "nodes_21",
+      "bNode": "nodes_22",
+      "a": [
+        3440,
+        5440
+      ],
+      "b": [
+        3440,
+        6690
+      ],
+      "t": 200,
+      "bearing": false,
+      "status": "existing"
+    },
+    {
+      "id": "walls_27",
+      "aNode": "nodes_22",
+      "bNode": "nodes_7",
+      "a": [
+        3440,
+        6690
+      ],
+      "b": [
+        3440,
+        10130
+      ],
+      "t": 200,
+      "bearing": false,
+      "status": "existing"
+    },
+    {
+      "id": "walls_28",
+      "aNode": "nodes_22",
+      "bNode": "nodes_23",
+      "a": [
+        3440,
+        6690
+      ],
+      "b": [
+        6430,
+        6690
+      ],
+      "t": 120,
+      "bearing": false,
+      "status": "existing"
+    },
+    {
+      "id": "walls_29",
+      "aNode": "nodes_23",
+      "bNode": "nodes_24",
+      "a": [
+        6430,
+        6690
+      ],
+      "b": [
+        6430,
+        10130
+      ],
+      "t": 120,
+      "bearing": false,
+      "status": "existing"
+    },
+    {
+      "id": "walls_30",
+      "aNode": "nodes_25",
+      "bNode": "nodes_5",
+      "a": [
+        10420,
+        10130
+      ],
+      "b": [
+        10420,
+        11830
+      ],
+      "t": 240,
+      "bearing": true,
+      "status": "existing"
+    },
+    {
+      "id": "walls_31",
+      "aNode": "nodes_7",
+      "bNode": "nodes_24",
+      "a": [
+        3440,
+        10130
+      ],
+      "b": [
+        6430,
+        10130
+      ],
+      "t": 240,
+      "bearing": true,
+      "status": "existing"
+    },
+    {
+      "id": "walls_32",
+      "aNode": "nodes_24",
+      "bNode": "nodes_25",
+      "a": [
+        6430,
+        10130
+      ],
+      "b": [
+        10420,
+        10130
+      ],
+      "t": 240,
+      "bearing": true,
+      "status": "existing"
+    }
+  ],
+  "openings": [
+    {
+      "id": "openings_0",
+      "wall": "walls_0",
+      "type": "double",
+      "pos": 810,
+      "width": 1240
+    },
+    {
+      "id": "openings_1",
+      "wall": "walls_2",
+      "type": "door",
+      "pos": 655,
+      "width": 850
+    },
+    {
+      "id": "openings_2",
+      "wall": "walls_3",
+      "type": "window",
+      "pos": 875,
+      "width": 1410
+    },
+    {
+      "id": "openings_3",
+      "wall": "walls_5",
+      "type": "window",
+      "pos": 3490,
+      "width": 5640
+    },
+    {
+      "id": "openings_4",
+      "wall": "walls_8",
+      "type": "window",
+      "pos": 1535,
+      "width": 1730
+    },
+    {
+      "id": "openings_5",
+      "wall": "walls_9",
+      "type": "window",
+      "pos": 1475,
+      "width": 930
+    },
+    {
+      "id": "openings_6",
+      "wall": "walls_20",
+      "type": "window",
+      "pos": 1130,
+      "width": 1980
+    },
+    {
+      "id": "openings_7",
+      "wall": "walls_11",
+      "type": "window",
+      "pos": 790,
+      "width": 1380
+    },
+    {
+      "id": "openings_8",
+      "wall": "walls_17",
+      "type": "sliding",
+      "pos": 1820,
+      "width": 2120
+    },
+    {
+      "id": "openings_9",
+      "wall": "walls_25",
+      "type": "door",
+      "pos": 620,
+      "width": 880
+    },
+    {
+      "id": "openings_10",
+      "wall": "walls_22",
+      "type": "door",
+      "pos": 630,
+      "width": 880
+    },
+    {
+      "id": "openings_11",
+      "wall": "walls_26",
+      "type": "door",
+      "pos": 630,
+      "width": 880
+    },
+    {
+      "id": "openings_12",
+      "wall": "walls_28",
+      "type": "door",
+      "pos": 635,
+      "width": 850
+    },
+    {
+      "id": "openings_13",
+      "wall": "walls_31",
+      "type": "window",
+      "pos": 1570,
+      "width": 1800
+    },
+    {
+      "id": "openings_14",
+      "wall": "walls_32",
+      "type": "sliding",
+      "pos": 1735,
+      "width": 3270
+    }
+  ],
+  "furniture": {
+    "主卧": [
+      {
+        "id": "furniture_0",
+        "key": "bed18",
+        "x": 1290,
+        "y": 8300,
+        "rot": 270,
+        "name": "双人床 1.8m",
+        "w": 1800,
+        "d": 2100
+      },
+      {
+        "id": "furniture_1",
+        "key": "nightstand",
+        "x": 450,
+        "y": 7130,
+        "rot": 270,
+        "name": "床头柜（台灯可点亮）",
+        "w": 500,
+        "d": 420
+      },
+      {
+        "id": "furniture_2",
+        "key": "nightstand",
+        "x": 450,
+        "y": 9470,
+        "rot": 270,
+        "name": "床头柜（台灯可点亮）",
+        "w": 500,
+        "d": 420
+      },
+      {
+        "id": "furniture_3",
+        "key": "cabWardrobe",
+        "x": 3020,
+        "y": 8300,
+        "rot": 90,
+        "name": "定制衣柜",
+        "w": 2400,
+        "d": 600
+      },
+      {
+        "id": "furniture_4",
+        "key": "rug",
+        "x": 1900,
+        "y": 8300,
+        "rot": 270,
+        "name": "地毯",
+        "w": 2400,
+        "d": 2000
+      }
+    ],
+    "次卧": [
+      {
+        "id": "furniture_5",
+        "key": "bed15",
+        "x": 5345,
+        "y": 8600,
+        "rot": 90,
+        "name": "双人床 1.5m",
+        "w": 1500,
+        "d": 2050
+      },
+      {
+        "id": "furniture_6",
+        "key": "nightstand",
+        "x": 6160,
+        "y": 7590,
+        "rot": 90,
+        "name": "床头柜（台灯可点亮）",
+        "w": 500,
+        "d": 420
+      },
+      {
+        "id": "furniture_7",
+        "key": "nightstand",
+        "x": 6160,
+        "y": 9610,
+        "rot": 90,
+        "name": "床头柜（台灯可点亮）",
+        "w": 500,
+        "d": 420
+      },
+      {
+        "id": "furniture_8",
+        "key": "wardrobe",
+        "x": 3860,
+        "y": 8900,
+        "rot": 270,
+        "name": "衣柜",
+        "w": 1600,
+        "d": 600
+      },
+      {
+        "id": "furniture_9",
+        "key": "bed12",
+        "x": 10700,
+        "y": 1260,
+        "rot": 0,
+        "name": "单人床 1.2m",
+        "w": 1200,
+        "d": 2000
+      },
+      {
+        "id": "furniture_10",
+        "key": "nightstand",
+        "x": 11600,
+        "y": 470,
+        "rot": 0,
+        "name": "床头柜（台灯可点亮）",
+        "w": 500,
+        "d": 420
+      },
+      {
+        "id": "furniture_11",
+        "key": "wardrobe",
+        "x": 9160,
+        "y": 1100,
+        "rot": 270,
+        "name": "衣柜",
+        "w": 1500,
+        "d": 600
+      }
+    ],
+    "客餐厅": [
+      {
+        "id": "furniture_12",
+        "key": "rug",
+        "x": 8500,
+        "y": 8300,
+        "rot": 90,
+        "name": "地毯",
+        "w": 2000,
+        "d": 1700
+      },
+      {
+        "id": "furniture_13",
+        "key": "sofa",
+        "x": 9825,
+        "y": 8300,
+        "rot": 90,
+        "name": "三人沙发",
+        "w": 2200,
+        "d": 950
+      },
+      {
+        "id": "furniture_14",
+        "key": "coffeeTable",
+        "x": 8600,
+        "y": 8300,
+        "rot": 90,
+        "name": "茶几",
+        "w": 1200,
+        "d": 600
+      },
+      {
+        "id": "furniture_15",
+        "key": "tvCabinet",
+        "x": 6690,
+        "y": 8300,
+        "rot": 270,
+        "name": "电视柜（电视可开关）",
+        "w": 2000,
+        "d": 400
+      },
+      {
+        "id": "furniture_16",
+        "key": "armchair",
+        "x": 8500,
+        "y": 6900,
+        "rot": 180,
+        "name": "单人沙发",
+        "w": 850,
+        "d": 850
+      },
+      {
+        "id": "furniture_17",
+        "key": "diningTable",
+        "x": 8400,
+        "y": 4300,
+        "rot": 0,
+        "name": "餐桌",
+        "w": 1600,
+        "d": 900
+      },
+      {
+        "id": "furniture_18",
+        "key": "chair",
+        "x": 8000,
+        "y": 3740,
+        "rot": 0,
+        "name": "餐椅",
+        "w": 460,
+        "d": 520
+      },
+      {
+        "id": "furniture_19",
+        "key": "chair",
+        "x": 8800,
+        "y": 3740,
+        "rot": 0,
+        "name": "餐椅",
+        "w": 460,
+        "d": 520
+      },
+      {
+        "id": "furniture_20",
+        "key": "chair",
+        "x": 8000,
+        "y": 4860,
+        "rot": 180,
+        "name": "餐椅",
+        "w": 460,
+        "d": 520
+      },
+      {
+        "id": "furniture_21",
+        "key": "chair",
+        "x": 8800,
+        "y": 4860,
+        "rot": 180,
+        "name": "餐椅",
+        "w": 460,
+        "d": 520
+      },
+      {
+        "id": "furniture_22",
+        "key": "shoeCabinet",
+        "x": 6705,
+        "y": 1100,
+        "rot": 270,
+        "name": "鞋柜",
+        "w": 1200,
+        "d": 350
+      },
+      {
+        "id": "furniture_23",
+        "key": "plant",
+        "x": 10000,
+        "y": 6400,
+        "rot": 0,
+        "name": "绿植",
+        "w": 500,
+        "d": 500
+      }
+    ],
+    "厨房": [
+      {
+        "id": "furniture_24",
+        "key": "counter",
+        "x": 5050,
+        "y": 3300,
+        "rot": 270,
+        "name": "一字橱柜（可定制）",
+        "w": 2100,
+        "d": 600
+      },
+      {
+        "id": "furniture_25",
+        "key": "fridge",
+        "x": 5100,
+        "y": 4950,
+        "rot": 270,
+        "name": "冰箱",
+        "w": 700,
+        "d": 700
+      }
+    ],
+    "主卫": [
+      {
+        "id": "furniture_26",
+        "key": "toilet",
+        "x": 650,
+        "y": 4210,
+        "rot": 0,
+        "name": "马桶",
+        "w": 400,
+        "d": 700
+      },
+      {
+        "id": "furniture_27",
+        "key": "shower",
+        "x": 1400,
+        "y": 4310,
+        "rot": 0,
+        "name": "淋浴房",
+        "w": 900,
+        "d": 900
+      },
+      {
+        "id": "furniture_28",
+        "key": "vanity",
+        "x": 490,
+        "y": 5300,
+        "rot": 270,
+        "name": "浴室柜（含镜）",
+        "w": 800,
+        "d": 500
+      }
+    ],
+    "卫生间": [
+      {
+        "id": "furniture_29",
+        "key": "shower",
+        "x": 2450,
+        "y": 4310,
+        "rot": 0,
+        "name": "淋浴房",
+        "w": 900,
+        "d": 900
+      },
+      {
+        "id": "furniture_30",
+        "key": "toilet",
+        "x": 3300,
+        "y": 4210,
+        "rot": 0,
+        "name": "马桶",
+        "w": 400,
+        "d": 700
+      },
+      {
+        "id": "furniture_31",
+        "key": "vanity",
+        "x": 2700,
+        "y": 5090,
+        "rot": 180,
+        "name": "浴室柜（含镜）",
+        "w": 800,
+        "d": 500
+      }
+    ],
+    "阳台": [
+      {
+        "id": "furniture_32",
+        "key": "washer",
+        "x": 3900,
+        "y": 11400,
+        "rot": 0,
+        "name": "洗衣机",
+        "w": 600,
+        "d": 600
+      },
+      {
+        "id": "furniture_33",
+        "key": "lounge",
+        "x": 8000,
+        "y": 11000,
+        "rot": 0,
+        "name": "休闲椅",
+        "w": 700,
+        "d": 750
+      },
+      {
+        "id": "furniture_34",
+        "key": "lounge",
+        "x": 8800,
+        "y": 11000,
+        "rot": 0,
+        "name": "休闲椅",
+        "w": 700,
+        "d": 750
+      },
+      {
+        "id": "furniture_35",
+        "key": "sideTable",
+        "x": 8400,
+        "y": 11050,
+        "rot": 0,
+        "name": "边几",
+        "w": 500,
+        "d": 500
+      },
+      {
+        "id": "furniture_36",
+        "key": "plant",
+        "x": 10000,
+        "y": 11400,
+        "rot": 0,
+        "name": "绿植",
+        "w": 500,
+        "d": 500
+      }
+    ]
+  },
+  "issues": []
+}

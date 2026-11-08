@@ -3,11 +3,10 @@ import { test } from "node:test";
 import {
   OPENAI_DEFAULT_BASE_URL,
   resolveImageRoute,
-} from "../skill/cad-skill/scripts/lib/image-route.mjs";
-import * as pptRoute from "../skill/ppt-skill/scripts/lib/image-route.mjs";
+} from "../skill/ppt-skill/scripts/lib/image-route.mjs";
 
 /**
- * How the skills reach an image model.
+ * How ppt-skill reaches an image model (cad-skill no longer generates images).
  *
  * Only OpenAI-compatible endpoints are supported, so nothing here reads a
  * vendor: the endpoint follows from the model's own name. The skills used to
@@ -43,16 +42,4 @@ test("the route is decided by the model alone, never by a vendor field", () => {
 
 test("the default base URL is OpenAI's", () => {
   assert.equal(OPENAI_DEFAULT_BASE_URL, "https://api.openai.com/v1");
-});
-
-test("both skills route identically", () => {
-  // They are separate packages, so the rule exists twice and can drift.
-  assert.equal(pptRoute.OPENAI_DEFAULT_BASE_URL, OPENAI_DEFAULT_BASE_URL);
-  for (const model of ["gpt-image-1", "dall-e-3", "gpt-5.5", ""]) {
-    assert.equal(
-      pptRoute.resolveImageRoute({ model }).protocol,
-      resolveImageRoute({ model }).protocol,
-      model,
-    );
-  }
 });

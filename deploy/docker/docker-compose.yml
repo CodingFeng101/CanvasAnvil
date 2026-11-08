@@ -10,6 +10,7 @@ services:
     environment:
       PORT: 8080
       API_BODY_LIMIT: 25mb
+      RECOGNIZER_URL: http://recognizer:8090
     ports:
       - "8001:8080"
     healthcheck:
@@ -18,5 +19,14 @@ services:
       timeout: 5s
       retries: 3
       start_period: 15s
+    depends_on:
+      - recognizer
+    restart: unless-stopped
+
+  recognizer:
+    image: canvasanvil/floorplan-recognizer:latest
+    container_name: canvasanvil-recognizer
+    build:
+      context: ../../services/floorplan-recognizer
     restart: unless-stopped
 

@@ -1,4 +1,5 @@
 import { GET as getConfig } from "../routes/config";
+import { POST as postCadRecognize } from "../routes/cad-recognize";
 import { POST as postChat } from "../routes/chat";
 import {
   GET as getEditableExportFile,
@@ -7,7 +8,7 @@ import {
 } from "../routes/editable-export";
 import { POST as postLogFileParser } from "../routes/log-file-parser";
 import { POST as postLogSave } from "../routes/log-save";
-import { POST as postPptAi } from "../routes/ppt-ai";
+import { POST as postPptAi, POST_STREAM as postPptAiStream } from "../routes/ppt-ai";
 import { POST as postThirdPartyParser } from "../routes/third-party-parser";
 
 /**
@@ -26,6 +27,8 @@ export const API_ROUTES: Record<string, RouteHandler> = {
   "POST /api/third-party-parser": postThirdPartyParser,
   "POST /api/chat": postChat,
   "POST /api/ppt-ai": postPptAi,
+  "POST /api/ppt-ai/stream": postPptAiStream,
+  "POST /api/cad/recognize": postCadRecognize,
   "POST /api/editable-export": postEditableExport,
   "GET /api/editable-export/file": getEditableExportFile,
   "GET /api/editable-export/artifact": getEditableExportArtifact,

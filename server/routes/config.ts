@@ -8,6 +8,7 @@ export async function GET() {
         defaultProvider: process.env.AI_PROVIDER || "openai",
         defaultModel: process.env.AI_MODEL || "gpt-4o",
         defaultBaseUrl: process.env.AI_BASE_URL || "",
+        cadRecognizer: !!process.env.RECOGNIZER_URL,
     })
 }
 

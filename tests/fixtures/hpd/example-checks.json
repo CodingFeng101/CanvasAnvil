@@ -1,0 +1,56 @@
+[
+  {
+    "id": "i0",
+    "level": "info",
+    "type": "遮挡窗户",
+    "msg": "淋浴房 高 2,000mm，挡住了窗户（窗台高 1,400mm）",
+    "targets": [
+      {
+        "kind": "furn",
+        "id": "adwaq9e9"
+      }
+    ],
+    "at": {
+      "id": "adwaq9e9",
+      "key": "shower",
+      "type": "shower",
+      "name": "淋浴房",
+      "w": 900,
+      "d": 900,
+      "h": 2000,
+      "color": "#e9eef2",
+      "x": 2450,
+      "y": 4310,
+      "rot": 0
+    }
+  },
+  {
+    "id": "i1",
+    "level": "warn",
+    "type": "橱柜",
+    "msg": "一字橱柜（可定制） 的吊柜挡住了窗户：窗前这段不要做吊柜（定制 → 吊柜只做其他段）",
+    "targets": [
+      {
+        "kind": "furn",
+        "id": "8dgaqio0"
+      },
+      {
+        "kind": "opening",
+        "id": "c8yesfyh"
+      }
+    ],
+    "at": {
+      "id": "8dgaqio0",
+      "key": "counter",
+      "type": "counter",
+      "name": "一字橱柜（可定制）",
+      "w": 2100,
+      "d": 600,
+      "h": 900,
+      "color": "#f0ede8",
+      "x": 5050,
+      "y": 3300,
+      "rot": 270
+    }
+  }
+]

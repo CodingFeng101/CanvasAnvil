@@ -48,8 +48,8 @@ const messages = {
   "empty.diagram.ex3": { zh: "把 RAG 检索增强生成的流程画成从左到右的步骤图", en: "Draw the RAG (retrieval-augmented generation) pipeline as left-to-right steps" },
   "empty.cad.title": { zh: "从一句需求开始做方案", en: "Start a design from one sentence" },
   "empty.cad.desc": {
-    zh: "告诉助手户型、面积、风格和预算，它会生成分析图、2D 平面图、装修图纸和物料清单。",
-    en: "Tell the assistant the layout, size, style and budget, and it produces analysis boards, a 2D plan, renovation drawings and a material list.",
+    zh: "告诉助手户型、面积、风格和预算，它会先整理设计方案，确认后生成可编辑的户型、施工图和报价单。",
+    en: "Tell the assistant the layout, size, style and budget, and it drafts a design plan, then an editable floorplan, drawings and a quote once you confirm.",
   },
   "empty.cad.ex1": { zh: "两室一厅 89㎡，现代简约风，预算 15 万，帮我出一套方案", en: "Two bedrooms, 89㎡, modern minimal, ¥150k budget — draft a full scheme" },
   "empty.cad.ex2": { zh: "一间 30㎡ 的开放式办公室，需要 6 个工位和一个洽谈区", en: "A 30㎡ open office with six desks and a small meeting corner" },

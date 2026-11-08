@@ -1,0 +1,2228 @@
+{
+  "bed18": {
+    "name": "双人床 1.8m",
+    "type": "bed",
+    "w": 1800,
+    "d": 2100,
+    "h": 1050
+  },
+  "bed15": {
+    "name": "双人床 1.5m",
+    "type": "bed",
+    "w": 1500,
+    "d": 2050,
+    "h": 1000
+  },
+  "bed12": {
+    "name": "单人床 1.2m",
+    "type": "bed",
+    "w": 1200,
+    "d": 2000,
+    "h": 950
+  },
+  "bed20": {
+    "name": "双人床 2.0m",
+    "type": "bed",
+    "w": 2000,
+    "d": 2200,
+    "h": 1050
+  },
+  "roundBed": {
+    "name": "圆床",
+    "type": "roundBed",
+    "w": 2200,
+    "d": 2200,
+    "h": 900
+  },
+  "bunkBed": {
+    "name": "上下床",
+    "type": "bunkBed",
+    "w": 1000,
+    "d": 2000,
+    "h": 1750
+  },
+  "crib": {
+    "name": "婴儿床",
+    "type": "crib",
+    "w": 1250,
+    "d": 700,
+    "h": 950
+  },
+  "tatami": {
+    "name": "榻榻米",
+    "type": "tatami",
+    "w": 2000,
+    "d": 2000,
+    "h": 400
+  },
+  "nightstand": {
+    "name": "床头柜（台灯可点亮）",
+    "type": "nightstand",
+    "w": 500,
+    "d": 420,
+    "h": 500
+  },
+  "bedBench": {
+    "name": "床尾凳",
+    "type": "bedBench",
+    "w": 1400,
+    "d": 400,
+    "h": 450
+  },
+  "wardrobe": {
+    "name": "衣柜",
+    "type": "wardrobe",
+    "w": 2000,
+    "d": 600,
+    "h": 2400
+  },
+  "chest": {
+    "name": "五斗柜",
+    "type": "chest",
+    "w": 900,
+    "d": 480,
+    "h": 1100
+  },
+  "coatRack": {
+    "name": "衣帽架",
+    "type": "coatRack",
+    "w": 500,
+    "d": 500,
+    "h": 1750
+  },
+  "stool": {
+    "name": "圆凳 / 化妆凳",
+    "type": "stool",
+    "w": 400,
+    "d": 400,
+    "h": 450
+  },
+  "bayCushion": {
+    "name": "飘窗垫",
+    "type": "bayCushion",
+    "w": 1800,
+    "d": 500,
+    "h": 80
+  },
+  "dresser": {
+    "name": "梳妆台",
+    "type": "dresser",
+    "w": 1000,
+    "d": 450,
+    "h": 750
+  },
+  "mirror": {
+    "name": "穿衣镜",
+    "type": "mirror",
+    "w": 600,
+    "d": 60,
+    "h": 1650
+  },
+  "desk": {
+    "name": "书桌",
+    "type": "desk",
+    "w": 1200,
+    "d": 600,
+    "h": 750
+  },
+  "officeChair": {
+    "name": "办公椅",
+    "type": "officeChair",
+    "w": 600,
+    "d": 600,
+    "h": 1050
+  },
+  "lDesk": {
+    "name": "L 形书桌",
+    "type": "lDesk",
+    "w": 1600,
+    "d": 1400,
+    "h": 750
+  },
+  "kidsDesk": {
+    "name": "儿童学习桌",
+    "type": "desk",
+    "w": 1000,
+    "d": 600,
+    "h": 700
+  },
+  "gamingChair": {
+    "name": "电竞椅",
+    "type": "officeChair",
+    "w": 700,
+    "d": 700,
+    "h": 1300
+  },
+  "fileCabinet": {
+    "name": "文件柜",
+    "type": "chest",
+    "w": 450,
+    "d": 550,
+    "h": 1050
+  },
+  "bookshelf": {
+    "name": "书架",
+    "type": "bookshelf",
+    "w": 900,
+    "d": 350,
+    "h": 2000
+  },
+  "sofa": {
+    "name": "三人沙发",
+    "type": "sofa",
+    "w": 2200,
+    "d": 950,
+    "h": 820
+  },
+  "lSofa": {
+    "name": "L 形转角沙发",
+    "type": "lSofa",
+    "w": 2800,
+    "d": 1700,
+    "h": 820
+  },
+  "loveseat": {
+    "name": "双人沙发",
+    "type": "sofa",
+    "w": 1600,
+    "d": 900,
+    "h": 820
+  },
+  "uSofa": {
+    "name": "U 形沙发",
+    "type": "uSofa",
+    "w": 3200,
+    "d": 2000,
+    "h": 820
+  },
+  "curvedSofa": {
+    "name": "弧形沙发",
+    "type": "curvedSofa",
+    "w": 2600,
+    "d": 1100,
+    "h": 780
+  },
+  "bendSofa": {
+    "name": "异形组合沙发（曲线可调）",
+    "type": "bendSofa",
+    "w": 3200,
+    "d": 2200,
+    "h": 760
+  },
+  "bendSofa_cornerChaise": {
+    "name": "转角弧形沙发（带贵妃）",
+    "type": "bendSofa",
+    "w": 2600,
+    "d": 3400,
+    "h": 760
+  },
+  "bendSofa_roundL": {
+    "name": "圆角 L 形沙发",
+    "type": "bendSofa",
+    "w": 3200,
+    "d": 2400,
+    "h": 760
+  },
+  "bendSofa_serpentine": {
+    "name": "S 形蛇形沙发",
+    "type": "bendSofa",
+    "w": 4200,
+    "d": 1900,
+    "h": 760
+  },
+  "bendSofa_crescent": {
+    "name": "月牙形沙发",
+    "type": "bendSofa",
+    "w": 3000,
+    "d": 1300,
+    "h": 760
+  },
+  "chaise": {
+    "name": "贵妃椅",
+    "type": "chaise",
+    "w": 1700,
+    "d": 750,
+    "h": 800
+  },
+  "beanbag": {
+    "name": "懒人沙发",
+    "type": "beanbag",
+    "w": 900,
+    "d": 900,
+    "h": 700
+  },
+  "ottoman": {
+    "name": "圆脚凳 / 坐墩",
+    "type": "ottoman",
+    "w": 550,
+    "d": 550,
+    "h": 420
+  },
+  "rockingChair": {
+    "name": "摇椅",
+    "type": "rockingChair",
+    "w": 700,
+    "d": 950,
+    "h": 900
+  },
+  "hangingChair": {
+    "name": "吊椅",
+    "type": "hangingChair",
+    "w": 1000,
+    "d": 1000,
+    "h": 1900
+  },
+  "armchair": {
+    "name": "单人沙发",
+    "type": "armchair",
+    "w": 850,
+    "d": 850,
+    "h": 800
+  },
+  "coffeeTable": {
+    "name": "茶几",
+    "type": "coffeeTable",
+    "w": 1200,
+    "d": 600,
+    "h": 400
+  },
+  "roundCoffee": {
+    "name": "圆茶几",
+    "type": "roundTable",
+    "w": 900,
+    "d": 900,
+    "h": 380
+  },
+  "ovalCoffee": {
+    "name": "椭圆茶几",
+    "type": "ovalTable",
+    "w": 1300,
+    "d": 800,
+    "h": 380
+  },
+  "tvCabinet": {
+    "name": "电视柜（电视可开关）",
+    "type": "tvCabinet",
+    "w": 2000,
+    "d": 400,
+    "h": 450
+  },
+  "diningTable": {
+    "name": "餐桌",
+    "type": "diningTable",
+    "w": 1600,
+    "d": 900,
+    "h": 750
+  },
+  "longTable": {
+    "name": "长餐桌（8 人）",
+    "type": "diningTable",
+    "w": 2400,
+    "d": 1000,
+    "h": 750
+  },
+  "roundTable": {
+    "name": "圆餐桌",
+    "type": "roundTable",
+    "w": 1300,
+    "d": 1300,
+    "h": 750
+  },
+  "ovalTable": {
+    "name": "椭圆餐桌",
+    "type": "ovalTable",
+    "w": 2400,
+    "d": 1100,
+    "h": 750
+  },
+  "booth": {
+    "name": "卡座",
+    "type": "booth",
+    "w": 1800,
+    "d": 600,
+    "h": 1000
+  },
+  "diningBench": {
+    "name": "餐凳",
+    "type": "bedBench",
+    "w": 1400,
+    "d": 350,
+    "h": 450
+  },
+  "chair": {
+    "name": "餐椅",
+    "type": "chair",
+    "w": 460,
+    "d": 520,
+    "h": 880
+  },
+  "sideboard": {
+    "name": "餐边柜",
+    "type": "sideboard",
+    "w": 1600,
+    "d": 400,
+    "h": 2200
+  },
+  "wineCabinet": {
+    "name": "酒柜",
+    "type": "wineCabinet",
+    "w": 900,
+    "d": 450,
+    "h": 2000
+  },
+  "displayCabinet": {
+    "name": "展示柜（玻璃门）",
+    "type": "displayCabinet",
+    "w": 1000,
+    "d": 400,
+    "h": 2000
+  },
+  "consoleTable": {
+    "name": "玄关桌 / 边桌",
+    "type": "consoleTable",
+    "w": 1200,
+    "d": 350,
+    "h": 800
+  },
+  "fireplace": {
+    "name": "电壁炉",
+    "type": "fireplace",
+    "w": 1400,
+    "d": 400,
+    "h": 1100
+  },
+  "fishTank": {
+    "name": "鱼缸",
+    "type": "fishTank",
+    "w": 1200,
+    "d": 450,
+    "h": 1300
+  },
+  "projScreen": {
+    "name": "投影幕布",
+    "type": "projScreen",
+    "w": 2400,
+    "d": 80,
+    "h": 1500
+  },
+  "speaker": {
+    "name": "落地音箱",
+    "type": "speaker",
+    "w": 300,
+    "d": 350,
+    "h": 1000
+  },
+  "screenDivider": {
+    "name": "屏风",
+    "type": "screenDivider",
+    "w": 1800,
+    "d": 40,
+    "h": 1800
+  },
+  "kitchenIsland": {
+    "name": "中岛台",
+    "type": "kitchenIsland",
+    "w": 1800,
+    "d": 900,
+    "h": 900
+  },
+  "barStool": {
+    "name": "吧椅",
+    "type": "barStool",
+    "w": 400,
+    "d": 400,
+    "h": 750
+  },
+  "shoeCabinet": {
+    "name": "鞋柜",
+    "type": "shoeCabinet",
+    "w": 1200,
+    "d": 350,
+    "h": 1000
+  },
+  "hallCabinet": {
+    "name": "玄关柜（中空）",
+    "type": "cabinet",
+    "w": 1200,
+    "d": 400,
+    "h": 2400
+  },
+  "entryBench": {
+    "name": "换鞋凳",
+    "type": "entryBench",
+    "w": 900,
+    "d": 350,
+    "h": 450
+  },
+  "piano": {
+    "name": "立式钢琴",
+    "type": "piano",
+    "w": 1500,
+    "d": 600,
+    "h": 1250
+  },
+  "rug": {
+    "name": "地毯",
+    "type": "rug",
+    "w": 2000,
+    "d": 1700,
+    "h": 12
+  },
+  "plant": {
+    "name": "绿植",
+    "type": "plant",
+    "w": 500,
+    "d": 500,
+    "h": 1400
+  },
+  "acWall": {
+    "name": "挂机空调",
+    "type": "acWall",
+    "w": 900,
+    "d": 260,
+    "h": 300
+  },
+  "acFloor": {
+    "name": "柜机空调",
+    "type": "acFloor",
+    "w": 520,
+    "d": 380,
+    "h": 1850
+  },
+  "waterHeater": {
+    "name": "电热水器",
+    "type": "waterHeater",
+    "w": 800,
+    "d": 450,
+    "h": 450
+  },
+  "miniHeater": {
+    "name": "小厨宝（台下储水式）",
+    "type": "waterHeater",
+    "w": 380,
+    "d": 320,
+    "h": 420
+  },
+  "gasHeater": {
+    "name": "燃气热水器",
+    "type": "gasHeater",
+    "w": 360,
+    "d": 180,
+    "h": 600
+  },
+  "waterDispenser": {
+    "name": "饮水机",
+    "type": "waterDispenser",
+    "w": 320,
+    "d": 330,
+    "h": 1050
+  },
+  "purifier": {
+    "name": "净水器（台下）",
+    "type": "purifier",
+    "w": 400,
+    "d": 200,
+    "h": 420
+  },
+  "dishwasher": {
+    "name": "洗碗机",
+    "type": "dishwasher",
+    "w": 600,
+    "d": 600,
+    "h": 820
+  },
+  "tallOven": {
+    "name": "电器高柜（蒸烤箱）",
+    "type": "tallOven",
+    "w": 600,
+    "d": 600,
+    "h": 2200
+  },
+  "hood": {
+    "name": "油烟机",
+    "type": "hood",
+    "w": 900,
+    "d": 520,
+    "h": 550
+  },
+  "microwave": {
+    "name": "微波炉",
+    "type": "microwave",
+    "w": 480,
+    "d": 380,
+    "h": 280
+  },
+  "washer": {
+    "name": "洗衣机",
+    "type": "washer",
+    "w": 600,
+    "d": 600,
+    "h": 850
+  },
+  "dryer": {
+    "name": "烘干机",
+    "type": "dryer",
+    "w": 600,
+    "d": 620,
+    "h": 850
+  },
+  "wallTV": {
+    "name": "壁挂电视（可开关）",
+    "type": "wallTV",
+    "w": 1450,
+    "d": 60,
+    "h": 830
+  },
+  "airPurifier": {
+    "name": "空气净化器",
+    "type": "airPurifier",
+    "w": 380,
+    "d": 250,
+    "h": 700
+  },
+  "robotVac": {
+    "name": "扫地机器人基站",
+    "type": "robotVac",
+    "w": 380,
+    "d": 420,
+    "h": 450
+  },
+  "treadmill": {
+    "name": "跑步机",
+    "type": "treadmill",
+    "w": 800,
+    "d": 1800,
+    "h": 1350
+  },
+  "floorLamp": {
+    "name": "落地灯（可点亮）",
+    "type": "floorLamp",
+    "w": 400,
+    "d": 400,
+    "h": 1650
+  },
+  "deskLamp": {
+    "name": "台灯（可点亮）",
+    "type": "deskLamp",
+    "w": 250,
+    "d": 250,
+    "h": 450
+  },
+  "curtain": {
+    "name": "落地窗帘（可开合）",
+    "type": "curtain",
+    "w": 2400,
+    "d": 160,
+    "h": 2650
+  },
+  "sheer": {
+    "name": "纱帘（可开合）",
+    "type": "curtain",
+    "w": 2400,
+    "d": 120,
+    "h": 2650
+  },
+  "bigPlant": {
+    "name": "大型绿植",
+    "type": "plant",
+    "w": 800,
+    "d": 800,
+    "h": 1800
+  },
+  "smallPlant": {
+    "name": "小盆栽",
+    "type": "plant",
+    "w": 300,
+    "d": 300,
+    "h": 500
+  },
+  "hangingPlant": {
+    "name": "吊兰（吸顶）",
+    "type": "hangingPlant",
+    "w": 400,
+    "d": 400,
+    "h": 600
+  },
+  "floorVase": {
+    "name": "落地花瓶",
+    "type": "vase",
+    "w": 350,
+    "d": 350,
+    "h": 900
+  },
+  "wallPanel": {
+    "name": "墙面造型板",
+    "type": "wallPanel",
+    "w": 2400,
+    "d": 60,
+    "h": 2600
+  },
+  "wallArt": {
+    "name": "装饰画",
+    "type": "wallArt",
+    "w": 900,
+    "d": 40,
+    "h": 650
+  },
+  "wallArt3": {
+    "name": "装饰画（三联）",
+    "type": "wallArt",
+    "w": 1500,
+    "d": 40,
+    "h": 600
+  },
+  "wallClock": {
+    "name": "挂钟",
+    "type": "clock",
+    "w": 400,
+    "d": 50,
+    "h": 400
+  },
+  "roundRug": {
+    "name": "圆地毯",
+    "type": "rugRound",
+    "w": 2000,
+    "d": 2000,
+    "h": 12
+  },
+  "doormat": {
+    "name": "门口地垫",
+    "type": "rug",
+    "w": 900,
+    "d": 600,
+    "h": 10
+  },
+  "fan": {
+    "name": "落地扇",
+    "type": "fan",
+    "w": 400,
+    "d": 400,
+    "h": 1200
+  },
+  "radiator": {
+    "name": "暖气片",
+    "type": "radiator",
+    "w": 1000,
+    "d": 100,
+    "h": 600
+  },
+  "cabWardrobe": {
+    "name": "定制衣柜",
+    "type": "cabinet",
+    "w": 2400,
+    "d": 600,
+    "h": 2600
+  },
+  "cabSlide": {
+    "name": "推拉门衣柜",
+    "type": "cabinet",
+    "w": 2000,
+    "d": 650,
+    "h": 2600
+  },
+  "cabCorner": {
+    "name": "转角衣柜（L 形）",
+    "type": "cabinet",
+    "w": 2400,
+    "d": 1800,
+    "h": 2600
+  },
+  "cabShoe": {
+    "name": "定制鞋柜（中空）",
+    "type": "cabinet",
+    "w": 1200,
+    "d": 380,
+    "h": 2400
+  },
+  "cabSideboard": {
+    "name": "定制餐边柜",
+    "type": "cabinet",
+    "w": 1800,
+    "d": 400,
+    "h": 2400
+  },
+  "cabTall": {
+    "name": "书柜 / 高柜",
+    "type": "cabinet",
+    "w": 1200,
+    "d": 400,
+    "h": 2400
+  },
+  "cabBase": {
+    "name": "地柜",
+    "type": "cabinet",
+    "w": 1600,
+    "d": 600,
+    "h": 850
+  },
+  "cabWall": {
+    "name": "吊柜",
+    "type": "cabinet",
+    "w": 1600,
+    "d": 350,
+    "h": 700
+  },
+  "cabTV": {
+    "name": "悬空电视柜",
+    "type": "cabinet",
+    "w": 2400,
+    "d": 400,
+    "h": 400
+  },
+  "counter": {
+    "name": "一字橱柜（可定制）",
+    "type": "counter",
+    "w": 2100,
+    "d": 600,
+    "h": 900
+  },
+  "fridge": {
+    "name": "冰箱",
+    "type": "fridge",
+    "w": 700,
+    "d": 700,
+    "h": 1850
+  },
+  "fridgeDouble": {
+    "name": "对开门冰箱",
+    "type": "fridge",
+    "w": 910,
+    "d": 720,
+    "h": 1780
+  },
+  "fridgeFrench": {
+    "name": "法式多门冰箱",
+    "type": "fridge",
+    "w": 830,
+    "d": 700,
+    "h": 1900
+  },
+  "lCounter": {
+    "name": "L 形橱柜（可定制）",
+    "type": "lCounter",
+    "w": 2400,
+    "d": 1800,
+    "h": 900
+  },
+  "uCounter": {
+    "name": "U 形橱柜（可定制）",
+    "type": "uCounter",
+    "w": 2700,
+    "d": 2100,
+    "h": 900
+  },
+  "freezer": {
+    "name": "冰柜",
+    "type": "freezer",
+    "w": 1000,
+    "d": 600,
+    "h": 850
+  },
+  "trashBin": {
+    "name": "垃圾桶",
+    "type": "bin",
+    "w": 300,
+    "d": 300,
+    "h": 600
+  },
+  "toilet": {
+    "name": "马桶",
+    "type": "toilet",
+    "w": 400,
+    "d": 700,
+    "h": 780
+  },
+  "wallToilet": {
+    "name": "壁挂马桶",
+    "type": "toilet",
+    "w": 380,
+    "d": 550,
+    "h": 400
+  },
+  "squatToilet": {
+    "name": "蹲便器",
+    "type": "squat",
+    "w": 450,
+    "d": 600,
+    "h": 200
+  },
+  "vanity": {
+    "name": "浴室柜（含镜）",
+    "type": "vanity",
+    "w": 800,
+    "d": 500,
+    "h": 850
+  },
+  "mirrorCabinet": {
+    "name": "镜柜",
+    "type": "mirrorCabinet",
+    "w": 800,
+    "d": 150,
+    "h": 700
+  },
+  "doubleVanity": {
+    "name": "双盆浴室柜",
+    "type": "vanity",
+    "w": 1400,
+    "d": 550,
+    "h": 850
+  },
+  "pedestalSink": {
+    "name": "立柱盆",
+    "type": "pedestalSink",
+    "w": 500,
+    "d": 450,
+    "h": 850
+  },
+  "freeTub": {
+    "name": "独立浴缸",
+    "type": "freeTub",
+    "w": 1700,
+    "d": 800,
+    "h": 620
+  },
+  "bathShelf": {
+    "name": "置物架",
+    "type": "shelfRack",
+    "w": 600,
+    "d": 250,
+    "h": 1600
+  },
+  "shower": {
+    "name": "淋浴房",
+    "type": "shower",
+    "w": 900,
+    "d": 900,
+    "h": 2000
+  },
+  "showerScreen": {
+    "name": "一字淋浴隔断",
+    "type": "showerScreen",
+    "w": 1200,
+    "d": 80,
+    "h": 2000
+  },
+  "bathtub": {
+    "name": "浴缸",
+    "type": "bathtub",
+    "w": 1600,
+    "d": 750,
+    "h": 600
+  },
+  "showerSet": {
+    "name": "嵌入式恒温淋浴",
+    "type": "showerSet",
+    "w": 900,
+    "d": 200,
+    "h": 1100
+  },
+  "towelWarmer": {
+    "name": "电热毛巾架",
+    "type": "towelWarmer",
+    "w": 500,
+    "d": 100,
+    "h": 800
+  },
+  "bathHeater": {
+    "name": "风暖浴霸（吸顶）",
+    "type": "bathHeater",
+    "w": 300,
+    "d": 300,
+    "h": 160
+  },
+  "laundrySink": {
+    "name": "洗衣池柜",
+    "type": "laundrySink",
+    "w": 700,
+    "d": 550,
+    "h": 850
+  },
+  "clothesRack": {
+    "name": "升降晾衣架（吸顶）",
+    "type": "clothesRack",
+    "w": 2400,
+    "d": 450,
+    "h": 500
+  },
+  "lounge": {
+    "name": "休闲椅",
+    "type": "lounge",
+    "w": 700,
+    "d": 750,
+    "h": 800
+  },
+  "sideTable": {
+    "name": "边几",
+    "type": "sideTable",
+    "w": 500,
+    "d": 500,
+    "h": 550
+  },
+  "island": {
+    "name": "衣帽岛台",
+    "type": "island",
+    "w": 1200,
+    "d": 600,
+    "h": 900
+  },
+  "stairU": {
+    "name": "U 形三跑楼梯",
+    "type": "stairU",
+    "w": 3300,
+    "d": 2400,
+    "h": 3320
+  },
+  "stairRun": {
+    "name": "直跑梯段",
+    "type": "stairRun",
+    "w": 1100,
+    "d": 3000,
+    "h": 1700
+  },
+  "stairLanding": {
+    "name": "楼梯平台",
+    "type": "stairRun",
+    "w": 1100,
+    "d": 1100,
+    "h": 1700
+  },
+  "elevator": {
+    "name": "家用电梯（漫游时可乘坐）",
+    "type": "elevator",
+    "w": 910,
+    "d": 1160,
+    "h": 2600
+  },
+  "stairDogleg": {
+    "name": "双跑扇形转角楼梯",
+    "type": "stairDogleg",
+    "w": 2400,
+    "d": 3600,
+    "h": 3150
+  },
+  "riser": {
+    "name": "立管（排水 / 雨水 Φ110，通高）",
+    "type": "riser",
+    "w": 110,
+    "d": 110,
+    "h": 2800
+  },
+  "acOutdoor": {
+    "name": "空调室外机",
+    "type": "acOutdoor",
+    "w": 850,
+    "d": 320,
+    "h": 600
+  },
+  "louver": {
+    "name": "百叶（空调位 / 风井）",
+    "type": "louver",
+    "w": 1000,
+    "d": 60,
+    "h": 1800
+  },
+  "meterBox": {
+    "name": "电表箱 / 配线箱（井道）",
+    "type": "meterBox",
+    "w": 500,
+    "d": 160,
+    "h": 700
+  },
+  "cornerShelf": {
+    "name": "斜角开放展示格（三角多层）",
+    "type": "cornerShelf",
+    "w": 450,
+    "d": 450,
+    "h": 1800
+  },
+  "modularSofa": {
+    "name": "模块沙发（按格数，可带脚踏）",
+    "type": "modularSofa",
+    "w": 2700,
+    "d": 1000,
+    "h": 760
+  },
+  "bayDeck": {
+    "name": "室内飘窗台（450 高台面）",
+    "type": "bayDeck",
+    "w": 1800,
+    "d": 550,
+    "h": 450
+  },
+  "plushToy": {
+    "name": "毛绒玩偶",
+    "type": "plushToy",
+    "w": 300,
+    "d": 250,
+    "h": 380
+  },
+  "tableVase": {
+    "name": "花瓶（桌面摆件）",
+    "type": "tableVase",
+    "w": 180,
+    "d": 180,
+    "h": 350
+  },
+  "bookSet": {
+    "name": "书摆（一排书 + 书立）",
+    "type": "bookSet",
+    "w": 400,
+    "d": 220,
+    "h": 260
+  },
+  "car": {
+    "name": "轿车",
+    "type": "car",
+    "w": 1850,
+    "d": 4800,
+    "h": 1450
+  },
+  "suv": {
+    "name": "SUV",
+    "type": "car",
+    "w": 1950,
+    "d": 4900,
+    "h": 1750
+  },
+  "evCharger": {
+    "name": "充电桩（壁挂 7kW）",
+    "type": "evCharger",
+    "w": 300,
+    "d": 150,
+    "h": 450
+  },
+  "carport": {
+    "name": "车棚（单车位）",
+    "type": "carport",
+    "w": 3200,
+    "d": 5600,
+    "h": 2600
+  },
+  "carport2": {
+    "name": "车棚（双车位）",
+    "type": "carport",
+    "w": 6000,
+    "d": 5600,
+    "h": 2600
+  },
+  "garageShelf": {
+    "name": "车库储物架",
+    "type": "garageShelf",
+    "w": 1800,
+    "d": 500,
+    "h": 2000
+  },
+  "workbench": {
+    "name": "工具台 + 洞洞板",
+    "type": "workbench",
+    "w": 1800,
+    "d": 650,
+    "h": 1800
+  },
+  "bicycle": {
+    "name": "自行车",
+    "type": "bicycle",
+    "w": 600,
+    "d": 1750,
+    "h": 1050
+  },
+  "pool": {
+    "name": "泳池",
+    "type": "pool",
+    "w": 3500,
+    "d": 8000,
+    "h": 60
+  },
+  "lawn": {
+    "name": "草坪",
+    "type": "lawn",
+    "w": 4000,
+    "d": 4000,
+    "h": 15
+  },
+  "stepStones": {
+    "name": "汀步 / 石板路",
+    "type": "stepStones",
+    "w": 600,
+    "d": 3600,
+    "h": 30
+  },
+  "tree": {
+    "name": "庭院乔木",
+    "type": "tree",
+    "w": 2600,
+    "d": 2600,
+    "h": 4500
+  },
+  "shrub": {
+    "name": "灌木球",
+    "type": "shrub",
+    "w": 900,
+    "d": 900,
+    "h": 800
+  },
+  "gazebo": {
+    "name": "凉亭",
+    "type": "gazebo",
+    "w": 3200,
+    "d": 3200,
+    "h": 3000
+  },
+  "parasol": {
+    "name": "遮阳伞 + 桌椅",
+    "type": "parasol",
+    "w": 2800,
+    "d": 2800,
+    "h": 2500
+  },
+  "sunLounger": {
+    "name": "泳池躺椅",
+    "type": "sunLounger",
+    "w": 700,
+    "d": 1950,
+    "h": 450
+  },
+  "swing": {
+    "name": "庭院秋千",
+    "type": "swing",
+    "w": 2000,
+    "d": 1300,
+    "h": 2100
+  },
+  "bbq": {
+    "name": "户外烧烤台",
+    "type": "bbq",
+    "w": 1600,
+    "d": 650,
+    "h": 950
+  },
+  "waterFeature": {
+    "name": "叠水景墙",
+    "type": "waterFeature",
+    "w": 1600,
+    "d": 600,
+    "h": 1500
+  },
+  "fence": {
+    "name": "庭院围栏",
+    "type": "fence",
+    "w": 2000,
+    "d": 60,
+    "h": 1200
+  },
+  "gate": {
+    "name": "庭院大门",
+    "type": "gate",
+    "w": 3000,
+    "d": 150,
+    "h": 1800
+  },
+  "lawnLamp": {
+    "name": "草坪灯（可点亮）",
+    "type": "lawnLamp",
+    "w": 200,
+    "d": 200,
+    "h": 650
+  },
+  "billiards": {
+    "name": "台球桌",
+    "type": "billiards",
+    "w": 1600,
+    "d": 2850,
+    "h": 800
+  },
+  "mahjong": {
+    "name": "自动麻将桌",
+    "type": "mahjong",
+    "w": 950,
+    "d": 950,
+    "h": 780
+  },
+  "teaTable": {
+    "name": "茶台",
+    "type": "teaTable",
+    "w": 1800,
+    "d": 800,
+    "h": 700
+  },
+  "theaterSofa": {
+    "name": "影院沙发（三连座）",
+    "type": "theaterSofa",
+    "w": 2600,
+    "d": 1000,
+    "h": 1000
+  },
+  "grandPiano": {
+    "name": "三角钢琴",
+    "type": "grandPiano",
+    "w": 1550,
+    "d": 1900,
+    "h": 1000
+  },
+  "barCounter": {
+    "name": "吧台（带水槽）",
+    "type": "barCounter",
+    "w": 2400,
+    "d": 650,
+    "h": 1100
+  },
+  "sauna": {
+    "name": "桑拿房",
+    "type": "sauna",
+    "w": 1500,
+    "d": 1500,
+    "h": 2100
+  },
+  "chandelier": {
+    "name": "挑空水晶大吊灯",
+    "type": "chandelier",
+    "w": 1200,
+    "d": 1200,
+    "h": 1600
+  },
+  "boiler": {
+    "name": "壁挂炉（地暖 + 热水）",
+    "type": "boiler",
+    "w": 450,
+    "d": 350,
+    "h": 750
+  },
+  "manifold": {
+    "name": "地暖分集水器",
+    "type": "manifold",
+    "w": 800,
+    "d": 120,
+    "h": 450
+  },
+  "waterSoftener": {
+    "name": "中央软水机",
+    "type": "waterSoftener",
+    "w": 350,
+    "d": 450,
+    "h": 1100
+  },
+  "trainingTable": {
+    "name": "培训桌",
+    "type": "trainingTable",
+    "w": 1200,
+    "d": 450,
+    "h": 750
+  },
+  "curveTrainingTable": {
+    "name": "弧形培训桌",
+    "type": "curveTrainingTable",
+    "w": 3000,
+    "d": 600,
+    "h": 750
+  },
+  "conferenceTable": {
+    "name": "会议桌",
+    "type": "diningTable",
+    "w": 3600,
+    "d": 1200,
+    "h": 750
+  },
+  "trainingChair": {
+    "name": "培训椅",
+    "type": "chair",
+    "w": 500,
+    "d": 500,
+    "h": 830
+  },
+  "lectern": {
+    "name": "可升降讲台",
+    "type": "lectern",
+    "w": 900,
+    "d": 650,
+    "h": 1100
+  },
+  "stage": {
+    "name": "培训室地台",
+    "type": "stage",
+    "w": 6000,
+    "d": 2400,
+    "h": 300
+  },
+  "slidingBoard": {
+    "name": "上下升降黑板",
+    "type": "slidingBoard",
+    "w": 4000,
+    "d": 180,
+    "h": 2300
+  },
+  "mobileDisplay": {
+    "name": "移动会议平板",
+    "type": "mobileDisplay",
+    "w": 1700,
+    "d": 650,
+    "h": 1850
+  },
+  "printer": {
+    "name": "办公复合打印机",
+    "type": "printer",
+    "w": 650,
+    "d": 650,
+    "h": 1100
+  },
+  "coffeeMachine": {
+    "name": "咖啡机",
+    "type": "coffeeMachine",
+    "w": 450,
+    "d": 450,
+    "h": 550
+  },
+  "urinal": {
+    "name": "壁挂小便器",
+    "type": "urinal",
+    "w": 410,
+    "d": 360,
+    "h": 650
+  },
+  "serviceSink": {
+    "name": "清洁拖布池",
+    "type": "serviceSink",
+    "w": 600,
+    "d": 500,
+    "h": 600
+  },
+  "wifiAP": {
+    "name": "吸顶无线 AP",
+    "type": "wifiAP",
+    "w": 220,
+    "d": 220,
+    "h": 45
+  },
+  "ceilingSpeaker": {
+    "name": "嵌入式扬声器",
+    "type": "ceilingSpeaker",
+    "w": 240,
+    "d": 240,
+    "h": 70
+  },
+  "supplyVent": {
+    "name": "空调送风口 A/S",
+    "type": "airVent",
+    "w": 600,
+    "d": 300,
+    "h": 60
+  },
+  "returnVent": {
+    "name": "空调回风口 A/R",
+    "type": "airVent",
+    "w": 600,
+    "d": 300,
+    "h": 60
+  },
+  "outdoorSet": {
+    "name": "户外桌椅",
+    "type": "outdoorSet",
+    "w": 1600,
+    "d": 1600,
+    "h": 750
+  },
+  "plantShelf": {
+    "name": "花架",
+    "type": "plantShelf",
+    "w": 1000,
+    "d": 350,
+    "h": 1200
+  },
+  "bike": {
+    "name": "动感单车",
+    "type": "bike",
+    "w": 550,
+    "d": 1100,
+    "h": 1200
+  },
+  "yogaMat": {
+    "name": "瑜伽垫",
+    "type": "yogaMat",
+    "w": 610,
+    "d": 1830,
+    "h": 6
+  },
+  "catTree": {
+    "name": "猫爬架",
+    "type": "catTree",
+    "w": 600,
+    "d": 600,
+    "h": 1600
+  },
+  "petBed": {
+    "name": "宠物窝",
+    "type": "petBed",
+    "w": 700,
+    "d": 550,
+    "h": 250
+  },
+  "fourSofa": {
+    "name": "四人沙发",
+    "type": "sofa",
+    "w": 2800,
+    "d": 1000,
+    "h": 820
+  },
+  "singleSofa": {
+    "name": "单人位沙发",
+    "type": "sofa",
+    "w": 1000,
+    "d": 900,
+    "h": 820
+  },
+  "chaiseSofa": {
+    "name": "贵妃位沙发（2.6m）",
+    "type": "lSofa",
+    "w": 2600,
+    "d": 1600,
+    "h": 820
+  },
+  "readingChair": {
+    "name": "阅读椅",
+    "type": "armchair",
+    "w": 750,
+    "d": 800,
+    "h": 950
+  },
+  "nestTables": {
+    "name": "组合圆茶几（小）",
+    "type": "roundTable",
+    "w": 600,
+    "d": 600,
+    "h": 450
+  },
+  "diningTable4": {
+    "name": "四人餐桌",
+    "type": "diningTable",
+    "w": 1200,
+    "d": 800,
+    "h": 750
+  },
+  "diningTable6": {
+    "name": "六人餐桌",
+    "type": "diningTable",
+    "w": 1800,
+    "d": 900,
+    "h": 750
+  },
+  "roundTable10": {
+    "name": "圆餐桌（10 人）",
+    "type": "roundTable",
+    "w": 1800,
+    "d": 1800,
+    "h": 760
+  },
+  "barTable": {
+    "name": "吧台桌（高桌）",
+    "type": "diningTable",
+    "w": 1400,
+    "d": 500,
+    "h": 1050
+  },
+  "armDiningChair": {
+    "name": "扶手餐椅",
+    "type": "chair",
+    "w": 560,
+    "d": 560,
+    "h": 820
+  },
+  "kingBed": {
+    "name": "双人床 2.2m（King）",
+    "type": "bed",
+    "w": 2200,
+    "d": 2200,
+    "h": 1100
+  },
+  "kidsBed": {
+    "name": "儿童床 1.0m",
+    "type": "bed",
+    "w": 1000,
+    "d": 1900,
+    "h": 900
+  },
+  "dayBed": {
+    "name": "罗汉床 / 卧榻",
+    "type": "chaise",
+    "w": 1900,
+    "d": 800,
+    "h": 750
+  },
+  "wardrobe2": {
+    "name": "两门衣柜 1.0m",
+    "type": "wardrobe",
+    "w": 1000,
+    "d": 600,
+    "h": 2200
+  },
+  "wardrobe3": {
+    "name": "三门衣柜 1.5m",
+    "type": "wardrobe",
+    "w": 1500,
+    "d": 600,
+    "h": 2300
+  },
+  "toyCabinet": {
+    "name": "儿童玩具柜",
+    "type": "chest",
+    "w": 900,
+    "d": 350,
+    "h": 800
+  },
+  "playMat": {
+    "name": "儿童爬行垫",
+    "type": "rug",
+    "w": 1800,
+    "d": 1500,
+    "h": 15
+  },
+  "standingDesk": {
+    "name": "升降书桌 1.4m",
+    "type": "desk",
+    "w": 1400,
+    "d": 700,
+    "h": 750
+  },
+  "bookshelfLow": {
+    "name": "矮书架",
+    "type": "bookshelf",
+    "w": 1200,
+    "d": 300,
+    "h": 900
+  },
+  "officeDesk": {
+    "name": "办公桌 1.4m",
+    "type": "desk",
+    "w": 1400,
+    "d": 700,
+    "h": 750
+  },
+  "deskBench2": {
+    "name": "工位（两人位）",
+    "type": "trainingTable",
+    "w": 2400,
+    "d": 700,
+    "h": 750
+  },
+  "deskBench4": {
+    "name": "工位（四人位对坐）",
+    "type": "trainingTable",
+    "w": 2400,
+    "d": 1400,
+    "h": 750
+  },
+  "bossDesk": {
+    "name": "大班台",
+    "type": "lDesk",
+    "w": 2200,
+    "d": 1900,
+    "h": 760
+  },
+  "roundMeeting": {
+    "name": "圆形洽谈桌",
+    "type": "roundTable",
+    "w": 1000,
+    "d": 1000,
+    "h": 750
+  },
+  "reception": {
+    "name": "前台接待台",
+    "type": "barCounter",
+    "w": 2400,
+    "d": 800,
+    "h": 1100
+  },
+  "lockers": {
+    "name": "储物柜 / 更衣柜",
+    "type": "cabinet",
+    "w": 1200,
+    "d": 450,
+    "h": 1850
+  },
+  "officeSofa": {
+    "name": "办公接待沙发",
+    "type": "sofa",
+    "w": 1800,
+    "d": 800,
+    "h": 780
+  },
+  "whiteboard": {
+    "name": "移动白板",
+    "type": "slidingBoard",
+    "w": 1800,
+    "d": 150,
+    "h": 1900
+  },
+  "pantryCounter": {
+    "name": "茶水间台面（一字）",
+    "type": "counter",
+    "w": 2000,
+    "d": 600,
+    "h": 850
+  },
+  "shoeBench": {
+    "name": "穿鞋凳（长）",
+    "type": "entryBench",
+    "w": 1200,
+    "d": 380,
+    "h": 450
+  },
+  "wineFridge": {
+    "name": "红酒柜 / 嵌入冰吧",
+    "type": "fridge",
+    "w": 600,
+    "d": 600,
+    "h": 850
+  },
+  "kitchenTrolley": {
+    "name": "厨房小推车",
+    "type": "shelfRack",
+    "w": 450,
+    "d": 350,
+    "h": 800
+  },
+  "arcLamp": {
+    "name": "钓鱼灯（落地）",
+    "type": "floorLamp",
+    "w": 450,
+    "d": 1300,
+    "h": 1900
+  },
+  "ductAC": {
+    "name": "风管机内机（藏吊顶内）",
+    "type": "ductAC",
+    "w": 1000,
+    "d": 500,
+    "h": 250
+  },
+  "linearVent": {
+    "name": "线性出风口（下出风）",
+    "type": "linearVent",
+    "w": 1500,
+    "d": 150,
+    "h": 40
+  },
+  "linearVentSide": {
+    "name": "侧出风口（边吊侧面）",
+    "type": "linearVent",
+    "w": 1500,
+    "d": 60,
+    "h": 120
+  },
+  "linearReturn": {
+    "name": "回风口（带检修口）",
+    "type": "linearVent",
+    "w": 1200,
+    "d": 300,
+    "h": 40
+  },
+  "cassetteAC": {
+    "name": "天花机（四面出风）",
+    "type": "cassetteAC",
+    "w": 840,
+    "d": 840,
+    "h": 250
+  },
+  "vrfOutdoor": {
+    "name": "多联机室外机（双风扇）",
+    "type": "vrfOutdoor",
+    "w": 940,
+    "d": 370,
+    "h": 1380
+  },
+  "freshAirUnit": {
+    "name": "新风主机（全热交换，吊顶内）",
+    "type": "freshAirUnit",
+    "w": 800,
+    "d": 600,
+    "h": 270
+  },
+  "thermostat": {
+    "name": "温控面板",
+    "type": "thermostat",
+    "w": 86,
+    "d": 15,
+    "h": 86
+  },
+  "heatPump": {
+    "name": "空气能热泵外机",
+    "type": "acOutdoor",
+    "w": 1000,
+    "d": 400,
+    "h": 760
+  },
+  "bufferTank": {
+    "name": "缓冲水箱 / 储热水箱",
+    "type": "tank",
+    "w": 500,
+    "d": 500,
+    "h": 1500
+  },
+  "centralPurifier": {
+    "name": "中央净水机",
+    "type": "waterSoftener",
+    "w": 350,
+    "d": 300,
+    "h": 1200
+  },
+  "preFilter": {
+    "name": "前置过滤器",
+    "type": "preFilter",
+    "w": 180,
+    "d": 150,
+    "h": 450
+  },
+  "dehumidifier": {
+    "name": "除湿机",
+    "type": "airPurifier",
+    "w": 400,
+    "d": 300,
+    "h": 650
+  },
+  "floorHeat": {
+    "name": "地暖盘管（铺满房间，选中后拉大）",
+    "type": "floorHeat",
+    "w": 3000,
+    "d": 3000,
+    "h": 5
+  },
+  "linearPendant": {
+    "name": "线性吊灯（餐厅，可点亮）",
+    "type": "linearPendant",
+    "w": 1200,
+    "d": 80,
+    "h": 800
+  },
+  "ceilLamp": {
+    "name": "吸顶灯（奶油圆形，可点亮）",
+    "type": "ceilLamp",
+    "w": 600,
+    "d": 600,
+    "h": 90
+  },
+  "ceilingFan": {
+    "name": "风扇灯（可点亮）",
+    "type": "ceilingFan",
+    "w": 1320,
+    "d": 1320,
+    "h": 420
+  },
+  "bubblePendant": {
+    "name": "泡泡吊灯 / 魔豆灯（可点亮）",
+    "type": "bubblePendant",
+    "w": 900,
+    "d": 900,
+    "h": 900
+  },
+  "gardenLamp": {
+    "name": "庭院灯（2.8m，可点亮）",
+    "type": "gardenLamp",
+    "w": 380,
+    "d": 380,
+    "h": 2800
+  },
+  "inGround": {
+    "name": "地埋灯（可点亮）",
+    "type": "inGround",
+    "w": 140,
+    "d": 140,
+    "h": 20
+  },
+  "wallWasher": {
+    "name": "户外壁灯（可点亮）",
+    "type": "wallWasher",
+    "w": 160,
+    "d": 140,
+    "h": 260
+  },
+  "integratedStove": {
+    "name": "集成灶（下排油烟）",
+    "type": "integratedStove",
+    "w": 900,
+    "d": 600,
+    "h": 850
+  },
+  "washerTower": {
+    "name": "洗烘套装（叠放）",
+    "type": "washerTower",
+    "w": 600,
+    "d": 650,
+    "h": 1750
+  },
+  "builtinFridge": {
+    "name": "嵌入式冰箱 0.6m",
+    "type": "fridge",
+    "w": 600,
+    "d": 600,
+    "h": 1780
+  },
+  "smartToilet": {
+    "name": "智能马桶（一体机）",
+    "type": "toilet",
+    "w": 400,
+    "d": 700,
+    "h": 500
+  },
+  "ledMirror": {
+    "name": "智能浴镜（背光，可点亮）",
+    "type": "ledMirror",
+    "w": 800,
+    "d": 40,
+    "h": 1000
+  },
+  "projector": {
+    "name": "吊装投影仪",
+    "type": "projector",
+    "w": 400,
+    "d": 320,
+    "h": 130
+  },
+  "hedge": {
+    "name": "绿篱（修剪成形）",
+    "type": "hedge",
+    "w": 2000,
+    "d": 600,
+    "h": 900
+  },
+  "flowerBed": {
+    "name": "砖砌花坛",
+    "type": "flowerBed",
+    "w": 1600,
+    "d": 800,
+    "h": 450
+  },
+  "planterBox": {
+    "name": "花箱（木质）",
+    "type": "planterBox",
+    "w": 1000,
+    "d": 400,
+    "h": 500
+  },
+  "palm": {
+    "name": "棕榈 / 椰树",
+    "type": "palm",
+    "w": 2400,
+    "d": 2400,
+    "h": 5000
+  },
+  "bamboo": {
+    "name": "竹子（一丛）",
+    "type": "bamboo",
+    "w": 1500,
+    "d": 600,
+    "h": 4000
+  },
+  "rock": {
+    "name": "景观石",
+    "type": "rock",
+    "w": 1200,
+    "d": 800,
+    "h": 700
+  },
+  "pergola": {
+    "name": "花架廊 / 葡萄架",
+    "type": "pergola",
+    "w": 3000,
+    "d": 3000,
+    "h": 2600
+  },
+  "outdoorSofa": {
+    "name": "户外藤编沙发组",
+    "type": "outdoorSofa",
+    "w": 2600,
+    "d": 2000,
+    "h": 750
+  },
+  "hammock": {
+    "name": "吊床（带支架）",
+    "type": "hammock",
+    "w": 3000,
+    "d": 1000,
+    "h": 1200
+  },
+  "kidsSlide": {
+    "name": "儿童滑梯",
+    "type": "kidsSlide",
+    "w": 1000,
+    "d": 2600,
+    "h": 1500
+  },
+  "dogHouse": {
+    "name": "狗屋",
+    "type": "dogHouse",
+    "w": 800,
+    "d": 1000,
+    "h": 900
+  },
+  "firePit": {
+    "name": "户外火盆",
+    "type": "firePit",
+    "w": 1000,
+    "d": 1000,
+    "h": 400
+  },
+  "outdoorSink": {
+    "name": "户外洗手池",
+    "type": "serviceSink",
+    "w": 600,
+    "d": 500,
+    "h": 850
+  },
+  "landLawn": {
+    "name": "草坪（画轮廓）",
+    "type": "free",
+    "w": 4000,
+    "d": 3000,
+    "h": 30
+  },
+  "landGravel": {
+    "name": "碎石 / 砾石铺地（画轮廓）",
+    "type": "free",
+    "w": 3000,
+    "d": 1500,
+    "h": 30
+  },
+  "landPaver": {
+    "name": "石材铺装（画轮廓）",
+    "type": "free",
+    "w": 3000,
+    "d": 2000,
+    "h": 40
+  },
+  "landDeck": {
+    "name": "户外木平台（画轮廓）",
+    "type": "free",
+    "w": 3000,
+    "d": 2400,
+    "h": 150
+  },
+  "landWater": {
+    "name": "水景 / 鱼池（画轮廓）",
+    "type": "free",
+    "w": 2500,
+    "d": 1800,
+    "h": 20
+  },
+  "landBed": {
+    "name": "花境 / 种植池（画轮廓）",
+    "type": "free",
+    "w": 2400,
+    "d": 1200,
+    "h": 120
+  },
+  "ceilZone": {
+    "name": "局部吊顶（画轮廓）",
+    "type": "free",
+    "w": 2400,
+    "d": 1800,
+    "h": 150
+  },
+  "ceilZoneCove": {
+    "name": "局部吊顶 + 灯带（悬浮）",
+    "type": "free",
+    "w": 2400,
+    "d": 1800,
+    "h": 150
+  },
+  "ceilZoneRound": {
+    "name": "圆形吊顶（餐厅）",
+    "type": "free",
+    "w": 1800,
+    "d": 1800,
+    "h": 120
+  },
+  "ceilBeamWood": {
+    "name": "木梁 / 装饰假梁",
+    "type": "free",
+    "w": 3600,
+    "d": 150,
+    "h": 180
+  },
+  "ceilSlats": {
+    "name": "木格栅吊顶片",
+    "type": "free",
+    "w": 2400,
+    "d": 1200,
+    "h": 60
+  },
+  "freeBox": {
+    "name": "立方体",
+    "type": "free",
+    "w": 1000,
+    "d": 1000,
+    "h": 1000
+  },
+  "freeRoundBox": {
+    "name": "圆角方块",
+    "type": "free",
+    "w": 1000,
+    "d": 600,
+    "h": 450
+  },
+  "freePlatform": {
+    "name": "地台 / 榻榻米台",
+    "type": "free",
+    "w": 2400,
+    "d": 1800,
+    "h": 300
+  },
+  "freeWallBlock": {
+    "name": "背景墙凸块",
+    "type": "free",
+    "w": 2400,
+    "d": 150,
+    "h": 2600
+  },
+  "freeCeilBlock": {
+    "name": "吊顶造型块",
+    "type": "free",
+    "w": 2000,
+    "d": 2000,
+    "h": 150
+  },
+  "freeCyl": {
+    "name": "圆柱",
+    "type": "free",
+    "w": 400,
+    "d": 400,
+    "h": 2700
+  },
+  "freeRoundStage": {
+    "name": "圆形地台",
+    "type": "free",
+    "w": 2000,
+    "d": 2000,
+    "h": 200
+  },
+  "freeHalfCyl": {
+    "name": "半圆柱 / 半圆墙垛",
+    "type": "free",
+    "w": 800,
+    "d": 400,
+    "h": 2700
+  },
+  "freeTube": {
+    "name": "圆管 / 圆环隔断",
+    "type": "free",
+    "w": 1800,
+    "d": 1800,
+    "h": 2400
+  },
+  "freeSphere": {
+    "name": "球体",
+    "type": "free",
+    "w": 500,
+    "d": 500,
+    "h": 500
+  },
+  "freeHemi": {
+    "name": "半球 / 穹顶",
+    "type": "free",
+    "w": 1200,
+    "d": 1200,
+    "h": 600
+  },
+  "freeCone": {
+    "name": "圆锥",
+    "type": "free",
+    "w": 500,
+    "d": 500,
+    "h": 800
+  },
+  "freePyramid": {
+    "name": "四棱锥",
+    "type": "free",
+    "w": 800,
+    "d": 800,
+    "h": 800
+  },
+  "freeWedge": {
+    "name": "楔形 / 坡道",
+    "type": "free",
+    "w": 1200,
+    "d": 1500,
+    "h": 200
+  },
+  "freeArch": {
+    "name": "拱门造型",
+    "type": "free",
+    "w": 1400,
+    "d": 240,
+    "h": 2600
+  },
+  "freeArcWall": {
+    "name": "弧形墙 / 弧形隔断",
+    "type": "free",
+    "w": 2400,
+    "d": 600,
+    "h": 2700
+  },
+  "freeSlats": {
+    "name": "木格栅",
+    "type": "free",
+    "w": 1800,
+    "d": 60,
+    "h": 2700
+  },
+  "freeGlassScreen": {
+    "name": "长虹玻璃隔断",
+    "type": "free",
+    "w": 1500,
+    "d": 60,
+    "h": 2400
+  },
+  "freeSteps": {
+    "name": "台阶",
+    "type": "free",
+    "w": 1200,
+    "d": 900,
+    "h": 450
+  },
+  "freeTorus": {
+    "name": "圆环 / 环形灯",
+    "type": "free",
+    "w": 1200,
+    "d": 1200,
+    "h": 60
+  },
+  "freeLightBox": {
+    "name": "发光灯带 / 灯箱",
+    "type": "free",
+    "w": 2000,
+    "d": 40,
+    "h": 30
+  },
+  "freeMirror": {
+    "name": "镜面板",
+    "type": "free",
+    "w": 900,
+    "d": 20,
+    "h": 1800
+  },
+  "freeVase": {
+    "name": "旋转体 · 花瓶",
+    "type": "free",
+    "w": 350,
+    "d": 350,
+    "h": 600
+  },
+  "freeColumn": {
+    "name": "旋转体 · 罗马柱",
+    "type": "free",
+    "w": 450,
+    "d": 450,
+    "h": 2700
+  },
+  "freeExtrude": {
+    "name": "拉伸体（画轮廓）",
+    "type": "free",
+    "w": 1500,
+    "d": 1000,
+    "h": 300
+  },
+  "freeModel": {
+    "name": "自由造型",
+    "type": "free",
+    "w": 600,
+    "d": 600,
+    "h": 600
+  }
+}
