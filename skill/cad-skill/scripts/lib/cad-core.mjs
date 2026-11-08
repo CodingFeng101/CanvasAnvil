@@ -2230,6 +2230,57 @@ var catalog_default = {
   }
 };
 
+// client/workspaces/cad/lib/design/finishes.ts
+var FLOOR_MATS = {
+  oak: ["\u6A61\u6728", "\u6728\u5730\u677F", "\u5B9E\u6728\u5730\u677F", "\u590D\u5408\u5730\u677F"],
+  walnut: ["\u80E1\u6843\u6728", "\u80E1\u6843\u6728\u5730\u677F"],
+  herring: ["\u4EBA\u5B57\u62FC", "\u4EBA\u5B57\u62FC\u5730\u677F", "\u9C7C\u9AA8\u62FC"],
+  tile: ["\u5927\u677F", "\u74F7\u7816", "\u5730\u7816", "\u7070\u767D"],
+  marble: ["\u5927\u7406\u77F3", "\u5CA9\u677F"],
+  cement: ["\u5FAE\u6C34\u6CE5", "\u6C34\u6CE5"],
+  terrazzo: ["\u6C34\u78E8\u77F3"],
+  carpet: ["\u5730\u6BEF"],
+  bath: ["\u9632\u6ED1"],
+  epoxy: ["\u73AF\u6C27"],
+  deck: ["\u6728\u5851", "\u6237\u5916\u6728"],
+  paving: ["\u77F3\u6750\u94FA\u88C5", "\u5EAD\u9662\u77F3"],
+  grass: ["\u8349\u576A"]
+};
+var WALL_MATS = {
+  latexWhite: ["\u767D\u8272", "\u767D\u5899", "\u767D\u8272\u4E73\u80F6\u6F06"],
+  latexGrey: ["\u6D45\u7070", "\u7070\u8272"],
+  latexSage: ["\u7070\u7EFF", "\u7EFF\u8272"],
+  latexWarm: ["\u5976\u5496", "\u7C73\u8272", "\u6696\u8272", "\u5976\u6CB9"],
+  wallpaper: ["\u5899\u5E03", "\u58C1\u7EB8", "\u5899\u7EB8"],
+  wallTile: ["\u5899\u7816", "\u74F7\u7816\u5899"],
+  woodPanel: ["\u6728\u9970\u9762", "\u62A4\u5899\u677F"]
+};
+var SKIRTINGS = { none: ["\u65E0", "\u4E0D\u8981", "\u9690\u5F62", "\u4E0D\u505A"], wood: ["\u5B9E\u6728", "\u6728"], metal: ["\u91D1\u5C5E", "\u94DD", "\u4E0D\u9508\u94A2"] };
+var LOOK_STYLES = { real: ["\u5199\u5B9E"], diorama: ["\u6C99\u76D8", "\u6A21\u578B", "\u5FAE\u7F29"], colorplan: ["\u5F69\u5E73"] };
+var LOOK_PALETTES = {
+  plan: ["\u65B9\u6848\u539F\u8272", "\u539F\u8272", "\u9ED8\u8BA4"],
+  cream: ["\u5976\u6CB9"],
+  wood: ["\u539F\u6728"],
+  morandi: ["\u83AB\u5170\u8FEA"],
+  wabi: ["\u4F98\u5BC2"],
+  nordic: ["\u5317\u6B27"],
+  midcentury: ["\u4E2D\u53E4"],
+  chinese: ["\u65B0\u4E2D\u5F0F", "\u4E2D\u5F0F"],
+  french: ["\u6CD5\u5F0F"],
+  industrial: ["\u5DE5\u4E1A"],
+  mono: ["\u6781\u7B80", "\u9ED1\u767D"],
+  coastal: ["\u6D77\u98CE", "\u5730\u4E2D\u6D77"],
+  dusk: ["\u591C\u666F", "\u6DF1\u8272"]
+};
+function finish(table, value) {
+  const text = String(value ?? "").trim();
+  if (!text) return void 0;
+  if (table[text]) return text;
+  let best;
+  for (const [key, names] of Object.entries(table)) for (const name of names) if (text.includes(name) && name.length > (best?.[1] ?? 0)) best = [key, name.length];
+  return best?.[0];
+}
+
 // client/workspaces/cad/lib/design/layout.ts
 var EXTERIOR = 240;
 var INTERIOR = 120;
@@ -2261,37 +2312,6 @@ var CURTAIN_ROOMS = /卧|客厅|起居|书房|厅|bed|living|study/i;
 var WET = /卫|厕|浴|bath|toilet|wc/i;
 var MOUNTED = /* @__PURE__ */ new Set(["acWall", "waterHeater", "gasHeater", "hood", "wallTV", "mirrorCabinet", "towelWarmer", "wallArt", "wallArt3", "wallClock", "projScreen", "louver", "meterBox", "wallPanel", "evCharger", "cabWall", "ledMirror", "boiler", "thermostat", "manifold"]);
 var CEILING = /* @__PURE__ */ new Set(["bathHeater", "clothesRack", "hangingPlant", "chandelier", "ceilLamp", "linearPendant", "bubblePendant", "ceilingFan", "projector", "freshAirUnit", "ductAC", "cassetteAC", "linearVent", "linearVentSide", "linearReturn", "supplyVent", "returnVent"]);
-var FLOOR_MATS = {
-  oak: ["\u6A61\u6728", "\u6728\u5730\u677F", "\u5B9E\u6728\u5730\u677F", "\u590D\u5408\u5730\u677F"],
-  walnut: ["\u80E1\u6843\u6728", "\u80E1\u6843\u6728\u5730\u677F"],
-  herring: ["\u4EBA\u5B57\u62FC", "\u4EBA\u5B57\u62FC\u5730\u677F", "\u9C7C\u9AA8\u62FC"],
-  tile: ["\u5927\u677F", "\u74F7\u7816", "\u5730\u7816", "\u7070\u767D"],
-  marble: ["\u5927\u7406\u77F3", "\u5CA9\u677F"],
-  cement: ["\u5FAE\u6C34\u6CE5", "\u6C34\u6CE5"],
-  terrazzo: ["\u6C34\u78E8\u77F3"],
-  carpet: ["\u5730\u6BEF"],
-  bath: ["\u9632\u6ED1"],
-  epoxy: ["\u73AF\u6C27"],
-  deck: ["\u6728\u5851", "\u6237\u5916\u6728"]
-};
-var WALL_MATS = {
-  latexWhite: ["\u767D\u8272", "\u767D\u5899", "\u767D\u8272\u4E73\u80F6\u6F06"],
-  latexGrey: ["\u6D45\u7070", "\u7070\u8272"],
-  latexSage: ["\u7070\u7EFF", "\u7EFF\u8272"],
-  latexWarm: ["\u5976\u5496", "\u7C73\u8272", "\u6696\u8272", "\u5976\u6CB9"],
-  wallpaper: ["\u5899\u5E03", "\u58C1\u7EB8", "\u5899\u7EB8"],
-  wallTile: ["\u5899\u7816", "\u74F7\u7816\u5899"],
-  woodPanel: ["\u6728\u9970\u9762", "\u62A4\u5899\u677F"]
-};
-var SKIRTINGS = { none: ["\u65E0", "\u4E0D\u8981", "\u9690\u5F62", "\u4E0D\u505A"], wood: ["\u5B9E\u6728", "\u6728"], metal: ["\u91D1\u5C5E", "\u94DD", "\u4E0D\u9508\u94A2"] };
-function finish(table, value) {
-  const text = String(value ?? "").trim();
-  if (!text) return void 0;
-  if (table[text]) return text;
-  let best;
-  for (const [key, names] of Object.entries(table)) for (const name of names) if (text.includes(name) && name.length > (best?.[1] ?? 0)) best = [key, name.length];
-  return best?.[0];
-}
 var SOFT = /* @__PURE__ */ new Set(["rug", "roundRug", "doormat", "bayCushion", "yogaMat"]);
 var RESIZABLE = /* @__PURE__ */ new Set(["wardrobe", "cabWardrobe", "cabSlide", "cabTall", "counter", "tvCabinet", "cabTV", "shoeCabinet", "cabShoe", "hallCabinet", "desk", "kidsDesk", "sideboard", "cabSideboard", "bookshelf", "sofa", "diningTable", "cabBase", "laundrySink", "vanity", "consoleTable", "longTable", "chest"]);
 var SMALLER = { bed20: "bed18", bed18: "bed15", bed15: "bed12", lSofa: "sofa", uSofa: "lSofa", sofa: "loveseat", uCounter: "lCounter", lCounter: "counter", fridgeDouble: "fridge", fridgeFrench: "fridge", bathtub: "shower", freeTub: "shower", shower: "showerScreen", doubleVanity: "vanity", lDesk: "desk", longTable: "diningTable" };
@@ -2837,6 +2857,9 @@ function layoutToSpec(layout) {
     furniture,
     structs
   };
+  const style = finish(LOOK_STYLES, layout.look?.style), palette = finish(LOOK_PALETTES, layout.look?.palette);
+  if (style || palette) spec.look = { ...style ? { style } : {}, ...palette ? { palette } : {} };
+  if (layout.look?.palette && !palette) notes.push(`3D \u914D\u8272\u201C${layout.look.palette}\u201D\u8BBE\u8BA1\u5668\u91CC\u6CA1\u6709\uFF0C\u6309\u65B9\u6848\u539F\u8272`);
   return { spec, notes };
 }
 

@@ -7,56 +7,67 @@
       "at": [
         10420,
         1480
-      ]
+      ],
+      "mat": "oak"
     },
     {
       "name": "厨房",
       "at": [
         5580,
         3600
-      ]
+      ],
+      "mat": "bath",
+      "wallMat": "wallTile"
     },
     {
       "name": "卫生间",
       "at": [
         3350,
         4480
-      ]
+      ],
+      "mat": "bath",
+      "wallMat": "wallTile"
     },
     {
       "name": "主卫",
       "at": [
         1010,
         5100
-      ]
+      ],
+      "mat": "bath",
+      "wallMat": "wallTile"
     },
     {
       "name": "客餐厅",
       "at": [
         7940,
         5630
-      ]
+      ],
+      "mat": "tile"
     },
     {
       "name": "主卧",
       "at": [
         1890,
         8280
-      ]
+      ],
+      "mat": "walnut"
     },
     {
       "name": "次卧",
       "at": [
         5000,
         8280
-      ]
+      ],
+      "mat": "oak"
     },
     {
       "name": "阳台",
       "at": [
         6920,
         11020
-      ]
+      ],
+      "mat": "deck"
     }
   ],
   "walls": [
@@ -595,105 +606,315 @@
       "wall": "walls_0",
       "type": "double",
       "pos": 810,
-      "width": 1240
+      "width": 1240,
+      "at": [
+        7240,
+        140
+      ],
+      "ends": [
+        [
+          6620,
+          140
+        ],
+        [
+          7860,
+          140
+        ]
+      ]
     },
     {
       "id": "openings_1",
       "wall": "walls_2",
       "type": "door",
       "pos": 655,
-      "width": 850
+      "width": 850,
+      "at": [
+        9285,
+        3040
+      ],
+      "ends": [
+        [
+          8860,
+          3040
+        ],
+        [
+          9710,
+          3040
+        ]
+      ]
     },
     {
       "id": "openings_2",
       "wall": "walls_3",
       "type": "window",
       "pos": 875,
-      "width": 1410
+      "width": 1410,
+      "at": [
+        11295,
+        3040
+      ],
+      "ends": [
+        [
+          10590,
+          3040
+        ],
+        [
+          12000,
+          3040
+        ]
+      ]
     },
     {
       "id": "openings_3",
       "wall": "walls_5",
       "type": "window",
       "pos": 3490,
-      "width": 5640
+      "width": 5640,
+      "at": [
+        6930,
+        11830
+      ],
+      "ends": [
+        [
+          4110,
+          11830
+        ],
+        [
+          9750,
+          11830
+        ]
+      ]
     },
     {
       "id": "openings_4",
       "wall": "walls_8",
       "type": "window",
       "pos": 1535,
-      "width": 1730
+      "width": 1730,
+      "at": [
+        1655,
+        10730
+      ],
+      "ends": [
+        [
+          790,
+          10730
+        ],
+        [
+          2520,
+          10730
+        ]
+      ]
     },
     {
       "id": "openings_5",
       "wall": "walls_9",
       "type": "window",
       "pos": 1475,
-      "width": 930
+      "width": 930,
+      "at": [
+        120,
+        5215
+      ],
+      "ends": [
+        [
+          120,
+          4750
+        ],
+        [
+          120,
+          5680
+        ]
+      ]
     },
     {
       "id": "openings_6",
       "wall": "walls_20",
       "type": "window",
       "pos": 1130,
-      "width": 1980
+      "width": 1980,
+      "at": [
+        3070,
+        3740
+      ],
+      "ends": [
+        [
+          2080,
+          3740
+        ],
+        [
+          4060,
+          3740
+        ]
+      ]
     },
     {
       "id": "openings_7",
       "wall": "walls_11",
       "type": "window",
       "pos": 790,
-      "width": 1380
+      "width": 1380,
+      "at": [
+        4630,
+        2840
+      ],
+      "ends": [
+        [
+          4630,
+          2150
+        ],
+        [
+          4630,
+          3530
+        ]
+      ]
     },
     {
       "id": "openings_8",
       "wall": "walls_17",
       "type": "sliding",
       "pos": 1820,
-      "width": 2120
+      "width": 2120,
+      "at": [
+        6430,
+        3870
+      ],
+      "ends": [
+        [
+          6430,
+          2810
+        ],
+        [
+          6430,
+          4930
+        ]
+      ]
     },
     {
       "id": "openings_9",
       "wall": "walls_25",
       "type": "door",
       "pos": 620,
-      "width": 880
+      "width": 880,
+      "at": [
+        4060,
+        5440
+      ],
+      "ends": [
+        [
+          3620,
+          5440
+        ],
+        [
+          4500,
+          5440
+        ]
+      ]
     },
     {
       "id": "openings_10",
       "wall": "walls_22",
       "type": "door",
       "pos": 630,
-      "width": 880
+      "width": 880,
+      "at": [
+        1940,
+        6070
+      ],
+      "ends": [
+        [
+          1940,
+          5630
+        ],
+        [
+          1940,
+          6510
+        ]
+      ]
     },
     {
       "id": "openings_11",
       "wall": "walls_26",
       "type": "door",
       "pos": 630,
-      "width": 880
+      "width": 880,
+      "at": [
+        3440,
+        6070
+      ],
+      "ends": [
+        [
+          3440,
+          5630
+        ],
+        [
+          3440,
+          6510
+        ]
+      ]
     },
     {
       "id": "openings_12",
       "wall": "walls_28",
       "type": "door",
       "pos": 635,
-      "width": 850
+      "width": 850,
+      "at": [
+        4075,
+        6690
+      ],
+      "ends": [
+        [
+          3650,
+          6690
+        ],
+        [
+          4500,
+          6690
+        ]
+      ]
     },
     {
       "id": "openings_13",
       "wall": "walls_31",
       "type": "window",
       "pos": 1570,
-      "width": 1800
+      "width": 1800,
+      "at": [
+        5010,
+        10130
+      ],
+      "ends": [
+        [
+          4110,
+          10130
+        ],
+        [
+          5910,
+          10130
+        ]
+      ]
     },
     {
       "id": "openings_14",
       "wall": "walls_32",
       "type": "sliding",
       "pos": 1735,
-      "width": 3270
+      "width": 3270,
+      "at": [
+        8165,
+        10130
+      ],
+      "ends": [
+        [
+          6530,
+          10130
+        ],
+        [
+          9800,
+          10130
+        ]
+      ]
     }
   ],
   "furniture": {

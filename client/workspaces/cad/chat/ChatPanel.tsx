@@ -35,7 +35,7 @@ import { describeJsonError, parseCadPayload } from "../lib/design/model-output";
 import { catalogPromptTable } from "../lib/design/catalog";
 import { elecPrefsFromDecisions } from "@/workspaces/cad/lib/design/elec-prefs";
 import { layoutToSpec } from "../lib/design/layout";
-import type { CadDesignSession } from "../lib/design/design-session";
+import type { CadDesignSession, MepRun } from "../lib/design/design-session";
 import {
   buildImageTags,
   buildContextAttachments,
@@ -444,14 +444,34 @@ export function ChatPanel(props: ChatPanelProps) {
         });
         log.push(`✓ ${tr("自检完成", "Checked")}${repairRound ? tr(`（AI 修复 ${repairRound} 轮）`, ` (${repairRound} repair rounds)`) : ""}`);
         showStage(tr("布置水电点位…", "Laying out MEP points…"));
-        const mep = await session.autoMep().catch((reason) => { console.error('[CAD] Auto MEP failed', reason); return 0; });
+        // After walls, openings or furniture moved, the designer lays out MEP again (unless the points were edited by hand).
+        const mepRun = await session.autoMep({
+          relayout: result.touched.layout || result.touched.relayoutElec,
+          force: result.touched.relayoutElec,
+        }).catch((reason): MepRun => { console.error('[CAD] Auto MEP failed', reason); return { placed: 0 }; });
+        const mep = mepRun.placed;
         // Then the wiring preferences picked in the plan (more sockets, network points, where the boxes go…).
         const elecNotes = mep
           ? await session.applyElecPrefs(elecPrefsFromDecisions((planValue as { decisions?: unknown } | null)?.decisions)).catch((reason) => { console.error('[CAD] Wiring preferences failed', reason); return [] as string[]; })
           : [];
-        const mepLine = mep ? tr(`已自动布置 ${mep} 个水电点位${elecNotes.length ? `，并按你的水电偏好调整：${elecNotes.join("；")}` : ""}。`, ` ${mep} MEP points laid out automatically${elecNotes.length ? `; adjusted to your wiring preferences: ${elecNotes.join("; ")}` : ""}.`) : "";
+        const mepLine = mep
+          ? tr(`已${editing ? "按新户型重新" : "自动"}布置 ${mep} 个水电点位${elecNotes.length ? `，并按你的水电偏好调整：${elecNotes.join("；")}` : ""}。`, ` ${mep} MEP points laid out ${editing ? "again for the new layout" : "automatically"}${elecNotes.length ? `; adjusted to your wiring preferences: ${elecNotes.join("; ")}` : ""}.`)
+          : mepRun.skipped === "manual"
+            ? tr("水电点位之前手动调过，这次没有重新布置；要按新户型重新布置，就说“重新布置水电”。", " MEP points were edited by hand, so they were not laid out again; say \"redo the MEP layout\" to start them over.")
+            : "";
+        // The room-by-room MEP audit; what it finds goes back to the model once or twice as MEP operations.
+        let mepFixed = 0;
+        if ((mep || result.touched.elec) && session.getSnapshot().audit?.problems.length) {
+          showStage(tr(`水电审计发现 ${session.getSnapshot().audit!.problems.length} 个问题，让 AI 修…`, "Asking the model to fix the MEP audit problems…"));
+          const repair = await session.repairMep((problems, summary) => retry(
+            `水电逐房间审计问题（只用 add_elec / move_elec / link_elec / remove 点位id 修，不动墙、门窗和家具）：\n${problems.map((item) => `- ${item}`).join("\n")}`,
+            summary,
+          )).catch((reason) => { console.error('[CAD] MEP audit repair failed', reason); return null; });
+          mepFixed = repair?.fixed ?? 0;
+        }
         // The room-by-room MEP audit: say what is wrong, not just how many.
-        const audit = mep ? session.getSnapshot().audit : null;
+        const audit = mep || result.touched.elec ? session.getSnapshot().audit : null;
+        const fixedLine = mepFixed ? tr(`AI 已修好 ${mepFixed} 个水电审计问题。`, `The model fixed ${mepFixed} MEP audit problems.`) : "";
         const auditList = audit?.problems.map((item) => `- ${item}`).join("\n") ?? "";
         const auditLine = !audit
           ? ""
@@ -470,7 +490,7 @@ export function ChatPanel(props: ChatPanelProps) {
               `户型已生成：${result.errors} 个错误，${result.warnings} 个警告。可以在设计器里查看、直接拖动修改，或继续告诉我要改哪里；满意后点“确认户型”。`,
               `Floorplan generated: ${result.errors} errors, ${result.warnings} warnings. Review it in the designer, drag to adjust, or tell me what to change; press Confirm design when you are happy.`,
             );
-        updateAssistant(generateMessage("done", `${prefix}${[...log, reply, `**${summaryLine}${mepLine}**`, auditLine].filter(Boolean).join("\n\n")}`));
+        updateAssistant(generateMessage("done", `${prefix}${[...log, reply, `**${summaryLine}${mepLine}**`, fixedLine, auditLine].filter(Boolean).join("\n\n")}`));
         return result;
       };
       const generatePlan = async () => {

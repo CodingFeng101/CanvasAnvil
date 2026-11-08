@@ -1,5 +1,6 @@
 import catalog from '../../../../../resources/hpd/catalog.json';
 import type { HouseSpec, Point } from './types';
+import { FLOOR_MATS, WALL_MATS, SKIRTINGS, LOOK_STYLES, LOOK_PALETTES, finish } from './finishes';
 
 /**
  * The model describes a floorplan as intent — a grid of dimension chains, which cells each room
@@ -34,6 +35,8 @@ export type Layout = {
   doors?: Array<{ between?: [string, string]; room?: string; side?: string; entry?: boolean; type?: string; width?: number; into?: string; near?: string }>;
   windows?: Array<{ room: string; side: string; size?: string; type?: string; width?: number }>;
   furniture?: Record<string, LayoutItem[]>;
+  /** 3D style and palette (the designer's look): "沙盘", "奶油"… */
+  look?: { style?: string; palette?: string };
 };
 export type LayoutResult = { spec: HouseSpec; notes: string[] };
 
@@ -53,26 +56,6 @@ const CURTAIN_ROOMS = /卧|客厅|起居|书房|厅|bed|living|study/i;
 const WET = /卫|厕|浴|bath|toilet|wc/i;
 const MOUNTED = new Set(['acWall', 'waterHeater', 'gasHeater', 'hood', 'wallTV', 'mirrorCabinet', 'towelWarmer', 'wallArt', 'wallArt3', 'wallClock', 'projScreen', 'louver', 'meterBox', 'wallPanel', 'evCharger', 'cabWall', 'ledMirror', 'boiler', 'thermostat', 'manifold']);
 const CEILING = new Set(['bathHeater', 'clothesRack', 'hangingPlant', 'chandelier', 'ceilLamp', 'linearPendant', 'bubblePendant', 'ceilingFan', 'projector', 'freshAirUnit', 'ductAC', 'cassetteAC', 'linearVent', 'linearVentSide', 'linearReturn', 'supplyVent', 'returnVent']);
-// Finishes the designer knows (room.mat / wallMat / skirting), with the names people use for them.
-const FLOOR_MATS: Record<string, string[]> = {
-  oak: ['橡木', '木地板', '实木地板', '复合地板'], walnut: ['胡桃木', '胡桃木地板'], herring: ['人字拼', '人字拼地板', '鱼骨拼'], tile: ['大板', '瓷砖', '地砖', '灰白'],
-  marble: ['大理石', '岩板'], cement: ['微水泥', '水泥'], terrazzo: ['水磨石'], carpet: ['地毯'], bath: ['防滑'], epoxy: ['环氧'], deck: ['木塑', '户外木'],
-};
-const WALL_MATS: Record<string, string[]> = {
-  latexWhite: ['白色', '白墙', '白色乳胶漆'], latexGrey: ['浅灰', '灰色'], latexSage: ['灰绿', '绿色'], latexWarm: ['奶咖', '米色', '暖色', '奶油'],
-  wallpaper: ['墙布', '壁纸', '墙纸'], wallTile: ['墙砖', '瓷砖墙'], woodPanel: ['木饰面', '护墙板'],
-};
-const SKIRTINGS: Record<string, string[]> = { none: ['无', '不要', '隐形', '不做'], wood: ['实木', '木'], metal: ['金属', '铝', '不锈钢'] };
-/** A finish key from a key or a Chinese name ("人字拼地板" → herring); undefined when the designer has none like it. */
-function finish(table: Record<string, string[]>, value: unknown): string | undefined {
-  const text = String(value ?? '').trim();
-  if (!text) return undefined;
-  if (table[text]) return text;
-  // The longest matching name wins: "胡桃木地板" is walnut, not the generic "木地板".
-  let best: [string, number] | undefined;
-  for (const [key, names] of Object.entries(table)) for (const name of names) if (text.includes(name) && name.length > (best?.[1] ?? 0)) best = [key, name.length];
-  return best?.[0];
-}
 const SOFT = new Set(['rug', 'roundRug', 'doormat', 'bayCushion', 'yogaMat']);
 const RESIZABLE = new Set(['wardrobe', 'cabWardrobe', 'cabSlide', 'cabTall', 'counter', 'tvCabinet', 'cabTV', 'shoeCabinet', 'cabShoe', 'hallCabinet', 'desk', 'kidsDesk', 'sideboard', 'cabSideboard', 'bookshelf', 'sofa', 'diningTable', 'cabBase', 'laundrySink', 'vanity', 'consoleTable', 'longTable', 'chest']);
 const SMALLER: Record<string, string> = { bed20: 'bed18', bed18: 'bed15', bed15: 'bed12', lSofa: 'sofa', uSofa: 'lSofa', sofa: 'loveseat', uCounter: 'lCounter', lCounter: 'counter', fridgeDouble: 'fridge', fridgeFrench: 'fridge', bathtub: 'shower', freeTub: 'shower', shower: 'showerScreen', doubleVanity: 'vanity', lDesk: 'desk', longTable: 'diningTable' };
@@ -621,6 +604,9 @@ export function layoutToSpec(layout: Layout): LayoutResult {
     furniture,
     structs,
   };
+  const style = finish(LOOK_STYLES, layout.look?.style), palette = finish(LOOK_PALETTES, layout.look?.palette);
+  if (style || palette) spec.look = { ...(style ? { style } : {}), ...(palette ? { palette } : {}) };
+  if (layout.look?.palette && !palette) notes.push(`3D 配色“${layout.look.palette}”设计器里没有，按方案原色`);
   return { spec, notes };
 }
 

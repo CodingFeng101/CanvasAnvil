@@ -89,3 +89,5 @@
 ```
 
 家具 key 必须来自随请求附带的家具表，禁止臆造。
+
+可选 `look`：用户说了整体风格或效果图样式时写 `{"style":"real|diorama|colorplan","palette":"..."}`。style：real 写实、diorama 沙盘效果图、colorplan 彩平图；palette：plan 方案原色、cream 奶油白、wood 原木、morandi 莫兰迪、wabi 侘寂、nordic 北欧、midcentury 中古、chinese 新中式、french 法式、industrial 工业风、mono 极简黑白、coastal 海风、dusk 深色夜景。它只改 3D 显示，地面墙面材质仍按房间的 mat / wallMat 写。没提就不写。

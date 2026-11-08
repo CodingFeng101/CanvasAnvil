@@ -23,7 +23,7 @@ Ask them all at once, with the recommendation preselected; the user only changes
 
 ## 3. Layout (`prompts/layout.md`)
 
-Output: `{"type":"cad_layout","layout":{...}}` — a grid of column widths and row heights (wall centrelines), rooms as cell ranges, open connections, doors between rooms, windows by room side and size, furniture by room with placement intent (`wall`, `at`, `beside`, `front`, `center`, `corner`, `optional`), and per-room `floor` / `wall` / `skirting` / `ceil`. No coordinates.
+Output: `{"type":"cad_layout","layout":{...}}` — a grid of column widths and row heights (wall centrelines), rooms as cell ranges, open connections, doors between rooms, windows by room side and size, furniture by room with placement intent (`wall`, `at`, `beside`, `front`, `center`, `corner`, `optional`), and per-room `floor` / `wall` / `skirting` / `ceil`; optional `look` (3D style / palette). No coordinates.
 
 ## 4. Build the HouseSpec — `scripts/build-house-spec.mjs`
 
@@ -37,7 +37,8 @@ Runs the app's layout program: walls from the grid (240 exterior, 120 interior),
 
 ```
 node scripts/run-designer.mjs --spec house-spec.json --plan cad_plan.json --out-dir out \
-  [--exports quote,drawings,plan-dxf,mep-dxf,colour,render | all | none] [--no-open]
+  [--ops ops.json] [--exports quote,drawings,plan-dxf,mep-dxf,colour,render | all | none] [--no-open]
+node scripts/run-designer.mjs --design out/design.json --ops ops.json --plan cad_plan.json --out-dir out2 [...]
 ```
 
 The designer (`designer/assets/template.html`), headless through `designer/scripts/browser.mjs`, with the spec as preset:
@@ -45,10 +46,11 @@ The designer (`designer/assets/template.html`), headless through `designer/scrip
 1. auto-nudge: furniture a few cm into walls or neighbours is pushed clear (the app's step),
 2. one-click MEP layout (sockets, switches, lights, water, panel and network box),
 3. wiring preferences from the plan's 水电 decisions,
+3b. edit operations from `--ops` (below), then auto-nudge again and, after wall / opening / furniture edits, steps 2–3 again,
 4. the designer's checks → `report.json`,
 5. `<name>-装修设计器.html`, built like the designer's `build.py` (template, preset after `<meta charset>`, title) with the finished design (MEP included) as the preset: the full interactive designer as one offline file, opened in the user's default browser at the end. The user keeps editing there; changes are saved in that browser. Pass `--no-open` on a machine without a desktop and give the path instead,
 6. the room-by-room MEP audit (`designer/scripts/elecaudit.mjs`) on that page (every light switched, a switch beside the entry door and a room's only door on the handle side, mounting heights, double control and bedside sockets in bedrooms, hood socket and alarm in the kitchen, splash-proof sockets in bathrooms, both boxes present) → `elecAudit` in `report.json`; problems are reported, not fatal,
-7. exports: always `design.json`, `plan2d.png`, `design.dxf`; by default also the quote CSV, drawing-set PDF, MEP DXF and colour plan; `render` (2560×1440 3D) on request. The colour plan and render enter 3D the way `designer/scripts/qa.mjs` does (scene ready, transition over, 重置视角).
+7. exports: always `design.json`, `summary.json` (rooms with finishes, walls, openings with world coordinates, furniture and MEP points, all with ids), `plan2d.png`, `design.dxf`; by default also the quote CSV, drawing-set PDF, MEP DXF and colour plan; `render` (2560×1440 3D) on request. The colour plan and render enter 3D the way `designer/scripts/qa.mjs` does (scene ready, transition over, 重置视角).
 
 Exit 1 when errors remain. Typical fixes in the layout: a room too small for its furniture (widen the column or mark items `optional`), a door with no shared wall, a window on an interior wall.
 
@@ -62,3 +64,13 @@ python designer/scripts/qa_files.py <dir>/qa
 ```
 
 `qa.mjs` drives every feature of the page (several minutes); go through `qa/shots/`. `check.mjs <page> <dir>` gives `plan2d.png` / `view3d.png` and its own report when you want to look again after a change.
+
+## Edit operations — `--ops` (`prompts/edit.md`)
+
+The same operations as CanvasAnvil's design assistant, as `{"type":"cad_ops","ops":[…]}` (`prompts/edit.md` has every op and its rules; ids come from the last run's `summary.json`). Use them on `--design <last out>/design.json` for:
+
+- **MEP audit problems** (step 6 of `report.json` → `elecAudit.problems`): `add_elec` a switch beside the door (`openings[].ends` are the door's ends; 150–300mm past one end, on the room's side) with `links` to the room's light, `link_elec` an unswitched light, `move_elec` / `remove` a misplaced point. Points on a wall snap onto the nearest wall face; a point on a door or window opening is refused with the opening's span, so move it along the wall. Run again with the fixed design until the audit is clean or what is left cannot be fixed without moving a wall (say so).
+- **Small changes after delivery** ("客厅地面换人字拼", "换奶油风", "主卧加个书架", "这个开关挪到门右边"): `set_finish`, `set_look`, furniture / opening / wall ops, MEP point ops. After wall, opening or furniture edits the MEP layout runs again (so hand-placed points from earlier runs are replaced) unless the same batch edits points; `relayout_elec` lays it out again on request.
+- **Large changes** (rooms moved, a room added): change `cad_layout.json` and run steps 4–5 from the spec again.
+
+`report.json` → `edits` lists what was applied and each refused op with its reason (exit 1); fix those and run again.

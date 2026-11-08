@@ -47,6 +47,8 @@ export type CadDesign = {
   lastSource: 'ai' | 'user' | 'recognize';
   status: 'draft' | 'confirmed';
   underlay?: Underlay;
+  /** MEP points were edited by hand (in the designer or on request): later layout edits leave them alone. */
+  mepManual?: boolean;
   updatedAt: number;
 };
 

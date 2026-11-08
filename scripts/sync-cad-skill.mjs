@@ -9,9 +9,11 @@
  *
  *   designer/                                 ← the designer checkout (only when its path is given)
  *   prompts/plan.md, prompts/layout.md        ← resources/prompts/cad/plan.md, design/create.md
+ *   prompts/edit.md                           ← resources/prompts/cad/design/edit.md (edit operations on a finished design)
  *   references/furniture-catalog.md           ← resources/hpd/catalog.json
  *   scripts/lib/cad-core.mjs                  ← layout program, autofix and validation (Node, ESM)
- *   scripts/lib/designer-kit.js               ← auto-nudge and wiring preferences (injected into the designer page)
+ *   scripts/lib/designer-kit.js               ← auto-nudge, wiring preferences, edit operations and the plan summary
+ *                                               (injected into the designer page)
  *
  * Run from the repository root after changing any of those sources:
  *
@@ -89,6 +91,7 @@ fs.rmSync(path.join(SKILL, "assets"), { recursive: true, force: true });
 for (const [source, target] of [
   ["resources/prompts/cad/plan.md", "prompts/plan.md"],
   ["resources/prompts/cad/design/create.md", "prompts/layout.md"],
+  ["resources/prompts/cad/design/edit.md", "prompts/edit.md"],
 ]) {
   write(target, `<!-- ${NOTE}${source} -->\n\n${fs.readFileSync(path.join(ROOT, source), "utf8").trimEnd()}\n`);
 }
@@ -125,6 +128,6 @@ await bundle(
 );
 await bundle(
   "scripts/lib/designer-kit.js",
-  `export { nudgeFurniture } from "./auto-nudge"; export { applyElecPrefs, elecPrefsFromDecisions } from "./elec-prefs";`,
+  `export { nudgeFurniture } from "./auto-nudge"; export { applyElecPrefs, elecPrefsFromDecisions } from "./elec-prefs"; export { applyOps } from "./plan-ops"; export { summarizePlan } from "./plan-summary";`,
   { format: "iife", globalName: "CadKit", platform: "browser", target: "es2020" },
 );

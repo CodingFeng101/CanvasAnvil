@@ -51,21 +51,48 @@ export function summarizePlan(plan: InternalPlan, rooms: RoomArea[], issues: Des
     }
     return found.length ? found : undefined;
   };
-  const output = {
+  // Finishes per room label (a merged region "客厅 / 餐厅" lists the first label's).
+  const finishesOf = (name: string) => {
+    const label = plan.rooms.find(room => room.name === name || name.split(' / ').includes(room.name));
+    if (!label) return {};
+    const { mat, wallMat, skirting } = label as { mat?: string; wallMat?: string; skirting?: string };
+    return { mat, wallMat, skirting };
+  };
+  // Where each opening is in the world, so a switch "beside the door" needs no wall arithmetic.
+  const openingAt = (opening: (typeof plan.openings)[number]) => {
+    const wall = walls.find(item => item.id === opening.wall);
+    if (!wall?.a || !wall.b) return undefined;
+    const length = Math.hypot(wall.b.x - wall.a.x, wall.b.y - wall.a.y) || 1, ux = (wall.b.x - wall.a.x) / length, uy = (wall.b.y - wall.a.y) / length;
+    const point = (along: number) => [Math.round(wall.a!.x + ux * along), Math.round(wall.a!.y + uy * along)];
+    return { at: point(opening.pos), ends: [point(opening.pos - opening.width / 2), point(opening.pos + opening.width / 2)] };
+  };
+  // MEP points by room: [id, kind, x, y, h] plus the lights a switch controls.
+  type Elec = { id: string; kind: string; x: number; y: number; h?: number; links?: string[] };
+  const elecList = ((plan as { elec?: Elec[] }).elec ?? []).filter(item => Number.isFinite(item.x) && Number.isFinite(item.y));
+  const elec = () => {
+    const grouped: Record<string, unknown[]> = Object.create(null);
+    for (const item of elecList) (grouped[roomOf([item.x, item.y])] ??= []).push([item.id, item.kind, Math.round(item.x), Math.round(item.y), Math.round(item.h ?? 0), ...(item.links?.length ? [item.links] : [])]);
+    return grouped;
+  };
+  const output: Record<string, unknown> & { furniture: unknown; elec?: unknown } = {
     name: plan.name,
     height: plan.height,
-    rooms: roomList.map(room => ({ name: room.name, area: room.area, at: room.at, walls: roomWalls(room) })),
+    look: plan.look,
+    rooms: roomList.map(room => ({ name: room.name, area: room.area, at: room.at, ...finishesOf(room.name), walls: roomWalls(room) })),
     walls: walls.map(wall => ({ ...wall, a: wall.a ? [wall.a.x, wall.a.y] : null, b: wall.b ? [wall.b.x, wall.b.y] : null })),
-    openings: plan.openings.map(opening => ({ id: opening.id, wall: opening.wall, type: opening.type, pos: opening.pos, width: opening.width })),
+    openings: plan.openings.map(opening => ({ id: opening.id, wall: opening.wall, type: opening.type, pos: opening.pos, width: opening.width, ...openingAt(opening) })),
     furniture: furniture(false),
+    ...(elecList.length ? { elecFormat: '[id, kind, x, y, h离地, 开关控制的灯id]', elec: elec() } : {}),
     issues: issues.filter(issue => issue.level === 'error' || issue.level === 'warn'),
   };
   const stringify = () => JSON.stringify(output, (key, value) => ['x', 'y', 'rot', 't', 'pos', 'width', 'w', 'd', 'height'].includes(key) && typeof value === 'number' ? Math.round(value) : value);
   // Arrays hold coordinate pairs, so round these explicitly before serialization.
-  output.rooms.forEach(room => { room.at = room.at.map(Math.round) as Point; });
-  output.walls.forEach(wall => { wall.a = wall.a?.map(Math.round) ?? null; wall.b = wall.b?.map(Math.round) ?? null; });
+  (output.rooms as Array<{ at: Point }>).forEach(room => { room.at = room.at.map(Math.round) as Point; });
+  (output.walls as Array<{ a: number[] | null; b: number[] | null }>).forEach(wall => { wall.a = wall.a?.map(Math.round) ?? null; wall.b = wall.b?.map(Math.round) ?? null; });
   let text = stringify();
   if (text.length > 12000) { output.furniture = furniture(true); text = stringify(); }
+  // A whole house of MEP points is long; past this only the counts per room go along.
+  if (text.length > 20000 && output.elec) { output.elec = Object.fromEntries(Object.entries(elec()).map(([room, items]) => [room, `${items.length} 个点位`])); text = stringify(); }
   return text;
 }
 

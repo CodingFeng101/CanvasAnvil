@@ -9,13 +9,18 @@ import { validateSpec } from './spec-validate';
 import { autofixSpec } from './spec-autofix';
 import { nudgeFurniture } from './auto-nudge';
 import { applyOps } from './plan-ops';
-import type { PlanOp } from './plan-ops';
+import type { PlanOp, OpsTouched } from './plan-ops';
 import { isValidKey } from './catalog';
 import { summarizePlan } from './plan-summary';
 import { reviseUntilClean } from './revise-loop';
 
 export type DesignerPreset = { plan: InternalPlan; underlay?: CadDesign['underlay'] } | { spec: HouseSpec; underlay?: CadDesign['underlay'] };
-export type DesignResult = { applied: number; errors: number; warnings: number; rounds: number };
+export type DesignResult = { applied: number; errors: number; warnings: number; rounds: number; touched: OpsTouched };
+export type MepRun = { placed: number; skipped?: 'manual' };
+export type MepRepair = { rounds: number; fixed: number; problems: string[] };
+type Elec = { kind: string; auto?: unknown };
+// The designer keeps its cove strips in step with the ceilings itself; those are not hand edits.
+const handElec = (plan: InternalPlan) => JSON.stringify(((plan as { elec?: Elec[] }).elec ?? []).filter(item => !item.auto));
 type Snapshot = { design: CadDesign | null; issues: DesignIssue[]; audit: ElecAudit | null; busy: boolean; ready: boolean; canUndo: boolean; lastResult: DesignResult | null };
 type StoredDesign = { design: CadDesign | null; history: CadDesign[]; undoAI: CadDesign | null };
 type Retry = (feedback: string, summary: string) => Promise<unknown>;
@@ -127,7 +132,8 @@ export class CadDesignSession {
   private async captureUserPlan(plan: InternalPlan) {
     const before = this.snapshot.design;
     if (!before || JSON.stringify(before.plan) === JSON.stringify(plan)) return;
-    const design: CadDesign = { ...before, plan, revision: before.revision + 1, lastSource: 'user', status: 'draft', updatedAt: Date.now() };
+    const mepManual = before.mepManual || handElec(before.plan) !== handElec(plan);
+    const design: CadDesign = { ...before, plan, mepManual, revision: before.revision + 1, lastSource: 'user', status: 'draft', updatedAt: Date.now() };
     const history = [...this.history, before].slice(-20);
     await this.persist(design, history, this.undo);
     this.history = history;
@@ -193,18 +199,63 @@ export class CadDesignSession {
       throw reason;
     } finally { this.update({ busy: false }); }
   }
-  /** Once there is furniture but no MEP yet, let the designer lay out MEP itself. */
-  async autoMep(): Promise<number> {
+  /**
+   * Let the designer lay out MEP itself: once there is furniture but no MEP yet, or again after the
+   * walls, openings or furniture changed (relayout). Points edited by hand are kept unless forced.
+   */
+  async autoMep(options: { relayout?: boolean; force?: boolean } = {}): Promise<MepRun> {
     const design = this.snapshot.design;
-    if (!design || !this.bridge || this.snapshot.busy || isBuilding(design.plan)) return 0;
+    if (!design || !this.bridge || this.snapshot.busy || isBuilding(design.plan)) return { placed: 0 };
     const plan = design.plan as { furniture?: unknown[]; elec?: unknown[] };
-    if (!plan.furniture?.length || plan.elec?.length) return 0;
+    if (!plan.furniture?.length) return { placed: 0 };
+    if (plan.elec?.length) {
+      if (!options.relayout && !options.force) return { placed: 0 };
+      if (design.mepManual && !options.force) return { placed: 0, skipped: 'manual' };
+      this.bridge.replacePlan({ ...design.plan, elec: [] } as InternalPlan);
+    }
     const placed = await this.bridge.autoElec();
-    if (!placed) return 0;
-    const next: CadDesign = { ...design, plan: this.bridge.readPlan(), updatedAt: Date.now() };
+    if (!placed) { this.bridge.replacePlan(design.plan); return { placed: 0 }; }
+    const next: CadDesign = { ...design, plan: this.bridge.readPlan(), mepManual: false, updatedAt: Date.now() };
     await this.persist(next, this.history, this.undo);
     this.update({ design: next, issues: this.bridge.runChecks() });
-    return placed;
+    return { placed };
+  }
+  /**
+   * Fix what the room-by-room MEP audit finds: the model answers with MEP operations (add_elec /
+   * move_elec / link_elec / remove of a point), a round is kept only when it leaves fewer problems.
+   */
+  async repairMep(ask: (problems: string[], summary: string) => Promise<unknown>, maxRounds = 2): Promise<MepRepair> {
+    const design = this.snapshot.design;
+    const audit = this.auditNow();
+    const result: MepRepair = { rounds: 0, fixed: 0, problems: audit?.problems ?? [] };
+    if (!design || !this.bridge || this.snapshot.busy || isBuilding(design.plan) || !result.problems.length) return result;
+    const bridge = this.bridge;
+    this.update({ busy: true });
+    let current = design;
+    try {
+      for (let round = 0; round < maxRounds && result.problems.length; round++) {
+        result.rounds++;
+        const answer = object(await ask(result.problems, summarizePlan(current.plan, bridge.roomAreas(), this.snapshot.issues)));
+        if (answer.type !== 'cad_ops' || !Array.isArray(answer.ops)) break;
+        const ops = (answer.ops as PlanOp[]).filter(item => ['add_elec', 'move_elec', 'link_elec', 'remove'].includes(String(item?.op)));
+        const applied = applyOps(current.plan, ops, { makeFurn: bridge.makeFurn, isValidKey });
+        if (!applied.applied || applied.touched.layout) break;
+        bridge.replacePlan(applied.plan);
+        const left = this.auditNow()?.problems ?? [];
+        if (left.length >= result.problems.length) { bridge.replacePlan(current.plan); break; }
+        result.fixed += result.problems.length - left.length;
+        result.problems = left;
+        current = { ...current, plan: bridge.readPlan(), updatedAt: Date.now() };
+      }
+      if (current !== design) {
+        await this.persist(current, this.history, this.undo);
+        this.update({ design: current, issues: bridge.runChecks() });
+      }
+      return result;
+    } catch (reason) {
+      bridge.replacePlan(current.plan);
+      throw reason;
+    } finally { this.update({ busy: false }); }
   }
   /** The user's wiring preferences on top of the designer's MEP layout; returns what was changed, as sentences. */
   async applyElecPrefs(prefs: ElecPrefs): Promise<string[]> {
@@ -257,6 +308,7 @@ export class CadDesignSession {
     checkAbort();
     this.update({ busy: true });
     let applied = 0;
+    const touched: OpsTouched = { layout: false, elec: false, finish: false, look: false, relayoutElec: false };
     let validationRounds = Math.max(0, Math.min(3, options.initialRepairRounds ?? 0));
     let reloaded = false;
     const validatedSpec = async (value: unknown): Promise<HouseSpec> => {
@@ -296,6 +348,7 @@ export class CadDesignSession {
       if (result.rejected.length) throw new Error(JSON.stringify(result.rejected));
       checkAbort();
       applied += result.applied;
+      for (const key of Object.keys(touched) as Array<keyof OpsTouched>) touched[key] ||= result.touched[key];
       bridge.replacePlan(result.plan);
       return { ...current, plan: bridge.readPlan(), revision: current.revision + 1, status: 'draft', lastSource: 'ai', updatedAt: Date.now() };
     };
@@ -314,6 +367,7 @@ export class CadDesignSession {
         checkAbort();
         candidate = { plan: bridge.readPlan(), revision: (before?.revision ?? 0) + 1, status: 'draft', lastSource: 'ai', updatedAt: Date.now() };
         applied = 1;
+        touched.layout = true;
       } else if (payload.type === 'cad_ops') {
         if (!before) throw new Error('尚无户型，请先生成 cad_spec / Generate cad_spec first');
         if (isBuilding(before.plan)) throw new Error('暂只支持单层修改 / Only single-floor edits are supported');
@@ -347,11 +401,13 @@ export class CadDesignSession {
         revised.design = nudge(revised.design);
         revised.issues = bridge.runChecks();
       }
+      // Points the user asked for by hand stay through later layout edits; a full relayout starts over.
+      if (touched.elec && !touched.relayoutElec) revised.design = { ...revised.design, mepManual: true };
       const history = before ? [...this.history, before].slice(-20) : this.history;
       await this.persist(revised.design, history, before);
       this.history = history;
       this.undo = before;
-      const result = { applied, errors: revised.issues.filter(issue => issue.level === 'error').length, warnings: revised.issues.filter(issue => issue.level === 'warn').length, rounds: validationRounds + revised.rounds };
+      const result = { applied, errors: revised.issues.filter(issue => issue.level === 'error').length, warnings: revised.issues.filter(issue => issue.level === 'warn').length, rounds: validationRounds + revised.rounds, touched };
       this.update({ design: revised.design, issues: revised.issues, lastResult: result, canUndo: !!before });
       return result;
     } catch (reason) {

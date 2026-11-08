@@ -368,3 +368,50 @@ test('updating a legacy unsupported opening requires an explicit supported repla
   assert.deepEqual(repaired.rejected, []);
   assert.equal((repaired.plan as SinglePlan).openings[0].sill, 900);
 });
+
+test('set_finish and set_look take keys or Chinese names and reject what the designer lacks', () => {
+  const result = applyOps(plan, [
+    { op: 'set_finish', room: '次卧', mat: '人字拼地板', wallMat: 'latexGrey' },
+    { op: 'set_look', style: '沙盘', palette: '奶油' },
+    { op: 'set_finish', room: '次卧', mat: '金砖' },
+  ], ctx);
+  const next = result.plan as SinglePlan;
+  assert.deepEqual(result.rejected.map(item => item.index), [2]);
+  assert.equal(next.rooms.find(room => room.name === '次卧')?.mat, 'herring');
+  assert.equal(next.rooms.find(room => room.name === '次卧')?.wallMat, 'latexGrey');
+  assert.deepEqual(next.look, { style: 'diorama', palette: 'cream' });
+  assert.deepEqual({ ...result.touched }, { layout: false, elec: false, finish: true, look: true, relayoutElec: false });
+});
+
+test('MEP points snap onto the nearest wall face, link to lights and refuse door openings', () => {
+  const nodes = new Map(plan.nodes.map(node => [node.id, node]));
+  const wall = plan.walls.find(item => { const a = nodes.get(item.a)!, b = nodes.get(item.b)!; return Math.abs(a.y - b.y) < 1 && Math.abs(a.x - b.x) > 3000 && !plan.openings.some(o => o.wall === item.id); })!;
+  const a = nodes.get(wall.a)!, b = nodes.get(wall.b)!;
+  const midX = (a.x + b.x) / 2;
+  const base = { ...structuredClone(plan), elec: [{ id: 'lamp1', kind: 'light', x: midX, y: a.y + 1500, rot: 0, h: 0 }] } as SinglePlan;
+  const result = applyOps(base, [
+    { op: 'add_elec', kind: 'switch1', x: midX, y: a.y + 300, links: ['lamp1'] },
+    { op: 'add_elec', kind: 'socket', x: midX, y: a.y + 5000 },
+    { op: 'add_elec', kind: 'downlight', x: midX, y: a.y + 900 },
+  ], ctx);
+  const elec = (result.plan as unknown as { elec: Array<{ id: string; kind: string; x: number; y: number; rot: number; h: number; links?: string[] }> }).elec;
+  const sw = elec.find(item => item.kind === 'switch1')!;
+  assert.equal(sw.y, Math.round(a.y + wall.t / 2 + 60));
+  assert.equal(sw.rot, 0);
+  assert.equal(sw.h, 1300);
+  assert.deepEqual(sw.links, ['lamp1']);
+  assert.ok(elec.some(item => item.kind === 'downlight' && item.y === Math.round(a.y + 900)));
+  assert.equal(result.touched.elec, true);
+  assert.equal(result.touched.layout, false);
+  // Far from every wall: rejected with a reason.
+  assert.deepEqual(result.rejected.map(item => item.index), result.rejected.length ? [1] : []);
+  const removed = applyOps(result.plan, [{ op: 'remove', id: 'lamp1' }], ctx);
+  assert.deepEqual((removed.plan as unknown as { elec: Array<{ kind: string; links?: string[] }> }).elec.find(item => item.kind === 'switch1')?.links, []);
+  assert.equal(removed.touched.elec, true);
+  const door = plan.openings.find(item => item.type === 'door')!;
+  const doorWall = plan.walls.find(item => item.id === door.wall)!;
+  const da = nodes.get(doorWall.a)!, db = nodes.get(doorWall.b)!, len = Math.hypot(db.x - da.x, db.y - da.y);
+  const onDoor = [da.x + (db.x - da.x) * door.pos / len, da.y + (db.y - da.y) * door.pos / len];
+  const blocked = applyOps(plan, [{ op: 'add_elec', kind: 'switch1', x: onDoor[0], y: onDoor[1] }], ctx);
+  assert.match(blocked.rejected[0]?.reason ?? '', /洞口/);
+});
