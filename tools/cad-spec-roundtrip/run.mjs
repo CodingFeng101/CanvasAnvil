@@ -27,10 +27,10 @@ const kit = (await build({
 
 // The same functions in Node, for carryOver after the second load.
 const nodeKit = (await build({
-  stdin: { contents: `export { planToSpec, carryOver } from "./plan-to-spec";`, resolveDir: path.join(ROOT, "client/workspaces/cad/lib/design"), loader: "ts" },
+  stdin: { contents: `export { planToSpec, carryOver } from "./plan-to-spec"; export { applySpecPatch } from "./spec-patch";`, resolveDir: path.join(ROOT, "client/workspaces/cad/lib/design"), loader: "ts" },
   bundle: true, write: false, format: "esm", platform: "node", target: "node18",
 })).outputFiles[0].text;
-const { carryOver } = await import(`data:text/javascript;base64,${Buffer.from(nodeKit).toString("base64")}`);
+const { carryOver, applySpecPatch } = await import(`data:text/javascript;base64,${Buffer.from(nodeKit).toString("base64")}`);
 
 const server = http.createServer((request, response) => {
   response.writeHead(200, { "content-type": "text/html; charset=utf-8" });
@@ -129,6 +129,40 @@ try {
       for (const line of problems) console.log(`  ${line}`);
     } else console.log(`✓ ${name}`);
   }
+
+  // A patch on the exported spec reaches the designer: one of each kind cad_ops cannot express.
+  const base = await load({ id: `p0-${Date.now()}`, spec: JSON.parse(fs.readFileSync(path.join(HERE, "specs/example.json"), "utf8")) });
+  const wallWithDoor = base.spec.walls.findIndex((wall) => wall.openings?.some((o) => o.type === "door"));
+  const doorAt = base.spec.walls[wallWithDoor].openings.findIndex((o) => o.type === "door");
+  const patched = applySpecPatch(base.spec, [
+    { op: "replace", path: `/walls/${wallWithDoor}/openings/${doorAt}/hinge`, value: base.spec.walls[wallWithDoor].openings[doorAt].hinge === "to" ? "from" : "to" },
+    { op: "replace", path: "/rooms/1/ceil", value: { type: "tray", drop: 250, edgeW: 450, cove: true, drop2: 150, edgeW2: 300 } },
+    { op: "add", path: "/elec/-", value: { kind: "track", pts: [[8000, 2000], [10000, 2000]], h: 0, cct: 3500 } },
+    { op: "add", path: "/mep", value: { power: "ceil", floorStyle: "direct" } },
+    { op: "add", path: "/structs/-", value: { kind: "drain", at: [5000, 4000] } },
+    { op: "add", path: "/furniture/-", value: { key: "freePlatform", at: [9000, 4000], w: 1200, d: 800, h: 150, opt: { mat: "wood" } } },
+    { op: "add", path: "/look", value: { style: "colorplan", palette: "wabi", labels: false } },
+    { op: "add", path: "/site", value: { city: "上海", month: 6 } },
+    { op: "add", path: "/north", value: 90 },
+    { op: "add", path: "/voids", value: [{ rect: [2000, 2000, 2600, 2600], depth: 150, name: "下沉区" }] },
+  ]);
+  const after = await load({ id: `p1-${Date.now()}`, spec: patched });
+  const p0 = base.plan, p1 = after.plan;
+  const door = (plan) => plan.openings.filter((o) => o.type === "door").map((o) => o.hinge).join("");
+  const checks = [
+    ["door hinge flipped", door(p0) !== door(p1)],
+    ["tray ceiling", p1.rooms.some((room) => room.ceil?.type === "tray" && room.ceil.drop2 === 150)],
+    ["track light", (p1.elec ?? []).some((e) => e.kind === "track" && e.pts?.length === 2 && e.cct === 3500)],
+    ["mep routing", p1.mep?.power === "ceil" && p1.mep.floorStyle === "direct"],
+    ["drain", (p1.structs ?? []).length === (p0.structs ?? []).length + 1],
+    ["free platform", p1.furniture.some((f) => f.key === "freePlatform" && f.opt?.mat === "wood")],
+    ["look", p1.look?.style === "colorplan" && p1.look.palette === "wabi" && p1.look.labels === false],
+    ["site and north", p1.site?.city === "上海" && p1.north === 90],
+    ["void", (p1.voids ?? []).some((v) => v.name === "下沉区" && v.depth === 150)],
+    ["nothing else moved", p1.walls.length === p0.walls.length && p1.furniture.length === p0.furniture.length + 1],
+  ];
+  for (const [name, ok] of checks) { console.log(`${ok ? "✓" : "✗"} patch: ${name}`); if (!ok) failed++; }
+  for (const line of after.errors) { console.log(`  page error: ${line}`); failed++; }
 } finally {
   await browser.close();
   server.close();

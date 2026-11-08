@@ -29,6 +29,7 @@ import {
   CAD_DESIGN_CREATE_PROMPT,
   CAD_DESIGN_EDIT_PROMPT,
   CAD_DESIGN_FIX_PROMPT,
+  designerReferences,
 } from "../lib/agents";
 import { retryCadTextRequest } from "../lib/design/model-request";
 import { describeJsonError, parseCadPayload } from "../lib/design/model-output";
@@ -143,7 +144,7 @@ export function ChatPanel(props: ChatPanelProps) {
     retry: (feedback: string, summary: string) => Promise<unknown>,
     options: { signal?: AbortSignal; allowReplace?: boolean } = {},
   ) => {
-    if (payload.type === "cad_spec" || payload.type === "cad_ops")
+    if (payload.type === "cad_spec" || payload.type === "cad_ops" || payload.type === "cad_spec_patch")
       return await session.applyModelOutput(payload, retry, options);
     const result = await onCodeAction?.(JSON.stringify(payload), "cad");
     if (result && !result.ok)
@@ -318,11 +319,11 @@ export function ChatPanel(props: ChatPanelProps) {
       const retry = async (feedback: string, summary: string) =>
         parseCadPayload(
           await call(
-            [CAD_DESIGN_FIX_PROMPT, catalogPromptTable()].join("\n\n"),
+            [CAD_DESIGN_FIX_PROMPT, catalogPromptTable(), designerReferences(`${text}\n${feedback}`)].join("\n\n"),
             [
               {
                 role: "user",
-                content: `用户本次要求\n${stripCadMarkers(extractImageTags(text).rest)}\n校验反馈\n${feedback}\n当前相关户型摘要\n${summary}`,
+                content: `用户本次要求\n${stripCadMarkers(extractImageTags(text).rest)}\n校验反馈\n${feedback}\n当前相关户型摘要\n${summary}\n当前设计的 HouseSpec（designSpec，cad_spec_patch 的路径指向这里）\n${session.spec()}`,
               },
             ],
           ),
@@ -354,6 +355,8 @@ export function ChatPanel(props: ChatPanelProps) {
                 designStatus: designValue?.status ?? "draft",
                 cad_plan: planValue ?? undefined,
                 designSummary: designValue ? session.summary() : undefined,
+                // The design in the designer's own format: every field spec-format.md describes can be patched.
+                designSpec: designValue ? JSON.parse(session.spec() || "null") : undefined,
               }),
               buildContextAttachments(attachments),
               ...uploadedTexts,
@@ -384,6 +387,7 @@ export function ChatPanel(props: ChatPanelProps) {
         const prompt = [
           editing ? CAD_DESIGN_EDIT_PROMPT : CAD_DESIGN_CREATE_PROMPT,
           catalogPromptTable(),
+          ...(editing ? [designerReferences(plain)] : []),
         ].join("\n\n");
         // Edits refer back to the conversation ("阳台加一个窗花" after "阳台没有窗户啊"), so the last turns go along as text.
         const recent: ChatMessage[] = editing
@@ -417,7 +421,7 @@ export function ChatPanel(props: ChatPanelProps) {
         }
         if (options.replace && payload.type === "cad_spec") payload = { ...payload, replace: true };
         const reply = typeof payload.reply === "string" ? payload.reply.trim() : "";
-        if (payload.type === "cad_ops" && (!Array.isArray(payload.ops) || !payload.ops.length)) {
+        if ((payload.type === "cad_ops" && (!Array.isArray(payload.ops) || !payload.ops.length)) || (payload.type === "cad_spec_patch" && (!Array.isArray(payload.patch) || !payload.patch.length))) {
           // Nothing to change: say why instead of reporting "0 changes".
           updateAssistant(generateMessage("done", `${prefix}${reply || tr(
             "这次没有改动户型：AI 没能把这句话对应到具体的墙、门窗或家具。可以说得具体些，例如“在阳台南面外墙加一扇 1.5 米的窗”。",
@@ -632,11 +636,11 @@ export function ChatPanel(props: ChatPanelProps) {
             [
               {
                 role: "system",
-                content: [CAD_DESIGN_FIX_PROMPT, catalogPromptTable()].join(
+                content: [CAD_DESIGN_FIX_PROMPT, catalogPromptTable(), designerReferences(feedback)].join(
                   "\n\n",
                 ),
               },
-              { role: "user", content: `${feedback}\n${summary}` },
+              { role: "user", content: `${feedback}\n${summary}\n当前设计的 HouseSpec（designSpec）\n${session.spec()}` },
             ],
             chatModel,
           ),

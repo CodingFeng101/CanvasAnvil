@@ -415,3 +415,22 @@ test('MEP points snap onto the nearest wall face, link to lights and refuse door
   const blocked = applyOps(plan, [{ op: 'add_elec', kind: 'switch1', x: onDoor[0], y: onDoor[1] }], ctx);
   assert.match(blocked.rejected[0]?.reason ?? '', /洞口/);
 });
+
+test('spec patch applies all-or-nothing and reports what it touches', async () => {
+  const { applySpecPatch, patchTouches } = await import('../client/workspaces/cad/lib/design/spec-patch');
+  const spec = rectangle();
+  const next = applySpecPatch(spec, [
+    { op: 'replace', path: '/walls/0/openings/0/hinge', value: 'to' },
+    { op: 'add', path: '/rooms/0/ceil', value: { type: 'tray', drop: 250 } },
+    { op: 'add', path: '/elec', value: [{ kind: 'socket', at: [1200, 3000], h: 300 }] },
+    { op: 'move', from: '/furniture/0', path: '/furniture/-' },
+    { op: 'test', path: '/rooms/0/name', value: 'Bedroom' },
+  ]);
+  assert.equal((next.walls[0].openings![0] as { hinge?: string }).hinge, 'to');
+  assert.equal(spec.walls[0].openings![0].hinge, undefined, 'the input spec is left alone');
+  assert.throws(() => applySpecPatch(spec, [{ op: 'add', path: '/rooms/0/mat', value: 'oak' }, { op: 'remove', path: '/walls/9' }]), /第 2 条.*越界/);
+  assert.throws(() => applySpecPatch(spec, [{ op: 'replace', path: '/nothing/here', value: 1 }]), /不存在/);
+  assert.deepEqual(patchTouches([{ op: 'replace', path: '/rooms/0/mat', value: 'oak' }]), { layout: false, elec: false, finish: true, look: false, relayoutElec: false, comments: false });
+  const touched = patchTouches([{ op: 'replace', path: '/floors/1/walls/0/a', value: [0, 0] }, { op: 'add', path: '/elec/-', value: {} }, { op: 'add', path: '/look', value: {} }]);
+  assert.ok(touched.layout && touched.elec && touched.look && !touched.finish);
+});

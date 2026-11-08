@@ -64,7 +64,7 @@ export function describeSpecStream(text: string, zh: boolean): string {
   const ops = [...text.matchAll(/"op"\s*:\s*"(\w+)"[^{}]*?(?:"(?:key|name)"\s*:\s*"([^"]+)")?/g)];
   if (ops.length) {
     const verbs: Record<string, string> = zh
-      ? { add_furniture: "添加", move_furniture: "移动", resize_furniture: "调整尺寸", replace_furniture: "更换", remove: "删除", add_opening: "加门窗", update_opening: "改门窗", add_wall: "加墙", move_node: "移墙", update_wall: "改墙", set_room: "房间", set_plan: "户型信息" }
+      ? { add_furniture: "添加", move_furniture: "移动", resize_furniture: "调整尺寸", replace_furniture: "更换", remove: "删除", add_opening: "加门窗", update_opening: "改门窗", add_wall: "加墙", move_node: "移墙", update_wall: "改墙", set_room: "房间", set_plan: "户型信息", set_finish: "材质", set_look: "3D 风格", add_elec: "加点位", move_elec: "挪点位", link_elec: "关联开关", relayout_elec: "重新布置水电", add: "新增", replace: "修改", move: "移动", copy: "复制" }
       : {};
     lines.push(zh ? `修改操作 ${ops.length} 条` : `${ops.length} operations`);
     lines.push(`${zh ? "最近" : "Latest"}：${recent(ops.map(([, op, target]) => `${verbs[op] ?? op}${target ? (zh ? " " : " ") + catalogName(target) : ""}`))}`);

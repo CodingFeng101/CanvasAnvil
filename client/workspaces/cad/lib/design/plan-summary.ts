@@ -3,7 +3,7 @@ import { isBuilding } from './types';
 import { enclosedRegions, pointInPolygon, containingRegion } from './geometry';
 
 export function summarizePlan(plan: InternalPlan, rooms: RoomArea[], issues: DesignIssue[]): string {
-  if (isBuilding(plan)) return JSON.stringify({ name: plan.name, kind: 'building', message: '暂只支持单层修改', floors: plan.floors.map(floor => ({ name: floor.plan.name })) });
+  if (isBuilding(plan)) return JSON.stringify({ name: plan.name, kind: 'building', message: '多层户型：用 designSpec 和 cad_spec_patch 修改（路径 /floors/层号/...）', floors: plan.floors.map(floor => ({ name: floor.plan.name })) });
   const nodes = new Map(plan.nodes.map(node => [node.id, node]));
   const walls = plan.walls.map(wall => ({ id: wall.id, aNode: wall.a, bNode: wall.b, a: nodes.get(wall.a), b: nodes.get(wall.b), t: wall.t, bearing: wall.bearing, status: wall.status }));
   const regions = enclosedRegions(walls.filter(wall => wall.status !== 'removed' && wall.a && wall.b).map(wall => ({ a: [wall.a!.x, wall.a!.y] as Point, b: [wall.b!.x, wall.b!.y] as Point })));
@@ -98,7 +98,7 @@ export function summarizePlan(plan: InternalPlan, rooms: RoomArea[], issues: Des
 
 export function issueSummary(plan: InternalPlan, issues: DesignIssue[]): string {
   const full = JSON.parse(summarizePlan(plan, [], issues));
-  if (isBuilding(plan)) return JSON.stringify({ issues, message: '暂只支持单层修改' });
+  if (isBuilding(plan)) return JSON.stringify({ issues, message: '多层户型：用 designSpec 和 cad_spec_patch 修复（路径 /floors/层号/...）' });
   const targetIds = new Set(issues.flatMap(issue => issue.targets?.map(target => target.id) ?? []));
   const names = new Set(issues.flatMap(issue => issue.room ? [issue.room] : []));
   for (const [room, furniture] of Object.entries(full.furniture) as Array<[string, Array<{ id: string }> ]>) {

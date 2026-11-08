@@ -2,7 +2,7 @@
 
 输出契约根据当前阶段选择。
 - 户型尚未加载、反馈含原始 HouseSpec 时，完整输出 {"type":"cad_spec","spec":{...}}。
-- 已有 InternalPlan 摘要时，完整输出 {"type":"cad_ops","ops":[...]}，顶层必须包含 type 和 ops，ops 内每个对象必须使用下面的 op 名称及字段。
+- 已有户型时，完整输出 {"type":"cad_ops","ops":[...]}，或在 cad_ops 做不到、反馈来自补丁（patchError）或多层户型时输出 {"type":"cad_spec_patch","patch":[...]}，顶层必须包含 type 和 ops，ops 内每个对象必须使用下面的 op 名称及字段。
 - 家具移动使用 move_furniture 和 id/x/y/rot。家具更换使用 replace_furniture 和 id/key，保留原 id。
 - 仅处理反馈指向的对象和用户本次要求的对象，保留其他对象和属性。
 
@@ -53,3 +53,25 @@ HouseSpec 单位为 mm，x 向右，y 向下。walls[].a/b 为墙中线端点 [x
 - relayout_elec 让设计器按当前户型从头重新布置全部水电点位，只在用户明确要“重新布置水电”时用；手动加过的点位会被清掉。
 - 改墙、门窗、家具后，程序会自动重新布置水电（用户手动调过点位时除外），不用为此手写点位。
 水电审计问题的修复只输出水电点位操作（add_elec / move_elec / link_elec / remove 点位id），不动墙、门窗和家具；缺开关就在门旁加开关并关联该房间的灯，缺灯就在房间中央加灯并让门旁开关关联它，开关没关联灯就用 link_elec 关联。
+
+## 两种修改输出：cad_ops 和 cad_spec_patch
+
+请求里的 designSpec 是当前设计按设计器自己的 HouseSpec 格式导出的完整数据（格式说明随请求附带，以它为准）。设计器能做的一切都写在这个格式里，所以：
+- 家具、门窗、墙、房间名和吊顶、材质、3D 风格、水电点位这类常见修改，用上面的 cad_ops（按 designSummary 里的 id）。
+- cad_ops 做不到的，一律用 cad_spec_patch：{"type":"cad_spec_patch","reply":"...","patch":[...]}，patch 是对 designSpec 的 RFC 6902 JSON Patch，每条 {"op":"add|remove|replace|move|copy","path":"/…","value":…}，path 是 JSON Pointer（数组下标从 0 开始，追加用 /-）。例如：
+  {"op":"replace","path":"/walls/3/openings/0/hinge","value":"to"}（门轴换一边）
+  {"op":"add","path":"/walls/3/openings/0/into","value":[2400,-500]}（门往外开）
+  {"op":"replace","path":"/rooms/1/ceil","value":{"type":"tray","drop":250,"edgeW":450,"cove":true,"drop2":150,"edgeW2":300}}（回字形吊顶）
+  {"op":"add","path":"/elec/-","value":{"kind":"strip","pts":[[1000,1500],[4000,1500]],"h":0,"cct":3000}}（灯带、磁吸轨道 track、线性灯 linear）
+  {"op":"add","path":"/mep","value":{"power":"ceil","floorStyle":"direct"}}（管线走法；custom 预画管线）
+  {"op":"add","path":"/structs/-","value":{"kind":"drain","at":[1200,800]}}（下水口、管井等结构）
+  {"op":"add","path":"/furniture/-","value":{"key":"freePlatform","at":[3000,2000],"w":1800,"d":1200,"h":150,"opt":{"mat":"wood"}}}（自由造型）
+  {"op":"replace","path":"/furniture/12/kit","value":{"hob":false}}（定制家具参数）
+  {"op":"add","path":"/style","value":"nordic"}（家具风格）、{"op":"add","path":"/site","value":{"city":"上海","month":6}}、{"op":"add","path":"/north","value":90}
+  {"op":"replace","path":"/look","value":{"style":"colorplan","palette":"plan","labels":false,"cpDims":"full"}}
+  {"op":"add","path":"/voids/-","value":{"rect":[0,0,3000,2000],"name":"挑空"}}、{"op":"add","path":"/beams/-","value":{"a":[0,3000],"b":[6000,3000],"w":240,"depth":450}}
+  {"op":"add","path":"/comments/-","value":{"at":[2000,2000],"text":"窗台高待确认"}}、{"op":"add","path":"/expectDims","value":{...}}
+  多层户型（designSpec 有 floors）只能用 cad_spec_patch，路径写 /floors/层号/…；加一层就 {"op":"add","path":"/floors/-","value":{"name":"二层","height":3000,"walls":[…],"rooms":[…]}}。
+- 坐标、from/to、into 的写法按格式说明：横墙 from/to 是世界 x，竖墙是世界 y，斜墙是到 a 点的距离；hinge 写 "from" 或 "to"。
+- 只改用户提到的部分，其他路径不要动；不要整段替换 walls、furniture、elec 这类大数组，改到具体下标。
+- 改墙、门窗、家具后程序会自动重新布置水电（手动调过点位时除外）；要从头重布水电，就 remove /elec 并 add /autoElec true。

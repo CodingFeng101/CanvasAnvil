@@ -5,8 +5,9 @@ import { issueSummary } from './plan-summary';
 type ReviseArgs = {
   initial: CadDesign;
   issuesOf(plan: InternalPlan): Promise<DesignIssue[]>;
-  askModel(issues: DesignIssue[], summary: string): Promise<PlanOp[] | HouseSpec>;
-  apply(output: PlanOp[] | HouseSpec, current: CadDesign): Promise<CadDesign>;
+  /** cad_ops, a HouseSpec or a spec patch, as the session's apply takes it. */
+  askModel(issues: DesignIssue[], summary: string): Promise<PlanOp[] | HouseSpec | { patch: unknown[] }>;
+  apply(output: PlanOp[] | HouseSpec | { patch: unknown[] }, current: CadDesign): Promise<CadDesign>;
   maxRounds?: number;
 };
 export async function reviseUntilClean(args: ReviseArgs): Promise<{ design: CadDesign; issues: DesignIssue[]; rounds: number; rolledBack: boolean }> {

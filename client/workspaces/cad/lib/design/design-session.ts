@@ -12,6 +12,8 @@ import { applyOps } from './plan-ops';
 import type { PlanOp, OpsTouched } from './plan-ops';
 import { isValidKey } from './catalog';
 import { summarizePlan } from './plan-summary';
+import { planToSpec, carryOver } from './plan-to-spec';
+import { applySpecPatch, patchTouches, type SpecPatchOp } from './spec-patch';
 import { reviseUntilClean } from './revise-loop';
 
 export type DesignerPreset = { plan: InternalPlan; underlay?: CadDesign['underlay'] } | { spec: HouseSpec; underlay?: CadDesign['underlay'] };
@@ -149,6 +151,11 @@ export class CadDesignSession {
   summary(): string {
     const design = this.snapshot.design;
     return design ? summarizePlan(design.plan, this.bridge?.roomAreas() ?? [], this.snapshot.issues) : '';
+  }
+  /** The current design as a HouseSpec (spec-format.md): what cad_spec_patch paths point into. */
+  spec(): string {
+    const design = this.snapshot.design;
+    return design ? JSON.stringify(planToSpec(design.plan), (_, value) => typeof value === 'number' ? Math.round(value * 10) / 10 : value) : '';
   }
   async recheck(): Promise<DesignIssue[]> {
     await this.sync();
@@ -352,6 +359,46 @@ export class CadDesignSession {
       bridge.replacePlan(result.plan);
       return { ...current, plan: bridge.readPlan(), revision: current.revision + 1, status: 'draft', lastSource: 'ai', updatedAt: Date.now() };
     };
+    // Errors a patch adds on top of what the current design already has (an older design may carry some).
+    const newErrors = (spec: HouseSpec, base: HouseSpec) => {
+      const errorsOf = (value: HouseSpec) => {
+        const floors = (value as { floors?: HouseSpec[] }).floors;
+        return (Array.isArray(floors) ? floors.flatMap((floor, at) => validateSpec(floor).map(issue => ({ ...issue, msg: `floors[${at}].${issue.msg}` }))) : validateSpec(value))
+          .filter(issue => issue.level === 'error');
+      };
+      const known = new Set(errorsOf(base).map(issue => issue.msg));
+      return errorsOf(spec).filter(issue => !known.has(issue.msg));
+    };
+    /** cad_spec_patch: export the design as a HouseSpec, patch it, load it into the designer again. */
+    const applyPatch = async (value: unknown, current: CadDesign, allowRetry: boolean): Promise<CadDesign> => {
+      let ops = value as SpecPatchOp[];
+      const base = planToSpec(current.plan);
+      const attempt = (list: SpecPatchOp[]) => {
+        const next = applySpecPatch(base, list);
+        const errors = newErrors(next, base);
+        if (errors.length) throw new Error(JSON.stringify(errors));
+        return next;
+      };
+      let next: HouseSpec;
+      try { next = attempt(ops); }
+      catch (reason) {
+        if (!allowRetry || !retry) throw reason;
+        checkAbort();
+        const corrected = object(await retry(JSON.stringify({ patchError: reason instanceof Error ? reason.message : String(reason), patch: ops }), JSON.stringify(base)));
+        checkAbort();
+        if (corrected.type !== 'cad_spec_patch' || !Array.isArray(corrected.patch)) throw new Error('补丁重试必须返回 cad_spec_patch / Patch retry requires cad_spec_patch');
+        ops = corrected.patch as SpecPatchOp[];
+        next = attempt(ops);
+      }
+      checkAbort();
+      const scope = patchTouches(ops);
+      for (const key of Object.keys(touched) as Array<keyof OpsTouched>) touched[key] ||= scope[key];
+      reloaded = true;
+      const bridge = await this.load({ spec: next, underlay: current.underlay });
+      bridge.replacePlan(carryOver(current.plan, bridge.readPlan(), { comments: !scope.comments }));
+      applied += ops.length;
+      return { ...current, plan: bridge.readPlan(), revision: current.revision + 1, status: 'draft', lastSource: 'ai', updatedAt: Date.now() };
+    };
     try {
       const payload = object(input);
       let candidate: CadDesign;
@@ -370,9 +417,13 @@ export class CadDesignSession {
         touched.layout = true;
       } else if (payload.type === 'cad_ops') {
         if (!before) throw new Error('尚无户型，请先生成 cad_spec / Generate cad_spec first');
-        if (isBuilding(before.plan)) throw new Error('暂只支持单层修改 / Only single-floor edits are supported');
+        if (isBuilding(before.plan)) throw new Error('多层户型请用 cad_spec_patch 修改（路径 /floors/层号/...）/ Use cad_spec_patch for multi-floor designs');
         candidate = await applyOperations(payload.ops, before, true);
-      } else throw new Error('需要 cad_spec 或 cad_ops / Expected cad_spec or cad_ops');
+      } else if (payload.type === 'cad_spec_patch') {
+        if (!before) throw new Error('尚无户型，请先生成 cad_spec / Generate cad_spec first');
+        if (!Array.isArray(payload.patch)) throw new Error('cad_spec_patch.patch 必须是数组 / patch must be an array');
+        candidate = await applyPatch(payload.patch, before, true);
+      } else throw new Error('需要 cad_spec、cad_ops 或 cad_spec_patch / Expected cad_spec, cad_ops or cad_spec_patch');
       const bridge = this.bridge!;
       // Shift furniture stuck a few cm into walls, curtains or neighbours before (and after) asking the model.
       const nudge = (design: CadDesign): CadDesign => {
@@ -389,12 +440,15 @@ export class CadDesignSession {
         issuesOf: async plan => { checkAbort(); bridge.replacePlan(plan); return bridge.runChecks(); },
         askModel: async (issues, summary) => {
           checkAbort();
-          const correction = object(await retry!(JSON.stringify({ issues, requestedChanges: payload.type === 'cad_ops' ? payload.ops : undefined }), summary));
+          const correction = object(await retry!(JSON.stringify({ issues, requestedChanges: payload.type === 'cad_ops' ? payload.ops : payload.type === 'cad_spec_patch' ? payload.patch : undefined }), summary));
           checkAbort();
-          if (correction.type !== 'cad_ops' || !Array.isArray(correction.ops)) throw new Error('设计器修复必须返回 cad_ops / Designer repair requires cad_ops');
+          if (correction.type === 'cad_spec_patch' && Array.isArray(correction.patch)) return { patch: correction.patch };
+          if (correction.type !== 'cad_ops' || !Array.isArray(correction.ops)) throw new Error('设计器修复必须返回 cad_ops 或 cad_spec_patch / Designer repair requires cad_ops or cad_spec_patch');
           return correction.ops as PlanOp[];
         },
-        apply: async (ops, current) => await applyOperations(ops, current, true),
+        apply: async (output, current) => !Array.isArray(output) && 'patch' in output
+          ? await applyPatch(output.patch, current, true)
+          : await applyOperations(output, current, true),
       });
       checkAbort();
       if (revised.issues.some(issue => issue.level === 'error')) {

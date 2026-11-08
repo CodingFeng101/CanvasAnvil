@@ -151,7 +151,7 @@ export function CadWorkspace() {
     const parsed = tryParseJson(String(code || "").trim());
     if (!parsed) return { ok: false, retry: false, error: tr("JSON 无效", "Invalid JSON") };
     const parsedType = String(parsed?.type || "").trim().toLowerCase();
-    if (parsedType === "cad_spec" || parsedType === "cad_ops" || parsedType === "cad_layout") {
+    if (parsedType === "cad_spec" || parsedType === "cad_ops" || parsedType === "cad_spec_patch" || parsedType === "cad_layout") {
       try {
         await designSession.applyModelOutput(parsedType === "cad_layout" ? { type: "cad_spec", spec: layoutToSpec(parsed.layout).spec } : parsed);
         return { ok: true };
