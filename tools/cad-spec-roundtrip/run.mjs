@@ -66,7 +66,7 @@ async function load(preset) {
       building.floors[building.cur].plan = plan;
       plan = { ...building, version: 2, kind: "building" };
     }
-    return { plan, spec: window.RoundTrip.planToSpec(plan) };
+    return { plan, spec: window.RoundTrip.planToSpec(plan, { defaults: (key) => window.__designer.makeFurn(key, 0, 0, 0) }) };
   });
   await page.close();
   return { ...result, errors };
@@ -144,6 +144,7 @@ try {
     { op: "add", path: "/look", value: { style: "colorplan", palette: "wabi", labels: false } },
     { op: "add", path: "/site", value: { city: "上海", month: 6 } },
     { op: "add", path: "/north", value: 90 },
+    { op: "add", path: "/style", value: "nordic" },
     { op: "add", path: "/voids", value: [{ rect: [2000, 2000, 2600, 2600], depth: 150, name: "下沉区" }] },
   ]);
   const after = await load({ id: `p1-${Date.now()}`, spec: patched });
@@ -158,6 +159,7 @@ try {
     ["free platform", p1.furniture.some((f) => f.key === "freePlatform" && f.opt?.mat === "wood")],
     ["look", p1.look?.style === "colorplan" && p1.look.palette === "wabi" && p1.look.labels === false],
     ["site and north", p1.site?.city === "上海" && p1.north === 90],
+    ["furniture style", p1.furniture.filter((f) => f.opt?.style === "nordic").length > 0 && !p0.furniture.some((f) => f.opt?.style === "nordic")],
     ["void", (p1.voids ?? []).some((v) => v.name === "下沉区" && v.depth === 150)],
     ["nothing else moved", p1.walls.length === p0.walls.length && p1.furniture.length === p0.furniture.length + 1],
   ];

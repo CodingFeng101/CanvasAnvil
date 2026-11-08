@@ -12,7 +12,7 @@
  *   prompts/edit.md                           ← resources/prompts/cad/design/edit.md (edit operations on a finished design)
  *   references/furniture-catalog.md           ← resources/hpd/catalog.json
  *   scripts/lib/cad-core.mjs                  ← layout program, autofix and validation (Node, ESM)
- *   scripts/lib/designer-kit.js               ← auto-nudge, wiring preferences, edit operations and the plan summary
+ *   scripts/lib/designer-kit.js               ← auto-nudge, wiring preferences, edit operations, the plan summary, spec export and spec patches
  *                                               (injected into the designer page)
  *
  * Run from the repository root after changing any of those sources:
@@ -93,7 +93,11 @@ for (const [source, target] of [
   ["resources/prompts/cad/design/create.md", "prompts/layout.md"],
   ["resources/prompts/cad/design/edit.md", "prompts/edit.md"],
 ]) {
-  write(target, `<!-- ${NOTE}${source} -->\n\n${fs.readFileSync(path.join(ROOT, source), "utf8").trimEnd()}\n`);
+  // In the skill the edit prompt's inputs are the last run's files, and its two outputs go to --ops / --patch.
+  const intro = target === "prompts/edit.md"
+    ? "> 在 skill 里：designSummary = 上次输出目录的 `summary.json`，designSpec = 同目录的 `spec.json`。cad_ops 存成 `ops.json` 用 `--ops`，cad_spec_patch 存成 `patch.json` 用 `--patch`，都配 `--design <上次目录>/design.json` 运行 `scripts/run-designer.mjs`。\n\n"
+    : "";
+  write(target, `<!-- ${NOTE}${source} -->\n\n${intro}${fs.readFileSync(path.join(ROOT, source), "utf8").trimEnd()}\n`);
 }
 
 const catalog = JSON.parse(fs.readFileSync(path.join(ROOT, "resources/hpd/catalog.json"), "utf8"));
@@ -128,6 +132,6 @@ await bundle(
 );
 await bundle(
   "scripts/lib/designer-kit.js",
-  `export { nudgeFurniture } from "./auto-nudge"; export { applyElecPrefs, elecPrefsFromDecisions } from "./elec-prefs"; export { applyOps } from "./plan-ops"; export { summarizePlan } from "./plan-summary";`,
+  `export { nudgeFurniture } from "./auto-nudge"; export { applyElecPrefs, elecPrefsFromDecisions } from "./elec-prefs"; export { applyOps } from "./plan-ops"; export { summarizePlan } from "./plan-summary"; export { planToSpec, carryOver } from "./plan-to-spec"; export { applySpecPatch, patchTouches } from "./spec-patch"; export { validateSpec } from "./spec-validate";`,
   { format: "iife", globalName: "CadKit", platform: "browser", target: "es2020" },
 );

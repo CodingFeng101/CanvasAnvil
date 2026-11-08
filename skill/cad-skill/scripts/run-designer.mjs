@@ -9,6 +9,9 @@
  *   2. runs the designer's one-click MEP layout,
  *   3. applies the wiring preferences from the plan's decisions (CanvasAnvil: more sockets, network
  *      points, panel / network box location, bedside USB, floor sockets),
+ *   3a. applies a spec patch from --patch (cad_spec_patch, RFC 6902 on spec.json of the run it starts from):
+ *      the design is exported as a HouseSpec, patched and loaded into the designer again, with its measures,
+ *      prices and comments carried over: any field designer/reference/spec-format.md describes,
  *   3b. applies edit operations from --ops (prompts/edit.md: furniture, openings, walls, finishes, 3D look,
  *      MEP points); after wall / opening / furniture edits the MEP layout runs again unless the same
  *      batch edits points, or relayout_elec asks for it,
@@ -16,18 +19,29 @@
  *   5. writes "<户型名>-装修设计器.html" the way designer/scripts/build.py does (template + preset),
  *      with the finished design (MEP included) as the preset, and opens it in the user's browser,
  *   6. runs designer/scripts/elecaudit.mjs on that page (room-by-room MEP audit),
- *   7. exports the designer's own deliverables.
+ *   7. exports the designer's own deliverables,
+ *   8. with --qa, runs the designer's delivery check on that page (designer/scripts/qa.mjs --lite --quick,
+ *      then qa_files.py on what it downloaded).
+ *
+ * MEP on a spec start follows the designer: hand-written `elec` stays as written (with `autoElec` the designer
+ * adds the rest when it loads); with `autoElec: true` and no `elec`, the one-click layout runs after the nudge;
+ * a spec with neither gets no points. The wiring preferences apply whenever points were laid out.
  *
  *   node scripts/run-designer.mjs --spec house-spec.json [--plan cad_plan.json] [--out-dir out]
- *        [--ops ops.json] [--exports quote,drawings,plan-dxf,mep-dxf,colour,render | all | none] [--no-open]
- *   node scripts/run-designer.mjs --design out/design.json --ops ops.json [--plan cad_plan.json] [--out-dir out2] …
+ *        [--patch patch.json] [--ops ops.json] [--exports quote,drawings,plan-dxf,mep-dxf,colour,render | all | none] [--qa] [--no-open]
+ *   node scripts/run-designer.mjs --design out/design.json (--patch patch.json | --ops ops.json) [--plan cad_plan.json] [--out-dir out2] …
  *
  * --design starts from a finished design (its MEP points kept); --ops is a cad_ops JSON
- * ({"type":"cad_ops","ops":[…]} or the bare list), ids taken from summary.json of that run.
+ * ({"type":"cad_ops","ops":[…]} or the bare list), ids taken from summary.json of that run; --patch is a
+ * cad_spec_patch JSON ({"type":"cad_spec_patch","patch":[…]} or the bare list), paths into spec.json of that run
+ * (with --spec, into that spec). A patch runs before ops.
  * Always writes the designer HTML, report.json, summary.json (rooms, walls, openings, furniture and MEP
- * points with their ids, for the next --ops), design.json (the designer's internal plan), plan2d.png and design.dxf.
+ * points with their ids, for the next --ops), spec.json (the design as a HouseSpec, for the next --patch or
+ * to edit directly), design.json (the designer's internal plan), plan2d.png and design.dxf.
  * --exports adds the engine's menu exports (default quote,drawings,mep-dxf,colour; render is slow).
- * Exits 1 when the final check still has errors.
+ * Exit codes: 0 = delivery gates met (0 errors, 0 warnings, MEP audit without ✗, qa passed when asked);
+ * 3 = everything written but warnings or MEP audit problems are left (fix and run again, or explain each);
+ * 1 = errors, refused ops, a patch that does not apply, a failed qa or a run that broke; 2 = bad arguments.
  * The browser is started by designer/scripts/browser.mjs (the user's own Chrome / Edge / Chromium
  * through puppeteer-core); run "npm run setup" once in the skill folder.
  */
@@ -72,10 +86,12 @@ const EXPORTS = {
 const DEFAULT_EXPORTS = ["quote", "drawings", "mep-dxf", "colour"];
 
 function parseArgs(argv) {
-  const args = { spec: "", design: "", ops: "", plan: "", outDir: "cad-output", exports: DEFAULT_EXPORTS, open: true };
+  const args = { spec: "", design: "", ops: "", patch: "", plan: "", outDir: "cad-output", exports: DEFAULT_EXPORTS, open: true, qa: false };
   for (let i = 0; i < argv.length; i += 1) {
     const token = argv[i];
     if (token === "--no-open") args.open = false;
+    else if (token === "--qa") args.qa = true;
+    else if (token === "--patch") args.patch = argv[++i] || "";
     else if (token === "--spec") args.spec = argv[++i] || "";
     else if (token === "--plan") args.plan = argv[++i] || "";
     else if (token === "--design") args.design = argv[++i] || "";
@@ -91,7 +107,7 @@ function parseArgs(argv) {
 
 const args = parseArgs(process.argv.slice(2));
 if (!args.spec === !args.design) {
-  console.error("Usage: node scripts/run-designer.mjs (--spec house-spec.json | --design design.json) [--ops ops.json] [--plan cad_plan.json] [--out-dir out] [--exports list|all|none]");
+  console.error("Usage: node scripts/run-designer.mjs (--spec house-spec.json | --design design.json) [--patch patch.json] [--ops ops.json] [--plan cad_plan.json] [--out-dir out] [--exports list|all|none] [--qa]");
   process.exit(2);
 }
 for (const key of args.exports) if (!EXPORTS[key]) { console.error(`Unknown export "${key}". Choose from: ${Object.keys(EXPORTS).join(", ")}`); process.exit(2); }
@@ -104,6 +120,13 @@ const startPlan = args.design ? readJson(args.design) : null;
 const opsFile = args.ops ? readJson(args.ops) : null;
 const ops = Array.isArray(opsFile) ? opsFile : opsFile?.ops ?? [];
 if (args.ops && !Array.isArray(ops)) { console.error(`${args.ops}: expected {"type":"cad_ops","ops":[…]} or a list`); process.exit(2); }
+const patchFile = args.patch ? readJson(args.patch) : null;
+const specPatch = Array.isArray(patchFile) ? patchFile : patchFile?.patch ?? [];
+if (args.patch && (!Array.isArray(specPatch) || !specPatch.length)) { console.error(`${args.patch}: expected {"type":"cad_spec_patch","patch":[…]} or a non-empty list`); process.exit(2); }
+const parts = (value) => Array.isArray(value?.floors) ? value.floors : [value ?? {}];
+// The designer's own rule: hand-written points stay; autoElec without points means "lay them out".
+const specHasElec = !!spec && parts(spec).some((floor) => Array.isArray(floor.elec) && floor.elec.length);
+const specAutoElec = !!spec && (spec.autoElec === true || parts(spec).some((floor) => floor.autoElec === true));
 const planFile = args.plan ? JSON.parse(fs.readFileSync(path.resolve(args.plan), "utf8")) : null;
 const decisions = (planFile?.plan ?? planFile)?.decisions ?? [];
 const outDir = path.resolve(args.outDir);
@@ -166,6 +189,7 @@ const port = server.address().port;
 
 let browser;
 let exitCode = 0;
+let finished = null;
 try {
   try {
     // Real GPU when there is one (the colour plan and render are WebGL); Chrome falls back to software otherwise.
@@ -177,15 +201,33 @@ try {
   const pageErrors = [];
   page.on("pageerror", (error) => pageErrors.push(String(error?.message ?? error)));
   await setDownloadDir(browser, page, outDir);
-  // The designer takes its preset from the parent page or window.__PRESET__; pin ours in before it loads.
-  await page.evaluateOnNewDocument((preset) => {
-    Object.defineProperty(window, "__PRESET__", { get: () => preset, set: () => {}, configurable: true });
-  }, startPlan ? { id: `skill-${Date.now().toString(36)}`, plan: startPlan } : { id: `skill-${Date.now().toString(36)}`, spec });
+  // The designer takes its preset from the parent page or window.__PRESET__; pin ours in before it loads
+  // (again with the patched spec when there is a --patch).
+  let pinned = null;
+  const open = async (preset) => {
+    if (pinned) await page.removeScriptToEvaluateOnNewDocument(pinned.identifier);
+    pinned = await page.evaluateOnNewDocument((value) => {
+      Object.defineProperty(window, "__PRESET__", { get: () => value, set: () => {}, configurable: true });
+    }, { id: `skill-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`, ...preset });
+    await page.goto(`http://127.0.0.1:${port}/designer.html?debug`);
+    await page.waitForFunction(() => window.__designer?.app?.plan && typeof window.__designer.runChecks === "function", { timeout: 60000 });
+    await page.addScriptTag({ content: bundle });
+    // The whole design: app.plan is only the floor on screen when the design is a building (as the app's designer bridge reads it).
+    await page.evaluate(() => {
+      window.__readPlan = () => {
+        const d = window.__designer, clone = (value) => JSON.parse(JSON.stringify(value));
+        if (d.bld?.floors?.length > 1) {
+          const building = clone(d.bld);
+          building.floors[building.cur].plan = clone(d.app.plan);
+          return { ...building, version: 2, kind: "building" };
+        }
+        return clone(d.app.plan);
+      };
+    });
+  };
 
   step("打开设计器并载入户型");
-  await page.goto(`http://127.0.0.1:${port}/designer.html?debug`);
-  await page.waitForFunction(() => window.__designer?.app?.plan && typeof window.__designer.runChecks === "function", { timeout: 60000 });
-  await page.addScriptTag({ content: bundle });
+  await open(startPlan ? { plan: startPlan } : { spec });
 
   const checks = () => page.evaluate(() => window.__designer.runChecks().issues.map((issue) => ({ level: issue.level, code: issue.type, msg: issue.msg })));
   const initial = await checks();
@@ -228,20 +270,63 @@ try {
     return { points: (api.app.plan.elec ?? []).length, notes: result.notes };
   }, decisions);
 
+  const pointCount = () => page.evaluate(() => {
+    const plan = window.__readPlan();
+    return (plan.kind === "building" ? plan.floors.map((floor) => floor.plan ?? floor) : [plan]).reduce((sum, floor) => sum + (floor.elec ?? []).length, 0);
+  });
+  const isBuilding = () => page.evaluate(() => window.__readPlan().kind === "building");
   let moved = 0;
   let wiring = { points: 0, notes: [] };
   let relaidOut = false;
-  if (!startPlan) {
+  // A building gets the designer's own per-floor layout as it loads (nudge and wiring preferences are single-floor).
+  if (!startPlan && !await isBuilding()) {
     step("自动推开碰撞的家具");
     moved = await nudge();
-    step("一键布置水电");
-    step("按方案里的水电偏好调整");
-    wiring = await layOutMep();
-    relaidOut = true;
-  } else wiring.points = await page.evaluate(() => (window.__designer.app.plan.elec ?? []).length);
+    if (specAutoElec && !specHasElec) {
+      step("一键布置水电");
+      step("按方案里的水电偏好调整");
+      wiring = await layOutMep();
+      relaidOut = true;
+    } else wiring.points = await pointCount();
+  } else wiring.points = await pointCount();
+
+  // cad_spec_patch: the design as a HouseSpec, patched, loaded again; what only lives in the plan comes along.
+  let patched = null;
+  if (specPatch.length) {
+    step(`应用 ${specPatch.length} 条 spec 补丁`);
+    const prepared = await page.evaluate((list, startSpec) => {
+      const kit = window.CadKit;
+      const before = window.__readPlan();
+      const base = startSpec ?? kit.planToSpec(before, { defaults: (key) => window.__designer.makeFurn(key, 0, 0, 0) });
+      const errorsOf = (value) => (Array.isArray(value.floors) ? value.floors.flatMap((floor, at) => kit.validateSpec(floor).map((issue) => ({ ...issue, msg: `floors[${at}].${issue.msg}` }))) : kit.validateSpec(value))
+        .filter((issue) => issue.level === "error").map((issue) => issue.msg);
+      try {
+        const next = kit.applySpecPatch(base, list);
+        const known = new Set(errorsOf(base));
+        const added = errorsOf(next).filter((msg) => !known.has(msg));
+        if (added.length) return { error: `补丁让 spec 出现新错误：${added.join("；")}` };
+        return { next, before, touched: kit.patchTouches(list) };
+      } catch (error) { return { error: error instanceof Error ? error.message : String(error) }; }
+    }, specPatch, startPlan ? null : spec);
+    if (prepared.error) throw Object.assign(new Error(`spec 补丁没有应用：${prepared.error}`), { patchError: prepared.error });
+    await open({ spec: prepared.next });
+    await page.evaluate((before, keepComments) => {
+      const api = window.__designer;
+      api.replacePlan(window.CadKit.carryOver(before, window.__readPlan(), { comments: keepComments }));
+    }, prepared.before, !prepared.touched.comments);
+    patched = { applied: specPatch.length, touched: prepared.touched };
+    const building = await isBuilding();
+    if (prepared.touched.layout && !building) moved += await nudge();
+    if (!building && (prepared.touched.relayoutElec || (prepared.touched.layout && !prepared.touched.elec))) {
+      step("户型变了，重新布置水电");
+      wiring = await layOutMep();
+      relaidOut = true;
+    } else wiring.points = await pointCount();
+  }
 
   // Edit operations, as in the app's design assistant (prompts/edit.md).
   let edits = null;
+  if (ops.length && await isBuilding()) throw new Error("多层户型请用 --patch（cad_spec_patch，路径 /floors/层号/…）修改");
   if (ops.length) {
     step(`执行 ${ops.length} 条修改指令`);
     edits = await page.evaluate((list) => {
@@ -257,7 +342,7 @@ try {
       step("户型变了，重新布置水电");
       wiring = await layOutMep();
       relaidOut = true;
-    } else wiring.points = await page.evaluate(() => (window.__designer.app.plan.elec ?? []).length);
+    } else wiring.points = await pointCount();
   }
 
   const final = await checks();
@@ -269,15 +354,18 @@ try {
     const api = window.__designer;
     const bounds = api.app.geo.bounds;
     const rooms = api.app.rooms.regions.map((region) => ({ name: region.labels.map((label) => label.name).join(" / "), area: region.area, ...(region.rects ? { rects: JSON.parse(JSON.stringify(region.rects)) } : {}), at: [region.interior.x, region.interior.y] }));
+    const round = (_, value) => typeof value === "number" ? Math.round(value * 10) / 10 : value;
     return {
-      plan: api.app.plan,
-      summary: window.CadKit.summarizePlan(api.app.plan, rooms, issues),
+      plan: window.__readPlan(),
+      spec: JSON.parse(JSON.stringify(window.CadKit.planToSpec(window.__readPlan(), { defaults: (key) => api.makeFurn(key, 0, 0, 0) }), round)),
+      summary: window.CadKit.summarizePlan(window.__readPlan(), rooms, issues),
       png: api.shot2d("layout", bounds.x + bounds.w / 2, bounds.y + bounds.h / 2, Math.min(1400 / bounds.w, 1000 / bounds.h)),
       dxf: Array.from(api.dxfBytes("gb", "layout")),
     };
   }, final);
   fs.writeFileSync(path.join(outDir, "design.json"), `${JSON.stringify(core.plan, null, 2)}\n`);
   fs.writeFileSync(path.join(outDir, "summary.json"), `${JSON.stringify(JSON.parse(core.summary), null, 2)}\n`);
+  fs.writeFileSync(path.join(outDir, "spec.json"), `${JSON.stringify(core.spec, null, 2)}\n`);
   fs.writeFileSync(path.join(outDir, "plan2d.png"), Buffer.from(String(core.png).split(",")[1] ?? "", "base64"));
   fs.writeFileSync(path.join(outDir, "design.dxf"), Buffer.from(core.dxf));
   const designerFile = writeDesignerHtml(core.plan);
@@ -338,6 +426,7 @@ try {
     ...(args.spec ? { spec: path.basename(args.spec) } : { design: path.basename(args.design) }),
     initialIssues: initial,
     furnitureNudged: moved,
+    ...(patched ? { patch: patched } : {}),
     ...(edits ? { edits } : {}),
     mepLaidOut: relaidOut,
     mepPoints: wiring.points,
@@ -348,12 +437,14 @@ try {
     warnings: warnings.length,
     designerRuntimeErrors: pageErrors,
     designer: path.basename(designerFile),
-    files: [path.basename(designerFile), "design.json", "summary.json", "plan2d.png", "design.dxf", ...exported.filter((item) => item.file).map((item) => item.file)],
+    files: [path.basename(designerFile), "design.json", "spec.json", "summary.json", "plan2d.png", "design.dxf", ...exported.filter((item) => item.file).map((item) => item.file)],
     exports: exported,
   };
   fs.writeFileSync(path.join(outDir, "report.json"), `${JSON.stringify(report, null, 2)}\n`);
+  finished = { report, designerFile };
 
   console.log(`\n设计器检查：${errors.length} 个错误，${warnings.length} 个警告${moved ? `（自动推开了 ${moved} 件家具）` : ""}`);
+  if (patched) console.log(`spec 补丁：应用 ${patched.applied} 条`);
   for (const issue of final) console.log(`- [${issue.level}] ${issue.msg}`);
   if (edits) {
     console.log(`修改指令：执行 ${edits.applied} 条，拒绝 ${edits.rejected.length} 条`);
@@ -367,12 +458,39 @@ try {
   console.log(`设计器网页：${designerFile}${args.open ? "（已在浏览器打开）" : ""}`);
   console.log(`输出目录：${outDir}`);
   if (args.open) openInBrowser(designerFile);
-  if (errors.length || edits?.rejected.length) exitCode = 1;
+  if (errors.length || edits?.rejected.length || !audit.ok) exitCode = 1;
+  else if (warnings.length || audit.problems.length) exitCode = 3;
 } catch (error) {
   console.error(error instanceof Error ? error.message : error);
+  if (error?.patchError) fs.writeFileSync(path.join(outDir, "report.json"), `${JSON.stringify({ patchError: error.patchError }, null, 2)}\n`);
   exitCode = 1;
 } finally {
   await browser?.close();
   server.close();
+}
+
+/**
+ * The designer's delivery check (GUIDE section 6, reference/delivery.md), after our browser is closed so the two
+ * do not fight over the GPU: qa.mjs --lite --quick operates every button, tool, panel and export of the page,
+ * qa_files.py opens what it downloaded.
+ */
+if (args.qa && finished) {
+  const qaDir = path.join(outDir, "qa");
+  step("交付检查：qa.mjs --lite --quick（几分钟，按钮、面板、导出逐个操作）");
+  const qa = spawnSync(process.execPath, [path.join(HPD, "scripts", "qa.mjs"), finished.designerFile, qaDir, "--lite", "--quick"], { encoding: "utf8", timeout: 1800000, maxBuffer: 64 * 1024 * 1024 });
+  const qaTail = String(qa.stdout || "").trim().split(/\r?\n/).slice(-12);
+  const qaResult = { ok: qa.status === 0, report: path.relative(outDir, path.join(qaDir, "report.md")), summary: qaTail.join("\n"), ...(qa.status === 0 ? {} : { error: String(qa.stderr || qa.error || "").trim().split("\n")[0] || `exit ${qa.status}` }) };
+  let filesResult = { ok: false, error: "Python not found (pip install pillow ezdxf pypdf)" };
+  for (const python of process.platform === "win32" ? ["python", "py", "python3"] : ["python3", "python"]) {
+    const run = spawnSync(python, [path.join(HPD, "scripts", "qa_files.py"), qaDir], { encoding: "utf8", timeout: 300000, env: { ...process.env, PYTHONIOENCODING: "utf-8" } });
+    if (run.error) continue;
+    filesResult = { ok: run.status === 0, summary: String(run.stdout || "").trim().split(/\r?\n/).slice(-15).join("\n"), ...(run.status === 0 ? {} : { error: String(run.stderr || "").trim().split("\n").slice(-1)[0] || `exit ${run.status}` }) };
+    break;
+  }
+  finished.report.qa = { pages: qaResult, files: filesResult };
+  fs.writeFileSync(path.join(outDir, "report.json"), `${JSON.stringify(finished.report, null, 2)}\n`);
+  console.log(`\n交付检查（qa.mjs）：${qaResult.ok ? "通过" : "没通过"}，报告 ${qaResult.report}，截图在 qa/shots/（要人工过一遍）\n${qaResult.summary}`);
+  console.log(`导出文件检查（qa_files.py）：${filesResult.ok ? "通过" : `没通过：${filesResult.error ?? ""}`}${filesResult.summary ? `\n${filesResult.summary}` : ""}`);
+  if (!qaResult.ok || !filesResult.ok) exitCode = 1;
 }
 process.exit(exitCode);

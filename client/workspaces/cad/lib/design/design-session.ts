@@ -155,7 +155,12 @@ export class CadDesignSession {
   /** The current design as a HouseSpec (spec-format.md): what cad_spec_patch paths point into. */
   spec(): string {
     const design = this.snapshot.design;
-    return design ? JSON.stringify(planToSpec(design.plan), (_, value) => typeof value === 'number' ? Math.round(value * 10) / 10 : value) : '';
+    return design ? JSON.stringify(planToSpec(design.plan, this.specOptions()), (_, value) => typeof value === 'number' ? Math.round(value * 10) / 10 : value) : '';
+  }
+  /** Default furniture colours come from the designer, so the export leaves them out as a hand-written spec would. */
+  private specOptions() {
+    const bridge = this.bridge;
+    return bridge ? { defaults: (key: string) => bridge.makeFurn(key, 0, 0, 0) as { color?: unknown } } : {};
   }
   async recheck(): Promise<DesignIssue[]> {
     await this.sync();
@@ -373,7 +378,7 @@ export class CadDesignSession {
     /** cad_spec_patch: export the design as a HouseSpec, patch it, load it into the designer again. */
     const applyPatch = async (value: unknown, current: CadDesign, allowRetry: boolean): Promise<CadDesign> => {
       let ops = value as SpecPatchOp[];
-      const base = planToSpec(current.plan);
+      const base = planToSpec(current.plan, this.specOptions());
       const attempt = (list: SpecPatchOp[]) => {
         const next = applySpecPatch(base, list);
         const errors = newErrors(next, base);

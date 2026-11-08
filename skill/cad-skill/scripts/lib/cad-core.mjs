@@ -3005,8 +3005,8 @@ function validateSpec(input) {
     if (input[key] !== void 0 && !Array.isArray(input[key])) add("schema", key, "\u6539\u4E3A\u6570\u7EC4");
     const items = Array.isArray(input[key]) ? input[key] : [];
     for (const [index, item] of items.entries()) {
-      const valid = isObject(item) && (key === "beams" ? point(item.a) && point(item.b) : point(item.at) && typeof item.kind === "string");
-      if (!valid) add("schema", `${key}[${index}]`, key === "beams" ? "\u586B\u5199 a/b \u4E24\u5143\u6570\u5B57\u5750\u6807" : "\u586B\u5199 kind \u5B57\u7B26\u4E32\u548C at \u4E24\u5143\u6570\u5B57\u5750\u6807");
+      const valid = isObject(item) && (key === "beams" ? point(item.a) && point(item.b) : typeof item.kind === "string" && (point(item.at) || key === "elec" && Array.isArray(item.pts) && item.pts.length >= 2 && item.pts.every(point)));
+      if (!valid) add("schema", `${key}[${index}]`, key === "beams" ? "\u586B\u5199 a/b \u4E24\u5143\u6570\u5B57\u5750\u6807" : key === "elec" ? "\u586B\u5199 kind \u5B57\u7B26\u4E32\u548C at \u4E24\u5143\u6570\u5B57\u5750\u6807\uFF08\u706F\u5E26 / \u8F68\u9053 / \u7EBF\u6027\u706F\u5199 pts \u70B9\u5217\uFF09" : "\u586B\u5199 kind \u5B57\u7B26\u4E32\u548C at \u4E24\u5143\u6570\u5B57\u5750\u6807");
     }
   }
   if (issues.length) return issues;

@@ -15,7 +15,12 @@ import { isBuilding } from './types';
  * - cove strips (`auto: "cove:…"`) are left out: the designer derives them from the ceilings.
  * Comments, measures and prices have no spec form beyond what the loader rebuilds; `carryOver` puts
  * them back after a reload.
+ *
+ * The loader gives every piece of furniture a colour; with `defaults` (the designer's makeFurn) a colour
+ * that is just the default is left out, as a hand-written spec would, so a top-level `style` still
+ * restyles that piece ("没单独写风格、也没指定颜色的…全部按这一款建模").
  */
+export type SpecExportOptions = { defaults?: (key: string) => { color?: unknown } | undefined };
 
 type Xy = { x: number; y: number };
 const pair = (point: Xy): Point => [point.x, point.y];
@@ -24,7 +29,7 @@ const pick = (source: Record<string, unknown>, keys: string[]) => defined(Object
 // A compass side whose cross product with the wall direction has the sign of `align`.
 const SIDES: Array<[string, Xy]> = [['N', { x: 0, y: -1 }], ['S', { x: 0, y: 1 }], ['E', { x: 1, y: 0 }], ['W', { x: -1, y: 0 }]];
 
-function singleToSpec(plan: SinglePlan): HouseSpec {
+function singleToSpec(plan: SinglePlan, options: SpecExportOptions = {}): HouseSpec {
   const nodes = new Map(plan.nodes.map(node => [node.id, node]));
   const raw = plan as Record<string, unknown>;
   const walls = plan.walls.flatMap(wall => {
@@ -112,21 +117,27 @@ function singleToSpec(plan: SinglePlan): HouseSpec {
     })),
     structs: ((raw.structs ?? []) as Array<Xy & { kind: string; w?: number; d?: number; rot?: number }>).map(item => defined({ kind: item.kind, at: pair(item), w: item.w, d: item.d, rot: item.rot })),
     beams: ((raw.beams ?? []) as Array<{ a: Xy; b: Xy; w?: number; depth?: number }>).map(item => defined({ a: pair(item.a), b: pair(item.b), w: item.w, depth: item.depth })),
-    furniture: plan.furniture.map(item => defined({
-      key: item.key, at: [item.x, item.y] as Point, rot: item.rot as number | undefined,
-      ...pick(item, ['w', 'd', 'h', 'z', 'name', 'color', 'price', 'brand', 'kit', 'opt', 'cab']),
-    })),
+    furniture: plan.furniture.map(item => {
+      let color = item.color;
+      if (color !== undefined && options.defaults) {
+        try { if (options.defaults(item.key)?.color === color) color = undefined; } catch { /* unknown key: keep the colour */ }
+      }
+      return defined({
+        key: item.key, at: [item.x, item.y] as Point, rot: item.rot as number | undefined,
+        ...pick({ ...item, color }, ['w', 'd', 'h', 'z', 'name', 'color', 'price', 'brand', 'kit', 'opt', 'cab']),
+      });
+    }),
     elec,
     comments: comments.length ? comments : undefined,
   }) as HouseSpec;
 }
 
 /** The whole design as a HouseSpec; a building becomes `floors`. */
-export function planToSpec(plan: InternalPlan): HouseSpec {
-  if (!isBuilding(plan)) return singleToSpec(plan);
+export function planToSpec(plan: InternalPlan, options: SpecExportOptions = {}): HouseSpec {
+  if (!isBuilding(plan)) return singleToSpec(plan, options);
   const building = plan as BuildingPlan & { slab?: number; base?: number; grade?: number };
   const floors = building.floors.map(floor => {
-    const { north: _north, site: _site, look: _look, name: _name, ...rest } = singleToSpec(floor.plan) as HouseSpec & Record<string, unknown>;
+    const { north: _north, site: _site, look: _look, name: _name, ...rest } = singleToSpec(floor.plan, options) as HouseSpec & Record<string, unknown>;
     return { name: String(floor.name ?? floor.plan.name), ...rest };
   });
   const first = floors.length ? singleToSpec(building.floors[0].plan) as HouseSpec & Record<string, unknown> : {} as Record<string, unknown>;

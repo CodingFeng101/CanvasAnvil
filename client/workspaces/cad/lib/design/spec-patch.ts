@@ -84,7 +84,34 @@ export function applySpecPatch(spec: HouseSpec, patch: SpecPatchOp[]): HouseSpec
       throw new Error(`patch 第 ${at + 1} 条（${(operation as { op?: string })?.op} ${(operation as { path?: string })?.path}）：${reason instanceof Error ? reason.message : String(reason)}`);
     }
   });
+  restyle(root as unknown as Record<string, unknown>, patch);
   return root;
+}
+
+/**
+ * A new top-level `style` restyles the whole set, as the designer's 整套家具换成某风格 does: the loader
+ * applies `style` only to pieces with neither their own style nor a colour, and an exported design has
+ * both on every piece the last style reached (opt.style plus that style's colour), so those are cleared.
+ * A colour the user chose on an unstyled piece stays.
+ */
+function restyle(root: Record<string, unknown>, patch: SpecPatchOp[]) {
+  const floors = Array.isArray(root.floors) ? root.floors as Array<Record<string, unknown>> : null;
+  const scopes = new Set<Record<string, unknown>>();
+  for (const operation of patch) {
+    if (operation.op === 'remove' || operation.op === 'test') continue;
+    const parts = tokens(operation.path);
+    if (parts.length === 1 && parts[0] === 'style') (floors ?? [root]).forEach(scope => scopes.add(scope));
+    else if (floors && parts.length === 3 && parts[0] === 'floors' && parts[2] === 'style' && floors[Number(parts[1])]) scopes.add(floors[Number(parts[1])]);
+  }
+  for (const scope of scopes) {
+    for (const item of Array.isArray(scope.furniture) ? scope.furniture as Array<Record<string, unknown>> : []) {
+      const opt = item.opt as Record<string, unknown> | undefined;
+      if (!opt || typeof opt !== 'object' || !('style' in opt)) continue;
+      delete opt.style;
+      delete item.color;
+      if (!Object.keys(opt).length) delete item.opt;
+    }
+  }
 }
 
 /**

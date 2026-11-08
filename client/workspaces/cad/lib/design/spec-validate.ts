@@ -39,8 +39,10 @@ export function validateSpec(input: unknown): DesignIssue[] {
     for (const [index, item] of items.entries()) {
       const valid = isObject(item) && (key === 'beams'
         ? point(item.a) && point(item.b)
-        : point(item.at) && typeof item.kind === 'string');
-      if (!valid) add('schema', `${key}[${index}]`, key === 'beams' ? '填写 a/b 两元数字坐标' : '填写 kind 字符串和 at 两元数字坐标');
+        : typeof item.kind === 'string' && (point(item.at)
+          // Line fixtures (strip / track / linear) are drawn along pts instead of standing at one point.
+          || (key === 'elec' && Array.isArray(item.pts) && item.pts.length >= 2 && item.pts.every(point))));
+      if (!valid) add('schema', `${key}[${index}]`, key === 'beams' ? '填写 a/b 两元数字坐标' : key === 'elec' ? '填写 kind 字符串和 at 两元数字坐标（灯带 / 轨道 / 线性灯写 pts 点列）' : '填写 kind 字符串和 at 两元数字坐标');
     }
   }
   if (issues.length) return issues;

@@ -443,3 +443,24 @@ test('spec patch applies all-or-nothing and reports what it touches', async () =
   const touched = patchTouches([{ op: 'replace', path: '/floors/1/walls/0/a', value: [0, 0] }, { op: 'add', path: '/elec/-', value: {} }, { op: 'add', path: '/look', value: {} }]);
   assert.ok(touched.layout && touched.elec && touched.look && !touched.finish);
 });
+
+test('validation accepts line fixtures drawn along pts', () => {
+  const spec = rectangle();
+  spec.elec = [{ kind: 'track', pts: [[2000, 2000], [4000, 2000]], h: 0 } as never, { kind: 'socket', at: [1200, 3000] }];
+  assert.ok(!codes(spec).includes('schema'));
+  spec.elec = [{ kind: 'strip', pts: [[2000, 2000]] } as never];
+  assert.ok(codes(spec).includes('schema'));
+});
+
+test('a new top-level style restyles pieces an earlier style reached and keeps user colours', async () => {
+  const { applySpecPatch } = await import('../client/workspaces/cad/lib/design/spec-patch');
+  const spec = rectangle();
+  spec.furniture = [
+    { key: 'bed18', at: [3000, 3000], color: '#d2b48c', opt: { style: 'nordic' } },
+    { key: 'sofa3', at: [2000, 2000], color: '#123456' },
+  ] as never;
+  const next = applySpecPatch(spec, [{ op: 'add', path: '/style', value: 'modern' }]);
+  assert.deepEqual(next.furniture![0], { key: 'bed18', at: [3000, 3000] });
+  assert.equal(next.furniture![1].color, '#123456');
+  assert.equal(applySpecPatch(spec, [{ op: 'replace', path: '/name', value: 'x' }]).furniture![0].color, '#d2b48c');
+});
