@@ -118,6 +118,10 @@ function getJob(id: string): Job | undefined {
   if (!existsSync(dir)) return undefined;
   const done = existsSync(path.join(dir, "files.json"));
   const job: Job = { id, dir, state: done ? "done" : "running", error: "", startedAt: statSync(dir).birthtimeMs, finishedAt: done ? statSync(path.join(dir, "files.json")).mtimeMs : 0 };
+  // A run whose log has been quiet longer than qa.mjs's own time limit died with the server.
+  const log = path.join(dir, "qa.log");
+  const quiet = Date.now() - (existsSync(log) ? statSync(log).mtimeMs : job.startedAt);
+  if (!done && quiet > 1800000) Object.assign(job, { state: "failed", error: "The delivery check stopped without a result", finishedAt: Date.now() });
   jobs.set(id, job);
   return job;
 }

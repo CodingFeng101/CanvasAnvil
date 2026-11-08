@@ -117,7 +117,9 @@ export function CadWorkspace() {
       toast.loading(tr("交付检查中：设计器逐项操作（几分钟）…", "Delivery check: operating the designer (a few minutes)…"), { id: toastId });
       // A check already running (409) is joined: its job is polled like a new one.
       let status: QaStatus = { ...started, jobId, state: started.state ?? "running" };
+      const deadline = Date.now() + 40 * 60 * 1000;
       while (status.state === "running") {
+        if (Date.now() > deadline) throw new Error(tr("交付检查超过 40 分钟没有结果", "The delivery check gave no result within 40 minutes"));
         await new Promise((resolve) => setTimeout(resolve, 5000));
         status = await post({ action: "status", jobId });
         if (status.state === "running") toast.loading(tr(`交付检查中… ${status.seconds ?? 0} 秒`, `Delivery check… ${status.seconds ?? 0}s`), { id: toastId });
