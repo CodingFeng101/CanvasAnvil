@@ -211,7 +211,6 @@ npm run build
 ## 📚 文档
 
 - 架构说明：[docs/architecture.md](docs/architecture.md)
-- 交接文档：[docs/HANDOFF.md](docs/HANDOFF.md)
 - 部署说明：[deploy/README.md](deploy/README.md)
 
 ## 🗓️ 最近更新

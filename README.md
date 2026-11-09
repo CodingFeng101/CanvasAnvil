@@ -211,7 +211,6 @@ npm run build
 ## 📚 Docs
 
 - Architecture overview: [docs/architecture.md](docs/architecture.md)
-- Handoff notes (Chinese): [docs/HANDOFF.md](docs/HANDOFF.md)
 - Deployment guide: [deploy/README.md](deploy/README.md)
 
 ## 🗓️ Recent updates
