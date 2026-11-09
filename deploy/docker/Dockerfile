@@ -1,4 +1,4 @@
-FROM node:20-alpine AS build
+FROM node:22-alpine AS build
 
 WORKDIR /app
 COPY package.json package-lock.json ./
@@ -9,15 +9,16 @@ RUN npm run build
 
 # Debian rather than Alpine: the CAD workspace runs the house designer's Python scripts (floorplan
 # recognition: OpenCV, PyMuPDF, ezdxf wheels need glibc) and its delivery check drives Chromium.
-FROM node:20-bookworm-slim AS runtime
+FROM node:22-bookworm-slim AS runtime
 
 WORKDIR /app
 
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends python3 python3-pip chromium fonts-noto-cjk \
+    && apt-get install -y --no-install-recommends python3 python3-pip chromium libreoffice-impress fonts-noto-cjk fonts-crosextra-carlito fonts-liberation \
     && rm -rf /var/lib/apt/lists/*
 COPY server/recognizer/requirements.txt ./server/recognizer/requirements.txt
-RUN pip3 install --no-cache-dir --break-system-packages -r server/recognizer/requirements.txt
+COPY scripts/slide-agent/requirements.txt ./scripts/slide-agent/requirements.txt
+RUN pip3 install --no-cache-dir --break-system-packages -r server/recognizer/requirements.txt -r scripts/slide-agent/requirements.txt
 
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev
@@ -30,6 +31,7 @@ COPY server ./server
 COPY contracts ./contracts
 COPY resources ./resources
 COPY skill/cad-skill ./skill/cad-skill
+COPY scripts/slide-agent ./scripts/slide-agent
 COPY tsconfig.json ./tsconfig.json
 COPY --from=build /app/dist ./dist
 

@@ -5,12 +5,12 @@
  *   npx tsx pipeline.ts --run <dir> <slide.png> [...]
  *   node --experimental-strip-types pipeline.ts --run <dir> <slide.png> [...]   (Node 22.6+)
  *
- * Self-contained: it needs only this folder (lib.ts, qa_check.py,
+ * Self-contained: it needs only this folder (lib.ts, render_preview.py, qa_check.py,
  * slice_blobs.py, tools/, requirements.txt). Run by the app's editable export
  * (server/routes/editable-export.ts).
  *
  * Code does the mechanical steps (OCR, image calls, slicing, edge checks,
- * composition, PowerPoint export, QA). The model is asked only for judgment:
+ * composition, slide preview export, QA). The model is asked only for judgment:
  *   1. one call: base grouping + clean-base prompts for the whole deck
  *   2. after the bases, one call per page in parallel (source + its clean
  *      base), then a short lead call merging duplicate components across
@@ -95,6 +95,9 @@ const runRel = (abs: string) => relative(RUN, abs).replace(/\\/g, "/");
 const exportLock = mutex();
 async function exportPreview(pptx: string, outDir: string) {
   mkdirSync(outDir, { recursive: true });
+  if (process.platform !== "win32") {
+    return exec(PYTHON, [join(HERE, "render_preview.py"), pptx, outDir], { cwd: RUN, timeoutMs: 5 * 60_000 });
+  }
   const q = (s: string) => s.replace(/'/g, "''");
   const ps = `$ErrorActionPreference='Stop'
 $pp = New-Object -ComObject PowerPoint.Application
@@ -463,7 +466,7 @@ const sharedAssets: Promise<SharedAsset[]> = MERGE_ONLY
 const [layout, , deckAnalysis, shared] = await Promise.all([ocr, bases, analysis, sharedAssets]);
 
 // ---------- 3. pages: one agent each, in parallel ----------
-const pageSystem = `You rebuild ONE slide page into an editable PPTX slide. The clean base is already generated and the text is already extracted by OCR; code handles image generation, slicing, edge checks, composition, PowerPoint export and QA through your tools.
+const pageSystem = `You rebuild ONE slide page into an editable PPTX slide. The clean base is already generated and the text is already extracted by OCR; code handles image generation, slicing, edge checks, composition, slide preview export and QA through your tools.
 
 Binding rules (from the skill):
 - Layer order: base PNG -> editable geometry -> PNG icons -> editable text.
@@ -603,7 +606,7 @@ async function rebuildPageInner(page: number): Promise<PageResult> {
       run: async ({ path }) => ({ text: `viewing ${path}`, images: [await imagePart(inDir(path), 1200, path)] }),
     },
     compose_and_check: {
-      description: "Wait for pending assets, build the full spec from analysis/compose_spec.json + OCR text, compose, export with PowerPoint, run QA. Returns the QA report and shows source | preview.",
+      description: "Wait for pending assets, build the full spec from analysis/compose_spec.json + OCR text, compose, export slide previews, run QA. Returns the QA report and shows source | preview.",
       parameters: { type: "object", properties: {} },
       run: async () => {
         emit({ type: "line", stage: "pages", page, text: `第 ${page} 页：第 ${state.rounds + 1} 轮合成并检查` });
@@ -721,7 +724,8 @@ const finalQa = await stage("merge", async () => {
   writeFileSync(join(RUN, "analysis", "compose_spec.json"), JSON.stringify(deck, null, 2));
   const c = await script("compose_component_pptx.py", ["analysis/compose_spec.json", "out/editable.pptx"], RUN);
   if (c.code !== 0) throw new Error(`deck compose failed: ${clip(c.out, 800)}`);
-  await exportPreview(join(RUN, "out", "editable.pptx"), join(RUN, "out", "preview"));
+  const preview = await exportPreview(join(RUN, "out", "editable.pptx"), join(RUN, "out", "preview"));
+  if (preview.code !== 0) throw new Error(`deck preview failed: ${clip(preview.out, 1500)}`);
   for (let i = 1; i <= N; i++)
     if (existsSync(join(RUN, "out", "preview", `slide_${pad3(i)}.png`))) emit({ type: "artifact", stage: "merge", page: i, label: `第 ${i} 页成品`, path: `out/preview/slide_${pad3(i)}.png` });
   for (let i = 1; i <= N; i++) await script("compare_preview.py", [sourceRel(i), `out/preview/slide_${pad3(i)}.png`, `out/compare/slide_${pad3(i)}`], RUN);

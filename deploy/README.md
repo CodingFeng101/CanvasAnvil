@@ -92,6 +92,10 @@ docker run --rm -p 8001:8080 canvasanvil/app:latest
 
 ## Environment Variables
 
+Editable PPTX export reads model settings on the server. With Compose, set the `SLIDE_AGENT_*` variables below in a repository-root `.env` file or the launching shell. Compose passes them to the container. Configure both text and image channels. With `docker run`, pass the configuration file through `--env-file`.
+
+The image includes the reconstruction scripts, Python dependencies, LibreOffice and fonts. Linux exports PDF through LibreOffice and renders page previews through PyMuPDF for QA. Windows hosts continue using PowerPoint. Font metrics and layout can differ between renderers, so verify the exported slides after deployment.
+
 | Variable | Default | Description |
 | --- | --- | --- |
 | `PORT` | `8080` | Service listen port inside the container or host process |
@@ -99,3 +103,8 @@ docker run --rm -p 8001:8080 canvasanvil/app:latest
 | `WEB_DIST_DIR` | `./dist` | Static web assets directory |
 | `PYTHON` | `python3` (`python` on Windows) | Python for floorplan recognition and the CAD delivery check (needs `server/recognizer/requirements.txt`) |
 | `CHROME_PATH` | auto-detected | Chrome / Edge / Chromium for the CAD delivery check |
+| `SLIDE_AGENT_API_KEY` / `SLIDE_AGENT_MODEL` | unset | Text model key and name for editable PPTX reconstruction |
+| `SLIDE_AGENT_BASE_URL` | `https://api.openai.com/v1` | OpenAI-compatible URL for the reconstruction text model |
+| `SLIDE_AGENT_IMAGE_API_KEY` | unset | Image channel key for reconstruction |
+| `SLIDE_AGENT_IMAGE_MODEL` | `gpt-image-2` | Reconstruction image model name |
+| `SLIDE_AGENT_IMAGE_BASE_URL` | `https://api.openai.com/v1` | OpenAI-compatible URL for the reconstruction image model |
