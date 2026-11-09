@@ -8,14 +8,14 @@ import { z } from "zod";
  * Editable PPTX export: the editable PPTX pipeline (scripts/slide-agent), run as a job.
  *
  * The pipeline (scripts/slide-agent/pipeline.ts) needs Python, its tools in
- * scripts/slide-agent/tools and PowerPoint for previews, so it runs here rather than in the
+ * scripts/slide-agent/tools and a preview renderer (PowerPoint on Windows, LibreOffice on Linux), so it runs here rather than in the
  * browser, as a child process on the same server -- no extra port. A run takes
  * minutes, so the client creates a job, uploads the slides one request each
  * (each stays well under the body limit), starts it, then polls for the
  * pipeline's progress events and fetches the finished file. Intermediate
  * pictures the events point at are served from the job's run directory.
  *
- * One job at a time: every run drives the same PowerPoint for its previews.
+ * One job at a time keeps resource use bounded and serializes PowerPoint previews on Windows.
  */
 
 type JobState = "uploading" | "running" | "done" | "failed";
