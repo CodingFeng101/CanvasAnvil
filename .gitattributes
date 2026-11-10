@@ -1,0 +1,19 @@
+# GitHub language stats (linguist): leave out build outputs, copies and third-party code, so the
+# bar shows the hand-written source. These files are produced by scripts/sync-*.mjs or copied in.
+
+# Bundled MCP server, editor widgets and the standalone runtimes copied into each skill
+skill/canvas-skill/assets/** linguist-generated
+skill/*/runtime/** linguist-generated
+# The plugin's copies of the standalone skills
+skill/canvas-skill/skills/** linguist-generated
+# Website code bundled into the skills
+skill/ppt-skill/scripts/lib/website-prompts.mjs linguist-generated
+skill/ppt-skill/scripts/lib/mineru.mjs linguist-generated
+skill/cad-skill/scripts/lib/cad-core.mjs linguist-generated
+skill/cad-skill/scripts/lib/designer-kit.js linguist-generated
+
+# Third-party code
+skill/ppt-skill/scripts/vendor/** linguist-vendored
+skill/diagram-skill/vendor/** linguist-vendored
+skill/cad-skill/designer/** linguist-vendored
+public/vendor/** linguist-vendored
