@@ -305,7 +305,7 @@ interface ResolvedAnnotatedEdit {
  * looks like -- shared by the preview shown in chat and the actual edit
  * request, so the two never disagree about what "the annotated image" is.
  */
-async function resolveAnnotatedEdit(
+export async function resolveAnnotatedEdit(
   api: ExcalidrawImperativeAPI,
   uiLang: UiLanguage,
 ): Promise<{ ok: true; resolved: ResolvedAnnotatedEdit } | { ok: false; error: string }> {

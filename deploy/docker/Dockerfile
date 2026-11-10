@@ -5,7 +5,8 @@ COPY package.json package-lock.json ./
 RUN npm ci
 
 COPY . .
-RUN npm run build
+# tsc -b plus the vite build need more than Node's default heap; Docker Desktop's default 8 GB VM ran out of it.
+RUN NODE_OPTIONS=--max-old-space-size=6144 npm run build
 
 # Debian rather than Alpine: the CAD workspace runs the house designer's Python scripts (floorplan
 # recognition: OpenCV, PyMuPDF, ezdxf wheels need glibc) and its delivery check drives Chromium.

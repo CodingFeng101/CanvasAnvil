@@ -21,4 +21,4 @@ Continue from the exact point where the previous XML fragment stopped.
 
 ## After Completion
 
-Once the XML is complete, stop. The caller validates it and opens it in the draw.io online editor.
+Submit each continuation through `append_diagram` using the latest awaiting-append operation ID as `draftId`. Reuse the chunk operation ID on retries. Once complete, the widget validates, repairs and layout-corrects the assembled XML before showing the final result.

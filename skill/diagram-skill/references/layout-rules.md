@@ -1,6 +1,6 @@
 # Layout Rules
 
-How to place shapes so a diagram reads cleanly. These rules hold for any kind of diagram. There is no automatic layout step after you, so the coordinates you write are the layout.
+How to place shapes so a diagram reads cleanly. These rules hold for any kind of diagram. The native widget applies the website layout correction after generation. The initial coordinates still express the intended arrangement and guide that correction.
 
 ## 1. Plan before drawing
 

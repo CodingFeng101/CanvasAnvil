@@ -47,3 +47,7 @@ Return the full updated XML after the operations. The caller:
 2. runs the layout check, and you fix any new errors your edit introduced;
 3. writes the `.drawio` file;
 4. opens the result in the draw.io online editor.
+
+## Native tool
+
+Submit the changes through `edit_diagram` with the current `baseRevision` and a stable `operationId`. Use `operations` entries with `operation`, `cell_id` and `new_xml` for add/update. Deletion requires the operation and cell ID. Read the current IDs from `get_diagram_state`.

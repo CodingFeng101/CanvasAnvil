@@ -1,0 +1,5 @@
+{
+  "mcpServers": {
+    "canvasanvil_canvas": { "command": "node", "args": ["./scripts/start-mcp.mjs"], "cwd": "." }
+  }
+}

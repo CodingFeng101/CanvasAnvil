@@ -152,11 +152,14 @@
 CanvasAnvil 为每个画布都提供了专用本地 skill，用来保证工作流稳定、输出一致，而不是把所有任务都塞进同一条通用提示链。
 
 - `diagram-skill` · 图表生成与打包
-  输出整洁的图表资源，并默认跳过独立 HTML 预览。
+  在 Codex 内打开现有 draw.io 编辑器，通过对话修改 XML，支持手动编辑同步和 drawio/SVG/PNG 导出，数据保存在项目的 `diagram/` 下。在线 draw.io 编辑器需要网络访问。
 - `cad-skill` · 室内设计交付流程
-  从原始户型图或一句需求出发（待定事项可点选），生成离线设计器网页，自动自检和水电审计，并导出报价单、施工图 PDF、DXF、彩平图、效果图。拷到任何项目都能独立运行。
+  在 Codex 内打开现有户型设计器，通过对话生成方案、执行局部操作和 spec 补丁，支持手动修改同步、设计检查及导出，数据保存在 `cad/` 下。原有离线重建和完整交付脚本继续可用。
 - `ppt-skill` · 完整演示稿生产
   强制先确认大纲，再生成整套演示稿，并导出可编辑 PPT、PDF 或图片版 PPT。
+- `canvas-skill` · 本地白板图片创作
+  Codex 原生画布插件，复用网站的 Excalidraw 白板、标注合成、图片摆放和版本条。画布通过 MCP widget 打开，直接在 Codex 对话中提出生成与修改要求，由 Codex 读取选中图片及标注，调用宿主图片工具生成并回填。数据保存在当前项目的 `canvas/` 下。
+  从仓库根目录执行 `codex plugin marketplace add .`，再执行 `codex plugin add canvasanvil-canvas@canvasanvil-local`。安装后重启 Codex，调用 `$canvas-skill`、`$diagram-skill` 或 `$cad-skill` 打开对应画布。运行环境为 Node 20+，发布包包含 MCP 和 widget，无需安装 npm 依赖。
 
 所有 skill 默认使用宿主文本模型。只有生图能力需要单独配置图片生成供应商。
 可编辑 PPTX 导出同样用宿主模型：助手按 `skill/ppt-skill/references/editable-pptx-workflow.md` 逐步重建幻灯片，所需脚本都在 skill 的 `editable/` 目录里；另外需要 PowerPoint 和 Python 依赖（`editable/requirements.txt`）。

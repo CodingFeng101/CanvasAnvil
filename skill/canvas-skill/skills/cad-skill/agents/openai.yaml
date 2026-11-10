@@ -1,0 +1,7 @@
+interface:
+  display_name: "CAD Skill"
+  short_description: "Design home interiors in the native Codex house designer"
+  default_prompt: "Use $cad-skill to open the native house designer, settle the plan with me, then build and check the design."
+
+policy:
+  allow_implicit_invocation: true

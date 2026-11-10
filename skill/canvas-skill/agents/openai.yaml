@@ -1,0 +1,4 @@
+interface:
+  display_name: "Canvas Skill"
+  short_description: "Create and revise images on a local annotated whiteboard"
+  default_prompt: "Use $canvas-skill to open a whiteboard and create or edit images from my annotations."

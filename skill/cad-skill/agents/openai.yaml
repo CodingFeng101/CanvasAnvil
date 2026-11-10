@@ -1,7 +1,7 @@
 interface:
   display_name: "CAD Skill"
-  short_description: "An interactive house designer page from a floor plan, or from a brief with clickable decisions; checks, MEP audit and exports done for you."
-  default_prompt: "Use $cad-skill to design this home: settle the plan and decisions with me first, then build and check the floorplan and export the delivery files."
+  short_description: "Design home interiors in the native Codex house designer"
+  default_prompt: "Use $cad-skill to open the native house designer, settle the plan with me, then build and check the design."
 
 policy:
   allow_implicit_invocation: true

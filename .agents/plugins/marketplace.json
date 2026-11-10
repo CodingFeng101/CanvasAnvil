@@ -1,0 +1,5 @@
+{
+  "name": "canvasanvil-local",
+  "interface": { "displayName": "CanvasAnvil" },
+  "plugins": [{ "name": "canvasanvil-canvas", "source": { "source": "local", "path": "./skill/canvas-skill" } }]
+}

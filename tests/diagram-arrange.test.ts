@@ -5,6 +5,7 @@ import { arrangeDiagramXml, parseLayout, tidyIfBetter } from "../client/workspac
 import { elkLayoutXml } from "../client/workspaces/diagram/lib/elk-layout";
 import { alignmentKept, lintDiagramXml, orderKept } from "../client/workspaces/diagram/lib/layout-lint";
 import { readDiagramModel } from "../client/workspaces/diagram/lib/tidy-layout";
+import { correctDiagramLayout } from "../client/workspaces/native/diagram-layout";
 
 /**
  * Choosing a layout: as drawn, tidied, or laid out by ELK. Whatever is
@@ -39,6 +40,32 @@ test("parseLayout treats unknown values as auto", () => {
   assert.equal(parseLayout("flow-down"), "flow-down");
   assert.equal(parseLayout("diagonal"), "auto");
   assert.equal(parseLayout(undefined), "auto");
+});
+
+test("native creation uses the website layout engine and reports the final score", async () => {
+  const expected = await arrangeDiagramXml(crooked, 'flow-down');
+  const result = await correctDiagramLayout(wrap(''), crooked, { mode: 'create', layout: 'flow-down' });
+  assert.equal(result.xml, expected.xml);
+  assert.equal(result.correction.originalXml, crooked);
+  assert.equal(result.correction.method, expected.chosen);
+  assert.ok(result.correction.afterScore >= result.correction.scores.original);
+});
+
+test("native local edits use scoped tidying and retain unrelated manually positioned rows", async () => {
+  const current = wrap(shape('manual', 317, 500) + shape('a', 100, 40) + shape('b', 108, 150) + edge('ab', 'a', 'b'));
+  const next = current.replace('value="b"', 'value="Updated"');
+  const result = await correctDiagramLayout(current, next);
+  assert.equal(result.correction.mode, 'edit');
+  assert.ok(['tidy', 'original'].includes(result.correction.method));
+  const manual = readDiagramModel(result.xml).shapes.get('manual')!.box;
+  assert.equal(manual.x, 317);
+  assert.equal(manual.y, 500);
+  assert.match(result.xml, /value="Updated"/);
+});
+
+test("native create-mode sequence diagrams retain the website tidy-only behavior", async () => {
+  const result = await correctDiagramLayout(wrap(''), crooked, { mode: 'create', layout: 'sequence' });
+  assert.ok(['tidy', 'original'].includes(result.correction.method));
 });
 
 test("the arranged diagram never scores below the drawing", async () => {

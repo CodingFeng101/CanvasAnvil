@@ -152,11 +152,14 @@ One walkthrough per canvas on Bilibili (narrated in Chinese). In the app, the **
 CanvasAnvil includes dedicated local skills for each canvas so workflows stay opinionated, repeatable, and easier to maintain.
 
 - `diagram-skill` · Diagram generation and packaging
-  Outputs clean diagram assets and skips standalone HTML preview by default.
+  Opens the existing draw.io editor inside Codex. Chat-driven XML updates, manual edits and drawio/SVG/PNG exports synchronize through MCP. State lives under the project’s `diagram/` directory. The online draw.io editor requires network access.
 - `cad-skill` · Interior-delivery workflow
-  From a floor plan or a brief (decisions settled with clickable options), builds an offline designer page, checks and MEP-audits it, and exports the quote, drawing PDF, DXF, colour plan and render. Runs on its own in any project.
+  Opens the existing house designer inside Codex, with chat-driven designs, operations and spec patches, synchronized manual edits, checks and exports. State lives under `cad/`. The existing offline reconstruction and delivery scripts remain available.
 - `ppt-skill` · Full presentation production
   Enforces outline review before generation and supports editable PPT, PDF, and image-based PPT output.
+- `canvas-skill` · Image creation on a local whiteboard
+  A native Codex canvas plugin reusing the website's Excalidraw board, annotation compositor, image placement and version strip. Give instructions directly in the Codex conversation. Codex captures selected images and annotations through MCP, then uses the host image tool and inserts results. Data lives in the project's `canvas/` directory.
+  From the repository root, run `codex plugin marketplace add .` and `codex plugin add canvasanvil-canvas@canvasanvil-local`, then restart Codex and invoke `$canvas-skill`, `$diagram-skill` or `$cad-skill`. Node 20+ is required. The release includes the MCP and widget bundles with no runtime npm installation.
 
 All skills use the host text model by default. Only image generation requires explicit provider configuration.
 Editable PPTX export uses the host model too: the agent rebuilds the slides step by step following `skill/ppt-skill/references/editable-pptx-workflow.md`, with the scripts in the skill's `editable/` folder; it also needs PowerPoint and the Python packages in `editable/requirements.txt`.

@@ -24,7 +24,7 @@ Use these rules when the task is a local edit to existing draw.io XML.
 - Keep ids stable unless the user explicitly requests renaming.
 - When deleting a node, account for connected edges.
 - When adding into a group, use `parent="<group id>"` with relative coordinates, and grow the group if needed.
-- After editing, validate the result and run `scripts/check-layout.mjs`. Fix any error your edit introduced, then rebuild the online editor URL with `scripts/build-drawio-url.mjs`.
+- After editing, validate the result and run `scripts/check-layout.mjs`. Fix any error your edit introduced, then submit the minimal add/update/delete operation set through `edit_diagram` with the latest revision. The widget limits layout tidying to rows containing added or updated cells.
 
 ## Safe review checklist
 
