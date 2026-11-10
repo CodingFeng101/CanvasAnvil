@@ -1,7 +1,7 @@
 interface:
   display_name: "PPT Skill"
-  short_description: "Generate PPT templates, presentation slide sets, and exportable PDF, image PPT or editable PPTX deliverables."
-  default_prompt: "Use $ppt-skill to generate a PPT template or a full presentation and export it as PDF, PPT, or editable PPTX."
+  short_description: "Build decks from an idea, an outline or an existing PPT (beautify) with a template library, outline review, concurrent slide drawing and PDF / PPTX / editable PPTX export."
+  default_prompt: "Use $ppt-skill to make a presentation: pick a template, review the outline, draw the slides and export it as PDF, PPTX or editable PPTX."
 
 policy:
   allow_implicit_invocation: true

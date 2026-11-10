@@ -88,7 +88,7 @@ Do not guess undocumented shape-library prefixes or shape names.
 
 The editor reuses the website layout engine. New diagrams try light tidying and ELK optimization, retaining a result that meets the website score and arrangement-preservation gates. Local edits tidy only rows containing changed cells. Give the model a coherent initial layout using `references/layout-rules.md`.
 
-- Declare a layout kind and follow its arrangement: `flow-down`, `flow-right`, `flow-up`, `tree-down`, `tree-right`, `mindmap`, `swimlane`, `sequence`, `timeline` or `free`.
+- Declare a layout kind and follow its arrangement: `flow-down`, `flow-right`, `flow-up`, `tree-down`, `tree-right`, `mindmap`, `swimlane`, `sequence`, `timeline`, `free`, or `auto` when none of them fits or you are unsure (the editor then picks the correction itself).
 - Shapes in one rank share a centre line exactly. Shapes with the same role share a size.
 - Leave 40px or more between shapes and between groups.
 - Put the title above the drawing and legends below it.

@@ -4,3 +4,4 @@ numpy
 opencv-python-headless
 rapidocr>=3
 onnxruntime
+pymupdf

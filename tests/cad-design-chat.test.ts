@@ -2,23 +2,25 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { validateSpec } from "../client/workspaces/cad/lib/design/spec-validate";
+import { layoutToSpec } from "../client/workspaces/cad/lib/design/layout";
 const read = (file: string) =>
   readFileSync(new URL("../" + file, import.meta.url), "utf8");
 
-test("CAD design prompt example passes the actual prevalidator", () => {
+test("CAD design prompt example builds a spec that passes the actual prevalidator", () => {
+  // create.md now describes a grid layout (cad_layout); the program turns it into the HouseSpec.
   const prompt = read("resources/prompts/cad/design/create.md");
-  const example = JSON.parse(
-    prompt.split("\n").find((line) => line.startsWith('{"type":"cad_spec"'))!,
-  );
-  assert.deepEqual(validateSpec(example.spec), []);
+  const block = prompt.match(/```json\r?\n(\{"type":"cad_layout"[\s\S]*?)\r?\n```/)![1];
+  const example = JSON.parse(block);
+  assert.deepEqual(validateSpec(layoutToSpec(example.layout).spec), []);
 });
 
-test("create, edit and fix prompts list every supported opening type and world-coordinate rules", () => {
+test("edit, fix and draft prompts list every supported opening type and world-coordinate rules", () => {
   const types =
     "door double unequal sliding folding pocket hole garage window slideWindow floorWindow highWindow bay glassWall".split(
       " ",
     );
-  for (const mode of ["create", "edit", "fix", "create-from-draft"]) {
+  // create.md writes no coordinates or opening types at all: doors and windows are placed by the layout program.
+  for (const mode of ["edit", "fix", "create-from-draft"]) {
     const prompt = read(`resources/prompts/cad/design/${mode}.md`);
     for (const type of types)
       assert.ok(prompt.includes(type), `${mode}: ${type}`);

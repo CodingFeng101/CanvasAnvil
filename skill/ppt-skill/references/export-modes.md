@@ -63,8 +63,8 @@ Settings:
 
 Requirements:
 
-- Python 3 with the packages in `editable/requirements.txt`: `pip install -r editable/requirements.txt` from this skill folder (Pillow, python-pptx, numpy, OpenCV, RapidOCR)
-- Microsoft PowerPoint, for the previews the checks compare
+- Python 3 with the packages in `editable/requirements.txt`: `pip install -r editable/requirements.txt` from this skill folder (Pillow, python-pptx, numpy, OpenCV, RapidOCR, PyMuPDF)
+- for the previews the checks compare: Microsoft PowerPoint on Windows; otherwise (macOS, Linux, or no PowerPoint) LibreOffice, found on PATH, in its usual install folder, or at `SOFFICE`
 - an image model: this skill's `config/image-provider.json` (the same file the other modes use), or `SLIDE_AGENT_IMAGE_API_KEY`, `SLIDE_AGENT_IMAGE_BASE_URL`, `SLIDE_AGENT_IMAGE_MODEL` in the environment; a variable already set in the environment wins
 - never ask the user to paste keys into chat; if a setting is missing, tell them which file to fill
 

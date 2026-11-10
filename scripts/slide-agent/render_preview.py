@@ -1,12 +1,26 @@
 #!/usr/bin/env python3
-"""Render PPTX previews with headless LibreOffice and PyMuPDF on Linux."""
+"""Render PPTX previews with headless LibreOffice and PyMuPDF (Linux, or wherever PowerPoint is missing)."""
 import argparse
+import os
 from pathlib import Path
+import shutil
 import subprocess
 import tempfile
 
 import fitz
 from pptx import Presentation
+
+
+def find_soffice() -> str:
+    """LibreOffice from $SOFFICE, PATH, or its usual install folder on Windows and macOS."""
+    candidates = [os.environ.get("SOFFICE", ""), shutil.which("soffice") or "", shutil.which("libreoffice") or "",
+                  r"C:\Program Files\LibreOffice\program\soffice.exe",
+                  r"C:\Program Files (x86)\LibreOffice\program\soffice.exe",
+                  "/Applications/LibreOffice.app/Contents/MacOS/soffice"]
+    for candidate in candidates:
+        if candidate and Path(candidate).is_file():
+            return candidate
+    raise RuntimeError("LibreOffice (soffice) not found: install it, or set SOFFICE to its path")
 
 
 def render_preview(pptx: Path, out_dir: Path):
@@ -18,7 +32,7 @@ def render_preview(pptx: Path, out_dir: Path):
         work = Path(folder)
         result = subprocess.run(
             [
-                "soffice",
+                find_soffice(),
                 f"-env:UserInstallation={(work / 'profile').as_uri()}",
                 "--headless",
                 "--convert-to", "pdf:impress_pdf_Export",

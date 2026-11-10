@@ -10,7 +10,7 @@ Create a new draw.io diagram or perform a major rewrite of the current one.
 
 1. **Plan.** Write 1–3 sentences in the user's language covering:
    - what the diagram shows;
-   - its layout kind (`flow-down`, `flow-right`, `flow-up`, `tree-down`, `tree-right`, `mindmap`, `swimlane`, `sequence`, `timeline` or `free`);
+   - its layout kind (`flow-down`, `flow-right`, `flow-up`, `tree-down`, `tree-right`, `mindmap`, `swimlane`, `sequence`, `timeline`, `free`, or `auto` when none fits or you are unsure);
    - its groups;
    - its main flow.
 

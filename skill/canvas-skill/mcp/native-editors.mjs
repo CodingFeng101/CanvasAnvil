@@ -5,6 +5,37 @@ import { createHash } from 'node:crypto';
 import path from 'node:path';
 import { isMxCellXmlComplete } from '../../../client/workspaces/diagram/lib/diagram-operations.ts';
 
+/** Rounds the website's own loops allow: 6 for designer issues, 8 for the MEP audit; the gate allows the larger. */
+export const CAD_MAX_FIX_ROUNDS = 8;
+
+/**
+ * What is left after a CAD change, and whether the agent must keep going -- the website fixes issues and audit
+ * problems in a loop by itself; here each applied change carries this gate and the agent is told the next step.
+ * Rounds count consecutive changes that left something to fix; a round that fixes nothing, or the round limit,
+ * ends the loop with the remaining items to explain.
+ */
+export function cadGate(state, command) {
+  const scene = state.scene || {};
+  const issues = Array.isArray(scene.issues) ? scene.issues : [];
+  const errors = issues.filter(issue => issue.level === 'error').map(issue => issue.msg);
+  const warnings = issues.filter(issue => issue.level === 'warn').map(issue => issue.msg);
+  const audit = Array.isArray(scene.audit?.problems) ? scene.audit.problems : [];
+  const total = errors.length + warnings.length + audit.length;
+  const previous = [...state.operations].reverse()
+    .find(item => item !== command && item.action === 'apply' && item.status === 'applied' && item.gate);
+  const fresh = command.payload?.type === 'cad_layout' || command.payload?.replace === true;
+  const round = !fresh && previous && previous.gate.status !== 'clean' ? previous.gate.round + 1 : 1;
+  const stalled = round > 1 && total >= previous.gate.remaining;
+  const status = total === 0 ? 'clean' : stalled ? 'stalled' : round >= CAD_MAX_FIX_ROUNDS ? 'limit' : 'fix';
+  const next = {
+    clean: 'Done: 0 errors, 0 warnings, MEP audit clean. Go on to the delivery checks.',
+    fix: `Not done: fix every item below with another apply_cad_design (round ${round + 1} of at most ${CAD_MAX_FIX_ROUNDS}), then read this gate again.`,
+    stalled: 'Stopped: this round fixed nothing. Do not repeat it; explain each remaining item to the user (why it stays, or what they must decide).',
+    limit: `Stopped after ${CAD_MAX_FIX_ROUNDS} rounds. Explain each remaining item to the user.`,
+  }[status];
+  return { status, round, remaining: total, errors, warnings, audit, next };
+}
+
 export function registerNativeEditors(server, storage) {
   const { root, readState, change, target, result, safely, saveBlob, blobPath, browserUrl } = storage;
   const editorSchema = z.enum(['diagram', 'cad']);
@@ -69,7 +100,15 @@ export function registerNativeEditors(server, storage) {
     });
     tool(`export_${editor}`, `Export the current ${editor} through its open widget. Poll get_editor_operation for the saved file.`, {
       ...operation, format: editor === 'diagram' ? z.enum(['drawio', 'svg', 'png']) : z.enum(['spec', 'designer', 'png', 'dxf']),
-    }, args => queue(editor, args, { action: 'export', format: args.format }));
+    }, async args => {
+      if (editor === 'cad' && args.format === 'spec') {
+        // The spec export feeds the delivery checks; the fix rounds come first.
+        const state = await readState(args.projectDir, 'cad');
+        const last = [...state.operations].reverse().find(item => item.action === 'apply' && item.status === 'applied' && item.gate);
+        if (last?.gate.status === 'fix') throw new Error(`Fix rounds not finished: ${last.gate.remaining} item(s) left (${last.gate.next}). Apply the fixes first.`);
+      }
+      return queue(editor, args, { action: 'export', format: args.format });
+    });
   }
   tool('set_diagram_xml', 'Apply complete draw.io XML with the website layout correction. Use mode=create for a new diagram or explicit relayout, mode=edit for local edits. Read the revision first and poll get_editor_operation. Read get_diagram_state for correction scores and original XML.', {
     ...operation, xml: z.string().min(1), mode: z.enum(['create', 'edit']).optional(),
@@ -81,10 +120,10 @@ export function registerNativeEditors(server, storage) {
   tool('edit_diagram', 'Apply ordered add/update/delete mxCell operations to the current diagram using the website editing logic. Read the current revision and cell IDs first. Layout correction is limited to the edited cells before the final result is shown.', {
     ...operation, operations: z.array(z.object({ operation: z.enum(['add', 'update', 'delete']), cell_id: z.string().min(1), new_xml: z.string().optional() })).min(1),
   }, args => queue('diagram', args, { action: 'edit', operations: args.operations, mode: 'edit' }));
-  tool('apply_cad_design', 'Apply cad_layout (a new floorplan from prompts/layout.md), cad_spec, cad_ops or cad_spec_patch through the existing house designer session, as the website does: layout to spec, apply and check, MEP laid out again after wall/opening/furniture edits, then the wiring preferences of the confirmed cad_plan. Pass that plan as `plan` with the first design (it is kept). Preserve manual edits using the latest baseRevision. Full replacement requires replace=true and allowReplace=true. Afterwards read get_cad_state: fix its issues and audit problems in further rounds until 0 errors and 0 warnings or a round fixes nothing.', {
+  tool('apply_cad_design', 'Apply cad_layout (a new floorplan from prompts/layout.md), cad_spec, cad_ops or cad_spec_patch through the existing house designer session, as the website does: layout to spec, apply and check, MEP laid out again after wall/opening/furniture edits, then the wiring preferences of the confirmed cad_plan. Pass that plan as `plan` with the first design (it is kept). Preserve manual edits using the latest baseRevision. Full replacement requires replace=true and allowReplace=true. When get_editor_operation reports it applied, its `gate` says what is left (errors, warnings, MEP audit problems) and `next` says what to do: keep applying fix rounds while gate.status is "fix"; "clean" means done; "stalled" or "limit" means explain each remaining item to the user.', {
     ...operation, payload: z.object({ type: z.enum(['cad_layout', 'cad_spec', 'cad_ops', 'cad_spec_patch']) }).passthrough(), plan: z.object({}).passthrough().optional(), allowReplace: z.boolean().default(false),
   }, args => queue('cad', args, { action: 'apply', payload: args.payload, plan: args.plan, allowReplace: args.allowReplace }));
-  tool('get_editor_operation', 'Read whether an editor operation is pending, applied or failed, including exported file paths and actual errors.', { editor: editorSchema, operationId: z.string() }, async ({ projectDir, editor, operationId }) => {
+  tool('get_editor_operation', 'Read whether an editor operation is pending, applied or failed, including exported file paths and actual errors. An applied CAD change carries `gate`: the remaining errors, warnings and MEP audit problems and the required next step.', { editor: editorSchema, operationId: z.string() }, async ({ projectDir, editor, operationId }) => {
     const item = (await readState(projectDir, editor)).operations.find(item => item.id === operationId);
     if (!item) throw new Error('Operation not found');
     return item;
@@ -110,6 +149,7 @@ export function registerNativeEditors(server, storage) {
     state.revision++;
     state.updatedAt = Date.now();
     if (command) Object.assign(command, { status: 'applied', revision: state.revision });
+    if (command && args.editor === 'cad' && command.action === 'apply') command.gate = cadGate(state, command);
     return { revision: state.revision };
   }, args.editor), true);
   tool('finish_editor_command', 'Save an editor export or record a failed command.', {

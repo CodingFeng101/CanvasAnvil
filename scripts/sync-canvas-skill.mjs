@@ -67,10 +67,22 @@ await cp(path.join(root, 'LICENSE'), path.join(plugin, 'assets/LICENSE'));
 const skill = path.join(plugin, 'skills/canvas-skill');
 await mkdir(skill, { recursive: true });
 await cp(path.join(plugin, 'SKILL.md'), path.join(skill, 'SKILL.md'));
+// The canvas skill folder runs on its own too: its runtime opens the canvas in a browser, and its config
+// folder holds the image API for hosts without an image tool.
+const canvasRuntime = path.join(skill, 'runtime');
+await rm(canvasRuntime, { recursive: true, force: true });
+await mkdir(path.join(canvasRuntime, 'assets'), { recursive: true });
+await mkdir(path.join(canvasRuntime, 'scripts'), { recursive: true });
+await cp(path.join(plugin, 'scripts/canvas.mjs'), path.join(canvasRuntime, 'scripts/canvas.mjs'));
+for (const file of ['canvas-mcp.mjs', 'canvas-widget.bin', 'canvas-widget.html', 'LICENSE']) await cp(path.join(plugin, 'assets', file), path.join(canvasRuntime, 'assets', file));
+await mkdir(path.join(skill, 'config'), { recursive: true });
+await cp(path.join(plugin, 'config/image-provider.example.json'), path.join(skill, 'config/image-provider.example.json'));
 for (const name of ['diagram-skill', 'cad-skill']) {
   const destination = path.join(plugin, 'skills', name);
   await mkdir(destination, { recursive: true });
   await cp(path.join(root, 'skill', name, 'SKILL.md'), path.join(destination, 'SKILL.md'));
+  // Its npm scripts (cad: `npm run setup` for the designer's QA) work in the plugin's copy too.
+  await cp(path.join(root, 'skill', name, 'package.json'), path.join(destination, 'package.json'));
   for (const folder of name === 'diagram-skill' ? ['references', 'prompts', 'scripts', 'vendor', 'agents', 'runtime'] : ['references', 'prompts', 'scripts', 'designer', 'agents', 'runtime']) {
     await cp(path.join(root, 'skill', name, folder), path.join(destination, folder), { recursive: true, filter: source => !source.split(path.sep).includes('node_modules') });
   }

@@ -17,6 +17,7 @@ import {
 } from "@/workspaces/canvas/canvas/bounds";
 import { insertGeneratedImage } from "@/workspaces/canvas/canvas/insert-image";
 import { getImageLineage, makeLineageId, withImageLineage } from "@/workspaces/canvas/canvas/lineage";
+import { buildDescribedEditPrompt, buildPlainEditPrompt } from "./edit-prompts";
 
 export interface AnnotatedEditResult {
   ok: boolean;
@@ -171,7 +172,7 @@ async function buildAnnotatedComposite(
 function buildPrompt(uiLang: UiLanguage, instruction: string, hasAnnotation: boolean, annotationTexts: string[]): string {
   const trimmed = instruction.trim();
   if (uiLang === "zh") {
-    if (!hasAnnotation) return trimmed || "请基于这张图片进行修改。";
+    if (!hasAnnotation) return buildPlainEditPrompt(uiLang, trimmed);
     return [
       "图1是原图。图2是图1加上了手绘标注（箭头/圆圈/文字等），标注只是用来指出改哪里、怎么改，标注本身不是图片内容的一部分。",
       "第一步，定位图2里标注圈住或指向的具体区域，以及标注附近文字写的修改要求。",
@@ -183,7 +184,7 @@ function buildPrompt(uiLang: UiLanguage, instruction: string, hasAnnotation: boo
       .filter(Boolean)
       .join("\n");
   }
-  if (!hasAnnotation) return trimmed || "Edit this image.";
+  if (!hasAnnotation) return buildPlainEditPrompt(uiLang, trimmed);
   return [
     "Image 1 is the original. Image 2 is image 1 with hand-drawn annotations on top (arrows, circles, text) that only mark what to change and how -- the markup itself is not part of the picture's content.",
     "Step 1: locate the exact area image 2's markup circles or points at, and read the change it describes.",
@@ -285,11 +286,6 @@ async function describeAnnotationInWords(
   }
 }
 
-function buildDescribedEditPrompt(uiLang: UiLanguage, describedChange: string): string {
-  return uiLang === "zh"
-    ? `请编辑这张图片：${describedChange}\n只修改这一处，图片其它部分（颜色、文字、布局、间距）保持不变，不要重新排版或重绘整张图。引号里的新文字必须逐字照写，不要增删或替换任何字。`
-    : `Edit this picture: ${describedChange}\nChange only that. Keep every other part of the picture (color, text, layout, spacing) unchanged -- do not re-layout or redraw the whole picture. Render any quoted new text exactly, character for character.`;
-}
 
 interface ResolvedAnnotatedEdit {
   imageElement: ExcalidrawImageElement;

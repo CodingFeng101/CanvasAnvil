@@ -38,6 +38,7 @@ import { useEditableExport } from "./hooks/use-editable-export";
 const EDITABLE_EXPORT_VIA_AGENT = true;
 import { useSlideshow } from "./hooks/use-slideshow";
 import { buildBeautifyInstruction } from "./lib/beautify-instruction";
+import { buildChatImagesInstruction, buildStyleReferenceInstruction } from "../lib/slide-prompts";
 import { describeRebuildEvent, type RebuildLogEntry } from "./lib/rebuild-log";
 import { generateChatMessage } from '@/ai/client';
 import {
@@ -690,12 +691,7 @@ export function PptCanvas({
       if (pinnedImageMode === "edit") return !String(currentUrl || "").trim();
       return routerWantsRedraw;
     };
-    const uploadedImageInstruction = uploadedImageRefs.length > 0
-      ? tr(
-          `用户在对话中上传了这些参考图：${uploadedImageRefs.map((x) => x.label).join("、")}。请把它们放进画面并保持原貌，不要重画、改色或替换。`,
-          `The user attached these reference images in chat: ${uploadedImageRefs.map((x) => x.label).join(", ")}. Place them in the slide as they are; do not redraw, recolour or replace them.`,
-        )
-      : "";
+    const uploadedImageInstruction = buildChatImagesInstruction(uiLang as "zh" | "en", uploadedImageRefs.map((x) => x.label));
     const existingById = new Map(localSlides.map((s) => [s.id, s] as const));
     const getCurrentSlideImageUrlById = (slideId: string) => {
       const versions = imageVersions[slideId] || [];
@@ -815,37 +811,7 @@ export function PptCanvas({
         new Map([...styleRefRefsFromSlides, ...explicitStyleRefRefs].map((x) => [x.url, x] as const)).values()
       );
       const styleRefImageUrls = styleRefRefs.map((x) => x.url);
-      const styleRefMappingText = styleRefRefs.length > 0
-        ? styleRefRefs.map((x, i) => `${i + 1}. ${x.label} => ${x.source}`).join("\n")
-        : "";
-      /*
-      const styleReferenceInstruction = styleRefImageUrls.length > 0
-        ? (
-            styleRefPolicy === "style_and_layout"
-              ? tr(
-                  `风格参考映射如下（标签 => 来源）：\n${styleRefMappingText}\n可参考其视觉风格与版式结构，但禁止复用其文字内容。`,
-                  `Style reference mapping (label => source):\n${styleRefMappingText}\nYou may follow both style and layout, but must not copy their text content.`
-                )
-              : tr(
-                  `风格参考映射如下（标签 => 来源）：\n${styleRefMappingText}\n仅参考其视觉风格（配色、质感、氛围），不要复制其版式与文字内容。`,
-                  `Style reference mapping (label => source):\n${styleRefMappingText}\nFollow style only (palette/texture/mood), do not copy their layout or text content.`
-                )
-          )
-        : "";
-      */
-      const styleReferenceInstruction = styleRefImageUrls.length > 0
-        ? (
-            styleRefPolicy === "style_and_layout"
-              ? tr(
-                  `参考映射如下（标签 => 来源）:\n${styleRefMappingText}\n可参考其风格和版式，但不要复制其中的文字内容。`,
-                  `Style reference mapping (label => source):\n${styleRefMappingText}\nYou may follow both style and layout, but must not copy their text content.`
-                )
-              : tr(
-                  `参考映射如下（标签 => 来源）:\n${styleRefMappingText}\n仅参考风格，不要复制其版式和文字内容。`,
-                  `Style reference mapping (label => source):\n${styleRefMappingText}\nFollow style only (palette/texture/mood), do not copy their layout or text content.`
-                )
-          )
-        : "";
+      const styleReferenceInstruction = buildStyleReferenceInstruction(uiLang as "zh" | "en", styleRefPolicy, styleRefRefs);
       const page: PptPage = {
         id,
         title: slide.title,

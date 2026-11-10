@@ -4,7 +4,7 @@
 The host agent (Claude Code, Codex, ...) makes every judgment: base grouping
 and prompts, element analysis, each page's compose spec, and what to fix after
 QA. This tool does everything else: OCR, image calls with retries, aspect
-checks, slicing with a drawing-count check, composition, PowerPoint previews,
+checks, slicing with a drawing-count check, composition, previews (PowerPoint, else LibreOffice),
 QA and the final merge. The steps, in order (see references/editable-pptx-workflow.md):
 
   python editable_run.py init     --run DIR (--manifest-file slides.manifest.json | slide.png ...) [--qa-rounds 3]
@@ -112,7 +112,17 @@ def generate_image(cwd, prompt_rel, out_rel, reference=None, size=None):
 
 
 def export_preview(pptx, out_dir):
-    """PowerPoint renders the previews the checks compare: what the user will see when opening the file."""
+    """The previews the checks compare: PowerPoint on Windows (what the user will see when opening the file);
+    headless LibreOffice + PyMuPDF elsewhere or when PowerPoint is not installed, as the website does on Linux."""
+    if sys.platform == "win32":
+        code, out = export_preview_powerpoint(pptx, out_dir)
+        if code == 0:
+            return code, out
+        print(f"  PowerPoint preview failed, trying LibreOffice ({clip(out, 160).strip()})")
+    return run_py(HERE / "render_preview.py", [str(pptx), str(out_dir)], Path(out_dir).parent, timeout=300)
+
+
+def export_preview_powerpoint(pptx, out_dir):
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     q = lambda s: str(s).replace("'", "''")
@@ -149,6 +159,9 @@ def cmd_init(args):
     if args.manifest_file:
         manifest_path = Path(args.manifest_file).resolve()
         manifest = read_json(manifest_path)
+        missing = [item.get("slideId", "?") for item in manifest.get("slides", []) if not item.get("imageFile") or item.get("status") == "failed"]
+        if missing:
+            fail(f"no image for {', '.join(missing)}: redraw them (generate-slides --only) first")
         sources += [(manifest_path.parent / item["imageFile"]).resolve() for item in manifest.get("slides", [])]
     if not sources:
         fail("no slides: pass --manifest-file or slide images")
@@ -459,7 +472,7 @@ def cmd_check(args):
         fail(f"compose failed:\n{clip(out)}")
     code, out = export_preview(d / "out" / "editable.pptx", d / "out" / "preview")
     if code != 0:
-        fail(f"PowerPoint export failed:\n{clip(out)}")
+        fail(f"Preview export failed (needs PowerPoint, or LibreOffice with pymupdf):\n{clip(out)}")
     code, qa = run_py(HERE / "qa_check.py", [d, "--skill", HERE / "tools"], d, 10 * 60)
     state["rounds"] += 1
     state["passed"] = bool(re.search(r"^QA PASS", qa, re.M))

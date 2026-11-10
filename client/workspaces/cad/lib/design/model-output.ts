@@ -6,11 +6,44 @@ export function parseCadPayload(text: string): any {
     if (value) return value;
   }
   // Models sometimes leave a trailing comma, a comment or one mismatched bracket in a long spec.
+  // An answer cut off mid-way is not one of those: closing its brackets would turn half a design
+  // into a valid but emptier one (a spec with no walls), so it is reported for the model to resend.
+  let truncated = false;
   for (const candidate of candidates) {
+    if (looksTruncated(candidate)) { truncated = true; continue; }
     const value = tryPayload(repairJson(candidate));
     if (value) return flattenLists(value);
   }
-  throw new Error('模型未返回完整的 CAD JSON 数据 / Model returned no complete CAD JSON payload');
+  throw new Error(truncated
+    ? '模型的 CAD JSON 被截断（没有写完）/ Model CAD JSON was cut off before it ended'
+    : '模型未返回完整的 CAD JSON 数据 / Model returned no complete CAD JSON payload');
+}
+
+/**
+ * Whether JSON text stops before its end, as a reply cut off by the output limit does: it ends inside a
+ * string, right after an opener, comma or colon, or with two or more brackets still open. One missing
+ * closer at the very end is a slip, not a cut.
+ */
+export function looksTruncated(source: string): boolean {
+  const text = source.trim();
+  if (!text.startsWith('{') && !text.startsWith('[')) return false;
+  let depth = 0;
+  let quoted = false;
+  let escaped = false;
+  for (const character of text) {
+    if (quoted) {
+      if (escaped) escaped = false;
+      else if (character === '\\') escaped = true;
+      else if (character === '"') quoted = false;
+      continue;
+    }
+    if (character === '"') quoted = true;
+    else if (character === '{' || character === '[') depth++;
+    else if (character === '}' || character === ']') depth--;
+  }
+  if (quoted) return true;
+  if (depth <= 0) return false;
+  return depth >= 2 || /[[{,:]$/.test(text);
 }
 
 /** Why the model text did not parse, with the text around the failing position, for logs and the repair request. */

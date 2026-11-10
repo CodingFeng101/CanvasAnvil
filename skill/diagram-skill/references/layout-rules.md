@@ -24,8 +24,9 @@ Show the plan to the user before the XML. For an edit, write a 1–2 sentence pl
 | `sequence` | lifelines with messages | Participants in one row, evenly spaced. Lifelines are free vertical lines. Messages are horizontal, each one lower than the last. |
 | `timeline` | events along time | One axis line. Events evenly spaced along it in time order, cards all the same size, alternating sides if labels are long. |
 | `free` | illustrations, maps, anything where positions carry meaning | Positions as the subject demands; the rules below still apply. |
+| `auto` | none of the above fits, or you are unsure | Arrange it the way it reads best; the editor picks the layout correction itself. |
 
-When nothing fits, use `flow-down`. Pick the direction that keeps the drawing closest to a landscape page: long chains of 6+ steps usually read better as `flow-right` or wrapped into rows.
+When nothing fits or you are unsure, declare `auto` (as the website does). For a flow, pick the direction that keeps the drawing closest to a landscape page: long chains of 6+ steps usually read better as `flow-right` or wrapped into rows.
 
 ## 3. Place on a grid
 

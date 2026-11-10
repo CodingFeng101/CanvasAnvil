@@ -1,6 +1,7 @@
 import { generateChatMessage, generateImage, generateVisionChatMessage } from "@/ai/client"
 import { FREEFORM, PPTX_SHAPE, type ShapeName } from "@/workspaces/ppt/lib/shapes"
 import { buildRisenPrompt } from "./risen-prompt"
+import { buildEditPagePrompt, buildPageImagePrompt, buildPlanPrompt } from "./slide-prompts"
 import pptOutlineSystem from "@prompts/ppt/outline.md?raw"
 import pptSlidesGenerateSystem from "@prompts/ppt/slides-generate.md?raw"
 
@@ -979,31 +980,6 @@ const downloadBlob = (data: Uint8Array | ArrayBuffer, mime: string, filename: st
 };
 
 /**
- * What the planner is told about the deck's template.
- *
- * The template is the only picture of the finished deck that exists at
- * planning time, and the plan's per-slide `description` is what drives image
- * generation later. Without seeing it the planner invents a look of its own --
- * "white minimal background", "flat vector" -- and that concrete prose then
- * outweighs the template reference at render time, so the deck ignores the
- * template it was built on. Handed the image, it describes scenes that
- * already belong to it.
- *
- * Style and colour tone only, though: a planner told to "match" the template
- * also copies its arrangement into every description, and the deck comes out
- * as one layout repeated. Each slide's layout is the planner's own call.
- */
-const outlineTemplateStep = (hasTemplate: boolean) =>
-    hasTemplate
-        ? "3. Write a concrete visual description for each slide. The attached image is the deck's template, a style and colour-tone reference only: match its palette, colour tone, lighting, materials and art style so every slide looks like part of that deck, but design each slide's layout from its own content rather than copying the template's arrangement."
-        : "3. Write a concrete visual description for each slide.";
-
-const outlineTemplateRule = (hasTemplate: boolean) =>
-    hasTemplate
-        ? "\n5. description must stay inside the template image's colour scheme and art style, and must never describe a look that contradicts it.\n6. description must not reproduce the template's layout -- where its title, text blocks, cards or pictures sit; vary the layout to fit each slide's content."
-        : "";
-
-/**
  * A whole-deck plan is one long JSON answer (every slide's bullets, notes and
  * image description), sent with the template image when there is one; slower
  * models need well over two minutes for an eight-slide deck.
@@ -1033,14 +1009,7 @@ export const pptService = {
         const hasTemplate = Boolean(templateImage);
         const refText = formatReferenceFiles(referenceFiles);
         const imageAssetText = formatReferenceImageAssets(referenceImageAssets);
-        const prompt = buildRisenPrompt({
-            role: "You are PlanFromIdeaAgent for PPT planning.",
-            instructions: "Generate a complete PptPlan from the idea prompt and return JSON only.",
-            input: `idea_prompt: ${topic}\nui_language: ${uiLanguage}\n\nreference_files_content:\n${refText || "(none)"}\n\nreference_image_assets:\n${imageAssetText || "(none)"}`,
-            steps: "1. Convert the idea into a coherent slide sequence.\n2. Write 4-6 specific bullets per slide.\n" + outlineTemplateStep(hasTemplate) + "\n4. Write a coherent speaker note paragraph for each slide.\n5. Assign materialLabels only when truly relevant.",
-            endGoal: "Produce a complete render-ready PptPlan with stable slide ids and usable materialLabels.",
-            narrowing: "1. Return JSON only; markdown JSON block is allowed.\n2. Every slide must include id, title, content, description, layout, note, materialLabels.\n3. materialLabels must come only from reference_image_assets and can be [].\n4. All fields must follow ui_language; zh means Simplified Chinese." + outlineTemplateRule(hasTemplate),
-        });
+        const prompt = buildPlanPrompt({ mode: "idea", input: topic, uiLanguage, referenceText: refText, imageAssetText, hasTemplate });
 
         const response = hasTemplate
             ? await generateVisionChatMessage(PPT_OUTLINE_SYSTEM, prompt, [templateImage], undefined, {
@@ -1084,14 +1053,7 @@ export const pptService = {
         const hasTemplate = Boolean(templateImage);
         const refText = formatReferenceFiles(referenceFiles);
         const imageAssetText = formatReferenceImageAssets(referenceImageAssets);
-        const prompt = buildRisenPrompt({
-            role: "You are PlanFromOutlineAgent for PPT planning.",
-            instructions: "Generate a complete PptPlan from the outline and return JSON only.",
-            input: `outline_text:\n${outlineText}\n\nui_language: ${uiLanguage}\n\nreference_files_content:\n${refText || "(none)"}\n\nreference_image_assets:\n${imageAssetText || "(none)"}`,
-            steps: "1. Expand the outline into a coherent slide sequence.\n2. Write 4-6 specific bullets per slide.\n" + outlineTemplateStep(hasTemplate) + "\n4. Write a coherent speaker note paragraph for each slide.\n5. Assign materialLabels only when truly relevant.",
-            endGoal: "Produce a complete render-ready PptPlan derived from the outline.",
-            narrowing: "1. Return JSON only; markdown JSON block is allowed.\n2. Every slide must include id, title, content, description, layout, note, materialLabels.\n3. materialLabels must come only from reference_image_assets and can be [].\n4. All fields must follow ui_language; zh means Simplified Chinese." + outlineTemplateRule(hasTemplate),
-        });
+        const prompt = buildPlanPrompt({ mode: "outline", input: outlineText, uiLanguage, referenceText: refText, imageAssetText, hasTemplate });
         const response = hasTemplate
             ? await generateVisionChatMessage(PPT_OUTLINE_SYSTEM, prompt, [templateImage], undefined, {
                   timeoutMs: PLAN_TIMEOUT_MS,
@@ -1199,18 +1161,12 @@ export const pptService = {
                 typeof x === "string" ? { url: x, label: `MATERIAL_${i + 1}` } : { url: String(x?.url || ""), label: x?.label }
             ).filter((x) => x.url)
             : [];
-        const additionalLabelText = normalizedAdditional.length > 0
-            ? normalizedAdditional
-                .map((x, i) => `${i + 1}. ${x.label || `MATERIAL_${i + 1}`}`)
-                .join("\n")
-            : "(none)";
-        const prompt = buildRisenPrompt({
-            role: "You are a PPT slide image generation agent.",
-            instructions: "Generate one modern, professional slide image in 16:9.",
-            input: `Title: ${page.title}\nBullets: ${(page.content || []).join(" | ")}\nLanguage: ${uiLanguage}\nScene/subject: ${page.description || page.title}\nTemplate style reference: ${templateImageUrl ? "provided as a reference image -- a STYLE and COLOUR-TONE reference only: it decides palette, colour tone, typography feel and mood, but NOT the layout" : "not provided -- take the style from the scene description"}\nUploaded material labels:\n${additionalLabelText}${extraRequirements ? `\n\nExtra requirements:\n${extraRequirements}` : ""}`,
-            steps: "1. Design the slide composition from the title, bullets, and description -- the layout is decided by this slide's own content.\n2. Take palette, colour tone, typography feel, lighting, textures and decorative motifs from the template reference image, not from the scene description.\n3. Do not take the layout from the template: where its title sits, how its text blocks, cards, columns or pictures are arranged, and how many there are all stay with the template. Lay this slide out fresh.\n4. Use referenced material images only when required or clearly helpful.\n5. Preserve the identity and aspect ratio of referenced material images.",
-            endGoal: "Produce one sharp, readable, presentation-ready slide image with accurate content coverage.",
-            narrowing: "1. Avoid large paragraphs of text.\n2. Prefer diagrammatic or illustrative composition that matches the bullets.\n3. When a template is provided and the scene description names a colour, background or art style that disagrees with it, follow the template and keep only the description's subject and composition.\n4. When a template is provided, the slide must not reproduce the template's layout, element placement or text; only its style and colour tone carry over.\n5. If the description contains {{image:Name}}, you must use the material image whose label is Name.\n6. Do not redraw, restyle, recolor, or replace referenced material images.\n7. Do not add watermarks.",
+        const prompt = buildPageImagePrompt({
+            page,
+            uiLanguage,
+            hasTemplate: Boolean(templateImageUrl),
+            materialLabels: normalizedAdditional.map((x, i) => x.label || `MATERIAL_${i + 1}`),
+            extraRequirements,
         });
         const additionalReferenceImageUrls = Array.isArray(normalizedAdditional)
             ? normalizedAdditional.map((x) => String(x?.url || "")).filter(Boolean)
@@ -1426,13 +1382,11 @@ export const pptService = {
     },
 
     editPageImage: async (page: PptPage, instruction: string, referenceImageUrl?: string, templateImageUrl?: string, additionalImages?: string[]) => {
-        const prompt = buildRisenPrompt({
-            role: "You are a slide image editing agent.",
-            instructions: "Edit the current slide image as the base image rather than regenerating from scratch.",
-            input: `Slide title: ${page.title}\nBullets: ${(page.content || []).join(" | ")}\nOriginal visual description: ${page.description || ""}\nInstruction: ${instruction}\nTemplate/style reference: ${templateImageUrl ? "provided -- a style and colour-tone reference only: it decides palette, colour tone, typography feel and mood, never the layout" : "not provided"}\nAdditional references: ${Array.isArray(additionalImages) && additionalImages.length > 0 ? "provided" : "none"}`,
-            steps: "1. Start from the current slide image.\n2. Apply the requested visual edit.\n3. Keep the overall visual style and colour tone consistent with the template, which outranks any style named in the description.\n4. Take the layout from the current slide (or from the instruction), never from the template.\n5. Preserve readability.",
-            endGoal: "Produce one edited 16:9 slide image that reflects the instruction while staying visually consistent.",
-            narrowing: "1. Treat the current slide image as the base image.\n2. Keep layout readable.\n3. Do not add a watermark.",
+        const prompt = buildEditPagePrompt({
+            page,
+            instruction,
+            hasTemplate: Boolean(templateImageUrl),
+            hasAdditional: Array.isArray(additionalImages) && additionalImages.length > 0,
         });
 
         const ref = referenceImageUrl || templateImageUrl;

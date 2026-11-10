@@ -11,6 +11,7 @@ import { spawn } from 'node:child_process';
 import { gunzipSync } from 'node:zlib';
 import { fileURLToPath } from 'node:url';
 import { registerNativeEditors } from './native-editors.mjs';
+import { registerImageFallback } from './image-fallback.mjs';
 
 const ROOT = process.env.CANVAS_PLUGIN_ROOT || fileURLToPath(new URL('../', import.meta.url));
 const URI = 'ui://canvasanvil/canvas.html';
@@ -111,6 +112,7 @@ export function createCanvasServer() {
     annotations: { readOnlyHint: /^(get|read)_/.test(name) && name !== 'get_canvas_request', destructiveHint: false, openWorldHint: false, idempotentHint: name !== 'submit_canvas_request' },
     _meta: { ui: { visibility: appOnly ? ['app'] : ['model', 'app'] } },
   }, safely(handler));
+  registerImageFallback(tool, { root: ROOT, readState, target });
   tool('store_canvas_blob', 'Upload a bounded scene or image chunk.', { id: z.string(), chunk: z.number().int().nonnegative(), total: z.number().int().min(1).max(1024), data: z.string().max(512 * 1024), editor: z.enum(['canvas', 'diagram', 'cad']).default('canvas') }, async ({ projectDir, id, chunk, total, data, editor }) => {
     const file = blobPath(projectDir, id, editor);
     if (chunk >= total) throw new Error('Invalid chunk');

@@ -2,7 +2,7 @@
 
 import fs from "node:fs";
 import path from "node:path";
-import { PDFDocument } from "pdf-lib";
+import { PDFDocument } from "./vendor/pdf-lib.mjs";
 import { loadManifest, parseSlideSize, resolveFromCwd, fail } from "./lib/common.mjs";
 
 function parseArgs(argv) {
@@ -46,6 +46,8 @@ async function main() {
   const { manifest, manifestPath } = loadManifest(args.manifestFile);
   const slides = Array.isArray(manifest?.slides) ? manifest.slides : [];
   if (slides.length === 0) fail("Manifest contains no slides.");
+  const missing = slides.filter((slide) => !slide.imageFile || slide.status === "failed");
+  if (missing.length) fail(`No image for ${missing.map((slide) => slide.slideId).join(", ")}: redraw them (generate-slides --only) before exporting.`);
 
   const pdfDoc = await PDFDocument.create();
   const size = parseSlideSize(args.slideSize);

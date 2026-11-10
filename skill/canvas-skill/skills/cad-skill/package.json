@@ -1,0 +1,14 @@
+{
+  "name": "cad-skill",
+  "private": true,
+  "version": "3.0.0",
+  "type": "module",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "setup": "npm install --prefix designer/scripts --no-audit --no-fund",
+    "build:spec": "node scripts/build-house-spec.mjs",
+    "run:designer": "node scripts/run-designer.mjs"
+  }
+}
