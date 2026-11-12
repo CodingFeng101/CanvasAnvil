@@ -10,12 +10,6 @@ services:
     environment:
       PORT: 8080
       API_BODY_LIMIT: 25mb
-      SLIDE_AGENT_API_KEY: ${SLIDE_AGENT_API_KEY:-}
-      SLIDE_AGENT_MODEL: ${SLIDE_AGENT_MODEL:-}
-      SLIDE_AGENT_BASE_URL: ${SLIDE_AGENT_BASE_URL:-https://api.openai.com/v1}
-      SLIDE_AGENT_IMAGE_API_KEY: ${SLIDE_AGENT_IMAGE_API_KEY:-}
-      SLIDE_AGENT_IMAGE_MODEL: ${SLIDE_AGENT_IMAGE_MODEL:-gpt-image-2}
-      SLIDE_AGENT_IMAGE_BASE_URL: ${SLIDE_AGENT_IMAGE_BASE_URL:-https://api.openai.com/v1}
     ports:
       - "8001:8080"
     healthcheck:

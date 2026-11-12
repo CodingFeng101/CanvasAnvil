@@ -309,7 +309,7 @@ npm run build
 - 可编辑导出需要逐页生成和检查，比较慢，通常需要 10 分钟以上；同一时间只运行一个导出任务。
 - 图标和插图是按原图重新绘制的，设计一致，但不会和原图逐像素相同。
 - 运行环境：需要安装 Microsoft PowerPoint（用于导出预览做检查），Python 依赖用 `pip install -r scripts/slide-agent/requirements.txt` 安装；所需的脚本和规则文档都在 `scripts/slide-agent/` 里，不用另外安装。
-- 模型配置：在 `scripts/slide-agent/.env.local` 或环境变量里配置一个对话模型（`SLIDE_AGENT_API_KEY` / `SLIDE_AGENT_BASE_URL` / `SLIDE_AGENT_MODEL`）和一个生图模型（`SLIDE_AGENT_IMAGE_API_KEY` / `SLIDE_AGENT_IMAGE_BASE_URL` / `SLIDE_AGENT_IMAGE_MODEL`）。
+- 模型配置：网页里导出时用的是“AI 设置”里你自己填的文本模型和图片模型，服务端不使用环境变量里的密钥。单独在命令行跑 `scripts/slide-agent/pipeline.ts` 时，才在 `scripts/slide-agent/.env.local` 或环境变量里配置 `SLIDE_AGENT_API_KEY` / `SLIDE_AGENT_BASE_URL` / `SLIDE_AGENT_MODEL` 和 `SLIDE_AGENT_IMAGE_API_KEY` / `SLIDE_AGENT_IMAGE_BASE_URL` / `SLIDE_AGENT_IMAGE_MODEL`。
 
 ### 2026-11-05
 

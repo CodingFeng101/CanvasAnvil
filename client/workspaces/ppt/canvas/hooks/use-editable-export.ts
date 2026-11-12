@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { getAIConfig } from "@/ai/storage";
 
 /**
  * Editable PPTX export through the server's editable PPTX pipeline.
@@ -152,7 +153,7 @@ export function useEditableExport(tr: (zh: string, en: string) => string) {
     setSeconds(0);
     setJobId("");
     try {
-      const { jobId: id } = await api<{ jobId: string }>({ action: "create", count: slides.length, qaRounds });
+      const { jobId: id } = await api<{ jobId: string }>({ action: "create", count: slides.length, qaRounds, aiConfig: getAIConfig() });
       setJobId(id);
       for (const [index, slide] of slides.entries()) {
         setUploadText(tr(`上传第 ${index + 1}/${slides.length} 页`, `Uploading ${index + 1}/${slides.length}`));

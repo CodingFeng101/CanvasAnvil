@@ -92,7 +92,7 @@ docker run --rm -p 8001:8080 canvasanvil/app:latest
 
 ## 环境变量
 
-可编辑 PPTX 导出的模型配置由服务端读取。使用 Compose 时，在仓库根目录的 `.env` 或启动 shell 中设置下表的 `SLIDE_AGENT_*` 变量，Compose 会传入容器。文本和图片通道都需要配置。使用 `docker run` 时通过 `--env-file` 传入配置文件。
+可编辑 PPTX 导出和其它功能一样，用的是用户在网页“AI 设置”里填的文本模型和图片模型（密钥、地址、模型名），随每次导出发给服务端，只在内存里使用；服务端不需要、也不会使用环境变量里的模型密钥。
 
 镜像包含重建脚本、Python 依赖、LibreOffice 和字体。Linux 通过 LibreOffice 导出 PDF，再由 PyMuPDF 生成逐页预览供 QA 使用。Windows 主机继续使用 PowerPoint。两种渲染器的字体和排版可能存在差异，部署后需核对实际导出效果。
 
@@ -103,8 +103,3 @@ docker run --rm -p 8001:8080 canvasanvil/app:latest
 | `WEB_DIST_DIR` | `./dist` | 前端静态资源目录 |
 | `PYTHON` | `python3`（Windows 为 `python`） | 户型识别和 CAD 交付检查用的 Python（需装 `server/recognizer/requirements.txt`） |
 | `CHROME_PATH` | 自动查找 | CAD 交付检查用的 Chrome / Edge / Chromium |
-| `SLIDE_AGENT_API_KEY` / `SLIDE_AGENT_MODEL` | 无 | 可编辑 PPTX 重建的文本模型密钥与模型名 |
-| `SLIDE_AGENT_BASE_URL` | `https://api.openai.com/v1` | 重建文本模型的 OpenAI 兼容地址 |
-| `SLIDE_AGENT_IMAGE_API_KEY` | 无 | 重建图片通道的密钥 |
-| `SLIDE_AGENT_IMAGE_MODEL` | `gpt-image-2` | 重建图片模型名 |
-| `SLIDE_AGENT_IMAGE_BASE_URL` | `https://api.openai.com/v1` | 重建图片模型的 OpenAI 兼容地址 |

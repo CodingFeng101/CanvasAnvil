@@ -238,12 +238,6 @@ async function handleChatRequest(req: Request): Promise<Response> {
         route: diagramRequestRoute,
     })
 
-    console.log("[DiagramRoute]", {
-        route: diagramRequestRoute,
-        deepThinkingEnabled,
-        shouldUseDeepThinking,
-    })
-
     let deepThinkingImageDataUrl: string | null = null
     if (shouldUseDeepThinking) {
         const deepThinkingImageModel = String(imageModelId || "").trim()
@@ -557,22 +551,19 @@ ${parsedFilesContext ? `\n\nParsed file summaries:\n"""md\n${parsedFilesContext}
     }
 
     const stream = createUIMessageStream({
+        // A retry after a failed tool call continues the same assistant message. Without the conversation the
+        // stream starts under a fresh message id, and the client shows the earlier steps a second time.
+        originalMessages: Array.isArray(messages) ? messages : [],
         execute: async ({ writer }) => {
             try {
-                const maxTokensEnv = process.env.MAX_OUTPUT_TOKENS
-                const parsedMaxTokens = maxTokensEnv
-                    ? Number.parseInt(maxTokensEnv, 10)
-                    : undefined
-                const safeMaxTokens =
-                    parsedMaxTokens && parsedMaxTokens > 0
-                        ? parsedMaxTokens
-                        : 8192
+                // No output limit unless the deployer sets one: the provider's own maximum applies.
+                const maxOutputTokens = Number.parseInt(process.env.MAX_OUTPUT_TOKENS || "", 10)
 
                 const result = await streamText({
                         model,
                         stopWhen: stepCountIs(5),
                         messages: allMessages,
-                        ...(safeMaxTokens && { maxTokens: safeMaxTokens }),
+                        ...(maxOutputTokens > 0 && { maxOutputTokens }),
                     ...(getTelemetryConfig({ sessionId: validSessionId, userId }) && {
                         experimental_telemetry: getTelemetryConfig({
                             sessionId: validSessionId,
@@ -757,23 +748,6 @@ Rules:
                 const uiStream = result.toUIMessageStream()
 
                 for await (const message of uiStream as any) {
-                    const hasToolName =
-                        (message as any)?.toolName ||
-                        (Array.isArray((message as any)?.parts) &&
-                            (message as any).parts.some(
-                                (part: any) =>
-                                    part.toolName ||
-                                    (part.type &&
-                                        String(part.type).includes("tool")),
-                            ))
-
-                    if (hasToolName) {
-                        console.log(
-                            "[TOOL EVENT]",
-                            JSON.stringify(message, null, 2),
-                        )
-                    }
-
                     writer.write(message)
                 }
             } catch (error) {

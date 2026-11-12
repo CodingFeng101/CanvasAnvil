@@ -93,7 +93,6 @@ interface PptCanvasProps {
   onAddToChat?: (json: string, name: string) => void;
   onPptReadyChange?: (ready: boolean) => void;
   onPptStageChange?: (stage: "start" | "outline" | "slides") => void;
-  onExportReviewModeChange?: (active: boolean) => void;
   incomingEdit?: { id: string; payload: string } | null;
   onIncomingEditHandled?: (id: string) => void;
   onResetWorkspace?: () => void;
@@ -104,7 +103,6 @@ export function PptCanvas({
   onAddToChat,
   onPptReadyChange,
   onPptStageChange,
-  onExportReviewModeChange,
   incomingEdit,
   onIncomingEditHandled,
   onResetWorkspace

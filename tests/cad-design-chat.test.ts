@@ -52,7 +52,7 @@ test('CAD repair prompt specifies the supported operation envelope and operation
 });
 
 test("the floorplan check message carries the GUIDE's questions as clickable decisions", async () => {
-  const { checkMessage, parseCadSteps, recognitionLines } = await import("../client/workspaces/cad/chat/CadSteps");
+  const { checkMessage, parseCadSteps, recognitionLines } = await import("../client/workspaces/cad/chat/cad-steps-text");
   const { floorplanQuestions, recognitionSummary } = await import("../client/workspaces/cad/lib/design/floorplan-check");
   const questions = floorplanQuestions(true, true);
   assert.ok(questions.some((item) => item.topic === "两张图以谁为准") && questions.some((item) => item.topic === "楼板厚"));

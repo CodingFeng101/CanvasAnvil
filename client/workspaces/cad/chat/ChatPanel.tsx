@@ -17,7 +17,7 @@ import {
 } from "@/shared/chat";
 import { ChatMessageDisplay, type UIMessage } from "./ChatMessageDisplay";
 import { DesignHistoryDialog } from "./DesignHistoryDialog";
-import { CAD_CONFIRM, applyPicks, describeSpecStream, generateMessage, parsePartialJson, planMessage, recognitionLines, stripCadMarkers, takePicks, validDecisions } from "./CadSteps";
+import { CAD_CONFIRM, applyPicks, describeSpecStream, generateMessage, parsePartialJson, planMessage, recognitionLines, stripCadMarkers, takePicks, validDecisions } from "./cad-steps-text";
 import { useUiLanguage } from "@/shared/i18n";
 import {
   chatStorageKey,
@@ -37,6 +37,7 @@ import { retryCadTextRequest } from "../lib/design/model-request";
 import { describeJsonError, parseCadPayload } from "../lib/design/model-output";
 import { catalogPromptTable } from "../lib/design/catalog";
 import { elecPrefsFromDecisions } from "@/workspaces/cad/lib/design/elec-prefs";
+import { unwrapCadPlan } from "@/workspaces/cad/lib/design/cad-plan";
 import { layoutToSpec } from "../lib/design/layout";
 import type { CadDesignSession, MepRun } from "../lib/design/design-session";
 import {
@@ -340,7 +341,7 @@ export function ChatPanel(props: ChatPanelProps) {
       // The floorplan is only generated once the user confirms the plan (button or words).
       const wantsGenerate = confirming || /生成户型|画户型|出户型|根据.*方案.*生成|按(?:新)?方案(?:重新)?(?:生成|画|出)|确认方案|方案(?:没问题|可以|确认|ok)|就按(?:这个|这版)|generate (?:a |the )?floorplan|confirm (?:the )?plan/i.test(plain);
       const current = await session.sync();
-      let plan = cadContext?.plan ?? null;
+      let plan = unwrapCadPlan(cadContext?.plan);
       // Options clicked in the plan block become the plan's decisions, so a retry or a later edit keeps them.
       const { picks } = takePicks(text);
       if (picks && plan) {

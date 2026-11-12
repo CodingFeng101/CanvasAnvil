@@ -424,7 +424,7 @@ export function layoutToSpec(layout: Layout): LayoutResult {
     }
 
     function placeItem(raw: LayoutItem, copy: number) {
-      let key = String(raw.key ?? '').trim();
+      const key = String(raw.key ?? '').trim();
       if (key === 'curtain' || key === 'sheer') return; // curtains come with the windows
       if (!CATALOG[key]) { notes.push(`${room.name}：家具库没有 ${key}，已跳过`); return; }
       const mounted = MOUNTED.has(key);

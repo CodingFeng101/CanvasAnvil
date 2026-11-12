@@ -44,4 +44,9 @@ export default tseslint.config(
       ],
     },
   },
+  // A context provider with its hook, and a shadcn component with its variants, live in one file by design.
+  {
+    files: ['client/shared/chat/reasoning.tsx', 'client/shared/ui/button.tsx', 'client/workspaces/diagram/state/diagram-context.tsx'],
+    rules: { 'react-refresh/only-export-components': 'off' },
+  },
 )

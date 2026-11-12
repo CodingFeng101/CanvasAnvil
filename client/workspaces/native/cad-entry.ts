@@ -5,6 +5,7 @@ import { layoutToSpec } from '../cad/lib/design/layout';
 import { createDesignerBridge, type DesignerApi } from '../cad/designer/designer-bridge';
 import type { WorkspaceStore } from '@/shared/storage/indexed-db-store';
 import { runEditor } from './editor';
+import { unwrapCadPlan } from '../cad/lib/design/cad-plan';
 import './editor.css';
 
 let record: unknown = null;
@@ -25,7 +26,7 @@ const api = () => (frame.contentWindow as Window & { __designer?: DesignerApi })
 void runEditor({
   async load(document) {
     record = (document as { record?: unknown } | null)?.record ?? null;
-    cadPlan = (document as { cadPlan?: typeof cadPlan } | null)?.cadPlan ?? null;
+    cadPlan = unwrapCadPlan((document as { cadPlan?: unknown } | null)?.cadPlan);
     lastRun = (document as { lastRun?: typeof lastRun } | null)?.lastRun ?? null;
     session = new CadDesignSession({ store, confirmReplace: () => true });
     session.setLoader(async preset => {
@@ -58,7 +59,7 @@ void runEditor({
    * round (it reads them from get_cad_state), where the website asks its model in a loop.
    */
   async apply(command) {
-    if (command.plan) cadPlan = command.plan as typeof cadPlan;
+    if (command.plan) cadPlan = unwrapCadPlan(command.plan);
     let payload = command.payload as { type?: string; layout?: unknown; replace?: boolean };
     let layoutNotes: string[] = [];
     if (payload?.type === 'cad_layout') {

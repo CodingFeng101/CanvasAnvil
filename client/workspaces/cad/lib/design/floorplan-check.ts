@@ -1,4 +1,4 @@
-import type { PlanDecision } from '../../chat/CadSteps';
+import type { PlanDecision } from '../../chat/cad-steps-text';
 
 /** What the recognizer's routes are called for the user (the designer's GUIDE section 1). */
 export const ROUTE_NAMES: Record<string, [zh: string, en: string]> = {

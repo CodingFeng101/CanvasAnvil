@@ -14,7 +14,8 @@ import { HouseDesignerFrame } from "@/workspaces/cad/designer/HouseDesignerFrame
 import { ChatPanel as CadChatPanel } from "@/workspaces/cad/chat/ChatPanel";
 import { layoutToSpec } from "@/workspaces/cad/lib/design/layout";
 import { floorplanQuestions, recognitionSummary } from "@/workspaces/cad/lib/design/floorplan-check";
-import { checkMessage, recognitionLines } from "@/workspaces/cad/chat/CadSteps";
+import { checkMessage, recognitionLines } from "@/workspaces/cad/chat/cad-steps-text";
+import { unwrapCadPlan } from "@/workspaces/cad/lib/design/cad-plan";
 import { deliveryMessage, type QaStatus } from "@/workspaces/cad/lib/design/delivery-check";
 
 type Attachment = {
@@ -57,7 +58,7 @@ export function CadWorkspace() {
   const [cadPlan, setCadPlan] = useState<any>(() => {
     try {
       const raw = localStorage.getItem(CAD_WORKSPACE_STORAGE_KEY);
-      return raw ? JSON.parse(raw)?.cadPlan ?? null : null;
+      return raw ? unwrapCadPlan(JSON.parse(raw)?.cadPlan) : null;
     } catch {
       return null;
     }
@@ -227,7 +228,8 @@ export function CadWorkspace() {
       }
     }
     if (parsedType === "cad_plan") {
-      setCadPlan(parsed);
+      // The plan itself, not the answer around it: the chat reads its decisions and writes the user's picks into them.
+      setCadPlan(unwrapCadPlan(parsed));
       return { ok: true };
     }
     return { ok: false, error: tr("无法识别 CAD 数据类型", "Unrecognized CAD payload type") };

@@ -1,6 +1,6 @@
 ---
 name: diagram-skill
-description: Create and edit draw.io diagrams in a live draw.io editor the user can also edit by hand; every model change starts from the user's latest saved version. Shown in the conversation where the host renders MCP App widgets, otherwise opened in the built-in or the user's browser. Use for new diagrams, local XML edits, shape-library diagrams, and truncated XML continuation.
+description: Create and edit draw.io diagrams in a live draw.io editor the user can also edit by hand; every model change starts from the user's latest saved version. Shown in the conversation where the host renders MCP App widgets, otherwise opened by the agent in the built-in browser or the user's default browser. Use for new diagrams, local XML edits, shape-library diagrams, and truncated XML continuation.
 ---
 
 # Diagram Skill
@@ -25,14 +25,14 @@ Use when the user asks for a diagram, flowchart, architecture diagram, network d
 
 The same tools exist on two paths; use the first that is available.
 
-1. **MCP tools** (`canvasanvil_canvas`, from the CanvasAnvil plugin): call `render_diagram_widget`. A host that renders MCP App widgets shows the editor in the conversation. Otherwise open its returned `browserUrl` in the built-in browser, or give that URL to the user.
+1. **MCP tools** (`canvasanvil_canvas`, from the CanvasAnvil plugin): call `render_diagram_widget`. Showing it to the user is your job, in this order: (1) a host that renders MCP App widgets shows the editor in the conversation; (2) otherwise open the returned `browserUrl` yourself, right away, in the host's built-in browser or preview pane where the user can see it; (3) if you have no such tool, call `render_diagram_widget` again with `launch: true` to open the user's default browser; (4) hand the URL to the user only if all of that fails. The result's `next` repeats this.
 2. **Command line** (no plugin needed; this folder carries the runtime in `runtime/`, Node 20+):
 
    ```bash
    node <skill-dir>/runtime/scripts/canvas.mjs open diagram <projectDir>
    ```
 
-   It prints the editor's `url` (`http://127.0.0.1:…`). Open it in the built-in browser, or give it to the user (add `--launch` to open the system browser). Then run every tool below as
+   It prints the editor's `url` (`http://127.0.0.1:…`). Open it yourself in the host's built-in browser or preview pane; if you have no such tool, run the command again with `--launch` to open the user's default browser. Give the URL to the user only if both fail. Then run every tool below as
 
    ```bash
    node <skill-dir>/runtime/scripts/canvas.mjs call <tool> @args.json

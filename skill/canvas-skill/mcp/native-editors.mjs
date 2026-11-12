@@ -37,7 +37,7 @@ export function cadGate(state, command) {
 }
 
 export function registerNativeEditors(server, storage) {
-  const { root, readState, change, target, result, safely, saveBlob, blobPath, browserUrl } = storage;
+  const { root, readState, change, target, result, safely, saveBlob, blobPath, openResult } = storage;
   const editorSchema = z.enum(['diagram', 'cad']);
   const project = { projectDir: z.string().min(1) };
   const operation = { operationId: z.string().min(1), baseRevision: z.number().int().nonnegative() };
@@ -83,10 +83,10 @@ export function registerNativeEditors(server, storage) {
     registerAppResource(server, `CanvasAnvil ${editor}`, uri, { _meta: meta }, async () => ({ contents: [{ uri, mimeType: RESOURCE_MIME_TYPE,
       text: (await readFile(path.join(root, 'assets/canvas-widget.html'), 'utf8')).replace('<head>', `<head><meta name="canvas-editor" content="${editor}">`), _meta: meta }] }));
     registerAppTool(server, `render_${editor}_widget`, { title: editor === 'diagram' ? 'CanvasAnvil 图表' : 'CanvasAnvil 室内设计',
-      description: `Open the ${editor === 'diagram' ? 'draw.io' : 'house designer'} editor. Hosts that render MCP App widgets show it in the conversation; otherwise open the returned browserUrl in the built-in browser or give it to the user. Reuse the open editor.`,
-      inputSchema: project, _meta: { ui: { resourceUri: uri }, 'openai/outputTemplate': uri } }, async ({ projectDir }) => {
+      description: `Open the ${editor === 'diagram' ? 'draw.io' : 'house designer'} editor. Hosts that render MCP App widgets show it in the conversation; otherwise follow the returned \`next\`: open browserUrl yourself in the built-in browser, or call again with launch: true to open the system default browser. Reuse the open editor.`,
+      inputSchema: { ...project, launch: z.boolean().default(false).describe("Open the page in the system default browser. Only when the host neither shows the widget nor has a browser tool.") }, _meta: { ui: { resourceUri: uri }, 'openai/outputTemplate': uri } }, async ({ projectDir, launch }) => {
       await change(projectDir, () => ({}), editor);
-      return { ...result({ projectDir: path.resolve(projectDir), editor, browserUrl: browserUrl ? await browserUrl(projectDir, editor) : undefined }), _meta: { 'openai/outputTemplate': uri } };
+      return { ...result({ projectDir: path.resolve(projectDir), editor, ...(openResult ? await openResult(projectDir, editor, launch) : {}) }), _meta: { 'openai/outputTemplate': uri } };
     });
     tool(`get_${editor}_state`, `Read the latest saved ${editor} document and revision. Manual changes are synchronized by the open widget.`, {}, async ({ projectDir }) => {
       const state = await readState(projectDir, editor);

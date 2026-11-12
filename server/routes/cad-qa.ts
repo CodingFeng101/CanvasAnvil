@@ -4,6 +4,7 @@ import { appendFileSync, existsSync, mkdirSync, readFileSync, readdirSync, statS
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { z } from "zod";
+import { pruneRuns } from "../http/prune-runs";
 import { pythonCommand } from "./cad-python";
 
 /**
@@ -145,6 +146,7 @@ export async function POST(req: Request) {
   if (busy) return Response.json({ error: "A delivery check is already running", jobId: busy.id }, { status: 409 });
   const id = `${new Date().toISOString().replace(/[-:T]/g, "").slice(0, 14)}-${randomUUID().slice(0, 8)}`;
   const job: Job = { id, dir: path.join(RUNS, id), state: "running", error: "", startedAt: Date.now(), finishedAt: 0 };
+  pruneRuns(RUNS, [...jobs.values()].filter((item) => item.state === "running").map((item) => item.id));
   mkdirSync(job.dir, { recursive: true });
   jobs.set(id, job);
   void start(job, preset).catch((error) => Object.assign(job, { state: "failed", error: String((error as Error).message ?? error), finishedAt: Date.now() }));

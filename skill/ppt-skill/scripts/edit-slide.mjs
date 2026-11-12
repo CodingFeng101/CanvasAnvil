@@ -9,11 +9,11 @@
  *               "styleRefs": ["slide-2" | "style.png"], "styleRefPolicy": "style_only" | "style_and_layout" }]
  *   refs      -- pictures the user gave in chat; they are placed in the slide unchanged (website: 对话图 n).
  *   styleRefs -- other slides (by id) or images whose style (and, with style_and_layout, layout) to follow.
- *   edit   -- the current slide image is the base and only the instruction changes (website: background_redraw on
- *             a slide whose text did not change). Up to 2 extra reference images, then the template; if that
- *             request fails, it is tried with the base image and template alone, as the website does.
- *   redraw -- the slide is drawn again from its (updated) plan entry with the instruction as extra requirements
- *             (website: text_only / text_relayout, or any slide whose title or bullets changed).
+ *   edit   -- the default, as the website's chat toolbar (改图): the current slide image is the base, the
+ *             composition is kept and the instruction is applied. Up to 2 extra reference images, then the
+ *             template; if that request fails, it is tried with the base image and template alone.
+ *   redraw -- when the user asks for it (the website's 重画 switch) or the slide has no image yet: drawn again
+ *             from its (updated) plan entry with the instruction as extra requirements.
  * Update plan.json first when the edit changes a slide's title, bullets or description. The new image replaces
  * the old one; the manifest keeps pointing at it.
  */

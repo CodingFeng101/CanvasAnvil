@@ -5,7 +5,8 @@ import remarkGfm from 'remark-gfm';
 import { MessageAttachments, MessageImage, Reasoning, ReasoningContent, ReasoningTrigger, Shimmer } from "@/shared/chat";
 import { ScrollArea } from "@/shared/ui/scroll-area";
 import { CodeBlock } from "@/workspaces/cad/chat/code-block";
-import { CAD_CONFIRM, CadSteps, parseCadSteps } from "@/workspaces/cad/chat/CadSteps";
+import { CadSteps } from "@/workspaces/cad/chat/CadSteps";
+import { CAD_CONFIRM, parseCadSteps } from "@/workspaces/cad/chat/cad-steps-text";
 import { useUiLanguage } from "@/shared/i18n";
 import { cn } from "@/shared/lib/utils";
 import {

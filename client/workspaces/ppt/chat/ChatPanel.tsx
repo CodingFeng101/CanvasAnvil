@@ -215,16 +215,9 @@ const getPptTag = (slideId: string, title: string, kind: "outline" | "slide_imag
     return { ok: true } as CodeActionResult;
   };
 
+  /** Applies every ```json block of the answer (a ppt_edit patch) to the deck. */
   const handleAssistantResponse = async (fullResponse: string) => {
-    if (!fullResponse) return { patchFound: false, retryError: null as string | null };
-
-    const svgMatch = fullResponse.match(/```svg\n([\s\S]*?)\n```/);
-    if (svgMatch && svgMatch[1]) {
-      await runCodeAction(svgMatch[1], 'cad');
-    }
-
-    let patchFound = false;
-    let retryError: string | null = null;
+    if (!fullResponse) return;
 
     const jsonRegex = /```json\s*([\s\S]*?)```/g;
     let m: RegExpExecArray | null;
@@ -245,8 +238,6 @@ const getPptTag = (slideId: string, title: string, kind: "outline" | "slide_imag
         await runCodeAction(jsonText, 'ppt');
       }
     }
-
-    return { patchFound, retryError };
   };
 
   const handleSend = async () => {

@@ -1,6 +1,6 @@
 ---
 name: cad-skill
-description: Home interior design in a live house designer (2D / 3D / furniture / MEP / ceilings / quote / drawing set) the user can also edit by hand; every model change starts from the user's latest saved version. From an existing floor plan (image, PDF, DXF, CAD) it reconstructs the plan; from a brief it first settles a design plan with the user as clickable decisions, describes the layout as a grid with intent and lets programs draw it; MEP is laid out, the wiring preferences applied, checks and a room-by-room MEP audit run, and exports are produced. Shown in the conversation where the host renders MCP App widgets, otherwise opened in the built-in or the user's browser. Use for home layout, renovation design, floor plan to designer.
+description: Home interior design in a live house designer (2D / 3D / furniture / MEP / ceilings / quote / drawing set) the user can also edit by hand; every model change starts from the user's latest saved version. From an existing floor plan (image, PDF, DXF, CAD) it reconstructs the plan; from a brief it first settles a design plan with the user as clickable decisions, describes the layout as a grid with intent and lets programs draw it; MEP is laid out, the wiring preferences applied, checks and a room-by-room MEP audit run, and exports are produced. Shown in the conversation where the host renders MCP App widgets, otherwise opened by the agent in the built-in browser or the user's default browser. Use for home layout, renovation design, floor plan to designer.
 ---
 
 # CAD Skill
@@ -13,14 +13,14 @@ The design itself is the designer's HouseSpec (`designer/reference/spec-format.m
 
 The same tools exist on two paths; use the first that is available.
 
-1. **MCP tools** (`canvasanvil_canvas`, from the CanvasAnvil plugin): call `render_cad_widget` with the absolute active workspace as `projectDir`. A host that renders MCP App widgets shows the designer in the conversation. Otherwise open its returned `browserUrl` in the built-in browser, or give that URL to the user.
+1. **MCP tools** (`canvasanvil_canvas`, from the CanvasAnvil plugin): call `render_cad_widget` with the absolute active workspace as `projectDir`. Showing it to the user is your job, in this order: (1) a host that renders MCP App widgets shows the designer in the conversation; (2) otherwise open the returned `browserUrl` yourself, right away, in the host's built-in browser or preview pane where the user can see it; (3) if you have no such tool, call `render_cad_widget` again with `launch: true` to open the user's default browser; (4) hand the URL to the user only if all of that fails. The result's `next` repeats this.
 2. **Command line** (no plugin needed; this folder carries the runtime in `runtime/`, Node 20+):
 
    ```bash
    node <skill-dir>/runtime/scripts/canvas.mjs open cad <projectDir>
    ```
 
-   It prints the designer's `url` (`http://127.0.0.1:…`). Open it in the built-in browser, or give it to the user (add `--launch` to open the system browser). Then run every tool below as `node <skill-dir>/runtime/scripts/canvas.mjs call <tool> @args.json`, with the same arguments as a JSON file (`projectDir` included). It prints the tool's JSON result; `canvas.mjs tools` lists the tools.
+   It prints the designer's `url` (`http://127.0.0.1:…`). Open it yourself in the host's built-in browser or preview pane; if you have no such tool, run the command again with `--launch` to open the user's default browser. Give the URL to the user only if both fail. Then run every tool below as `node <skill-dir>/runtime/scripts/canvas.mjs call <tool> @args.json`, with the same arguments as a JSON file (`projectDir` included). It prints the tool's JSON result; `canvas.mjs tools` lists the tools.
 
 On both paths the designer page must stay open: it applies queued changes with the website's code and saves the user's manual edits. Reuse the open page. Every change is `apply_cad_design` with the latest `baseRevision` and a new stable `operationId` (reuse it only to retry the same call); then poll `get_editor_operation` with `editor="cad"` until `applied` or `failed`. A pending operation means the page is closed or busy: say so instead of claiming success. A revision conflict means the user changed the design meanwhile: read `get_cad_state` again and adapt the change.
 

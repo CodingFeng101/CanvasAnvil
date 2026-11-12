@@ -73,7 +73,7 @@ Every page is rendered to `<deck>/source/` (a PPTX goes through LibreOffice firs
 
 ## 6. Change slides
 
-When the user asks for changes after drawing, route them with `prompts/slide-edit-router.md`: decide which slides change and each one's `editType`, update those slides' fields in `plan.json`, then apply all of them in one run:
+When the user asks for changes after drawing, route them with `prompts/slide-edit-router.md` (the website's slide-edit chat prompt): decide which slides change and each one's instruction, update those slides' fields in `plan.json`, then apply all of them in one run:
 
 ```bash
 node scripts/edit-slide.mjs --plan <deck>/plan.json --edits <edits.json>
@@ -81,9 +81,8 @@ node scripts/edit-slide.mjs --plan <deck>/plan.json --edits <edits.json>
 
 `edits.json` is `[{"slideId": "slide-3", "mode": "edit" | "redraw", "instruction": "...", "refs": ["chat.png"], "styleRefs": ["slide-2"], "styleRefPolicy": "style_only"}]`, chosen as the website does:
 
-- `background_redraw` on a slide whose title, bullets, description, layout and note did not change -> `edit`: the current image is the base and only the instruction is applied (colour, picture, composition, "标题改大").
-- `text_only`, `text_relayout`, or any slide whose title, bullets, description, layout or note changed -> `redraw`: drawn again from its updated plan entry, the instruction added as an extra requirement.
-- When the user says which one they want ("重画这页" -> `redraw`; "在原图上改" -> `edit`), that wins over the router. A slide with no image yet is always `redraw`.
+- `edit` is the default, as on the website (its chat toolbar is set to 改图 unless the user switches it): the current image is the base, the composition is kept, and the instruction plus the slide's updated title and bullets are applied. This holds whatever `editType` the router gives, text changes included.
+- `redraw` only when the user asks for it ("重画", "重新生成这页", "整页重做", "构图大改"; the website's 重画 switch), or when the slide has no image yet: drawn again from its updated plan entry, the instruction added as an extra requirement.
 - `styleRefSlideIds` / `styleRefPolicy` from the router -> `styleRefs` (slide ids, or image files for outside references) and `styleRefPolicy` (`style_only` or `style_and_layout`). The script labels them and adds the website's "参考映射" line.
 - Pictures the user gives in chat go in `refs` of the slides they are for. The script labels them 对话图1, 对话图2, ... and tells the model to place them unchanged.
 

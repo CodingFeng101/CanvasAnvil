@@ -93,7 +93,7 @@ export function createCanvasServer() {
   const registerTool = server.registerTool.bind(server);
   server.registerTool = (name, config, callback) => { handlers.set(name, { config, callback }); return registerTool(name, config, callback); };
   server.canvasHandlers = handlers;
-  registerNativeEditors(server, { root: ROOT, readState, change, target, result, safely, saveBlob, blobPath, browserUrl });
+  registerNativeEditors(server, { root: ROOT, readState, change, target, result, safely, saveBlob, blobPath, openResult });
   const widgetData = new Map();
   registerAppTool(server, 'get_canvas_widget_chunk', { description: 'Load a bounded native widget resource chunk.',
     annotations: { readOnlyHint: true, openWorldHint: false },
@@ -137,10 +137,10 @@ export function createCanvasServer() {
     'openai/ui': { availableDisplayModes: ['fullscreen'], preferredDisplayMode: 'fullscreen' } };
   registerAppResource(server, 'CanvasAnvil', URI, { _meta: metadata }, async () => ({ contents: [{ uri: URI,
     mimeType: RESOURCE_MIME_TYPE, text: await readFile(path.join(ROOT, 'assets/canvas-widget.html'), 'utf8'), _meta: metadata }] }));
-  registerAppTool(server, 'render_canvas_widget', { title: 'CanvasAnvil 自由画布', description: 'Open the native Excalidraw canvas for the active user project. Reuse the open widget for subsequent image edits.',
-    inputSchema: targetSchema, _meta: { ui: { resourceUri: URI }, 'openai/outputTemplate': URI } }, async ({ projectDir }) => {
+  registerAppTool(server, 'render_canvas_widget', { title: 'CanvasAnvil 自由画布', description: 'Open the native Excalidraw canvas for the active user project. Hosts that render MCP App widgets show it in the conversation; otherwise follow the returned `next`: open browserUrl yourself in the built-in browser, or call again with launch: true to open the system default browser. Reuse the open canvas for subsequent image edits.',
+    inputSchema: { ...targetSchema, launch: z.boolean().default(false).describe('Open the page in the system default browser. Only when the host neither shows the widget nor has a browser tool.') }, _meta: { ui: { resourceUri: URI }, 'openai/outputTemplate': URI } }, async ({ projectDir, launch }) => {
     await change(projectDir, () => ({}));
-    const data = { projectDir: path.resolve(projectDir), browserUrl: await browserUrl(projectDir, 'canvas') };
+    const data = { projectDir: path.resolve(projectDir), ...(await openResult(projectDir, 'canvas', launch)) };
     return { ...result(data), _meta: { 'openai/outputTemplate': URI, widgetData: data } };
   });
   tool('get_canvas_state', 'Read the persisted Excalidraw scene for the widget.', {}, async ({ projectDir }) => {
@@ -300,6 +300,26 @@ async function ensurePageServer() {
   }
   throw new Error('The local editor page did not start');
 }
+/** Opens the editor page in the system default browser: for hosts that neither show the widget nor have a browser tool. */
+function launchInSystemBrowser(url) {
+  const opener = process.platform === 'win32' ? ['cmd', ['/c', 'start', '', url]] : [process.platform === 'darwin' ? 'open' : 'xdg-open', [url]];
+  spawn(opener[0], opener[1], { detached: true, stdio: 'ignore', windowsHide: true }).unref();
+}
+/**
+ * What a render tool returns besides the URL: the server cannot see whether the host showed the widget, so the
+ * agent is told the order to follow instead of being left to hand the URL to the user.
+ */
+async function openResult(projectDir, editor, launch) {
+  const url = await browserUrl(projectDir, editor);
+  if (launch && url) launchInSystemBrowser(url);
+  return {
+    browserUrl: url,
+    launched: Boolean(launch && url),
+    next: launch
+      ? 'The editor page was opened in the system default browser. Keep it open and continue.'
+      : 'If this host showed the editor in the conversation, continue. Otherwise open browserUrl yourself now, in the built-in browser or preview pane the user can see. If you have no such tool, call this tool again with launch: true to open the system default browser. Hand the URL to the user only if both fail.',
+  };
+}
 async function browserUrl(projectDir, editor) {
   try {
     const info = await ensurePageServer();
@@ -393,11 +413,11 @@ export async function runCli(argv) {
     await callTool(handlers, `render_${editor}_widget`, { projectDir });
     const url = await browserUrl(projectDir, editor);
     if (!url) throw new Error('The local editor page did not start');
-    if (rest.includes('--launch')) {
-      const opener = process.platform === 'win32' ? ['cmd', ['/c', 'start', '', url]] : [process.platform === 'darwin' ? 'open' : 'xdg-open', [url]];
-      spawn(opener[0], opener[1], { detached: true, stdio: 'ignore', windowsHide: true }).unref();
-    }
-    return print({ editor, projectDir: path.resolve(projectDir), url });
+    const launched = rest.includes('--launch');
+    if (launched) launchInSystemBrowser(url);
+    return print({ editor, projectDir: path.resolve(projectDir), url, launched,
+      next: launched ? 'The editor page was opened in the system default browser. Keep it open and continue.'
+        : 'Open this url yourself now in the built-in browser or preview pane the user can see. If you have no such tool, run this command again with --launch. Hand the URL to the user only if both fail.' });
   }
   if (command === 'call') {
     const [name, raw = '{}'] = rest;

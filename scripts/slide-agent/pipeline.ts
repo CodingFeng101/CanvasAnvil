@@ -738,7 +738,7 @@ const summary = {
   model: MODEL,
   usage: { ...usage, modelSeconds: Math.round(usage.modelSeconds) },
   timeline,
-  pages: pages.map(({ spec, ...p }) => p),
+  pages: pages.map(({ spec: _spec, ...p }) => p),
   finalQa,
 };
 writeFileSync(join(RUN, "pipeline_summary.json"), JSON.stringify(summary, null, 2));

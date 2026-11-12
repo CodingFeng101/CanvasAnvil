@@ -310,7 +310,7 @@ npm run build
 - Editable export builds and checks every page, so it is slow: usually 10+ minutes, and one export runs at a time.
 - Icons and illustrations are redrawn after the original: the same design, not pixel for pixel.
 - Needs Microsoft PowerPoint (previews for the checks); install the Python packages with `pip install -r scripts/slide-agent/requirements.txt`. The scripts and rule docs it uses are all in `scripts/slide-agent/`; nothing else to install.
-- Models: set a chat model (`SLIDE_AGENT_API_KEY` / `SLIDE_AGENT_BASE_URL` / `SLIDE_AGENT_MODEL`) and an image model (`SLIDE_AGENT_IMAGE_API_KEY` / `SLIDE_AGENT_IMAGE_BASE_URL` / `SLIDE_AGENT_IMAGE_MODEL`) in `scripts/slide-agent/.env.local` or the environment.
+- Models: an export from the web page runs on the text and image models you entered in the AI settings; the server does not use keys from its environment. Only when running `scripts/slide-agent/pipeline.ts` from the command line, set `SLIDE_AGENT_API_KEY` / `SLIDE_AGENT_BASE_URL` / `SLIDE_AGENT_MODEL` and `SLIDE_AGENT_IMAGE_API_KEY` / `SLIDE_AGENT_IMAGE_BASE_URL` / `SLIDE_AGENT_IMAGE_MODEL` in `scripts/slide-agent/.env.local` or the environment.
 
 ### 2026-11-05
 

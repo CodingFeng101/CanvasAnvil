@@ -3,6 +3,9 @@ import { randomUUID } from "node:crypto";
 import { appendFileSync, existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { z } from "zod";
+import { getImageChannel, getTextChannel, normalizeAIConfig } from "../../contracts/ai";
+import type { AIChannel } from "../../contracts/ai";
+import { pruneRuns } from "../http/prune-runs";
 
 /**
  * Editable PPTX export: the editable PPTX pipeline (scripts/slide-agent), run as a job.
@@ -16,6 +19,9 @@ import { z } from "zod";
  * pictures the events point at are served from the job's run directory.
  *
  * One job at a time keeps resource use bounded and serializes PowerPoint previews on Windows.
+ *
+ * The models are the user's own: the browser sends its AI settings with the job, and the pipeline runs on those
+ * keys only (never on keys in the server's environment). They stay in memory and are not written to the run folder.
  */
 
 type JobState = "uploading" | "running" | "done" | "failed";
@@ -28,6 +34,8 @@ interface Job {
   dir: string;
   count: number;
   qaRounds: number;
+  /** The user's chat and image models for this run; undefined once a restarted server rebuilt the job from disk. */
+  models?: { text: AIChannel; image: AIChannel };
   received: Set<number>;
   state: JobState;
   events: ProgressEvent[];
@@ -48,6 +56,8 @@ const createSchema = z.object({
   count: z.number().int().min(1).max(60),
   // The app asks for at least three check-and-fix rounds per page.
   qaRounds: z.number().int().min(3).max(10),
+  // The user's AI settings (text and image model, key, base URL), as every other model call sends them.
+  aiConfig: z.record(z.string(), z.unknown()).optional(),
 });
 const slideSchema = z.object({
   action: z.literal("slide"),
@@ -116,12 +126,29 @@ function status(job: Job, after = 0) {
   };
 }
 
+/** The pipeline's environment: the server's own, with every model setting replaced by the user's. */
+function pipelineEnv(models: { text: AIChannel; image: AIChannel }): NodeJS.ProcessEnv {
+  const env: NodeJS.ProcessEnv = { ...process.env };
+  for (const name of Object.keys(env)) {
+    if (/^(SLIDE_AGENT|SLIDE_ALCHEMY)_(IMAGE_)?(API_KEY|BASE_URL|MODEL)$/.test(name) || name === "OPENAI_API_KEY" || name === "OPENAI_BASE_URL") delete env[name];
+  }
+  return {
+    ...env,
+    SLIDE_AGENT_API_KEY: models.text.apiKey,
+    SLIDE_AGENT_BASE_URL: models.text.baseUrl,
+    SLIDE_AGENT_MODEL: models.text.model,
+    SLIDE_AGENT_IMAGE_API_KEY: models.image.apiKey,
+    SLIDE_AGENT_IMAGE_BASE_URL: models.image.baseUrl,
+    SLIDE_AGENT_IMAGE_MODEL: models.image.model,
+  };
+}
+
 function start(job: Job) {
   const inputs = Array.from({ length: job.count }, (_, i) => slidePath(job, i));
   const child = spawn(
     process.execPath,
     ["--import", "tsx", PIPELINE, "--run", job.dir, "--qa-rounds", String(job.qaRounds), ...inputs],
-    { cwd: ROOT, windowsHide: true },
+    { cwd: ROOT, windowsHide: true, env: pipelineEnv(job.models!) },
   );
   job.state = "running";
   job.startedAt = Date.now();
@@ -179,14 +206,21 @@ export async function POST(req: Request) {
     if ([...jobs.values()].some((job) => job.state === "uploading" || job.state === "running")) {
       return Response.json({ error: "busy" }, { status: 409 });
     }
+    const config = normalizeAIConfig(body.aiConfig);
+    const models = { text: getTextChannel(config), image: getImageChannel(config) };
+    if (!models.text.apiKey || !models.text.model || !models.image.apiKey || !models.image.model) {
+      return Response.json({ error: "Editable export needs your text model and image model (API key and model name) in the AI settings." }, { status: 400 });
+    }
     const id = `${new Date().toISOString().replace(/[-:T]/g, "").slice(0, 14)}-${randomUUID().slice(0, 8)}`;
     const dir = path.join(RUNS, id);
+    pruneRuns(RUNS, jobs.keys());
     mkdirSync(path.join(dir, "input"), { recursive: true });
     const job: Job = {
       id,
       dir,
       count: body.count,
       qaRounds: body.qaRounds,
+      models,
       received: new Set(),
       state: "uploading",
       events: [],
@@ -215,6 +249,7 @@ export async function POST(req: Request) {
     if (job.received.size !== job.count) {
       return Response.json({ error: `Only ${job.received.size}/${job.count} slides uploaded` }, { status: 409 });
     }
+    if (!job.models) return Response.json({ error: "The server restarted before this export began; start it again." }, { status: 409 });
     start(job);
     return Response.json(status(job));
   }
