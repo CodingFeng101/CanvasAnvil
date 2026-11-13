@@ -458,20 +458,22 @@ export class CadDesignSession {
         if (!Array.isArray(payload.patch)) throw new Error('cad_spec_patch.patch 必须是数组 / patch must be an array');
         candidate = await applyPatch(payload.patch, before, true);
       } else throw new Error('需要 cad_spec、cad_ops 或 cad_spec_patch / Expected cad_spec, cad_ops or cad_spec_patch');
-      const bridge = this.bridge!;
+      // Read the bridge each time: a repair round answered with cad_spec_patch reloads the designer into a
+      // new iframe, and a bridge kept from before then points at the removed one ("Designer unavailable").
+      const live = () => { if (!this.bridge) throw new Error('Designer unavailable'); return this.bridge; };
       // Shift furniture stuck a few cm into walls, curtains or neighbours before (and after) asking the model.
       const nudge = (design: CadDesign): CadDesign => {
         if (isBuilding(design.plan)) return design;
-        const result = nudgeFurniture(design.plan, plan => { bridge.replacePlan(plan); return bridge.runChecks(); });
-        bridge.replacePlan(result.plan);
-        return result.moved ? { ...design, plan: bridge.readPlan() } : design;
+        const result = nudgeFurniture(design.plan, plan => { live().replacePlan(plan); return live().runChecks(); });
+        live().replacePlan(result.plan);
+        return result.moved ? { ...design, plan: live().readPlan() } : design;
       };
       candidate = nudge(candidate);
       this.update({ design: candidate });
       const revised = await reviseUntilClean({
         initial: candidate,
         maxRounds: retry ? MAX_REVISE_ROUNDS - validationRounds : 0,
-        issuesOf: async plan => { checkAbort(); bridge.replacePlan(plan); return bridge.runChecks(); },
+        issuesOf: async plan => { checkAbort(); live().replacePlan(plan); return live().runChecks(); },
         askModel: async (issues, summary) => {
           checkAbort();
           const correction = object(await retry!(JSON.stringify({ issues, requestedChanges: payload.type === 'cad_ops' ? payload.ops : payload.type === 'cad_spec_patch' ? payload.patch : undefined }), summary));
@@ -487,7 +489,7 @@ export class CadDesignSession {
       checkAbort();
       if (revised.issues.some(issue => issue.level === 'error')) {
         revised.design = nudge(revised.design);
-        revised.issues = bridge.runChecks();
+        revised.issues = live().runChecks();
       }
       // Points the user asked for by hand stay through later layout edits; a full relayout starts over.
       if (touched.elec && !touched.relayoutElec) revised.design = { ...revised.design, mepManual: true };

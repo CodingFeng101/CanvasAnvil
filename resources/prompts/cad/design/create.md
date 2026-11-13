@@ -40,7 +40,7 @@
 
 ## 4. 设备与系统：按 cad_plan.decisions 的 choice 放
 
-`cad_plan.decisions` 是用户点选确定的设备和系统（choice 就是最终选择，以它为准，不要再按默认放）。对应写进 furniture：
+`cad_plan.decisions` 是用户点选确定的设备和系统（choice 就是最终选择，以它为准，不要再按默认放）。请求里的“用户已定事项”和“补充要求”是用户本人的决定：cad_plan 的 rooms、mustHave、assumptions 是方案按推荐写的，和它们冲突时一律按用户的来（例如选了中央空调，mustHave 里的挂机就不放；选了开放式厨房，厨房和餐厅就 `open`）。对应写进 furniture：
 - 空调：每间挂机 → 卧室、客厅各一台 `acWall`；客厅柜机 → 客厅 `acFloor`（靠墙放），卧室仍 `acWall`；中央空调/风管机 → **不要 acWall/acFloor**，卧室、客厅、餐厅各放 `ductAC` + `linearVent`，客厅再放一个 `linearReturn`，阳台放 `vrfOutdoor`；天花机 → 每间 `cassetteAC`。
 - 新风：装 → 过道或客厅放一台 `freshAirUnit`（吊顶内）。
 - 采暖：地暖 → 卧室、客厅、餐厅各放 `floorHeat`（程序会铺满房间），厨房或阳台墙上放 `manifold`；燃气壁挂炉 → 厨房或阳台 `boiler`；暖气片 → 卧室、客厅窗下墙放 `radiator`。

@@ -115,31 +115,12 @@ export function HouseDesignerFrame({ session, onFocus, onFixIssue, canRecognize 
     console.error('[CAD designer] Action failed', reason);
     setRuntimeError(String(reason));
   }); };
-  // Delivery comes from the designer itself: its quote, drawing set, DXF, colour plan and renders.
-  const engineAction = (label: string) => run(async () => {
-    await session.sync();
-    await session.ensureReady();
-    const doc = frameRef.current?.contentDocument;
-    const target = doc && Array.from(doc.querySelectorAll<HTMLElement>('button, [role=menuitem], a, li'))
-      .find(element => element.textContent?.replace(/\s+/g, ' ').trim().startsWith(label));
-    if (!target) throw new Error(tr(`设计器里没有找到“${label}”`, `"${label}" not found in the designer`));
-    target.click();
-  });
-  const deliveries: Array<[string, string]> = [
-    [tr('报价单', 'Quote'), '报价'],
-    [tr('施工图 PDF', 'Drawings PDF'), '整套施工图'],
-    [tr('平面图 DXF', 'Plan DXF'), 'CAD 平面布置图（DXF · 国标）'],
-    [tr('水电图 DXF', 'MEP DXF'), 'CAD 水电点位图'],
-    [tr('彩平图', 'Colour plan'), '彩平图（高清 PNG）'],
-    [tr('3D 效果图', '3D render'), '渲染出图'],
-  ];
-
-  if (hydrated && !snapshot.design && !snapshot.busy && !request) return <div className="flex h-full flex-col items-center justify-center gap-4 rounded-xl border bg-background" data-testid="cad-design-empty">
+  if (hydrated && !snapshot.design && !snapshot.busy && !request) return <div className="flex h-full flex-col items-center justify-center gap-4 bg-background" data-testid="cad-design-empty">
     <p className="text-muted-foreground">{hasPlan ? tr('设计方案已在右侧对话里，确认后会在这里生成户型', 'The design plan is in the chat on the right; confirm it there to generate the floorplan here.') : tr('在右侧描述需求，先出设计方案；或上传原始户型图', 'Describe your needs on the right to get a design plan, or upload an existing floorplan.')}</p>
     {canRecognize && <button className="rounded border px-4 py-2" onClick={onUpload}>{tr('上传原始户型图', 'Upload original floorplan')}</button>}
   </div>;
 
-  return <div className="relative flex h-full flex-col overflow-hidden rounded-xl border bg-background">
+  return <div className="relative flex h-full flex-col overflow-hidden bg-background">
     <div className="flex flex-wrap items-center gap-2 border-b px-3 py-2 text-xs" data-testid="cad-design-result" data-rounds={snapshot.lastResult?.rounds ?? 0}>
       <span>{snapshot.busy ? tr('检查中', 'Checking') : snapshot.ready ? snapshot.design?.lastSource === 'user' ? tr('手动修改已同步', 'Manual changes synced') : tr('已同步', 'Synced') : tr('加载设计器…', 'Loading designer…')}</span>
       <span data-testid="cad-design-revision">revision {snapshot.design?.revision ?? 0}</span>
@@ -148,7 +129,6 @@ export function HouseDesignerFrame({ session, onFocus, onFixIssue, canRecognize 
       <button className="rounded border px-2 py-1" onClick={onFocus}>{tr('专注模式', 'Focus mode')}</button>
       <button className="rounded border px-2 py-1" disabled={!snapshot.ready || snapshot.busy} onClick={() => run(() => session.recheck())}>{tr('重新检查', 'Recheck')}</button>
       <button className="rounded bg-primary px-2 py-1 text-primary-foreground disabled:opacity-50" title={errors > 0 ? tr('请先解决全部错误', 'Resolve all errors first') : ''} disabled={!snapshot.ready || snapshot.busy || errors > 0} onClick={() => run(() => session.confirm())}>{snapshot.design?.status === 'confirmed' ? tr('户型已确认', 'Design confirmed') : tr('确认户型', 'Confirm design')}</button>
-      {snapshot.design?.status === 'confirmed' && deliveries.map(([text, label]) => <button key={label} className="rounded border px-2 py-1" disabled={!snapshot.ready || snapshot.busy} onClick={() => engineAction(label)}>{text}</button>)}
       {canQa && snapshot.design && <button className="rounded border px-2 py-1 disabled:opacity-50" title={tr('设计器逐项操作验收 + 导出文件检查（几分钟）', 'Operate every button, panel and export, then open the exported files (a few minutes)')} disabled={!snapshot.ready || snapshot.busy || qaRunning} onClick={onQa}>{qaRunning ? tr('交付检查中…', 'Checking delivery…') : tr('交付检查', 'Delivery check')}</button>}
       {runtimeError && <span role="status" className="flex items-center gap-2 text-destructive" title={runtimeError}>{tr('设计器运行出错', 'Designer runtime error')}<button aria-label={tr('关闭错误提示', 'Dismiss error')} onClick={() => setRuntimeError('')}>×</button></span>}
     </div>

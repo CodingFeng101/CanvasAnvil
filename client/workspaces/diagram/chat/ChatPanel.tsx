@@ -94,6 +94,66 @@ function loadTidied(
 }
 
 /**
+ * AI SDK 5 messages carry `parts`; older saved chats and the old send path
+ * used `content`. The SDK reads `message.parts` on every message (for one,
+ * when a tool result is added), so a message without it breaks every tool
+ * call in the conversation.
+ */
+function normalizeMessageToParts(message: any): any[] {
+    if (Array.isArray(message?.parts)) return message.parts
+    if (typeof message?.content === "string") {
+        return [{ type: "text", text: message.content }]
+    }
+    if (Array.isArray(message?.content)) {
+        return message.content
+            .map((item: any) => {
+                if (typeof item === "string") return { type: "text", text: item }
+                if (item?.type === "text") return { type: "text", text: item.text || "" }
+                if (item?.type === "image_url" && item?.image_url?.url) {
+                    return { type: "file", url: item.image_url.url, mediaType: "image/*" }
+                }
+                if (item?.type === "image" && (item?.url || item?.image)) {
+                    return {
+                        type: "file",
+                        url: item.url || item.image,
+                        mediaType: item.mediaType || item.mimeType || "image/*",
+                    }
+                }
+                if (item?.type === "file" && item?.url) {
+                    return {
+                        type: "file",
+                        url: item.url,
+                        mediaType: item.mediaType || item.mimeType || "",
+                    }
+                }
+                return null
+            })
+            .filter(Boolean)
+    }
+    return []
+}
+
+/**
+ * Repairs a saved message on restore: gives it `parts`, and closes tool calls
+ * that never got a result. Those were drawn on the canvas, but without an
+ * output the chat shows them as still running, and the next request carries a
+ * tool call with no result, which the model API rejects.
+ */
+function repairSavedMessage(message: any) {
+    const parts = normalizeMessageToParts(message)
+    return {
+        ...message,
+        content: undefined,
+        parts: parts.map((part: any) =>
+            part?.type?.startsWith("tool-") &&
+            (part.state === "input-available" || part.state === "input-streaming")
+                ? { ...part, state: "output-available", output: "Done." }
+                : part,
+        ),
+    }
+}
+
+/**
  * Check if auto-resubmit should happen based on tool errors.
  * Does NOT handle retry count or quota - those are handled by the caller.
  */
@@ -735,7 +795,7 @@ Please fix the XML issues. Ensure cell_id values exist in the current XML and th
             if (savedMessages) {
                 const parsed = JSON.parse(savedMessages)
                 if (Array.isArray(parsed) && parsed.length > 0) {
-                    setMessages(parsed)
+                    setMessages(parsed.map(repairSavedMessage))
                 }
             }
 
@@ -953,40 +1013,6 @@ Please fix the XML issues. Ensure cell_id values exist in the current XML and th
         setInput(e.target.value)
     }
 
-    const normalizeMessageToParts = (message: any): any[] => {
-        if (Array.isArray(message?.parts)) return message.parts
-        if (typeof message?.content === "string") {
-            return [{ type: "text", text: message.content }]
-        }
-        if (Array.isArray(message?.content)) {
-            return message.content
-                .map((item: any) => {
-                    if (typeof item === "string") return { type: "text", text: item }
-                    if (item?.type === "text") return { type: "text", text: item.text || "" }
-                    if (item?.type === "image_url" && item?.image_url?.url) {
-                        return { type: "file", url: item.image_url.url, mediaType: "image/*" }
-                    }
-                    if (item?.type === "image" && (item?.url || item?.image)) {
-                        return {
-                            type: "file",
-                            url: item.url || item.image,
-                            mediaType: item.mediaType || item.mimeType || "image/*",
-                        }
-                    }
-                    if (item?.type === "file" && item?.url) {
-                        return {
-                            type: "file",
-                            url: item.url,
-                            mediaType: item.mediaType || item.mimeType || "",
-                        }
-                    }
-                    return null
-                })
-                .filter(Boolean)
-        }
-        return []
-    }
-
     const extractFileBlocksFromText = (text: string): string[] => {
         const blocks: string[] = []
         const pattern = /\[(PDF|File):\s*[^\]]+\][\s\S]*?(?=\n\n\[(PDF|File):|$)/g
@@ -1102,18 +1128,17 @@ Please fix the XML issues. Ensure cell_id values exist in the current XML and th
                     !!x?.url && String(x.url).startsWith("data:image/"),
             )
 
-        const messageContent: any[] = []
-        for (const attachment of imageAttachments) {
-            messageContent.push({
-                type: "image_url",
-                image_url: { url: attachment.url },
-            })
-        }
-        messageContent.push({ type: "text", text: userInput })
-
+        // AI SDK 5 shape: `parts`, not `content` (see normalizeMessageToParts).
         const message: any = {
             role: "user",
-            content: messageContent,
+            parts: [
+                ...imageAttachments.map((attachment) => ({
+                    type: "file",
+                    url: attachment.url,
+                    mediaType: attachment.contentType || attachment.url.slice(5, attachment.url.indexOf(";")),
+                })),
+                { type: "text", text: userInput },
+            ],
         }
 
         console.log('[sendChatMessage] calling appendMessage', { message, appendMessage })

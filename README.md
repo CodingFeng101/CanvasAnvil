@@ -24,6 +24,8 @@
   <a href="README.zh-CN.md">Chinese</a>
 </p>
 
+https://github.com/user-attachments/assets/582c70ae-38df-4949-913c-c3f4369a7c8c
+
 <p align="center">
   <strong>⭐ If CanvasAnvil helps your workflow, please star the repo and fork it for your own canvas experiments.</strong>
 </p>
@@ -71,6 +73,8 @@ Describe the home you want, settle the plan with clickable decisions, and get an
   </tr>
 </table>
 
+<a id="ppt-canvas"></a>
+
 ## 📑 PPT Canvas
 
 Generate full presentations through a controlled pipeline: outline first, visual production second, then export as PDF or image-based PPT. The deck template sets the style and colour palette; each slide gets a layout of its own.
@@ -117,6 +121,8 @@ A whiteboard for images: describe a picture in one sentence and it lands on the 
   </tr>
 </table>
 
+<a id="creative-canvases"></a>
+
 ## 🎨 Creative Canvases
 
 | Workspace | Focus | Typical output |
@@ -147,6 +153,8 @@ One walkthrough per canvas on Bilibili (narrated in Chinese). In the app, the **
   </tr>
 </table>
 
+<a id="skills"></a>
+
 ## 🧰 Skills
 
 CanvasAnvil includes dedicated local skills for each canvas so workflows stay opinionated, repeatable, and easier to maintain.
@@ -163,6 +171,8 @@ CanvasAnvil includes dedicated local skills for each canvas so workflows stay op
 
 All skills use the host text model by default. Only image generation requires explicit provider configuration.
 Editable PPTX export uses the host model too: the agent rebuilds the slides step by step following `skill/ppt-skill/references/editable-pptx-workflow.md`, with the scripts in the skill's `editable/` folder; its previews use PowerPoint on Windows and LibreOffice elsewhere, plus the Python packages in `editable/requirements.txt`.
+
+<a id="quick-start"></a>
 
 ## 🚀 Quick Start
 
@@ -216,7 +226,30 @@ npm run build
 - Architecture overview: [docs/architecture.md](docs/architecture.md)
 - Deployment guide: [deploy/README.md](deploy/README.md)
 
+<a id="recent-updates"></a>
+
 ## 🗓️ Recent updates
+
+### 2026-11-13
+
+**🐛 Fixes**
+
+- **Diagram: "Drawing the diagram" kept spinning after the diagram was drawn, and edits failed**
+  - After a dependency upgrade the AI SDK expects messages with `parts`; the diagram chat still sent the old format, so tool results never landed and the step stayed "running". That unanswered tool call then made the next request (an edit, for example) fail at the model API.
+  - User messages use the new format; older chats are converted when opened, and steps stuck as running are closed, so they can be edited again.
+- **Interior Design: picked decisions seemed to be ignored**
+  - After you confirm the plan, its decisions show what you picked, along with the note you wrote under the options.
+  - The floorplan request now lists your picks as the final decisions, and the model is told they override the rooms and must-have furniture the plan wrote for its own recommendation (central air conditioning means no wall units, for example).
+- **Interior Design: `Designer unavailable` while generating, fixed only by generating again**
+  - When a repair round reloaded the designer, the checks that followed still used the removed one. Every step now uses the current designer.
+- **Interior Design: the floorplan step kept spinning after switching canvases or reloading**
+  - Leaving the canvas stops the run, but the chat still showed it as running. It now shows as interrupted, with a button to generate again (your picks are kept).
+
+**⚡ Improvements**
+
+- The Interior Design canvas fills its area like the other canvases, with no margin or frame around it.
+- The duplicate export buttons above the designer are gone; the quote, drawings, DXF, colour plan and renders come from the designer's own Quote and Export drawings at the top right.
+- The README has its promo video back, and the links in its top navigation jump to their sections again.
 
 ### 2026-11-08
 

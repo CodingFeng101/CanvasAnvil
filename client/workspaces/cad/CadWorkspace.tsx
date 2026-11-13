@@ -262,7 +262,7 @@ export function CadWorkspace() {
         minSize="30%"
         className={cn("transition-[flex-grow,flex-basis] duration-300 ease-in-out will-change-[flex-grow,flex-basis]")}
       >
-        <div className="h-full w-full p-2">
+        <div className="h-full w-full">
           <HouseDesignerFrame
             key={`cad-ws-${cadResetTick}`}
             session={designSession}

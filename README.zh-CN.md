@@ -24,6 +24,8 @@
   <a href="README.md">English</a>
 </p>
 
+https://github.com/user-attachments/assets/582c70ae-38df-4949-913c-c3f4369a7c8c
+
 <p align="center">
   <strong>⭐ 如果 CanvasAnvil 对你有帮助，欢迎给仓库点个 Star，也可以 Fork 一份继续扩展你自己的画布工作流。</strong>
 </p>
@@ -71,6 +73,8 @@
   </tr>
 </table>
 
+<a id="ppt-演示画布"></a>
+
 ## 📑 PPT 演示画布
 
 通过“先大纲、后视觉”的方式生成完整演示文稿，并导出 PDF 或图片版 PPT。模板决定整套的风格与配色，每一页的版式按内容单独设计。
@@ -117,6 +121,8 @@
   </tr>
 </table>
 
+<a id="创作画布"></a>
+
 ## 🎨 创作画布
 
 | 画布 | 核心能力 | 常见输出 |
@@ -132,6 +138,8 @@
 
 - 🔗 CanvasAnvil：[https://canvasanvil.codingfgd.asia](https://canvasanvil.codingfgd.asia)
 
+<a id="视频教程"></a>
+
 ## 🎬 视频教程
 
 每个画布一段 B 站完整演示。在应用里，首页顶部的「教程」按钮可以直接播放。
@@ -146,6 +154,8 @@
     <td width="50%" align="center"><a href="https://www.bilibili.com/video/BV17Gxs6aETm"><img src="public/tutorials/canvas.jpg" alt="圈哪里改哪里，AI 改图不动其他地方" width="100%" /></a><br/><strong>🖌️ 自由画布</strong> · <a href="https://www.bilibili.com/video/BV17Gxs6aETm">圈哪里改哪里，AI 改图不动其他地方</a></td>
   </tr>
 </table>
+
+<a id="skills"></a>
 
 ## 🧰 Skills
 
@@ -163,6 +173,8 @@ CanvasAnvil 为每个画布都提供了专用本地 skill，用来保证工作�
 
 所有 skill 默认使用宿主文本模型。只有生图能力需要单独配置图片生成供应商。
 可编辑 PPTX 导出同样用宿主模型：助手按 `skill/ppt-skill/references/editable-pptx-workflow.md` 逐步重建幻灯片，所需脚本都在 skill 的 `editable/` 目录里；预览在 Windows 上用 PowerPoint，其他系统用 LibreOffice，另外需要 Python 依赖（`editable/requirements.txt`）。
+
+<a id="快速开始"></a>
 
 ## 🚀 快速开始
 
@@ -216,7 +228,30 @@ npm run build
 - 架构说明：[docs/architecture.md](docs/architecture.md)
 - 部署说明：[deploy/README.md](deploy/README.md)
 
+<a id="最近更新"></a>
+
 ## 🗓️ 最近更新
+
+### 2026-11-13
+
+**🐛 修复**
+
+- **图表绘制：图已经画好，「绘制图表」却一直转圈；局部修改报错**
+  - 原因是依赖升级后 AI SDK 要求消息带 `parts`，图表画布发出的用户消息还是旧格式，工具结果写不回去，于是一直显示进行中；这条没有结果的工具调用又让下一次请求（比如局部修改）被模型接口拒绝。
+  - 用户消息改为新格式；打开旧会话时会自动补齐格式，并把卡在进行中的步骤标为完成，旧会话也能接着改。
+- **室内设计：待定事项选了却像没生效**
+  - 确认方案后，方案里的「已定事项」会显示你实际选的内容，底部写的补充要求也一并显示出来。
+  - 生成户型时，你的选择单独作为「用户已定事项」交给模型，并说明与方案里按推荐写的房间、必备家具冲突时以你的选择为准（例如选了中央空调就不再放挂机）。
+- **室内设计：生成户型时出现 `Designer unavailable`，只能点重新生成**
+  - AI 修复轮如果重新加载了设计器，后续自检会还在用已经移除的旧设计器。现在每一步都使用当前的设计器。
+- **室内设计：切换画布或刷新后，生成步骤一直转圈**
+  - 切走画布会中止正在进行的生成，但对话里还留着「进行中」。现在回来时会显示「已中断」，并给出「重新生成户型」按钮（沿用已选的待定事项）。
+
+**⚡ 改进**
+
+- 室内设计画布和其他画布一样占满左侧区域，去掉了四周的留白和边框。
+- 去掉设计器外层重复的导出按钮，报价单、施工图、DXF、彩平图和效果图统一从设计器右上角的「报价」和「导出图纸」导出。
+- README 恢复宣传视频；修复顶部导航点了不跳转的问题。
 
 ### 2026-11-08
 

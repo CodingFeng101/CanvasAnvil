@@ -17,7 +17,7 @@ import {
 } from "@/shared/chat";
 import { ChatMessageDisplay, type UIMessage } from "./ChatMessageDisplay";
 import { DesignHistoryDialog } from "./DesignHistoryDialog";
-import { CAD_CONFIRM, applyPicks, describeSpecStream, generateMessage, parsePartialJson, planMessage, recognitionLines, stripCadMarkers, takePicks, validDecisions } from "./cad-steps-text";
+import { CAD_CONFIRM, applyPicks, describeSpecStream, generateMessage, parseCadSteps, parsePartialJson, planMessage, recognitionLines, stripCadMarkers, takePicks, validDecisions } from "./cad-steps-text";
 import { useUiLanguage } from "@/shared/i18n";
 import {
   chatStorageKey,
@@ -90,6 +90,25 @@ interface ChatPanelProps {
   composerRequest?: { id: number; text: string; send?: boolean; assistant?: string };
 }
 
+/**
+ * A run lives in the mounted panel: switching to another canvas or reloading the page unmounts it and
+ * stops the run, but the saved chat still ends on the step as it was ("布置水电点位…", spinning). On mount
+ * nothing is running, so such a step is shown as interrupted, with the button to generate again.
+ */
+function closeInterruptedStep(messages: ChatMessage[], zh: boolean): ChatMessage[] {
+  const last = messages[messages.length - 1];
+  if (last?.role !== "assistant" || typeof last.content !== "string") return messages;
+  const parsed = parseCadSteps(last.content);
+  const note = zh ? "已中断：切换了画布或刷新了页面，这一步没有跑完。" : "Interrupted: the canvas was switched or the page reloaded before this step finished.";
+  let content: string | null = null;
+  if (parsed?.kind === "generate" && parsed.state === "running") content = generateMessage("error", `${parsed.body}
+
+${note}`);
+  else if (parsed?.kind === "plan" && parsed.state === "drafting") content = `${note}${zh ? "请重新发送需求。" : " Please send the request again."}`;
+  else if (!parsed && !last.content.trim()) content = note;
+  return content === null ? messages : [...messages.slice(0, -1), { ...last, content }];
+}
+
 export function ChatPanel(props: ChatPanelProps) {
   const {
     designSession: session,
@@ -104,7 +123,7 @@ export function ChatPanel(props: ChatPanelProps) {
   const tr = (zh: string, en: string) => (language === "zh" ? zh : en);
   const snapshot = useSyncExternalStore(session.subscribe, session.getSnapshot);
   const [messages, setMessages] = useState<ChatMessage[]>(() =>
-    loadChatHistory(chatStorageKey(workspaceId), props.initialMessages ?? []),
+    closeInterruptedStep(loadChatHistory(chatStorageKey(workspaceId), props.initialMessages ?? []), language === "zh"),
   );
   const [input, setInput] = useState("");
   const [files, setFiles] = useState<File[]>([]);
@@ -348,12 +367,18 @@ export function ChatPanel(props: ChatPanelProps) {
         plan = applyPicks(plan, picks);
         await applyArtifact({ type: "cad_plan", plan }, retry);
       }
+      // What the user clicked, said outright: inside cad_plan it is one field among many, next to rooms and
+      // mustHave the plan wrote for its own recommendation, and the model kept following those.
+      const picksLine = picks && plan
+        ? `用户已定事项（最终选择，以此为准；cad_plan 的 rooms、mustHave、assumptions 等与之冲突的地方一律按这里改）：\n${validDecisions(plan.decisions).map((decision) => `- ${decision.topic}：${[decision.choice].flat().filter(Boolean).join("、") || "都不要"}`).join("\n")}`
+        : "";
       const designRequest = (planValue: unknown, designValue: typeof current) => {
         const parts: any[] = [
           {
             type: "text",
             text: [
               plain,
+              picksLine,
               JSON.stringify({
                 hasDesign: !!designValue,
                 designStatus: designValue?.status ?? "draft",
@@ -613,11 +638,25 @@ export function ChatPanel(props: ChatPanelProps) {
       const showPlan = (drafted: { plan: any }, regenerate: boolean) => {
         updateAssistant(planMessage("ready", planText(drafted.plan), "", regenerate, validDecisions(drafted.plan?.decisions)));
       };
+      // The plan block above shows what was picked, not the recommendation the plan arrived with.
+      if (picks && plan) {
+        const pickedPlan = plan;
+        // The confirm message itself is not shown, so the note written under the options goes into the block too.
+        const note = plain.match(/(?:补充要求（生成户型时一并照做）：|Also do this when generating: )([^\n]+)/)?.[1]?.trim();
+        const pickedText = `${planText(pickedPlan)}${note ? `\n\n**${tr("补充要求", "Your note")}**：${note}` : ""}`;
+        setMessages((previous) => {
+          let at = previous.length - 3;
+          while (at >= 0 && !(typeof previous[at].content === "string" && (previous[at].content as string).startsWith("[[CAD_STEPS|plan|ready"))) at--;
+          if (at < 0) return previous;
+          const regen = (previous[at].content as string).startsWith("[[CAD_STEPS|plan|ready|regen");
+          return previous.map((message, index) => index === at ? { ...message, content: planMessage("ready", pickedText, "", regen, validDecisions(pickedPlan.decisions)) } : message);
+        });
+      }
 
       if (wantsDeliver && !wantsPlan) {
         updateAssistant(
           current?.status === "confirmed"
-            ? tr("户型已确认。报价单、施工图 PDF、DXF、彩平图和 3D 效果图都在设计器顶栏的导出按钮里，直接下载即可。", "The design is confirmed. The quote, drawing PDF, DXF, colour plan and 3D render are in the designer's export buttons.")
+            ? tr("户型已确认。报价单、施工图 PDF、DXF、彩平图和 3D 效果图都在设计器右上角的「报价」和「导出图纸」里，直接下载即可。", "The design is confirmed. The quote, drawing PDF, DXF, colour plan and 3D render are under Quote and Export drawings at the top right of the designer.")
             : blocked,
         );
       } else if (current?.recognition && !current.recognition.completed && !wantsPlan) {
