@@ -57,19 +57,19 @@ Describe the home you want, settle the plan with clickable decisions, and get an
 
 <table>
   <tr>
-    <td width="33.33%" align="center"><img src="public/examples/cad/01.png" alt="CAD renovation plan layout" width="100%" /><br/><strong>Renovation Plan Layout</strong></td>
-    <td width="33.33%" align="center"><img src="public/examples/cad/02.png" alt="CAD floor finish plan" width="100%" /><br/><strong>Floor Finish Plan</strong></td>
-    <td width="33.33%" align="center"><img src="public/examples/cad/03.png" alt="CAD reflected ceiling plan" width="100%" /><br/><strong>Reflected Ceiling Plan</strong></td>
+    <td colspan="2" align="center"><a href="public/examples/cad/01.png"><img src="public/examples/cad/01.png" alt="2D + 3D Split View" width="100%" /></a><br/><strong>2D + 3D Split View</strong></td>
   </tr>
   <tr>
-    <td width="33.33%" align="center"><img src="public/examples/cad/04.png" alt="CAD wall setting out plan" width="100%" /><br/><strong>Wall Setting-Out Plan</strong></td>
-    <td width="33.33%" align="center"><img src="public/examples/cad/05.png" alt="CAD MEP plan" width="100%" /><br/><strong>MEP Coordination Plan</strong></td>
-    <td width="33.33%" align="center"><img src="public/examples/cad/06.png" alt="CAD elevation index and interior elevations" width="100%" /><br/><strong>Elevation Index + Interior Elevations</strong></td>
+    <td width="50%" align="center"><a href="public/examples/cad/02.png"><img src="public/examples/cad/02.png" alt="Editable Floorplan & Furniture" width="100%" /></a><br/><strong>Editable Floorplan & Furniture</strong></td>
+    <td width="50%" align="center"><a href="public/examples/cad/03.png"><img src="public/examples/cad/03.png" alt="3D Walkthrough" width="100%" /></a><br/><strong>3D Walkthrough</strong></td>
   </tr>
   <tr>
-    <td width="33.33%" align="center"><img src="public/examples/cad/07.png" alt="CAD detail drawings" width="100%" /><br/><strong>Detail Drawings</strong></td>
-    <td width="33.33%" align="center"></td>
-    <td width="33.33%" align="center"></td>
+    <td width="50%" align="center"><a href="public/examples/cad/04.png"><img src="public/examples/cad/04.png" alt="MEP Layout & Routing" width="100%" /></a><br/><strong>MEP Layout & Routing</strong></td>
+    <td width="50%" align="center"><a href="public/examples/cad/05.png"><img src="public/examples/cad/05.png" alt="Ceiling & Lighting Plan" width="100%" /></a><br/><strong>Ceiling & Lighting Plan</strong></td>
+  </tr>
+  <tr>
+    <td width="50%" align="center"><a href="public/examples/cad/06.png"><img src="public/examples/cad/06.png" alt="Quantity Takeoff & Quote" width="100%" /></a><br/><strong>Quantity Takeoff & Quote</strong></td>
+    <td width="50%" align="center"><a href="public/examples/cad/07.png"><img src="public/examples/cad/07.png" alt="Construction Drawing Exports" width="100%" /></a><br/><strong>Construction Drawing Exports</strong></td>
   </tr>
 </table>
 
