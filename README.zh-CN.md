@@ -57,19 +57,19 @@ https://github.com/user-attachments/assets/582c70ae-38df-4949-913c-c3f4369a7c8c
 
 <table>
   <tr>
-    <td colspan="2" align="center"><a href="public/examples/cad/01.png"><img src="public/examples/cad/01.png" alt="2D 平面与 3D 鸟瞰分屏" width="100%" /></a><br/><strong>2D 平面与 3D 鸟瞰分屏</strong></td>
+    <td colspan="2" align="center"><a href="public/examples/readme-previews/cad/split-view.png"><img src="public/examples/readme-previews/cad/split-view.png" alt="2D 平面与 3D 鸟瞰分屏" width="100%" /></a><br/><strong>2D 平面与 3D 鸟瞰分屏</strong></td>
   </tr>
   <tr>
-    <td width="50%" align="center"><a href="public/examples/cad/02.png"><img src="public/examples/cad/02.png" alt="可编辑户型与家具布置" width="100%" /></a><br/><strong>可编辑户型与家具布置</strong></td>
-    <td width="50%" align="center"><a href="public/examples/cad/03.png"><img src="public/examples/cad/03.png" alt="3D 室内漫游" width="100%" /></a><br/><strong>3D 室内漫游</strong></td>
+    <td width="50%" align="center"><a href="public/examples/readme-previews/cad/floorplan-furniture.png"><img src="public/examples/readme-previews/cad/floorplan-furniture.png" alt="可编辑户型与家具布置" width="100%" /></a><br/><strong>可编辑户型与家具布置</strong></td>
+    <td width="50%" align="center"><a href="public/examples/readme-previews/cad/walkthrough.png"><img src="public/examples/readme-previews/cad/walkthrough.png" alt="3D 室内漫游" width="100%" /></a><br/><strong>3D 室内漫游</strong></td>
   </tr>
   <tr>
-    <td width="50%" align="center"><a href="public/examples/cad/04.png"><img src="public/examples/cad/04.png" alt="水电点位与管线" width="100%" /></a><br/><strong>水电点位与管线</strong></td>
-    <td width="50%" align="center"><a href="public/examples/cad/05.png"><img src="public/examples/cad/05.png" alt="吊顶与灯位" width="100%" /></a><br/><strong>吊顶与灯位</strong></td>
+    <td width="50%" align="center"><a href="public/examples/readme-previews/cad/mep-routing.png"><img src="public/examples/readme-previews/cad/mep-routing.png" alt="水电点位与管线" width="100%" /></a><br/><strong>水电点位与管线</strong></td>
+    <td width="50%" align="center"><a href="public/examples/readme-previews/cad/ceiling-lighting.png"><img src="public/examples/readme-previews/cad/ceiling-lighting.png" alt="吊顶与灯位" width="100%" /></a><br/><strong>吊顶与灯位</strong></td>
   </tr>
   <tr>
-    <td width="50%" align="center"><a href="public/examples/cad/06.png"><img src="public/examples/cad/06.png" alt="工程量与报价" width="100%" /></a><br/><strong>工程量与报价</strong></td>
-    <td width="50%" align="center"><a href="public/examples/cad/07.png"><img src="public/examples/cad/07.png" alt="施工图与 DXF 导出" width="100%" /></a><br/><strong>施工图与 DXF 导出</strong></td>
+    <td width="50%" align="center"><a href="public/examples/readme-previews/cad/quantity-quote.png"><img src="public/examples/readme-previews/cad/quantity-quote.png" alt="工程量与报价" width="100%" /></a><br/><strong>工程量与报价</strong></td>
+    <td width="50%" align="center"><a href="public/examples/readme-previews/cad/drawing-exports.png"><img src="public/examples/readme-previews/cad/drawing-exports.png" alt="施工图与 DXF 导出" width="100%" /></a><br/><strong>施工图与 DXF 导出</strong></td>
   </tr>
 </table>
 
