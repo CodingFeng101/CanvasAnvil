@@ -167,7 +167,14 @@ CanvasAnvil includes dedicated local skills for each canvas so workflows stay op
   The website's flow: a bundled template library, idea / outline / beautify modes, outline review with the user before anything is drawn, all slides drawn concurrently with retries, single-slide edits, and PDF, image PPTX or editable PPTX export. Prompts and templates are synced from the website with `node scripts/sync-ppt-skill.mjs`.
 - `canvas-skill` · Image creation on a local whiteboard
   A native Codex canvas plugin reusing the website's Excalidraw board, annotation compositor, image placement and version strip. Give instructions directly in the Codex conversation. Codex captures selected images and annotations through MCP, then uses the host image tool and inserts results. Data lives in the project's `canvas/` directory.
-  From the repository root, run `codex plugin marketplace add .` and `codex plugin add canvasanvil-canvas@canvasanvil-local`, then restart Codex and invoke `$canvas-skill`, `$diagram-skill` or `$cad-skill`. Node 20+ is required. The release includes the MCP and widget bundles with no runtime npm installation.
+  Install straight from GitHub, no clone needed:
+
+  ```bash
+  codex plugin marketplace add CodingFeng101/CanvasAnvil --ref main
+  codex plugin add canvasanvil-canvas@canvasanvil
+  ```
+
+  Then restart Codex and invoke `$canvas-skill`, `$diagram-skill` or `$cad-skill`. Node 20+ is required. The release includes the MCP and widget bundles with no runtime npm installation. If you installed earlier from the `canvasanvil-local` marketplace, add the marketplace again with the first command, since its name changed. You can also copy any `skill/<name>` folder into a project and use it on its own.
 
 All skills use the host text model by default. Only image generation requires explicit provider configuration.
 Editable PPTX export uses the host model too: the agent rebuilds the slides step by step following `skill/ppt-skill/references/editable-pptx-workflow.md`, with the scripts in the skill's `editable/` folder; its previews use PowerPoint on Windows and LibreOffice elsewhere, plus the Python packages in `editable/requirements.txt`.

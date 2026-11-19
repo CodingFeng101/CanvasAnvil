@@ -169,7 +169,14 @@ CanvasAnvil 为每个画布都提供了专用本地 skill，用来保证工作�
   和网站同一套流程：自带模板库，想法 / 大纲 / 美化三种模式，出图前先和用户审阅大纲，所有页面并发生成、失败自动重试，可单页修改，导出 PDF、图片版 PPTX 或可编辑 PPTX。提示词和模板用 `node scripts/sync-ppt-skill.mjs` 从网站同步。
 - `canvas-skill` · 本地白板图片创作
   Codex 原生画布插件，复用网站的 Excalidraw 白板、标注合成、图片摆放和版本条。画布通过 MCP widget 打开，直接在 Codex 对话中提出生成与修改要求，由 Codex 读取选中图片及标注，调用宿主图片工具生成并回填。数据保存在当前项目的 `canvas/` 下。
-  从仓库根目录执行 `codex plugin marketplace add .`，再执行 `codex plugin add canvasanvil-canvas@canvasanvil-local`。安装后重启 Codex，调用 `$canvas-skill`、`$diagram-skill` 或 `$cad-skill` 打开对应画布。运行环境为 Node 20+，发布包包含 MCP 和 widget，无需安装 npm 依赖。
+  直接从 GitHub 安装，不需要先克隆仓库：
+
+  ```bash
+  codex plugin marketplace add CodingFeng101/CanvasAnvil --ref main
+  codex plugin add canvasanvil-canvas@canvasanvil
+  ```
+
+  安装后重启 Codex，调用 `$canvas-skill`、`$diagram-skill` 或 `$cad-skill` 打开对应画布。运行环境为 Node 20+，发布包包含 MCP 和 widget，无需安装 npm 依赖。以前从 `canvasanvil-local` 市场装过的，市场名已经改了，请用第一条命令重新添加一次市场。也可以把 `skill/<名称>` 文件夹直接拷到项目里单独使用。
 
 所有 skill 默认使用宿主文本模型。只有生图能力需要单独配置图片生成供应商。
 可编辑 PPTX 导出同样用宿主模型：助手按 `skill/ppt-skill/references/editable-pptx-workflow.md` 逐步重建幻灯片，所需脚本都在 skill 的 `editable/` 目录里；预览在 Windows 上用 PowerPoint，其他系统用 LibreOffice，另外需要 Python 依赖（`editable/requirements.txt`）。
