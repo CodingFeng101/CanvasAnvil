@@ -51,6 +51,9 @@ import {
   type SlideEditRoutingItem,
 } from '@/workspaces/ppt/lib/ppt-service';
 import { PPT_STATE_KEY, PPT_WORKSPACE_STORAGE_KEY, pptStore } from "@/workspaces/ppt/storage";
+import { useReportBusy, useWork, useWorkStore } from "@/shared/works/work-context";
+import { nameFromText } from "@/shared/works/works-index";
+import { makeThumbnail } from "@/shared/works/thumbnail";
 import { useUiLanguage } from "@/shared/i18n";
 import { canvasAnvilToEditorSlide, editorSlideToExportPayload } from "@/features/ppt-editor";
 import {
@@ -120,6 +123,9 @@ export function PptCanvas({
 }: PptCanvasProps) {
   const uiLang = useUiLanguage();
   const tr = useCallback((zh: string, en: string) => (uiLang === "zh" ? zh : en), [uiLang]);
+  // The open work's store (My works); the canvas remounts when another work is opened.
+  const deckStore = useWorkStore(pptStore);
+  const work = useWork();
   const initialPptStateRef = useRef<any>(undefined);
   if (typeof initialPptStateRef.current === "undefined") {
     initialPptStateRef.current = (() => {
@@ -296,7 +302,7 @@ export function PptCanvas({
 
     void (async () => {
       try {
-        const raw = await pptStore.read<any>(PPT_STATE_KEY);
+        const raw = await deckStore.read<any>(PPT_STATE_KEY);
         if (cancelled || !raw || typeof raw !== "object") return;
         const persistedState = migrateLegacyTextlessVersions(raw);
         const snapshotState =
@@ -414,6 +420,7 @@ export function PptCanvas({
       cancelled = true;
     };
   }, [
+    deckStore,
     restoreTemplateSelection,
     setSlideMaterials,
     setCreationMode,
@@ -472,7 +479,7 @@ export function PptCanvas({
     } catch (e) {
       console.error("Failed to persist PPT workspace snapshot to localStorage", e);
     }
-    void pptStore.save(PPT_STATE_KEY, workspaceState).catch((e) => {
+    void deckStore.save(PPT_STATE_KEY, workspaceState).catch((e) => {
       console.error("Failed to persist PPT workspace to IndexedDB", e);
     });
   }, [
@@ -2130,6 +2137,31 @@ export function PptCanvas({
   };
 
 
+  // My works: no switching while a deck is being generated; the deck's title and
+  // first slide name and preview the work.
+  useReportBusy(isGenerating(creationStep) || isGeneratingImage);
+  const firstSlide = localSlides[0];
+  const firstSlideImage = firstSlide ? generatedImages[firstSlide.id] : undefined;
+  useEffect(() => {
+    if (!work || !isPersistenceHydrated) return;
+    const touched = localSlides.length > 0 || !!ideaInput.trim() || !!outlineInput.trim();
+    if (!touched) return;
+    const nameHint = nameFromText(firstSlide?.title || ideaInput || outlineInput);
+    work.report({ touched: true, ...(nameHint ? { nameHint } : {}) });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isPersistenceHydrated, localSlides.length, firstSlide?.title, ideaInput, outlineInput]);
+  useEffect(() => {
+    if (!work || !firstSlideImage) return;
+    let cancelled = false;
+    void makeThumbnail(firstSlideImage).then((thumb) => {
+      if (thumb && !cancelled) work.report({ thumb });
+    });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [firstSlideImage]);
+
   const resetToStart = () => {
     if (typeof onResetWorkspace === "function") {
       onResetWorkspace();
@@ -2140,7 +2172,7 @@ export function PptCanvas({
     } catch {
       // A blocked localStorage only means the old history lingers.
     }
-    void pptStore.clear(PPT_STATE_KEY).catch((e) => {
+    void deckStore.clear(PPT_STATE_KEY).catch((e) => {
       console.error("Failed to clear persisted PPT workspace", e);
     });
     setLocalSlides([]);

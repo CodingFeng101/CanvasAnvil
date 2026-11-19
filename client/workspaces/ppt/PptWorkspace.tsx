@@ -9,11 +9,19 @@ import {
   type PanelImperativeHandle,
 } from "@/shared/ui/resizable";
 import { PPT_OUTLINE_EDIT_SYSTEM_PROMPT, PPT_SLIDES_EDIT_SYSTEM_PROMPT } from "@/workspaces/ppt/lib/prompts";
-import { PPT_STATE_KEY, PPT_WORKSPACE_STORAGE_KEY, pptStore } from "@/workspaces/ppt/storage";
+import {
+  PPT_CHAT_STORAGE_KEY,
+  PPT_HISTORY_STORAGE_KEY,
+  PPT_RETURN_STAGE_STORAGE_KEY,
+  PPT_STATE_KEY,
+  PPT_WORKSPACE_STORAGE_KEY,
+  pptStore,
+} from "@/workspaces/ppt/storage";
 import type { ChatMessage } from "@/ai/client";
 import { PptCanvas } from "@/workspaces/ppt/canvas/PptCanvas";
 import { ChatPanel as PptChatPanel } from "@/workspaces/ppt/chat/ChatPanel";
 import type { HistoryItem } from "@/shared/chat";
+import { useWork } from "@/shared/works/work-context";
 
 type Attachment = {
   id: string;
@@ -24,12 +32,10 @@ type Attachment = {
 
 type CodeActionResult = { ok: boolean; retry?: boolean; error?: string };
 
-const PPT_RETURN_STAGE_STORAGE_KEY = "CanvasAnvil-ppt-return-stage-v1";
-const PPT_HISTORY_STORAGE_KEY = "CanvasAnvil-history-ppt-v1";
-const PPT_CHAT_STORAGE_KEY = "chat_history_v2_ppt";
 
 export function PptWorkspace() {
   const uiLang = useUiLanguage();
+  const work = useWork();
   const didMountRef = useRef(false);
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [pptIncomingEdit, setPptIncomingEdit] = useState<{ id: string; payload: string } | null>(null);
@@ -229,6 +235,11 @@ export function PptWorkspace() {
     // The canvas is remounted below; a flow still running in the old one will never answer.
     for (const resolve of creationResolvers.current.values()) resolve({ ok: false });
     creationResolvers.current.clear();
+    if (work) {
+      // My works: the workspace remounts on a new draft; a saved deck stays listed.
+      work.startOver();
+      return;
+    }
     setCreationRequest(null);
     setPptIncomingEdit(null);
     setPptDraftSlides([]);
@@ -318,6 +329,7 @@ export function PptWorkspace() {
               pptDraftSlides={pptDraftSlides}
               onClearPptDraftSlides={() => setPptDraftSlides([])}
               onClearWorkspace={clearWorkspace}
+              onStartOver={work ? clearWorkspace : undefined}
               history={versionHistory}
               onRestore={handleRestore}
               onClearVersionHistory={() => setVersionHistory([])}

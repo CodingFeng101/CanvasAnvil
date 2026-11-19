@@ -62,6 +62,11 @@ interface ChatPanelProps {
     svg2d?: string;
   };
   onClearWorkspace?: () => void;
+  /**
+   * My works: clearing starts over on a new draft instead of wiping storage
+   * (a saved work keeps its chat). When given, it replaces the wipe.
+   */
+  onStartOver?: () => void;
   /** Where the deck is: before one exists ("start") a message asks for one instead of editing it. */
   stage?: "start" | "outline" | "slides";
   onStartCreation?: (request: CreationRequest) => Promise<CreationResult>;
@@ -106,6 +111,7 @@ export function ChatPanel({
     onClearVersionHistory,
     onClearAttachments,
     onClearWorkspace,
+    onStartOver,
     stage = "slides",
     onStartCreation,
     selectedTemplate,
@@ -230,6 +236,13 @@ const getPptTag = (slideId: string, title: string, kind: "outline" | "slide_imag
   }, [messages, storageKey, onMessagesChange]);
 
   const clearHistory = () => {
+    if (onStartOver) {
+      abortControllerRef.current?.abort();
+      abortControllerRef.current = null;
+      setShowResetWarning(false);
+      onStartOver();
+      return;
+    }
     abortControllerRef.current?.abort();
     abortControllerRef.current = null;
     setIsLoading(false);
