@@ -9,6 +9,14 @@ const messages = {
   // three panels are named the same way.
   "chat.panel.title": { zh: "图表助手", en: "Diagram Assistant" },
 
+  // draw.io editor loading
+  "drawio.load_failed": { zh: "编辑器加载失败", en: "The editor failed to load" },
+  "drawio.load_failed_hint": {
+    zh: "draw.io 编辑器从网络加载，默认地址和备用地址都没有响应。请检查网络后重试；如果所在网络打不开这两个地址，可以部署自己的 draw.io，并把 VITE_DRAWIO_BASE_URL 指向它。",
+    en: "The draw.io editor loads over the network, and neither the default nor the backup address answered. Check your connection and retry. If your network blocks both, host draw.io yourself and point VITE_DRAWIO_BASE_URL at it.",
+  },
+  "drawio.retry": { zh: "重试", en: "Retry" },
+
   // ChatInput
   "input.placeholder": { zh: "描述你想画的图表，或上传图片、文档…", en: "Describe the diagram you want, or upload an image or document…" },
   "input.clear": { zh: "清空对话", en: "Clear conversation" },
