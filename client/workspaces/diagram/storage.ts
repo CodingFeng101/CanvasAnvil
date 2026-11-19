@@ -35,6 +35,9 @@ export const STORAGE_KEYS = {
     aiApiKey: "next-ai-draw-io-ai-api-key",
 } as const
 
+/** The layout-correction steps shown in the chat (lib/layout-corrections.ts). */
+export const LAYOUT_CORRECTIONS_STORAGE_KEY = "next-ai-draw-io-layout-corrections"
+
 /** Database name is load-bearing: changing it orphans everything users saved. */
 export const diagramStore = createWorkspaceStore("CanvasAnvilDiagramWorkspaceDB")
 

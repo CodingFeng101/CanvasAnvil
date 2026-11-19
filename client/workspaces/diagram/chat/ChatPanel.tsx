@@ -21,6 +21,9 @@ import {
     toStorableMessages,
     type DiagramSession,
 } from "@/workspaces/diagram/storage";
+import { useReportBusy, useWork, useWorkStore } from "@/shared/works/work-context";
+import { nameFromText } from "@/shared/works/works-index";
+import { makeThumbnail } from "@/shared/works/thumbnail";
 import { useDiagram } from "@/workspaces/diagram/state/diagram-context"
 import { translateDiagram, useDiagramT } from "@/workspaces/diagram/lib/translations"
 import { getAIConfig } from "@/workspaces/diagram/lib/ai-config"
@@ -39,6 +42,7 @@ import { formatXML, validateAndFixXml, wrapWithMxFile } from "@/workspaces/diagr
 import { arrangeDiagramXml, parseLayout, tidyIfBetter } from "@/workspaces/diagram/lib/arrange"
 import {
     clearCorrections,
+    reloadCorrections,
     getCorrection,
     recordCorrection,
     updateCorrection,
@@ -195,6 +199,7 @@ export default function ChatPanel({
         chartXML,
         clearDiagram,
         isDrawioReady,
+        latestSvg,
     } = useDiagram()
     
     const t = useDiagramT()
@@ -351,13 +356,23 @@ export default function ChatPanel({
     // The saved session is read once per mount (after the one-time copy out of
     // localStorage). Nothing is saved until it has been read: an early save of the
     // still-empty state would overwrite what was just migrated.
-    const sessionStore = diagramStore
+    // Under My works the store is the open work's, and the shell has already
+    // done the localStorage copy into the first work.
+    const work = useWork()
+    const sessionStore = useWorkStore(diagramStore)
     const sessionLoadRef = useRef<Promise<DiagramSession> | null>(null)
     const loadSavedSession = useCallback(() => {
-        sessionLoadRef.current ??= migrateDiagramSession(sessionStore)
-            .catch((error) => console.error("Diagram storage migration failed:", error))
-            .then(() => loadDiagramSession(sessionStore))
+        if (!sessionLoadRef.current) {
+            const migrated = work
+                ? Promise.resolve()
+                : migrateDiagramSession(sessionStore).then(
+                      () => undefined,
+                      (error) => console.error("Diagram storage migration failed:", error),
+                  )
+            sessionLoadRef.current = migrated.then(() => loadDiagramSession(sessionStore))
+        }
         return sessionLoadRef.current
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [sessionStore])
     const [restored, setRestored] = useState(false)
     const persist = useCallback(
@@ -807,6 +822,35 @@ Please fix the XML issues. Ensure cell_id values exist in the current XML and th
 
     const messagesEndRef = useRef<HTMLDivElement>(null)
 
+    // My works: the layout steps in localStorage belong to the open work, so
+    // they are re-read on mount; no switching while a reply streams; the first
+    // request names the work and the last exported picture previews it.
+    useEffect(() => {
+        reloadCorrections()
+    }, [])
+    useReportBusy(status === "streaming" || status === "submitted")
+    const firstUser = (messages as Array<{ role: string; parts?: Array<{ type: string; text?: string }> }>).find(
+        (m) => m.role === "user",
+    )
+    const firstRequest = firstUser?.parts?.find((part) => part.type === "text")
+    useEffect(() => {
+        if (!work || !firstRequest?.text) return
+        const nameHint = nameFromText(firstRequest.text)
+        work.report({ touched: true, ...(nameHint ? { nameHint } : {}) })
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [firstRequest?.text])
+    useEffect(() => {
+        if (!work || !latestSvg || latestSvg.length > 2_000_000) return
+        let cancelled = false
+        void makeThumbnail(latestSvg).then((thumb) => {
+            if (thumb && !cancelled) work.report({ thumb, touched: true })
+        })
+        return () => {
+            cancelled = true
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [latestSvg])
+
     // Restore messages and XML snapshots on mount
     useEffect(() => {
         let cancelled = false
@@ -900,7 +944,9 @@ Please fix the XML issues. Ensure cell_id values exist in the current XML and th
         if (!canSaveDiagram) return
         if (chartXML && chartXML.length > 300) {
             void persist(DIAGRAM_DB_KEYS.diagramXml, chartXML)
+            if (/<mxCell[^>]*\bvertex="1"/.test(chartXML)) work?.report({ touched: true })
         }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [chartXML, canSaveDiagram, persist])
 
     // Save XML snapshots whenever they change
@@ -1511,6 +1557,11 @@ Please fix the XML issues. Ensure cell_id values exist in the current XML and th
                     onSubmit={onFormSubmit}
                     onChange={handleInputChange}
                     onClearChat={() => {
+                        if (work) {
+                            // My works: start over on a new draft; a saved diagram keeps its chat.
+                            work.startOver()
+                            return
+                        }
                         setMessages([])
                         clearCorrections()
                         clearDiagram()

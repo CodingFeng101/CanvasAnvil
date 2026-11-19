@@ -4,6 +4,7 @@ import type React from "react"
 import { createContext, useContext, useRef, useState } from "react"
 import type { DrawIoEmbedRef } from "react-drawio"
 import { DIAGRAM_DB_KEYS, diagramStore } from "@/workspaces/diagram/storage"
+import { useWorkStore } from "@/shared/works/work-context"
 import type { ExportFormat } from "@/workspaces/diagram/chat/save-dialog"
 import { extractDiagramXML, validateMxCellStructure } from "@/workspaces/diagram/lib/drawio-xml"
 
@@ -32,6 +33,8 @@ interface DiagramContextType {
 const DiagramContext = createContext<DiagramContextType | undefined>(undefined)
 
 export function DiagramProvider({ children }: { children: React.ReactNode }) {
+    // The open work's store (My works).
+    const sessionStore = useWorkStore(diagramStore)
     const [chartXML, setChartXML] = useState<string>("")
     const [latestSvg, setLatestSvg] = useState<string>("")
     const [diagramHistory, setDiagramHistory] = useState<
@@ -217,7 +220,7 @@ export function DiagramProvider({ children }: { children: React.ReactNode }) {
                     extension = ".drawio"
 
                     // Keep the saved copy in step when the user saves by hand
-                    void diagramStore.save(DIAGRAM_DB_KEYS.diagramXml, xmlContent).catch((error) => {
+                    void sessionStore.save(DIAGRAM_DB_KEYS.diagramXml, xmlContent).catch((error) => {
                         console.error("Failed to save diagram XML:", error)
                     })
                 } else if (format === "png") {

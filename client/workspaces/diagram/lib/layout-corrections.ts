@@ -11,6 +11,7 @@
 
 import { useSyncExternalStore } from "react"
 import { lintDiagramXml, type LintReport, type LintRule } from "./layout-lint"
+import { LAYOUT_CORRECTIONS_STORAGE_KEY } from "../storage"
 
 export type CorrectionMethod = "original" | "tidy" | "layered-down" | "layered-right" | "layered-up"
 
@@ -34,7 +35,7 @@ export interface LayoutCorrection {
     showing: "corrected" | "original"
 }
 
-const STORAGE_KEY = "next-ai-draw-io-layout-corrections"
+const STORAGE_KEY = LAYOUT_CORRECTIONS_STORAGE_KEY
 /** Older entries than this are dropped; a chat rarely holds more diagrams. */
 const MAX_SAVED = 100
 
@@ -75,6 +76,18 @@ restore()
 
 const emit = () => {
     save()
+    for (const l of listeners) l()
+}
+
+/**
+ * Re-reads the saved corrections, dropping what is in memory. Opening another
+ * work puts that work's corrections in localStorage; the canvas calls this on
+ * mount so the steps shown belong to the open work.
+ */
+export function reloadCorrections(): void {
+    corrections.clear()
+    latestId = undefined
+    restore()
     for (const l of listeners) l()
 }
 
