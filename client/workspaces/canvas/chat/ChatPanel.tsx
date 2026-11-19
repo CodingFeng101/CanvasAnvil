@@ -19,6 +19,9 @@ import {
 } from "@/workspaces/canvas/chat/chat-images";
 import { ChatMessageDisplay, type CanvasChatMessage } from "@/workspaces/canvas/chat/ChatMessageDisplay";
 import { VersionStrip } from "@/workspaces/canvas/chat/version-strip";
+import { canvasStore } from "@/workspaces/canvas/storage";
+import { useReportBusy, useWork, useWorkStore } from "@/shared/works/work-context";
+import { nameFromText } from "@/shared/works/works-index";
 
 const STORAGE_KEY = chatStorageKey("canvas");
 const IMAGE_OPTIONS_STORAGE_KEY = "CanvasAnvil-canvas-image-options-v1";
@@ -86,6 +89,8 @@ export function ChatPanel({
   const uiLang = useUiLanguage();
   const tr = (zh: string, en: string) => (uiLang === "zh" ? zh : en);
 
+  const work = useWork();
+  const imageStore = useWorkStore(canvasStore);
   const [messages, setMessages] = useState<CanvasChatMessage[]>(() =>
     loadChatHistory(STORAGE_KEY, []).map((m) => ({ ...m, id: makeId() })),
   );
@@ -94,6 +99,16 @@ export function ChatPanel({
   const [showResetWarning, setShowResetWarning] = useState(false);
   const [imageOptions, setImageOptions] = useState(loadImageOptions);
   const [focusTick, setFocusTick] = useState(0);
+
+  // My works: no switching mid-generation; the first request names the work.
+  useReportBusy(isGenerating);
+  const firstRequest = messages.find((m) => m.role === "user")?.content;
+  useEffect(() => {
+    if (!work || !firstRequest) return;
+    const nameHint = nameFromText(firstRequest);
+    work.report({ touched: true, ...(nameHint ? { nameHint } : {}) });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [firstRequest]);
 
   /** An example from the empty state goes into the input, not straight to the model, so it can be adjusted first. */
   const pickExample = (text: string) => {
@@ -111,7 +126,7 @@ export function ChatPanel({
 
   useEffect(() => {
     let cancelled = false;
-    void loadChatImages()
+    void loadChatImages(imageStore)
       .then((stored) => {
         if (cancelled) return;
         // History is trimmed as it is saved, so stored pictures can outlive
@@ -121,7 +136,7 @@ export function ChatPanel({
         chatImagesRef.current = { ...kept, ...chatImagesRef.current };
         setChatImages(chatImagesRef.current);
         if (Object.keys(kept).length !== Object.keys(stored).length) {
-          void saveChatImages(chatImagesRef.current).catch((e) => console.error("Failed to prune chat images", e));
+          void saveChatImages(chatImagesRef.current, imageStore).catch((e) => console.error("Failed to prune chat images", e));
         }
       })
       .catch((e) => console.error("Failed to load chat images", e));
@@ -135,7 +150,7 @@ export function ChatPanel({
   const writeChatImages = (next: ChatImageMap) => {
     chatImagesRef.current = next;
     setChatImages(next);
-    void saveChatImages(next).catch((e) => console.error("Failed to persist chat images", e));
+    void saveChatImages(next, imageStore).catch((e) => console.error("Failed to persist chat images", e));
   };
 
   const updateImageOptions = (next: Partial<{ size: ImageSize; quality: ImageQuality }>) => {
@@ -276,6 +291,12 @@ export function ChatPanel({
 
   const clearAll = () => {
     clearEpochRef.current += 1;
+    if (work) {
+      // My works: start over on a new draft; a saved work keeps its board and chat.
+      setShowResetWarning(false);
+      work.startOver();
+      return;
+    }
     persist([]);
     writeChatImages({});
     onClearAll();
