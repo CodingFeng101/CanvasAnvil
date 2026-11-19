@@ -90,6 +90,10 @@ export class CadDesignSession {
     await write;
   }
   setLoader(loader: Loader | undefined) { this.loader = loader; }
+  /** The designer's 2D plan as an image, when the designer is open; for the work's preview in My works. */
+  previewImage(): string | null {
+    try { return this.bridge?.shot2d() ?? null; } catch { return null; }
+  }
   private async load(preset: DesignerPreset, recovering = false): Promise<DesignerBridge> {
     this.activate();
     const start = Date.now();

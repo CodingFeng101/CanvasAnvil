@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { toast } from "sonner";
 import { cn } from "@/shared/lib/utils";
 import { t, useUiLanguage } from "@/shared/i18n";
@@ -17,6 +17,9 @@ import { floorplanQuestions, recognitionSummary } from "@/workspaces/cad/lib/des
 import { checkMessage, recognitionLines } from "@/workspaces/cad/chat/cad-steps-text";
 import { unwrapCadPlan } from "@/workspaces/cad/lib/design/cad-plan";
 import { deliveryMessage, type QaStatus } from "@/workspaces/cad/lib/design/delivery-check";
+import { CAD_CHAT_STORAGE_KEY, CAD_HISTORY_STORAGE_KEY, CAD_WORKSPACE_STORAGE_KEY, cadStore } from "@/workspaces/cad/storage";
+import { useReportBusy, useWork, useWorkStore } from "@/shared/works/work-context";
+import { makeThumbnail } from "@/shared/works/thumbnail";
 
 type Attachment = {
   id: string;
@@ -27,8 +30,6 @@ type Attachment = {
 
 type CodeActionResult = { ok: boolean; retry?: boolean; error?: string };
 
-const CAD_WORKSPACE_STORAGE_KEY = "CanvasAnvil-cad-state-v2";
-const CAD_CHAT_STORAGE_KEY = "chat_history_v2_cad";
 
 const tryParseJson = (text: string) => {
   try {
@@ -76,7 +77,27 @@ export function CadWorkspace() {
   const [isChatCollapsed, setIsChatCollapsed] = useState(false);
   const [cadResetTick, setCadResetTick] = useState(0);
   const [composerRequest, setComposerRequest] = useState<{ id: number; text: string; send?: boolean; assistant?: string }>();
-  const [designSession] = useState(() => new CadDesignSession());
+  // The open work's store (My works); the workspace remounts when another work is opened.
+  const work = useWork();
+  const designStore = useWorkStore(cadStore);
+  const [designSession] = useState(() => new CadDesignSession({ store: designStore }));
+  const designSnapshot = useSyncExternalStore(designSession.subscribe, designSession.getSnapshot);
+  const designRevision = designSnapshot.design ? `${designSnapshot.design.revision}:${designSnapshot.design.updatedAt}` : "";
+  useEffect(() => {
+    if (!work || !designRevision) return;
+    work.report({ touched: true });
+    if (!designSnapshot.ready || designSnapshot.busy) return;
+    let cancelled = false;
+    const timer = window.setTimeout(() => {
+      const shot = designSession.previewImage();
+      if (shot) void makeThumbnail(shot).then((thumb) => thumb && !cancelled && work.report({ thumb }));
+    }, 800);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [designRevision, designSnapshot.ready, designSnapshot.busy]);
   useEffect(() => {
     void designSession.hydrate().catch((error) => console.error("CAD design restore failed", error));
   }, [designSession]);
@@ -85,6 +106,7 @@ export function CadWorkspace() {
   const [canRecognize, setCanRecognize] = useState(false);
   const [canQa, setCanQa] = useState(false);
   const [qaRunning, setQaRunning] = useState(false);
+  useReportBusy(qaRunning || designSnapshot.busy);
   useEffect(() => {
     fetch("/api/config")
       .then((response) => response.json())
@@ -236,6 +258,11 @@ export function CadWorkspace() {
   };
 
   const clearWorkspace = async () => {
+    if (work) {
+      // My works: start over on a new draft; a saved design stays listed.
+      work.startOver();
+      return;
+    }
     try {
       await designSession.clear();
     } catch (reason) {
@@ -245,7 +272,7 @@ export function CadWorkspace() {
     setCadPlan(null);
     setChatHistory([]);
     setAttachments([]);
-    for (const key of [CAD_WORKSPACE_STORAGE_KEY, CAD_CHAT_STORAGE_KEY, "CanvasAnvil-history-cad-v1"]) {
+    for (const key of [CAD_WORKSPACE_STORAGE_KEY, CAD_CHAT_STORAGE_KEY, CAD_HISTORY_STORAGE_KEY]) {
       try {
         localStorage.removeItem(key);
       } catch {
