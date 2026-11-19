@@ -6,6 +6,8 @@ import { BrandIcon } from "@/app/BrandIcon";
 import { ErrorBoundary } from "@/app/ErrorBoundary";
 import { DEFAULT_WORKSPACE, WORKSPACES, isWorkspaceId, type WorkspaceId } from "@/app/workspaces";
 import { SettingsDialog } from "@/app/SettingsDialog";
+import { WorkHost, WorksProvider } from "@/app/works/works-provider";
+import { SaveWorkButton, WorksButton } from "@/app/works/works-dialog";
 import { LandingPage } from "@/pages/LandingPage";
 import { TutorialsPage } from "@/pages/tutorials/TutorialsPage";
 import { cn } from "@/shared/lib/utils";
@@ -279,6 +281,7 @@ export default function App() {
     // `reducedMotion="user"` is the single gate for the JS side; index.css
     // carries the equivalent for CSS transitions.
     <MotionConfig reducedMotion="user">
+      <WorksProvider activeWorkspace={active.id} onActivateWorkspace={setActiveWorkspace}>
       <div className="h-screen w-screen flex flex-col bg-background overflow-hidden font-sans">
         <Toaster position="top-center" richColors />
 
@@ -297,6 +300,8 @@ export default function App() {
           </div>
 
           <div className="flex items-center gap-1 justify-self-end">
+            <SaveWorkButton />
+            <WorksButton />
             <LanguageToggle />
             <ThemeToggle />
             <SettingsDialog />
@@ -321,12 +326,15 @@ export default function App() {
                 transition={TWEEN.base}
                 className="h-full w-full"
               >
-                <ActiveWorkspace />
+                <WorkHost fallback={<WorkspaceFallback />}>
+                  <ActiveWorkspace />
+                </WorkHost>
               </motion.div>
             </Suspense>
           </ErrorBoundary>
         </div>
       </div>
+      </WorksProvider>
     </MotionConfig>
   );
 }

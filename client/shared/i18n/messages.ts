@@ -18,6 +18,10 @@ const messages = {
   "settings.buttonTitle": { zh: "设置", en: "Settings" },
 
   "reset.title": { zh: "清空对话", en: "Clear Chat" },
+  "reset.descSaved": {
+    zh: "这份作品已保存在「我的作品」里，不会被删除。清空后会换成一份新的空白作品。",
+    en: "This work is saved in My works and stays there. Clearing opens a new blank work.",
+  },
   "reset.desc": {
     zh: "清空对话将同时清空当前工作台内容。此操作无法撤销。PPT 工作台会回到开始页面。",
     en: "Clearing chat will also clear the current workspace content. This action cannot be undone. The PPT workspace will return to the start page.",
