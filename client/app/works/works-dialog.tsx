@@ -1,12 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
-import { Check, Copy, FolderOpen, ImageOff, Pencil, Plus, Save, Trash2 } from "lucide-react";
+import { Check, Copy, FolderOpen, ImageOff, Pencil, Plus, Trash2 } from "lucide-react";
 import { cn } from "@/shared/lib/utils";
 import { t as tShell, useUiLanguage, type UiLanguage } from "@/shared/i18n";
 import { Button } from "@/shared/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/shared/ui/dialog";
 import { Input } from "@/shared/ui/input";
 import { ScrollArea } from "@/shared/ui/scroll-area";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/shared/ui/tooltip";
 import { listedWorks, type WorkMeta } from "@/shared/works/works-index";
 import type { WorksState } from "@/shared/works/works-store";
 import { WORKSPACES, type WorkspaceId } from "@/app/workspaces";
@@ -35,24 +34,6 @@ function formatTime(time: number, lang: UiLanguage) {
   } catch {
     return new Date(time).toLocaleString();
   }
-}
-
-/** The header's Save button for the canvas on screen. */
-export function SaveWorkButton() {
-  const t = useWorksT();
-  const { active, current, saveCurrent } = useWorksControl();
-  if (!active || active.phase !== "ready" || !current) return null;
-  return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <button type="button" className={headerButton} onClick={() => void saveCurrent()}>
-          {current.saved ? <Check className="h-4 w-4 text-primary" /> : <Save className="h-4 w-4" />}
-          <span className="hidden sm:inline">{current.saved ? t("save.saved") : t("save.button")}</span>
-        </button>
-      </TooltipTrigger>
-      <TooltipContent>{current.saved ? t("save.savedTip") : t("save.desc")}</TooltipContent>
-    </Tooltip>
-  );
 }
 
 /** The header's My works button and the list of every canvas's saved works. */
@@ -111,7 +92,8 @@ export function WorksButton() {
         <span className="hidden sm:inline">{t("works.open")}</span>
       </button>
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="sm:max-w-4xl max-h-[85vh] grid-rows-[auto_auto_1fr] overflow-hidden">
+        {/* A fixed size, like a settings window: the list scrolls inside instead of the window growing. */}
+        <DialogContent className="flex h-[min(640px,calc(100vh-4rem))] flex-col overflow-hidden sm:max-w-[min(56rem,calc(100%-2rem))]">
           <DialogHeader>
             <DialogTitle>{t("works.title")}</DialogTitle>
             <DialogDescription>{storageMissing ? t("works.unavailable") : t("works.desc")}</DialogDescription>
@@ -141,7 +123,7 @@ export function WorksButton() {
             </Button>
           </div>
 
-          <ScrollArea className="min-h-0 -mx-2 px-2">
+          <ScrollArea className="min-h-0 flex-1 -mx-2 px-2">
             {!all ? (
               <p className="py-12 text-center text-sm text-muted-foreground">{t("works.loading")}</p>
             ) : rows.length === 0 ? (

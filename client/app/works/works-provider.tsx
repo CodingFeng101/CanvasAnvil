@@ -293,6 +293,9 @@ export function WorksProvider({
         flushReport();
         leaveActive(null, !open?.saved);
       },
+      save() {
+        void saveCurrent();
+      },
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [active?.workspace, active?.currentId, active?.phase, active?.index, flushReport]);
@@ -314,7 +317,9 @@ export function WorksProvider({
 
   return (
     <WorksControlContext.Provider value={control}>
-      <WorkHostContext.Provider value={workValue}>{children}</WorkHostContext.Provider>
+      {/* Right after a canvas switch `active` still holds the previous canvas's
+          works until the effect above runs; the new canvas must not mount on them. */}
+      <WorkHostContext.Provider value={active?.workspace === activeWorkspace ? workValue : null}>{children}</WorkHostContext.Provider>
       <NameDialog
         request={nameRequest}
         onClose={(name) => {

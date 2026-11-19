@@ -27,6 +27,8 @@ export interface WorkContextValue {
    * Either way the canvas then remounts on a fresh draft.
    */
   startOver(): void;
+  /** The Save button: names and lists a draft, or renames a saved work. */
+  save(): void;
 }
 
 export const WorkContext = createContext<WorkContextValue | null>(null);

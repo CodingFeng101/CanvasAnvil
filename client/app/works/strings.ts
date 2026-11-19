@@ -18,9 +18,6 @@ export const { t: tWorks, useT: useWorksT } = createTranslator({
   "works.loading": { zh: "正在读取…", en: "Loading…" },
   "works.unavailable": { zh: "当前浏览器无法保存作品（可能是隐私模式），刷新后内容不会保留。", en: "This browser cannot keep your works (private mode?); they will not survive a reload." },
 
-  "save.button": { zh: "保存", en: "Save" },
-  "save.saved": { zh: "已保存", en: "Saved" },
-  "save.savedTip": { zh: "已保存到「我的作品」，之后的修改会自动保存。点击可改名。", en: "Saved to My works; later edits save on their own. Click to rename." },
   "save.title": { zh: "保存作品", en: "Save work" },
   "save.renameTitle": { zh: "作品改名", en: "Rename work" },
   "save.desc": { zh: "保存后会出现在「我的作品」里，之后的修改会自动保存。", en: "It will be listed in My works, and later edits save on their own." },

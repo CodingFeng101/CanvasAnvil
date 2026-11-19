@@ -20,6 +20,7 @@ import { GlobalConstraintsDialog } from "@/shared/chat"
 import { STORAGE_KEYS } from "@/workspaces/diagram/storage";
 import { HistoryDialog } from "@/workspaces/diagram/chat/history-dialog"
 import { ResetWarningModal } from "@/shared/chat"
+import { SaveWorkButton } from "@/shared/works/save-work-button"
 import { Textarea } from "@/shared/ui/textarea"
 import { cn } from "@/shared/lib/utils"
 import { useDiagram } from "@/workspaces/diagram/state/diagram-context"
@@ -406,6 +407,7 @@ export function ChatInput({
                 <div className="flex items-center justify-between px-3 py-2 border-t border-border/50">
                     {/* Left actions */}
                     <div className="flex items-center gap-1">
+                        <SaveWorkButton />
                         <ButtonWithTooltip
                             type="button"
                             variant="ghost"

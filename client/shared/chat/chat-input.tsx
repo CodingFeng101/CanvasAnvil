@@ -1,5 +1,6 @@
 import React, { useRef, useEffect, useMemo, useState, useCallback } from 'react';
 import { Send, FileText, ImageIcon, History, Square, Trash2, Upload } from 'lucide-react';
+import { SaveWorkButton } from '@/shared/works/save-work-button';
 import { cn } from '@/shared/lib/utils';
 import { ButtonWithTooltip } from '@/shared/chat';
 import { FilePreviewList } from '@/shared/chat';
@@ -607,6 +608,7 @@ export function ChatInput({
                 button off the right edge. */}
             <div className="flex flex-wrap items-center justify-between gap-y-1.5 px-3 py-2 border-t border-border/50">
                 <div className="flex flex-wrap items-center gap-1">
+                    <SaveWorkButton />
                     {toolbarExtras}
                     {onClearChat && (
                         <ButtonWithTooltip
