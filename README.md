@@ -167,7 +167,14 @@ CanvasAnvil includes dedicated local skills for each canvas so workflows stay op
   The website's flow: a bundled template library, idea / outline / beautify modes, outline review with the user before anything is drawn, all slides drawn concurrently with retries, single-slide edits, and PDF, image PPTX or editable PPTX export. Prompts and templates are synced from the website with `node scripts/sync-ppt-skill.mjs`.
 - `canvas-skill` · Image creation on a local whiteboard
   A native Codex canvas plugin reusing the website's Excalidraw board, annotation compositor, image placement and version strip. Give instructions directly in the Codex conversation. Codex captures selected images and annotations through MCP, then uses the host image tool and inserts results. Data lives in the project's `canvas/` directory.
-  From the repository root, run `codex plugin marketplace add .` and `codex plugin add canvasanvil-canvas@canvasanvil-local`, then restart Codex and invoke `$canvas-skill`, `$diagram-skill` or `$cad-skill`. Node 20+ is required. The release includes the MCP and widget bundles with no runtime npm installation.
+  Install straight from GitHub, no clone needed:
+
+  ```bash
+  codex plugin marketplace add CodingFeng101/CanvasAnvil --ref main
+  codex plugin add canvasanvil-canvas@canvasanvil
+  ```
+
+  Then restart Codex and invoke `$canvas-skill`, `$diagram-skill` or `$cad-skill`. Node 20+ is required. The release includes the MCP and widget bundles with no runtime npm installation. If you installed earlier from the `canvasanvil-local` marketplace, add the marketplace again with the first command, since its name changed. You can also copy any `skill/<name>` folder into a project and use it on its own.
 
 All skills use the host text model by default. Only image generation requires explicit provider configuration.
 Editable PPTX export uses the host model too: the agent rebuilds the slides step by step following `skill/ppt-skill/references/editable-pptx-workflow.md`, with the scripts in the skill's `editable/` folder; its previews use PowerPoint on Windows and LibreOffice elsewhere, plus the Python packages in `editable/requirements.txt`.
@@ -229,6 +236,24 @@ npm run build
 <a id="recent-updates"></a>
 
 ## 🗓️ Recent updates
+
+### 2026-11-18
+
+**✨ New**
+
+- **My works: keep several works per canvas**
+  - A new **My works** button in the header lists everything you have saved, with tabs for All / Diagram / Interior Design / PPT / Free Canvas. Open, rename, duplicate or delete; opening a work of another canvas switches to it.
+  - Every canvas gets a **Save** button in the toolbar under its chat input. Name the work the first time and it appears in My works.
+  - **Saved when you press Save**: what is on the canvas is still kept in the browser all the time, so a reload loses nothing, but the version in My works changes only when you press Save. After further edits the Save button shows a dot.
+  - Leaving a work with unsaved changes asks Save / Don't save / Cancel; Don't save takes it back to the last saved version. A draft that was never saved is simply dropped.
+  - Clearing the chat keeps a saved work in My works and opens a new blank one.
+  - What you had before upgrading becomes your first work; the old data is left in place.
+
+**⚡ Improvements**
+
+- **The Diagram canvas keeps its chat and diagram in IndexedDB**, so long chats no longer fail to save when localStorage is full. Old data is copied over on first open and kept; replies being generated are saved every 3 seconds.
+- **draw.io falls back to a mirror**: if the default address has not loaded in 8 seconds, the GitHub Pages mirror is used; if neither loads, a message with a Retry button appears. A draw.io address you configured yourself is used on its own.
+- **No clone needed to install the plugin**: the README now adds the marketplace straight from GitHub (`codex plugin marketplace add CodingFeng101/CanvasAnvil`). The marketplace is renamed `canvasanvil`; if you added it as `canvasanvil-local`, add it again.
 
 ### 2026-11-13
 
@@ -292,67 +317,6 @@ npm run build
 - The CAD "Delivery check" button runs the designer's acceptance (`skill/cad-skill/designer/scripts/qa.mjs --lite --quick`, then `qa_files.py`) on the server; it needs Chrome / Edge / Chromium there (or `CHROME_PATH`) and Python with the recognizer's requirements, and stays hidden without a browser. The Docker image includes Chromium.
 - The MEP audit reports problems but does not move points; adjust them under MEP in the designer.
 - In `cad-skill`, starting from an existing floor plan needs Python with `numpy pillow opencv-python pymupdf ezdxf pypdf`; designing from a brief needs only Node 18+.
-
-### 2026-11-06
-
-**✨ New**
-
-- **Editable PPTX export for the PPT canvas**
-  - The export menu has a new "Export Editable PPTX", next to "Export PDF" and "Export Image PPT".
-  - Exported decks used to be one picture per slide. Now every slide comes back as layers you can edit, from bottom to top:
-    - **Clean base**: the background with text, cards and icons removed; gradients, waves, buildings and other background art stay in this layer;
-    - **Native shapes**: card frames, dividers, dots, rings, bars and arrows are PowerPoint's own shapes, so their colour, size and corner radius can be changed directly;
-    - **Icons and illustrations**: redrawn by the image model after the original, on transparent backgrounds, to move, resize or replace one by one;
-    - **Editable text**: titles, body text and lists sit in text boxes, keeping their position, size, colour and weight.
-  - Slides in one style share a single base, and icons and cards repeated across slides are drawn once, so the whole deck stays consistent.
-
-- **Export settings**
-  - **Pages**: lists every slide by number and title; select all, none or page by page to export only what you need.
-  - **Rework rounds**: up to 3–10 per page, default 3. Each finished page is checked against the original (overall similarity, local differences, text position and size, green fringes left from cut-outs); a page that fails is fixed and checked again, and a page that passes stops early instead of using up its rounds.
-  - A count out of range snaps to the nearest allowed value.
-
-- **Export run panel**
-  - Once started, a fixed-height panel opens under the export button and scrolls through the whole run as it happens, like an agent at work.
-  - Seven steps in order: read text → plan backgrounds → draw clean backgrounds → analyse elements → draw icons and illustrations → rebuild pages → write the PPTX, each with its state (waiting, running, done or failed) and time taken.
-  - Under each step, timestamped details such as "page 1: 12 text blocks read", "base g1 shared by pages 1 and 2", "page 2: round 1 failed (similarity 78.5, 6 problems), fixing".
-  - "Rebuild pages" is grouped by page, so pages built side by side keep their progress apart.
-  - The step and page in progress open by themselves and fold away when done; anything you opened or closed yourself stays as you left it. When the panel is full it scrolls, following the newest line unless you have scrolled up to read.
-  - **Intermediate results open with a click**: the clean bases, icon sheets, every sliced icon and illustration, every page's preview after each round and the check images with problem areas marked all show as thumbnails that open full size.
-
-- **`editable_pptx` export mode in `ppt-skill`**
-  - Coding agents such as Claude Code and Codex can export a deck as editable PPTX, with the same steps and checks as the app.
-  - The host agent makes the judgments itself: planning the base groups, analysing each page's elements, writing each page's compose spec and fixing what the checks find. No separate chat model to configure.
-  - `editable/editable_run.py` does the mechanical steps (OCR, image calls with retries, aspect checks, slicing by drawings, composition, PowerPoint previews, checks, merge), run in order `init → base → analysis → assets → page / check → merge`; the full workflow is in `references/editable-pptx-workflow.md`.
-  - It reads the same slide manifest as the image PPT, converting JPG, WebP and other formats; the run folder keeps the bases, asset sheets and every round's previews and checks.
-  - The skill carries every script and rule doc it needs, independent of the app's code, so it works on its own.
-  - The image model comes from the skill's `config/image-provider.json`, the same file the other export modes use.
-  - `SKILL.md` and `references/export-modes.md` describe when to use the mode, its steps, settings and requirements, and the agent warns the user up front that it takes a while.
-
-**⚡ Improved**
-
-- During an export, collapse the run panel to a timer pill beside the export button (showing the time so far) and keep editing; click the pill to open it again.
-- When the export finishes the panel closes and the file downloads; if it fails, the panel stays open with the step that failed and why.
-- A page refresh, closing and reopening the page, or a server restart picks a running export back up, with its earlier steps and pictures still there, and the file still downloads when it is done.
-- Better background detection: elements are analysed with the clean base alongside, so gradients, waves and buildings in the background are no longer drawn a second time as elements.
-- A base whose aspect ratio is off from the original is redrawn, never stretched.
-- An icon sheet with the wrong number of drawings is thrown away and redrawn, so misaligned icons never end up in the deck.
-- Starting an export while one is running says "another export is running; wait for it to finish" instead of the two getting in each other's way.
-
-**📌 Notes**
-
-- Editable export builds and checks every page, so it is slow: usually 10+ minutes, and one export runs at a time.
-- Icons and illustrations are redrawn after the original: the same design, not pixel for pixel.
-- Needs Microsoft PowerPoint (previews for the checks); install the Python packages with `pip install -r scripts/slide-agent/requirements.txt`. The scripts and rule docs it uses are all in `scripts/slide-agent/`; nothing else to install.
-- Models: an export from the web page runs on the text and image models you entered in the AI settings; the server does not use keys from its environment. Only when running `scripts/slide-agent/pipeline.ts` from the command line, set `SLIDE_AGENT_API_KEY` / `SLIDE_AGENT_BASE_URL` / `SLIDE_AGENT_MODEL` and `SLIDE_AGENT_IMAGE_API_KEY` / `SLIDE_AGENT_IMAGE_BASE_URL` / `SLIDE_AGENT_IMAGE_MODEL` in `scripts/slide-agent/.env.local` or the environment.
-
-### 2026-11-05
-
-**🐛 Fixed**
-
-- **The Diagram canvas lost its correction step after a reload**: the canvas corrects the model's layout and shows each diagram as thinking → drawing → correction in the chat, but corrections lived only in memory, so a refresh dropped the third step.
-  - Every diagram's correction is now saved locally with the chat, so after a refresh the correction step and the layout scores before and after are still there;
-  - the latest diagram also keeps both versions, so you can still switch between the model's original and the corrected layout.
-- **A correction running at reload hung**: one that had not finished when the page was refreshed now comes back as finished instead of staying "in progress".
 
 ## ⚖️ License
 

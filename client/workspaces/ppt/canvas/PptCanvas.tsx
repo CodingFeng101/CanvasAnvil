@@ -6,7 +6,8 @@ import { parseJsonLoose } from "./lib/parse-json";
 import { extractPdfPagesAsImages, isPdfFile } from "./lib/deck-source";
 import { GenerationProgress } from "./views/GenerationProgress";
 import { OutlineReview } from "./views/OutlineReview";
-import { CreationStart } from "./views/CreationStart";
+import { StyleLibrary } from "./views/StyleLibrary";
+import type { CreationRequest, CreationResult } from "@/workspaces/ppt/lib/creation-intent";
 import { DeckView } from "./views/DeckView";
 import {
   getTextlessBackgroundVersion as textlessBackgroundOf,
@@ -50,6 +51,9 @@ import {
   type SlideEditRoutingItem,
 } from '@/workspaces/ppt/lib/ppt-service';
 import { PPT_STATE_KEY, PPT_WORKSPACE_STORAGE_KEY, pptStore } from "@/workspaces/ppt/storage";
+import { useReportBusy, useWork, useWorkStore } from "@/shared/works/work-context";
+import { nameFromText } from "@/shared/works/works-index";
+import { makeThumbnail } from "@/shared/works/thumbnail";
 import { useUiLanguage } from "@/shared/i18n";
 import { canvasAnvilToEditorSlide, editorSlideToExportPayload } from "@/features/ppt-editor";
 import {
@@ -96,6 +100,12 @@ interface PptCanvasProps {
   incomingEdit?: { id: string; payload: string } | null;
   onIncomingEditHandled?: (id: string) => void;
   onResetWorkspace?: () => void;
+  /** The first chat message of a deck: what to make, from what. */
+  creationRequest?: (CreationRequest & { id: string }) | null;
+  onCreationHandled?: (id: string, result: CreationResult) => void;
+  /** What is being typed in the chat, for the style library's suggestions. */
+  draftText?: string;
+  onTemplateChange?: (template: { name: string; previewSrc: string } | null) => void;
 }
 
 export function PptCanvas({
@@ -105,10 +115,17 @@ export function PptCanvas({
   onPptStageChange,
   incomingEdit,
   onIncomingEditHandled,
-  onResetWorkspace
+  onResetWorkspace,
+  creationRequest,
+  onCreationHandled,
+  draftText = "",
+  onTemplateChange,
 }: PptCanvasProps) {
   const uiLang = useUiLanguage();
   const tr = useCallback((zh: string, en: string) => (uiLang === "zh" ? zh : en), [uiLang]);
+  // The open work's store (My works); the canvas remounts when another work is opened.
+  const deckStore = useWorkStore(pptStore);
+  const work = useWork();
   const initialPptStateRef = useRef<any>(undefined);
   if (typeof initialPptStateRef.current === "undefined") {
     initialPptStateRef.current = (() => {
@@ -152,6 +169,12 @@ export function PptCanvas({
   });
   const { templateImage, selectedTemplateId, restoreSelection: restoreTemplateSelection } =
     templateLibrary;
+  const selectedTemplate = templateLibrary.templates.find((t) => t.id === selectedTemplateId);
+  const selectedTemplateName = selectedTemplate?.name ?? "";
+  const selectedTemplatePreview = selectedTemplate?.previewSrc ?? "";
+  useEffect(() => {
+    onTemplateChange?.(selectedTemplateName ? { name: selectedTemplateName, previewSrc: selectedTemplatePreview } : null);
+  }, [selectedTemplateName, selectedTemplatePreview, onTemplateChange]);
   const [backConfirmOpen, setBackConfirmOpen] = useState(false);
   const [generatedImages, setGeneratedImages] = useState<Record<string, string>>(() => {
     const v = initialPptState?.generatedImages;
@@ -279,7 +302,7 @@ export function PptCanvas({
 
     void (async () => {
       try {
-        const raw = await pptStore.read<any>(PPT_STATE_KEY);
+        const raw = await deckStore.read<any>(PPT_STATE_KEY);
         if (cancelled || !raw || typeof raw !== "object") return;
         const persistedState = migrateLegacyTextlessVersions(raw);
         const snapshotState =
@@ -397,6 +420,7 @@ export function PptCanvas({
       cancelled = true;
     };
   }, [
+    deckStore,
     restoreTemplateSelection,
     setSlideMaterials,
     setCreationMode,
@@ -455,7 +479,7 @@ export function PptCanvas({
     } catch (e) {
       console.error("Failed to persist PPT workspace snapshot to localStorage", e);
     }
-    void pptStore.save(PPT_STATE_KEY, workspaceState).catch((e) => {
+    void deckStore.save(PPT_STATE_KEY, workspaceState).catch((e) => {
       console.error("Failed to persist PPT workspace to IndexedDB", e);
     });
   }, [
@@ -1414,9 +1438,14 @@ export function PptCanvas({
     throw lastError instanceof Error ? lastError : new Error(getErrorMessage(lastError));
   };
 
-  const handleStartBeautify = async () => {
-    const file = inputs.beautify.file;
-    if (!file) return;
+  const handleStartBeautify = async (
+    fileOverride?: File | null,
+    requirementOverride?: string,
+    useTemplateOverride?: boolean,
+  ): Promise<CreationResult> => {
+    const file = fileOverride ?? inputs.beautify.file;
+    if (!file) return { ok: false };
+    let failedCount = 0;
 
     resetGenerationState();
     setBeautifyFailures({});
@@ -1428,9 +1457,8 @@ export function PptCanvas({
         : [];
 
       if (pageImages.length === 0) {
-        alert(tr("无法解析页面图片，请确认文件格式（仅支持 .pdf）。", "Failed to extract pages. Please upload a .pdf file."));
         dispatchCreation({ type: "failed" });
-        return;
+        return { ok: false, error: tr("无法解析页面图片，请确认文件格式（仅支持 .pdf）。", "Failed to extract pages. Please upload a .pdf file.") };
       }
 
       const slides: SlideData[] = pageImages.map((_, i) => ({
@@ -1471,8 +1499,8 @@ export function PptCanvas({
       );
       progressTracker.start();
 
-      const instruction = buildBeautifyInstruction(inputs.beautify.requirement);
-      const beautifyTemplate = inputs.beautify.useTemplate ? (templateImage || undefined) : undefined;
+      const instruction = buildBeautifyInstruction(requirementOverride ?? inputs.beautify.requirement);
+      const beautifyTemplate = (useTemplateOverride ?? inputs.beautify.useTemplate) ? (templateImage || undefined) : undefined;
       const tasks = slides.map((s, i) => async () => {
         let baseReady = false;
         try {
@@ -1494,10 +1522,12 @@ export function PptCanvas({
               return next;
             });
           } else {
+            failedCount += 1;
             setBeautifyFailures((prev) => ({ ...prev, [s.id]: tr("模型返回空结果", "Empty model result") }));
           }
         } catch (e) {
           console.error(`Beautify failed for slide ${i + 1}`, e);
+          failedCount += 1;
           setBeautifyFailures((prev) => ({ ...prev, [s.id]: getErrorMessage(e) }));
         } finally {
           progressTracker.markSlideFinished(baseReady);
@@ -1507,10 +1537,11 @@ export function PptCanvas({
       await runInParallel(tasks, BEAUTIFY_CONCURRENCY);
       dispatchCreation({ type: "finished" });
       onPptReadyChange?.(true);
+      return { ok: true, count: slides.length, failed: failedCount };
     } catch (e) {
       console.error("Beautify failed", e);
-      alert(tr("美化失败，请重试", "Beautify failed. Please retry."));
       dispatchCreation({ type: "failed" });
+      return { ok: false, error: getErrorMessage(e) };
     }
   };
 
@@ -1578,15 +1609,16 @@ export function PptCanvas({
     }
   };
 
-  const handleLoadOutline = async () => {
-      if (!outlineInput.trim()) return;
+  const handleLoadOutline = async (override?: string): Promise<CreationResult> => {
+      const outlineText = override ?? outlineInput;
+      if (!outlineText.trim()) return { ok: false };
       resetGenerationState();
       dispatchCreation({ type: "preparing", message: tr("正在解析参考素材...", "Preparing reference assets...") });
       try {
         const referenceVisualAssets = await buildReferenceVisualAssetsWithCaptions();
         dispatchCreation({ type: "progress", current: 0, total: 0, message: tr("正在生成计划...", "Generating plan...") });
         const pages = await pptService.generatePlanFromOutline(
-          outlineInput,
+          outlineText,
           uiLang as "zh" | "en",
           inputs.reference.files,
           referenceVisualAssets.map((x) => ({
@@ -1610,15 +1642,17 @@ export function PptCanvas({
         setLocalSlides(autoMaterial.nextSlides);
         dispatchCreation({ type: "outlined" });
         onPptReadyChange?.(true);
+        return { ok: true, count: slides.length };
       } catch (e) {
         console.error("Failed to build plan from outline", e);
-        alert(e instanceof Error ? e.message : tr("大纲转计划失败，请重试。", "Failed to build plan from outline. Please retry."));
         dispatchCreation({ type: "failed" });
+        return { ok: false, error: e instanceof Error ? e.message : tr("大纲转计划失败，请重试。", "Failed to build plan from outline. Please retry.") };
       }
   };
-  const handleGenerateOutline = async () => {
-    if (!ideaInput.trim()) return;
-    
+  const handleGenerateOutline = async (override?: string): Promise<CreationResult> => {
+    const ideaText = override ?? ideaInput;
+    if (!ideaText.trim()) return { ok: false };
+
     resetGenerationState();
     // The input form stays up while the plan is being built.
     dispatchCreation({ type: "preparing", message: tr("正在解析参考素材...", "Preparing reference assets...") });
@@ -1627,7 +1661,7 @@ export function PptCanvas({
         const referenceVisualAssets = await buildReferenceVisualAssetsWithCaptions();
         dispatchCreation({ type: "progress", current: 0, total: 0, message: tr("正在生成大纲...", "Generating outline...") });
         const pages = await pptService.generateOutline(
-          ideaInput,
+          ideaText,
           uiLang as "zh" | "en",
           inputs.reference.files,
           referenceVisualAssets.map((x) => ({
@@ -1654,6 +1688,7 @@ export function PptCanvas({
         setLocalSlides(autoMaterial.nextSlides);
         dispatchCreation({ type: "outlined" });
         onPptReadyChange?.(true);
+        return { ok: true, count: slides.length };
     } catch (e) {
         console.error("Failed to generate outline", e);
         const name = (e as any)?.name;
@@ -1666,10 +1701,54 @@ export function PptCanvas({
           : e instanceof Error
             ? e.message
             : tr("生成大纲失败，请重试", "Failed to generate outline. Please retry.");
-        alert(msg);
         dispatchCreation({ type: "failed" });
+        return { ok: false, error: msg };
     }
   };
+
+  /**
+   * A deck asked for in the chat. The reference documents are read first; the
+   * flow itself starts from the render after that, so it sees their text.
+   */
+  const pendingCreationRef = useRef<(CreationRequest & { id: string }) | null>(null);
+  const [pendingCreationTick, setPendingCreationTick] = useState(0);
+  useEffect(() => {
+    const request = creationRequest;
+    if (!request) return;
+    setCreationMode(request.kind);
+    if (request.kind === "idea") setIdeaInput(request.text);
+    else if (request.kind === "outline") setOutlineInput(request.text);
+    else {
+      setBeautifyRequirement(request.text);
+      setBeautifyUseTemplate(Boolean(templateImage));
+    }
+    void (async () => {
+      if (request.kind !== "beautify") {
+        dispatchCreation({ type: "preparing", message: tr("正在读参考资料...", "Reading the reference files...") });
+        await inputs.reference.handleFileChange(request.files).catch((e) => console.error("Failed to read reference files", e));
+      }
+      pendingCreationRef.current = request;
+      setPendingCreationTick((x) => x + 1);
+    })();
+    // One-shot per request: the id identifies it.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [creationRequest?.id]);
+  useEffect(() => {
+    const request = pendingCreationRef.current;
+    if (!request || inputs.reference.isParsing) return;
+    pendingCreationRef.current = null;
+    const run =
+      request.kind === "idea"
+        ? handleGenerateOutline(request.text)
+        : request.kind === "outline"
+          ? handleLoadOutline(request.text)
+          : handleStartBeautify(request.files[0] ?? null, request.text, Boolean(templateImage));
+    void run
+      .catch((e): CreationResult => ({ ok: false, error: getErrorMessage(e) }))
+      .then((result) => onCreationHandled?.(request.id, result));
+    // Runs the handlers of the render that has the parsed files.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingCreationTick, inputs.reference.isParsing]);
 
   const handleGenerateFullPpt = async () => {
     dispatchCreation({ type: "rendering" });
@@ -2058,6 +2137,31 @@ export function PptCanvas({
   };
 
 
+  // My works: no switching while a deck is being generated; the deck's title and
+  // first slide name and preview the work.
+  useReportBusy(isGenerating(creationStep) || isGeneratingImage);
+  const firstSlide = localSlides[0];
+  const firstSlideImage = firstSlide ? generatedImages[firstSlide.id] : undefined;
+  useEffect(() => {
+    if (!work || !isPersistenceHydrated) return;
+    const touched = localSlides.length > 0 || !!ideaInput.trim() || !!outlineInput.trim();
+    if (!touched) return;
+    const nameHint = nameFromText(firstSlide?.title || ideaInput || outlineInput);
+    work.report({ touched: true, ...(nameHint ? { nameHint } : {}) });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isPersistenceHydrated, localSlides.length, firstSlide?.title, ideaInput, outlineInput]);
+  useEffect(() => {
+    if (!work || !firstSlideImage) return;
+    let cancelled = false;
+    void makeThumbnail(firstSlideImage).then((thumb) => {
+      if (thumb && !cancelled) work.report({ thumb });
+    });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [firstSlideImage]);
+
   const resetToStart = () => {
     if (typeof onResetWorkspace === "function") {
       onResetWorkspace();
@@ -2068,7 +2172,7 @@ export function PptCanvas({
     } catch {
       // A blocked localStorage only means the old history lingers.
     }
-    void pptStore.clear(PPT_STATE_KEY).catch((e) => {
+    void deckStore.clear(PPT_STATE_KEY).catch((e) => {
       console.error("Failed to clear persisted PPT workspace", e);
     });
     setLocalSlides([]);
@@ -2172,15 +2276,7 @@ export function PptCanvas({
   // Render Creation Wizard
   if (activeSlides.length === 0 && (creationStep === 'idle' || creationStep === 'input' || creationStep === 'done')) {
     return (
-      <CreationStart
-        inputs={inputs}
-        templateLibrary={templateLibrary}
-        progress={progress}
-        tr={tr}
-        onGenerateOutline={handleGenerateOutline}
-        onLoadOutline={handleLoadOutline}
-        onStartBeautify={handleStartBeautify}
-      />
+      <StyleLibrary templateLibrary={templateLibrary} progress={progress} tr={tr} draftText={draftText} />
     );
   }
 

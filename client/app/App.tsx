@@ -6,6 +6,8 @@ import { BrandIcon } from "@/app/BrandIcon";
 import { ErrorBoundary } from "@/app/ErrorBoundary";
 import { DEFAULT_WORKSPACE, WORKSPACES, isWorkspaceId, type WorkspaceId } from "@/app/workspaces";
 import { SettingsDialog } from "@/app/SettingsDialog";
+import { WorkHost, WorksProvider } from "@/app/works/works-provider";
+import { WorksButton } from "@/app/works/works-dialog";
 import { LandingPage } from "@/pages/LandingPage";
 import { TutorialsPage } from "@/pages/tutorials/TutorialsPage";
 import { cn } from "@/shared/lib/utils";
@@ -279,6 +281,7 @@ export default function App() {
     // `reducedMotion="user"` is the single gate for the JS side; index.css
     // carries the equivalent for CSS transitions.
     <MotionConfig reducedMotion="user">
+      <WorksProvider activeWorkspace={active.id} onActivateWorkspace={setActiveWorkspace}>
       <div className="h-screen w-screen flex flex-col bg-background overflow-hidden font-sans">
         <Toaster position="top-center" richColors />
 
@@ -297,6 +300,7 @@ export default function App() {
           </div>
 
           <div className="flex items-center gap-1 justify-self-end">
+            <WorksButton />
             <LanguageToggle />
             <ThemeToggle />
             <SettingsDialog />
@@ -308,25 +312,33 @@ export default function App() {
             {/* Keyed so switching canvases unmounts the previous one rather than
                 reusing its state under a different workspace. Entrance only —
                 an exit animation would hold two heavy canvases alive at once. */}
-            <Suspense fallback={<WorkspaceFallback />}>
-              {/* Opacity only, deliberately. A `y` here left a residual inline
-                  transform on the wrapper, which makes it the containing block
-                  for every `position: fixed` descendant -- so any modal or
-                  lightbox opened inside a workspace was clipped to below the
-                  header instead of covering the viewport. */}
-              <motion.div
-                key={active.id}
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={TWEEN.base}
-                className="h-full w-full"
-              >
-                <ActiveWorkspace />
-              </motion.div>
-            </Suspense>
+            {/* Opacity only, deliberately. A `y` here left a residual inline
+                transform on the wrapper, which makes it the containing block
+                for every `position: fixed` descendant -- so any modal or
+                lightbox opened inside a workspace was clipped to below the
+                header instead of covering the viewport.
+
+                The fade sits above WorkHost and Suspense so it mounts with the
+                canvas switch itself. Mounted below them -- after the works are
+                read, or under a boundary that later suspends -- its entrance
+                never ran and the canvas stayed at opacity 0. */}
+            <motion.div
+              key={active.id}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={TWEEN.base}
+              className="h-full w-full"
+            >
+              <WorkHost fallback={<WorkspaceFallback />}>
+                <Suspense fallback={<WorkspaceFallback />}>
+                  <ActiveWorkspace />
+                </Suspense>
+              </WorkHost>
+            </motion.div>
           </ErrorBoundary>
         </div>
       </div>
+      </WorksProvider>
     </MotionConfig>
   );
 }

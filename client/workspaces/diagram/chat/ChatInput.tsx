@@ -20,6 +20,7 @@ import { GlobalConstraintsDialog } from "@/shared/chat"
 import { STORAGE_KEYS } from "@/workspaces/diagram/storage";
 import { HistoryDialog } from "@/workspaces/diagram/chat/history-dialog"
 import { ResetWarningModal } from "@/shared/chat"
+import { SaveWorkButton } from "@/shared/works/save-work-button"
 import { Textarea } from "@/shared/ui/textarea"
 import { cn } from "@/shared/lib/utils"
 import { useDiagram } from "@/workspaces/diagram/state/diagram-context"
@@ -416,6 +417,7 @@ export function ChatInput({
                         >
                             <Trash2 className="h-4 w-4" />
                         </ButtonWithTooltip>
+                        <SaveWorkButton />
 
                         <ButtonWithTooltip
                             type="button"

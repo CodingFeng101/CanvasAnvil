@@ -11,6 +11,8 @@ import type { ExcalidrawImageElement, OrderedExcalidrawElement } from "@excalidr
 import { canvasStore, CANVAS_SCENE_KEY } from "@/workspaces/canvas/storage";
 import { getAnnotationSearchBounds, resolveTargetImage } from "@/workspaces/canvas/canvas/bounds";
 import { lineageIdOf, type SelectedImageInfo } from "@/workspaces/canvas/canvas/lineage";
+import { useWork, useWorkStore } from "@/shared/works/work-context";
+import { makeThumbnail } from "@/shared/works/thumbnail";
 
 type PersistedScene = {
   elements: OrderedExcalidrawElement[];
@@ -49,6 +51,20 @@ interface OverlayRect {
 }
 
 const SAVE_DEBOUNCE_MS = 600;
+/** The list preview is refreshed at most this often. */
+const THUMB_INTERVAL_MS = 15_000;
+
+/** The newest picture on the board, used as the work's preview in My works. */
+function latestImageData(elements: readonly OrderedExcalidrawElement[], files: BinaryFiles): string | null {
+  for (let i = elements.length - 1; i >= 0; i--) {
+    const element = elements[i];
+    if (element.isDeleted || element.type !== "image") continue;
+    const fileId = (element as ExcalidrawImageElement).fileId;
+    const data = fileId ? files[fileId]?.dataURL : undefined;
+    if (data) return data;
+  }
+  return null;
+}
 
 export function CanvasBoard({ theme, langCode, onApiReady, onSelectedImageChange }: CanvasBoardProps) {
   const [initialData, setInitialData] = useState<ExcalidrawInitialDataState | null | undefined>(undefined);
@@ -57,12 +73,17 @@ export function CanvasBoard({ theme, langCode, onApiReady, onSelectedImageChange
   const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastSelectedImageKeyRef = useRef("");
   const lastBoundaryKeyRef = useRef("");
+  // The open work's store (My works); the skill renders this board without one.
+  const sceneStore = useWorkStore(canvasStore);
+  const work = useWork();
+  const pendingSaveRef = useRef<(() => void) | null>(null);
+  const lastThumbRef = useRef({ at: 0, source: "" });
 
   useEffect(() => {
     let cancelled = false;
     void (async () => {
       try {
-        const persisted = await canvasStore.read<PersistedScene>(CANVAS_SCENE_KEY);
+        const persisted = await sceneStore.read<PersistedScene>(CANVAS_SCENE_KEY);
         if (cancelled) return;
         if (!persisted) {
           setInitialData(null);
@@ -81,11 +102,15 @@ export function CanvasBoard({ theme, langCode, onApiReady, onSelectedImageChange
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [sceneStore]);
 
+  // A save still waiting when the board unmounts (another work opened, canvas
+  // switched) is written now rather than dropped.
   useEffect(() => {
     return () => {
       if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+      pendingSaveRef.current?.();
+      pendingSaveRef.current = null;
     };
   }, []);
 
@@ -149,16 +174,28 @@ export function CanvasBoard({ theme, langCode, onApiReady, onSelectedImageChange
     }
 
     if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
-    saveTimeoutRef.current = setTimeout(() => {
+    const save = () => {
+      pendingSaveRef.current = null;
       const snapshot: PersistedScene = {
         elements: elements as OrderedExcalidrawElement[],
         appState: pickAppState(appState),
         files,
       };
-      void canvasStore.save(CANVAS_SCENE_KEY, snapshot).catch((e) => {
+      void sceneStore.save(CANVAS_SCENE_KEY, snapshot).catch((e) => {
         console.error("Failed to persist canvas scene", e);
       });
-    }, SAVE_DEBOUNCE_MS);
+      if (work && elements.some((el) => !el.isDeleted)) {
+        work.report({ touched: true });
+        const source = latestImageData(elements, files);
+        const now = Date.now();
+        if (source && (source !== lastThumbRef.current.source || now - lastThumbRef.current.at > THUMB_INTERVAL_MS)) {
+          lastThumbRef.current = { at: now, source };
+          void makeThumbnail(source).then((thumb) => thumb && work.report({ thumb }));
+        }
+      }
+    };
+    pendingSaveRef.current = save;
+    saveTimeoutRef.current = setTimeout(save, SAVE_DEBOUNCE_MS);
   };
 
   if (initialData === undefined) {

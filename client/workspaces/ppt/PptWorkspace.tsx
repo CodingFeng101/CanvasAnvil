@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import type { CreationRequest, CreationResult } from "@/workspaces/ppt/lib/creation-intent";
 import { cn } from "@/shared/lib/utils";
 import { t, useUiLanguage } from "@/shared/i18n";
 import {
@@ -8,11 +9,19 @@ import {
   type PanelImperativeHandle,
 } from "@/shared/ui/resizable";
 import { PPT_OUTLINE_EDIT_SYSTEM_PROMPT, PPT_SLIDES_EDIT_SYSTEM_PROMPT } from "@/workspaces/ppt/lib/prompts";
-import { PPT_STATE_KEY, PPT_WORKSPACE_STORAGE_KEY, pptStore } from "@/workspaces/ppt/storage";
+import {
+  PPT_CHAT_STORAGE_KEY,
+  PPT_HISTORY_STORAGE_KEY,
+  PPT_RETURN_STAGE_STORAGE_KEY,
+  PPT_STATE_KEY,
+  PPT_WORKSPACE_STORAGE_KEY,
+  pptStore,
+} from "@/workspaces/ppt/storage";
 import type { ChatMessage } from "@/ai/client";
 import { PptCanvas } from "@/workspaces/ppt/canvas/PptCanvas";
 import { ChatPanel as PptChatPanel } from "@/workspaces/ppt/chat/ChatPanel";
 import type { HistoryItem } from "@/shared/chat";
+import { useWork } from "@/shared/works/work-context";
 
 type Attachment = {
   id: string;
@@ -23,12 +32,10 @@ type Attachment = {
 
 type CodeActionResult = { ok: boolean; retry?: boolean; error?: string };
 
-const PPT_RETURN_STAGE_STORAGE_KEY = "CanvasAnvil-ppt-return-stage-v1";
-const PPT_HISTORY_STORAGE_KEY = "CanvasAnvil-history-ppt-v1";
-const PPT_CHAT_STORAGE_KEY = "chat_history_v2_ppt";
 
 export function PptWorkspace() {
   const uiLang = useUiLanguage();
+  const work = useWork();
   const didMountRef = useRef(false);
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [pptIncomingEdit, setPptIncomingEdit] = useState<{ id: string; payload: string } | null>(null);
@@ -36,7 +43,7 @@ export function PptWorkspace() {
     Array<{ id: string; slideId: string; title: string; json: string; kind: "outline" | "slide_image"; imageUrl?: string }>
   >([]);
   const [pptResetTick, setPptResetTick] = useState(0);
-  const [pptReady, setPptReady] = useState(false);
+  const [, setPptReady] = useState(false);
   const [pptStage, setPptStage] = useState<"start" | "outline" | "slides">(() => {
     if (typeof window === "undefined") return "start";
     try {
@@ -61,9 +68,26 @@ export function PptWorkspace() {
 
   const [isChatCollapsed, setIsChatCollapsed] = useState(false);
   const chatPanelRef = useRef<PanelImperativeHandle | null>(null);
-  const showPptChat =
-    (pptStage === "outline" || pptStage === "slides");
-  const pptChatLocked = !showPptChat || !pptReady;
+
+  /** The first message of a deck goes to the canvas, which owns the template, the files and the flows. */
+  const [creationRequest, setCreationRequest] = useState<(CreationRequest & { id: string }) | null>(null);
+  const creationResolvers = useRef(new Map<string, (result: CreationResult) => void>());
+  const [draftText, setDraftText] = useState("");
+  const [selectedTemplate, setSelectedTemplate] = useState<{ name: string; previewSrc: string } | null>(null);
+  const startCreation = useCallback(
+    (request: CreationRequest) =>
+      new Promise<CreationResult>((resolve) => {
+        const id = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+        creationResolvers.current.set(id, resolve);
+        setCreationRequest({ ...request, id });
+      }),
+    [],
+  );
+  const handleCreationHandled = useCallback((id: string, result: CreationResult) => {
+    creationResolvers.current.get(id)?.(result);
+    creationResolvers.current.delete(id);
+    setCreationRequest((current) => (current?.id === id ? null : current));
+  }, []);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -105,30 +129,7 @@ export function PptWorkspace() {
     }
   }, [pptStage]);
 
-  useEffect(() => {
-    if (pptChatLocked && isChatCollapsed) {
-      setIsChatCollapsed(false);
-    }
-  }, [pptChatLocked, isChatCollapsed]);
-
-  useEffect(() => {
-    if (!showPptChat || pptChatLocked) return;
-    const timer = window.setTimeout(() => {
-      const panel = chatPanelRef.current;
-      if (!panel) return;
-      try {
-        if (!panel.isCollapsed?.()) return;
-        panel.resize("32%");
-        setIsChatCollapsed(false);
-      } catch {
-        // The panel is not mounted yet; the next toggle will find it.
-      }
-    }, 0);
-    return () => window.clearTimeout(timer);
-  }, [showPptChat, pptChatLocked]);
-
   const toggleCollapse = () => {
-    if (pptChatLocked) return;
     const panel = chatPanelRef.current;
     if (!panel) return;
     try {
@@ -231,6 +232,15 @@ export function PptWorkspace() {
   };
 
   const clearWorkspace = () => {
+    // The canvas is remounted below; a flow still running in the old one will never answer.
+    for (const resolve of creationResolvers.current.values()) resolve({ ok: false });
+    creationResolvers.current.clear();
+    if (work) {
+      // My works: the workspace remounts on a new draft; a saved deck stays listed.
+      work.startOver();
+      return;
+    }
+    setCreationRequest(null);
     setPptIncomingEdit(null);
     setPptDraftSlides([]);
     setPptReady(false);
@@ -266,7 +276,7 @@ export function PptWorkspace() {
       style={{ height: "100%" }}
     >
       <ResizablePanel
-        defaultSize={pptChatLocked ? "100%" : "68%"}
+        defaultSize="68%"
         minSize="30%"
         className={cn("transition-[flex-grow,flex-basis] duration-300 ease-in-out will-change-[flex-grow,flex-basis]")}
       >
@@ -279,11 +289,16 @@ export function PptWorkspace() {
             incomingEdit={pptIncomingEdit}
             onIncomingEditHandled={() => setPptIncomingEdit(null)}
             onResetWorkspace={clearWorkspace}
+            creationRequest={creationRequest}
+            onCreationHandled={handleCreationHandled}
+            draftText={draftText}
+            onTemplateChange={setSelectedTemplate}
           />
         </div>
       </ResizablePanel>
 
-      {showPptChat && (
+      {/* The chat is there from the start: a deck is asked for in it, as on the other canvases. */}
+      {(
         <>
           <ResizableHandle withHandle className="bg-border/50 hover:bg-primary/50 transition-colors w-1.5" />
           <ResizablePanel
@@ -306,7 +321,6 @@ export function PptWorkspace() {
               workspaceId="ppt"
               hideHistoryButton
               collapsed={isChatCollapsed}
-              collapseLocked={pptChatLocked}
               title={t(uiLang, "workspace.ppt.title")}
               inputPlaceholder={t(uiLang, "workspace.ppt.placeholder")}
               onToggleCollapse={toggleCollapse}
@@ -315,10 +329,15 @@ export function PptWorkspace() {
               pptDraftSlides={pptDraftSlides}
               onClearPptDraftSlides={() => setPptDraftSlides([])}
               onClearWorkspace={clearWorkspace}
+              onStartOver={work ? clearWorkspace : undefined}
               history={versionHistory}
               onRestore={handleRestore}
               onClearVersionHistory={() => setVersionHistory([])}
               onCodeAction={handlePptCodeAction}
+              stage={pptStage}
+              onStartCreation={startCreation}
+              selectedTemplate={selectedTemplate}
+              onDraftChange={setDraftText}
             />
           </ResizablePanel>
         </>

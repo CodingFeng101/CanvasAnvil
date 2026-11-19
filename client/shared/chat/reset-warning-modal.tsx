@@ -8,6 +8,7 @@ import {
     DialogTitle,
 } from "@/shared/ui/dialog"
 import { t, useUiLanguage } from "@/shared/i18n"
+import { useWork } from "@/shared/works/work-context"
 
 /**
  * Confirmation before a destructive clear.
@@ -37,8 +38,10 @@ export function ResetWarningModal({
     labels,
 }: ResetWarningModalProps) {
     const uiLang = useUiLanguage()
+    // A saved work is kept in My works, so nothing is lost and "cannot be undone" would be wrong.
+    const saved = !!useWork()?.saved
     const title = labels?.title ?? t(uiLang, "reset.title")
-    const description = labels?.description ?? t(uiLang, "reset.desc")
+    const description = saved ? t(uiLang, "reset.descSaved") : labels?.description ?? t(uiLang, "reset.desc")
     const cancel = labels?.cancel ?? t(uiLang, "common.cancel")
     const confirm = labels?.confirm ?? t(uiLang, "common.clear")
 

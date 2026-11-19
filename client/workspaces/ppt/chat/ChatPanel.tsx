@@ -14,6 +14,14 @@ import { STORAGE_GLOBAL_CONSTRAINTS_KEY } from '@/shared/chat';
 import { HistoryDialog, HistoryItem } from '@/shared/chat';
 import { ResetWarningModal } from '@/shared/chat';
 import { t, useUiLanguage } from "@/shared/i18n";
+import {
+  alternativeKind,
+  detectCreationKind,
+  isPdfName,
+  type CreationKind,
+  type CreationRequest,
+  type CreationResult,
+} from "@/workspaces/ppt/lib/creation-intent";
 
 interface Attachment {
   id: string;
@@ -54,7 +62,29 @@ interface ChatPanelProps {
     svg2d?: string;
   };
   onClearWorkspace?: () => void;
+  /**
+   * My works: clearing starts over on a new draft instead of wiping storage
+   * (a saved work keeps its chat). When given, it replaces the wipe.
+   */
+  onStartOver?: () => void;
+  /** Where the deck is: before one exists ("start") a message asks for one instead of editing it. */
+  stage?: "start" | "outline" | "slides";
+  onStartCreation?: (request: CreationRequest) => Promise<CreationResult>;
+  /** The style picked on the canvas, shown next to the input. */
+  selectedTemplate?: { name: string; previewSrc: string } | null;
+  onDraftChange?: (text: string) => void;
 }
+
+const KIND_LABEL: Record<CreationKind, [zh: string, en: string]> = {
+  idea: ["一句主题", "a topic"],
+  outline: ["一份提纲", "an outline"],
+  beautify: ["旧文件换风格", "a file to restyle"],
+};
+const KIND_SWITCH: Record<CreationKind, [zh: string, en: string]> = {
+  idea: ["当作主题", "Treat as topic"],
+  outline: ["当作提纲", "Treat as outline"],
+  beautify: ["换风格", "Restyle it"],
+};
 
 // Convert internal ChatMessage to UIMessage
 
@@ -80,7 +110,12 @@ export function ChatPanel({
     onRestore,
     onClearVersionHistory,
     onClearAttachments,
-    onClearWorkspace
+    onClearWorkspace,
+    onStartOver,
+    stage = "slides",
+    onStartCreation,
+    selectedTemplate,
+    onDraftChange,
 }: ChatPanelProps) {
   const uiLang = useUiLanguage();
   const trText = (zhText: string, enText: string) => (uiLang === "zh" ? zhText : enText);
@@ -123,6 +158,20 @@ export function ChatPanel({
   const [imageMode, setImageMode] = useState<"edit" | "regenerate">("edit");
   const imageModeRef = useRef(imageMode);
   imageModeRef.current = imageMode;
+
+  // Before a deck exists, the message asks for one: what kind is read off the text and the files.
+  const starting = stage === "start" && Boolean(onStartCreation);
+  const draftText = pptInputSegments.map((s) => (s.type === "text" ? s.text : "")).join("");
+  const draftFileNames = files.map((f) => f.name);
+  const draftKey = `${draftText}\n${draftFileNames.join("|")}`;
+  /** The user's correction of the reading, good for the draft it was made on. */
+  const [kindOverride, setKindOverride] = useState<{ key: string; kind: CreationKind } | null>(null);
+  const detectedKind = detectCreationKind(draftText, draftFileNames);
+  const creationKind = kindOverride?.key === draftKey ? kindOverride.kind : detectedKind;
+  const otherKind = alternativeKind(creationKind, draftText);
+  useEffect(() => {
+    onDraftChange?.(starting ? draftText : "");
+  }, [draftText, starting, onDraftChange]);
 
 const getPptLabel = (slideId: string, title: string) => {
   const m = String(slideId || "").match(/(\d+)/);
@@ -187,6 +236,13 @@ const getPptTag = (slideId: string, title: string, kind: "outline" | "slide_imag
   }, [messages, storageKey, onMessagesChange]);
 
   const clearHistory = () => {
+    if (onStartOver) {
+      abortControllerRef.current?.abort();
+      abortControllerRef.current = null;
+      setShowResetWarning(false);
+      onStartOver();
+      return;
+    }
     abortControllerRef.current?.abort();
     abortControllerRef.current = null;
     setIsLoading(false);
@@ -240,7 +296,59 @@ const getPptTag = (slideId: string, title: string, kind: "outline" | "slide_imag
     }
   };
 
+  /** The first message of a deck: hand it to the canvas and report how it went. */
+  const startCreation = async () => {
+    const text = draftText.trim();
+    const pdf = files.find((f) => isPdfName(f.name));
+    const kind: CreationKind = creationKind === "beautify" && !pdf ? "idea" : creationKind;
+    const requestFiles = kind === "beautify" ? [pdf as File] : files.filter((f) => !f.type.startsWith("image/"));
+    if ((!text && requestFiles.length === 0) || isLoading || !onStartCreation) return;
+
+    const working = {
+      idea: trText("正在根据主题写提纲…", "Writing an outline from your topic..."),
+      outline: trText("正在把提纲整理成逐页内容…", "Turning your outline into slides..."),
+      beautify: trText("正在逐页换风格，文字和数据保持不变…", "Restyling each page; text and numbers stay as they are..."),
+    }[kind];
+    const fileLines = requestFiles.map((f) => `[${isPdfName(f.name) ? "PDF" : "File"}: ${f.name}]`).join("\n");
+    const userContent = [text, fileLines].filter(Boolean).join("\n\n");
+    setMessages((prev) => [...prev, { role: "user", content: userContent }, { role: "assistant", content: working }]);
+    setPptInputSegments([{ type: "text", text: "" }]);
+    setPptClearTick((x) => x + 1);
+    setFiles([]);
+    setKindOverride(null);
+    setIsLoading(true);
+
+    let result: CreationResult;
+    try {
+      result = await onStartCreation({ kind, text, files: requestFiles });
+    } catch (error) {
+      result = { ok: false, error: error instanceof Error ? error.message : String(error) };
+    }
+    const style = selectedTemplate?.name
+      ? trText(`，用的是「${selectedTemplate.name}」这套风格`, `, in the "${selectedTemplate.name}" style`)
+      : "";
+    const reply = !result.ok
+      ? result.error
+        ? trText(`没做成：${result.error}`, `That did not work: ${result.error}`)
+        : trText("已停止。", "Stopped.")
+      : kind === "beautify"
+        ? trText(
+            `换好了，一共 ${result.count ?? 0} 页${style}${result.failed ? `，其中 ${result.failed} 页没成功，点左上角的“重试失败页”再试` : ""}。想改哪页直接说。`,
+            `Done: ${result.count ?? 0} pages${style}${result.failed ? `, ${result.failed} failed (use "Retry failed" at the top left)` : ""}. Tell me what to change.`,
+          )
+        : trText(
+            `提纲放在左边了，一共 ${result.count ?? 0} 页${style}。想改哪页直接说，也可以在左边直接改；确认后点“生成完整 PPT”。`,
+            `The outline is on the left: ${result.count ?? 0} slides${style}. Tell me what to change or edit it there, then press "Generate full PPT".`,
+          );
+    setMessages((prev) => {
+      const last = prev[prev.length - 1];
+      return last?.role === "assistant" && last.content === working ? [...prev.slice(0, -1), { role: "assistant", content: reply }] : [...prev, { role: "assistant", content: reply }];
+    });
+    setIsLoading(false);
+  };
+
   const handleSend = async () => {
+    if (starting) return startCreation();
     const rawInput = pptInputSegments
           .map((s) => (s.type === "text" ? s.text : s.tag))
           .join("");
@@ -665,10 +773,28 @@ const getPptTag = (slideId: string, title: string, kind: "outline" | "slide_imag
         {!isLoading && !uiMessages.some((m) => m.role === "user" || m.role === "assistant") ? (
           <ChatEmptyState
             icon={Presentation}
-            title={t(uiLang, "empty.ppt.title")}
-            description={t(uiLang, "empty.ppt.desc")}
+            title={starting ? trText("从一个主题开始", "Start from a topic") : t(uiLang, "empty.ppt.title")}
+            description={
+              starting
+                ? trText(
+                    "左边先挑一套风格，然后告诉我主题、贴一份提纲，或者把旧 PDF 拖进来换风格。",
+                    "Pick a style on the left, then give me a topic, paste an outline, or drop in a PDF to restyle.",
+                  )
+                : t(uiLang, "empty.ppt.desc")
+            }
             examplesLabel={t(uiLang, "empty.examplesLabel")}
-            examples={[t(uiLang, "empty.ppt.ex1"), t(uiLang, "empty.ppt.ex2"), t(uiLang, "empty.ppt.ex3")]}
+            examples={
+              starting
+                ? [
+                    trText("新员工入职培训，一小时讲完，轻松一点", "Onboarding for new hires, one hour, light in tone"),
+                    trText("第三季度复盘，给管理层看，10 页以内", "Q3 review for the management team, 10 slides at most"),
+                    trText(
+                      "一、项目背景\n- 现状与痛点\n二、方案\n- 整体架构\n- 排期与分工\n三、预期收益",
+                      "1. Background\n- Where we are\n2. Proposal\n- Architecture\n- Schedule and owners\n3. Expected gains",
+                    ),
+                  ]
+                : [t(uiLang, "empty.ppt.ex1"), t(uiLang, "empty.ppt.ex2"), t(uiLang, "empty.ppt.ex3")]
+            }
             onPickExample={(text) => {
               setPptInputSegments([{ type: "text", text }]);
               setPptInputFocusTick((tick) => tick + 1);
@@ -699,7 +825,7 @@ const getPptTag = (slideId: string, title: string, kind: "outline" | "slide_imag
             historyDisabled={history.length === 0}
             onFilesChange={setFiles}
             files={files}
-            toolbarExtras={
+            toolbarExtras={starting ? undefined : (
               <>
                 <ButtonWithTooltip
                   tooltipContent={trText(
@@ -736,9 +862,13 @@ const getPptTag = (slideId: string, title: string, kind: "outline" | "slide_imag
                   <RefreshCw className="h-4 w-4" />
                 </ButtonWithTooltip>
               </>
+            )}
+            uploadMode={starting ? "filesOnly" : "imagesOnly"}
+            placeholder={
+              starting
+                ? trText("写一句主题，贴一份提纲，或者把旧 PDF 拖进来", "A topic, an outline, or a PDF to restyle")
+                : inputPlaceholder
             }
-            uploadMode="imagesOnly"
-            placeholder={inputPlaceholder}
             focusKey={pptInputFocusTick}
             clearKey={pptClearTick}
             richSegments={pptInputSegments}
@@ -750,7 +880,37 @@ const getPptTag = (slideId: string, title: string, kind: "outline" | "slide_imag
               pumpPptInsertQueue();
             }}
             bottomChips={
-              attachments.length > 0
+              starting
+                ? (
+                  <div className="flex flex-wrap items-center gap-1.5 text-xs">
+                    <span className="inline-flex h-6 max-w-full items-center gap-1.5 rounded-md bg-muted pl-1 pr-2 text-muted-foreground">
+                      {selectedTemplate ? (
+                        <img src={selectedTemplate.previewSrc} alt="" className="h-[17px] w-[30px] rounded-[3px] object-cover" />
+                      ) : null}
+                      <span className={cn("truncate", !selectedTemplate && "pl-1")}>
+                        {selectedTemplate ? selectedTemplate.name : trText("还没选风格", "No style picked")}
+                      </span>
+                    </span>
+                    {draftText.trim() || files.length > 0 ? (
+                      <span className="inline-flex h-6 items-center gap-1 rounded-md bg-primary/10 px-2 text-primary-strong">
+                        {trText(`识别为${KIND_LABEL[creationKind][0]}`, `Read as ${KIND_LABEL[creationKind][1]}`)}
+                        {otherKind ? (
+                          <>
+                            <span aria-hidden>·</span>
+                            <button
+                              type="button"
+                              onClick={() => setKindOverride({ key: draftKey, kind: otherKind })}
+                              className="text-muted-foreground underline underline-offset-2 hover:text-foreground"
+                            >
+                              {trText(KIND_SWITCH[otherKind][0], KIND_SWITCH[otherKind][1])}
+                            </button>
+                          </>
+                        ) : null}
+                      </span>
+                    ) : null}
+                  </div>
+                )
+                : attachments.length > 0
                 ? (
                   <div className="space-y-2">
                     {attachments.length > 0 && (

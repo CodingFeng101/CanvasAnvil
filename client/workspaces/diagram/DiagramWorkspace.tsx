@@ -9,17 +9,20 @@ import {
 } from "@/shared/ui/resizable"
 import { DiagramProvider, useDiagram } from "@/workspaces/diagram/state/diagram-context"
 import { useTheme } from "@/shared/theme"
+import { Button } from "@/shared/ui/button"
+import { DRAWIO_LOAD_TIMEOUT_MS, drawioSettleDelay, drawioSources, nextDrawioSource } from "@/workspaces/diagram/lib/drawio-source"
+import { useDiagramT } from "@/workspaces/diagram/lib/translations"
 
-const drawioBaseUrl =
-    (typeof import.meta !== "undefined" &&
-    import.meta.env &&
-    import.meta.env.VITE_DRAWIO_BASE_URL
+const DRAWIO_SOURCES = drawioSources(
+    typeof import.meta !== "undefined" && import.meta.env && import.meta.env.VITE_DRAWIO_BASE_URL
         ? String(import.meta.env.VITE_DRAWIO_BASE_URL)
-        : "") || "https://embed.diagrams.net"
+        : "",
+)
 
 function DiagramCanvas() {
-    const { drawioRef, handleDiagramExport, onDrawioLoad, resetDrawioReady } =
+    const { drawioRef, handleDiagramExport, onDrawioLoad, resetDrawioReady, isDrawioReady } =
         useDiagram()
+    const t = useDiagramT()
     const [isMobile, setIsMobile] = useState(false)
     const [isChatVisible, setIsChatVisible] = useState(true)
     // Theme is app-wide now; this canvas only mirrors it into the draw.io embed.
@@ -34,6 +37,45 @@ function DiagramCanvas() {
         resetDrawioReady()
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [resolved])
+
+    // Each address gets a few seconds to load before the next is tried; when
+    // none loads, the canvas says so instead of staying blank. The address that
+    // worked is kept for later remounts (theme changes).
+    const [sourceIndex, setSourceIndex] = useState(0)
+    const [loadAttempt, setLoadAttempt] = useState(0)
+    const [loadFailed, setLoadFailed] = useState(false)
+    useEffect(() => {
+        if (isDrawioReady || loadFailed) return
+        const timer = window.setTimeout(() => {
+            const next = nextDrawioSource(DRAWIO_SOURCES, sourceIndex)
+            console.warn(`[DiagramCanvas] draw.io did not load from ${DRAWIO_SOURCES[sourceIndex]}`)
+            if (next.kind === "next") {
+                resetDrawioReady()
+                setSourceIndex(next.index)
+            } else {
+                setLoadFailed(true)
+            }
+        }, DRAWIO_LOAD_TIMEOUT_MS)
+        return () => window.clearTimeout(timer)
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [isDrawioReady, loadFailed, sourceIndex, loadAttempt, resolved])
+    useEffect(() => {
+        if (isDrawioReady) setLoadFailed(false)
+    }, [isDrawioReady])
+    // On the GitHub Pages copy of draw.io, a diagram loaded straight after the
+    // editor's first load lands at 1% zoom; that copy is reported ready only
+    // after it has settled. The public embed is reported ready at once.
+    const onEditorLoad = () => {
+        const delay = drawioSettleDelay(DRAWIO_SOURCES[sourceIndex])
+        if (delay) window.setTimeout(onDrawioLoad, delay)
+        else onDrawioLoad()
+    }
+    const retryDrawio = () => {
+        resetDrawioReady()
+        setSourceIndex(0)
+        setLoadFailed(false)
+        setLoadAttempt((n) => n + 1)
+    }
 
     // Check mobile
     useEffect(() => {
@@ -92,11 +134,11 @@ function DiagramCanvas() {
                     <div className="h-full relative">
                         <div className="h-full overflow-hidden">
                             <DrawIoEmbed
-                                key={`drawio-${darkMode}`}
+                                key={`drawio-${darkMode}-${sourceIndex}-${loadAttempt}`}
                                 ref={drawioRef}
                                 onExport={handleDiagramExport}
-                                onLoad={onDrawioLoad}
-                                baseUrl={drawioBaseUrl}
+                                onLoad={onEditorLoad}
+                                baseUrl={DRAWIO_SOURCES[sourceIndex]}
                                 urlParameters={{
                                     ui: "min",
                                     spin: true,
@@ -107,6 +149,18 @@ function DiagramCanvas() {
                                 }}
                             />
                         </div>
+                        {loadFailed && (
+                            <div
+                                role="alert"
+                                className="absolute inset-0 flex items-center justify-center bg-background/95 p-6"
+                            >
+                                <div className="max-w-sm text-center space-y-3">
+                                    <p className="text-base font-medium">{t("drawio.load_failed")}</p>
+                                    <p className="text-sm text-muted-foreground">{t("drawio.load_failed_hint")}</p>
+                                    <Button onClick={retryDrawio}>{t("drawio.retry")}</Button>
+                                </div>
+                            </div>
+                        )}
                     </div>
                 </ResizablePanel>
 

@@ -1,4 +1,5 @@
 import { CANVAS_CHAT_IMAGES_KEY, canvasStore } from "@/workspaces/canvas/storage";
+import type { WorkspaceStore } from "@/shared/storage/indexed-db-store";
 
 /**
  * Pictures shown in the chat that have no canvas element to fall back on.
@@ -17,13 +18,14 @@ export type ChatImageMap = Record<string, string>;
 const MAX_STORED_DIMENSION = 1024;
 const JPEG_QUALITY = 0.85;
 
-export async function loadChatImages(): Promise<ChatImageMap> {
-  const stored = await canvasStore.read<ChatImageMap>(CANVAS_CHAT_IMAGES_KEY);
+/** `store` is the open work's store (My works); without one, the canvas's own. */
+export async function loadChatImages(store: WorkspaceStore = canvasStore): Promise<ChatImageMap> {
+  const stored = await store.read<ChatImageMap>(CANVAS_CHAT_IMAGES_KEY);
   return stored && typeof stored === "object" ? stored : {};
 }
 
-export async function saveChatImages(images: ChatImageMap): Promise<void> {
-  await canvasStore.save(CANVAS_CHAT_IMAGES_KEY, images);
+export async function saveChatImages(images: ChatImageMap, store: WorkspaceStore = canvasStore): Promise<void> {
+  await store.save(CANVAS_CHAT_IMAGES_KEY, images);
 }
 
 /** Only the entries some message still points at; the rest belong to history that has since been trimmed or cleared. */

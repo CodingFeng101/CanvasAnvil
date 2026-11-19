@@ -14,6 +14,12 @@ export interface WorkspaceStore {
   read<T = unknown>(key: string): Promise<T | null>;
   save<T>(key: string, value: T): Promise<void>;
   clear(key: string): Promise<void>;
+  /**
+   * Every key starting with `prefix`. Optional: stores that cannot enumerate
+   * (the skills' file-backed one) leave it out, and callers that need it
+   * (copying or deleting a whole work) say so.
+   */
+  listKeys?(prefix: string): Promise<string[]>;
 }
 
 export function createWorkspaceStore(databaseName: string): WorkspaceStore {
@@ -73,6 +79,13 @@ export function createWorkspaceStore(databaseName: string): WorkspaceStore {
       await transact<void>("readwrite", (store) => {
         store.delete(key);
       });
+    },
+    async listKeys(prefix: string) {
+      const keys = await transact<string[]>("readonly", (store, resolve) => {
+        const request = store.getAllKeys(IDBKeyRange.bound(prefix, `${prefix}\uffff`));
+        request.onsuccess = () => resolve(request.result.map(String));
+      });
+      return keys ?? [];
     },
   };
 }

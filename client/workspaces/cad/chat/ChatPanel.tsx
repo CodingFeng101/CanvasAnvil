@@ -46,10 +46,12 @@ import {
   type Attachment,
 } from "../lib/chat-prompt";
 import { extractImageTags } from "@/shared/chat/ppt-message-tags";
-import { cadStore } from "../storage";
+import { CAD_CHAT_IMAGE_PREFIX, cadStore } from "../storage";
+import { useReportBusy, useWork, useWorkStore } from "@/shared/works/work-context";
+import { nameFromText } from "@/shared/works/works-index";
 
 /** Chat history drops inline images on save; images saved by earlier versions are kept here by id and put back on load. */
-const CHAT_IMAGE_PREFIX = "chat-image:";
+const CHAT_IMAGE_PREFIX = CAD_CHAT_IMAGE_PREFIX;
 const CHAT_IMAGE_TAG = /\[\[IMAGE\|([^|\]]*#([a-z0-9]{8}))\|\[image-data\]\]\]/gi;
 const generateChatMessage = (messages: ChatMessage[], model?: string, options?: GenerateChatMessageOptions) =>
   retryCadTextRequest(() => generateChatMessageOnce(messages, model, options), options?.signal);
@@ -128,6 +130,17 @@ export function ChatPanel(props: ChatPanelProps) {
   const [input, setInput] = useState("");
   const [files, setFiles] = useState<File[]>([]);
   const [loading, setLoading] = useState(false);
+  const work = useWork();
+  const imageStore = useWorkStore(cadStore);
+  // My works: no switching while a reply runs; the first request names the work.
+  useReportBusy(loading);
+  const firstRequest = messages.find((m) => m.role === "user" && typeof m.content === "string")?.content as string | undefined;
+  useEffect(() => {
+    if (!work || !firstRequest) return;
+    const nameHint = nameFromText(firstRequest.replace(/\[\[IMAGE\|[^\]]*\]\]/g, ""));
+    work.report({ touched: true, ...(nameHint ? { nameHint } : {}) });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [firstRequest]);
   const [focusTick, setFocusTick] = useState(0);
   const [showHistory, setShowHistory] = useState(false);
   const [showReset, setShowReset] = useState(false);
@@ -140,7 +153,7 @@ export function ChatPanel(props: ChatPanelProps) {
     )));
     if (!ids.length) return;
     let cancelled = false;
-    void Promise.all(ids.map(async (id) => [id, await cadStore.read<string>(CHAT_IMAGE_PREFIX + id).catch(() => null)] as const)).then((found) => {
+    void Promise.all(ids.map(async (id) => [id, await imageStore.read<string>(CHAT_IMAGE_PREFIX + id).catch(() => null)] as const)).then((found) => {
       const urls = new Map(found.filter((entry): entry is readonly [string, string] => !!entry[1]));
       if (cancelled || !urls.size) return;
       setMessages((previous) => previous.map((message) => typeof message.content !== "string" ? message : {
@@ -900,6 +913,11 @@ export function ChatPanel(props: ChatPanelProps) {
         onOpenChange={setShowReset}
         onClear={() => {
           abortRef.current?.abort();
+          if (work) {
+            // My works: start over on a new draft; a saved design keeps its chat.
+            work.startOver();
+            return;
+          }
           setMessages([]);
           props.onClearAttachments?.();
           props.onClearWorkspace?.();
