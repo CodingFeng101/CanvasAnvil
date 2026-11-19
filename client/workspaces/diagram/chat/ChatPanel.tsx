@@ -12,7 +12,15 @@ import { Toaster, toast } from "sonner"
 import { ButtonWithTooltip, ChatEmptyState } from "@/shared/chat"
 import { t as tShell, useUiLanguage } from "@/shared/i18n"
 import { ChatInput } from "@/workspaces/diagram/chat/ChatInput"
-import { STORAGE_KEYS } from "@/workspaces/diagram/storage";
+import {
+    DIAGRAM_DB_KEYS,
+    STORAGE_KEYS,
+    diagramStore,
+    loadDiagramSession,
+    migrateDiagramSession,
+    toStorableMessages,
+    type DiagramSession,
+} from "@/workspaces/diagram/storage";
 import { useDiagram } from "@/workspaces/diagram/state/diagram-context"
 import { translateDiagram, useDiagramT } from "@/workspaces/diagram/lib/translations"
 import { getAIConfig } from "@/workspaces/diagram/lib/ai-config"
@@ -38,11 +46,9 @@ import {
 import type { TidyResult } from "@/workspaces/diagram/lib/tidy-layout"
 import { ChatMessageDisplay } from "./ChatMessageDisplay"
 
-// localStorage keys for persistence
-const STORAGE_MESSAGES_KEY = "next-ai-draw-io-messages"
-const STORAGE_XML_SNAPSHOTS_KEY = "next-ai-draw-io-xml-snapshots"
-const STORAGE_SESSION_ID_KEY = "next-ai-draw-io-session-id"
-export const STORAGE_DIAGRAM_XML_KEY = "next-ai-draw-io-diagram-xml"
+// Small values stay in localStorage; the messages, snapshots and diagram XML
+// live in the IndexedDB store (see ../storage.ts).
+const STORAGE_SESSION_ID_KEY = STORAGE_KEYS.sessionId
 const STORAGE_DEEP_THINKING_KEY = "next-ai-draw-io-deep-thinking"
 
 // Type for message parts (tool calls and their states)
@@ -342,8 +348,25 @@ export default function ChatPanel({
     // Store XML snapshots for each user message (keyed by message index)
     const xmlSnapshotsRef = useRef<Map<number, string>>(new Map())
 
-    // Flag to track if we've restored from localStorage
-    const hasRestoredRef = useRef(false)
+    // The saved session is read once per mount (after the one-time copy out of
+    // localStorage). Nothing is saved until it has been read: an early save of the
+    // still-empty state would overwrite what was just migrated.
+    const sessionStore = diagramStore
+    const sessionLoadRef = useRef<Promise<DiagramSession> | null>(null)
+    const loadSavedSession = useCallback(() => {
+        sessionLoadRef.current ??= migrateDiagramSession(sessionStore)
+            .catch((error) => console.error("Diagram storage migration failed:", error))
+            .then(() => loadDiagramSession(sessionStore))
+        return sessionLoadRef.current
+    }, [sessionStore])
+    const [restored, setRestored] = useState(false)
+    const persist = useCallback(
+        (key: string, value: unknown) =>
+            sessionStore.save(key, value).catch((error) => {
+                console.error(`Failed to save diagram ${key}:`, error)
+            }),
+        [sessionStore],
+    )
 
     // Ref to track latest chartXML for use in callbacks (avoids stale closure)
     const chartXMLRef = useRef(chartXML)
@@ -784,33 +807,26 @@ Please fix the XML issues. Ensure cell_id values exist in the current XML and th
 
     const messagesEndRef = useRef<HTMLDivElement>(null)
 
-    // Restore messages and XML snapshots from localStorage on mount
+    // Restore messages and XML snapshots on mount
     useEffect(() => {
-        if (hasRestoredRef.current) return
-        hasRestoredRef.current = true
-
-        try {
-            // Restore messages
-            const savedMessages = localStorage.getItem(STORAGE_MESSAGES_KEY)
-            if (savedMessages) {
-                const parsed = JSON.parse(savedMessages)
-                if (Array.isArray(parsed) && parsed.length > 0) {
-                    setMessages(parsed.map(repairSavedMessage))
+        let cancelled = false
+        void loadSavedSession()
+            .then((saved) => {
+                if (cancelled) return
+                // A message sent while the read was in flight wins over the old session.
+                if (messagesRef.current.length === 0 && saved.messages?.length) {
+                    setMessages(saved.messages.map(repairSavedMessage))
+                    if (saved.xmlSnapshots) xmlSnapshotsRef.current = new Map(saved.xmlSnapshots)
                 }
-            }
-
-            // Restore XML snapshots
-            const savedSnapshots = localStorage.getItem(
-                STORAGE_XML_SNAPSHOTS_KEY,
-            )
-            if (savedSnapshots) {
-                const parsed = JSON.parse(savedSnapshots)
-                xmlSnapshotsRef.current = new Map(parsed)
-            }
-        } catch (error) {
-            console.error("Failed to restore from localStorage:", error)
+            })
+            .catch((error) => console.error("Failed to restore diagram chat:", error))
+            .finally(() => {
+                if (!cancelled) setRestored(true)
+            })
+        return () => {
+            cancelled = true
         }
-    }, [setMessages])
+    }, [loadSavedSession, setMessages])
 
     // Restore diagram XML when DrawIO becomes ready
     const hasDiagramRestoredRef = useRef(false)
@@ -825,70 +841,72 @@ Please fix the XML issues. Ensure cell_id values exist in the current XML and th
         if (hasDiagramRestoredRef.current) return
         hasDiagramRestoredRef.current = true
 
-        try {
-            const savedDiagramXml = localStorage.getItem(
-                STORAGE_DIAGRAM_XML_KEY,
-            )
-            console.log(
-                "[ChatPanel] Restoring diagram, has saved XML:",
-                !!savedDiagramXml,
-            )
-            if (savedDiagramXml) {
-                console.log(
-                    "[ChatPanel] Loading saved diagram XML, length:",
-                    savedDiagramXml.length,
-                )
-                // Skip validation for trusted saved diagrams
-                onDisplayChart(savedDiagramXml, true)
-                chartXMLRef.current = savedDiagramXml
-            }
-        } catch (error) {
-            console.error("Failed to restore diagram from localStorage:", error)
+        let cancelled = false
+        void loadSavedSession()
+            .then((saved) => {
+                if (cancelled) return
+                // A remount (theme or UI change) shows what is on screen now, not the copy read at mount.
+                const current = chartXMLRef.current
+                const xml = current && current.length > 300 ? current : saved.diagramXml
+                console.log("[ChatPanel] Restoring diagram, has saved XML:", !!xml)
+                if (xml) {
+                    // Skip validation for trusted saved diagrams
+                    onDisplayChart(xml, true)
+                    chartXMLRef.current = xml
+                }
+            })
+            .catch((error) => console.error("Failed to restore diagram:", error))
+            .finally(() => {
+                // Allow saving once the saved diagram is on screen
+                if (!cancelled) setCanSaveDiagram(true)
+            })
+        return () => {
+            cancelled = true
         }
+    }, [isDrawioReady, onDisplayChart, loadSavedSession])
 
-        // Allow saving after restore is complete
-        setTimeout(() => {
-            console.log("[ChatPanel] Enabling diagram save")
-            setCanSaveDiagram(true)
-        }, 500)
-    }, [isDrawioReady, onDisplayChart])
-
-    // Save messages to localStorage once a reply settles. Mid-stream saves
-    // would serialise the whole history (attachments included) on every
-    // update; the beforeunload handler below covers a reload mid-reply.
+    // Save messages once a reply settles. While a reply streams, a timer saves
+    // every few seconds instead of on every update (each save serialises the whole
+    // history, attachments included); a write still in flight skips a round.
+    const messageSaveInFlightRef = useRef(false)
+    const saveMessagesNow = useCallback(() => {
+        if (messageSaveInFlightRef.current) return
+        let value: unknown[]
+        try {
+            value = toStorableMessages(messagesRef.current)
+        } catch (error) {
+            console.error("Failed to serialise diagram messages:", error)
+            return
+        }
+        messageSaveInFlightRef.current = true
+        void persist(DIAGRAM_DB_KEYS.messages, value).finally(() => {
+            messageSaveInFlightRef.current = false
+        })
+    }, [persist])
     useEffect(() => {
-        if (!hasRestoredRef.current) return
+        if (!restored) return
         if (status === "streaming" || status === "submitted") return
-        try {
-            localStorage.setItem(STORAGE_MESSAGES_KEY, JSON.stringify(messages))
-        } catch (error) {
-            console.error("Failed to save messages to localStorage:", error)
-        }
-    }, [messages, status])
+        saveMessagesNow()
+    }, [messages, status, restored, saveMessagesNow])
+    useEffect(() => {
+        if (!restored) return
+        if (status !== "streaming" && status !== "submitted") return
+        const timer = window.setInterval(saveMessagesNow, 3000)
+        return () => window.clearInterval(timer)
+    }, [status, restored, saveMessagesNow])
 
-    // Save diagram XML to localStorage whenever it changes
+    // Save diagram XML whenever it changes
     useEffect(() => {
         if (!canSaveDiagram) return
         if (chartXML && chartXML.length > 300) {
-            localStorage.setItem(STORAGE_DIAGRAM_XML_KEY, chartXML)
+            void persist(DIAGRAM_DB_KEYS.diagramXml, chartXML)
         }
-    }, [chartXML, canSaveDiagram])
+    }, [chartXML, canSaveDiagram, persist])
 
-    // Save XML snapshots to localStorage whenever they change
+    // Save XML snapshots whenever they change
     const saveXmlSnapshots = useCallback(() => {
-        try {
-            const snapshotsArray = Array.from(xmlSnapshotsRef.current.entries())
-            localStorage.setItem(
-                STORAGE_XML_SNAPSHOTS_KEY,
-                JSON.stringify(snapshotsArray),
-            )
-        } catch (error) {
-            console.error(
-                "Failed to save XML snapshots to localStorage:",
-                error,
-            )
-        }
-    }, [])
+        void persist(DIAGRAM_DB_KEYS.xmlSnapshots, Array.from(xmlSnapshotsRef.current.entries()))
+    }, [persist])
 
     // Save session ID to localStorage
     useEffect(() => {
@@ -907,34 +925,35 @@ Please fix the XML issues. Ensure cell_id values exist in the current XML and th
         }
     }, [status, isParsingFiles])
 
-    // Save state right before page unload (refresh/close)
+    // Save state when the page is hidden or unloaded. IndexedDB writes are
+    // asynchronous, so the unload one is best effort; "hidden" fires earlier and
+    // reliably (tab switch, minimise, and before most closes on mobile).
     useEffect(() => {
-        const handleBeforeUnload = () => {
+        const saveAll = () => {
+            if (restored) {
+                saveMessagesNow()
+                saveXmlSnapshots()
+            }
+            const xml = chartXMLRef.current
+            if (canSaveDiagram && xml && xml.length > 300) void persist(DIAGRAM_DB_KEYS.diagramXml, xml)
             try {
-                localStorage.setItem(
-                    STORAGE_MESSAGES_KEY,
-                    JSON.stringify(messagesRef.current),
-                )
-                localStorage.setItem(
-                    STORAGE_XML_SNAPSHOTS_KEY,
-                    JSON.stringify(
-                        Array.from(xmlSnapshotsRef.current.entries()),
-                    ),
-                )
-                const xml = chartXMLRef.current
-                if (xml && xml.length > 300) {
-                    localStorage.setItem(STORAGE_DIAGRAM_XML_KEY, xml)
-                }
                 localStorage.setItem(STORAGE_SESSION_ID_KEY, sessionId)
             } catch (error) {
-                console.error("Failed to persist state before unload:", error)
+                console.error("Failed to persist session id:", error)
             }
         }
-
-        window.addEventListener("beforeunload", handleBeforeUnload)
-        return () =>
-            window.removeEventListener("beforeunload", handleBeforeUnload)
-    }, [sessionId])
+        const onVisibility = () => {
+            if (document.visibilityState === "hidden") saveAll()
+        }
+        window.addEventListener("beforeunload", saveAll)
+        window.addEventListener("pagehide", saveAll)
+        document.addEventListener("visibilitychange", onVisibility)
+        return () => {
+            window.removeEventListener("beforeunload", saveAll)
+            window.removeEventListener("pagehide", saveAll)
+            document.removeEventListener("visibilitychange", onVisibility)
+        }
+    }, [sessionId, restored, canSaveDiagram, persist, saveMessagesNow, saveXmlSnapshots])
 
     const onFormSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
         e.preventDefault()
@@ -1500,10 +1519,11 @@ Please fix the XML issues. Ensure cell_id values exist in the current XML and th
                             .slice(2, 9)}`
                         setSessionId(newSessionId)
                         xmlSnapshotsRef.current.clear()
-                        // Clear localStorage
-                        localStorage.removeItem(STORAGE_MESSAGES_KEY)
-                        localStorage.removeItem(STORAGE_XML_SNAPSHOTS_KEY)
-                        localStorage.removeItem(STORAGE_DIAGRAM_XML_KEY)
+                        for (const key of Object.values(DIAGRAM_DB_KEYS)) {
+                            void sessionStore.clear(key).catch((error) =>
+                                console.error(`Failed to clear diagram ${key}:`, error),
+                            )
+                        }
                         localStorage.setItem(
                             STORAGE_SESSION_ID_KEY,
                             newSessionId,

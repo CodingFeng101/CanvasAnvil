@@ -3,7 +3,7 @@
 import type React from "react"
 import { createContext, useContext, useRef, useState } from "react"
 import type { DrawIoEmbedRef } from "react-drawio"
-import { STORAGE_DIAGRAM_XML_KEY } from "@/workspaces/diagram/chat/ChatPanel"
+import { DIAGRAM_DB_KEYS, diagramStore } from "@/workspaces/diagram/storage"
 import type { ExportFormat } from "@/workspaces/diagram/chat/save-dialog"
 import { extractDiagramXML, validateMxCellStructure } from "@/workspaces/diagram/lib/drawio-xml"
 
@@ -216,8 +216,10 @@ export function DiagramProvider({ children }: { children: React.ReactNode }) {
                     mimeType = "application/xml"
                     extension = ".drawio"
 
-                    // Save to localStorage when user manually saves
-                    localStorage.setItem(STORAGE_DIAGRAM_XML_KEY, xmlContent)
+                    // Keep the saved copy in step when the user saves by hand
+                    void diagramStore.save(DIAGRAM_DB_KEYS.diagramXml, xmlContent).catch((error) => {
+                        console.error("Failed to save diagram XML:", error)
+                    })
                 } else if (format === "png") {
                     // PNG data comes as base64 data URL
                     fileContent = exportData
