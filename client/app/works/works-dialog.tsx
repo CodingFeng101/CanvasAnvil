@@ -93,7 +93,7 @@ export function WorksButton() {
       </button>
       <Dialog open={open} onOpenChange={setOpen}>
         {/* A fixed size, like a settings window: the list scrolls inside instead of the window growing. */}
-        <DialogContent className="flex h-[min(640px,calc(100vh-4rem))] flex-col overflow-hidden sm:max-w-[min(56rem,calc(100%-2rem))]">
+        <DialogContent className="flex h-[min(760px,calc(100vh-3rem))] flex-col overflow-hidden sm:max-w-[min(68rem,calc(100%-2rem))]">
           <DialogHeader>
             <DialogTitle>{t("works.title")}</DialogTitle>
             <DialogDescription>{storageMissing ? t("works.unavailable") : t("works.desc")}</DialogDescription>

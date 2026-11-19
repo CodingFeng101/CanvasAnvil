@@ -199,3 +199,81 @@ test("the index reader drops malformed entries and sorts the listed works", () =
   assert.deepEqual(index.map((w) => w.id), ["old", "new", "draft"]);
   assert.deepEqual(listedWorks(index).map((w) => w.id), ["new", "old"]);
 });
+
+test("My works changes only on Save; don't save goes back to the saved version", async () => {
+  const store = memoryStore();
+  const local = memoryLocal();
+  const works = createWorksStore(config(store), local);
+  const { currentId: id } = await works.ensure("zh");
+
+  await works.storeFor(id).save("primary", { v: 1 });
+  local.set("chat", "first");
+  await works.saveAs(id, "A");
+  assert.deepEqual(await store.read(`saved:${id}:primary`), { v: 1 });
+
+  // Edits after saving reach the live copy only.
+  await works.storeFor(id).save("primary", { v: 2 });
+  await works.storeFor(id).save("extra", "x");
+  local.set("chat", "second");
+  assert.deepEqual(await store.read(`saved:${id}:primary`), { v: 1 });
+
+  // Leaving without saving: back to v1, the extra key gone, the chat restored.
+  const next = await works.switchWork(id, null, { revertFrom: true });
+  assert.deepEqual(await works.storeFor(id).read("primary"), { v: 1 });
+  assert.equal(await works.storeFor(id).read("extra"), null);
+  await works.switchWork(next.currentId, id, { discardFrom: true });
+  assert.equal(local.get("chat"), "first");
+});
+
+test("leaving with save commits the live copy, a draft under its new name", async () => {
+  const store = memoryStore();
+  const works = createWorksStore(config(store), memoryLocal());
+  const { currentId: id } = await works.ensure("zh");
+  await works.storeFor(id).save("primary", { v: 7 });
+
+  const state = await works.switchWork(id, null, { commitFrom: { name: "Deck", thumb: "data:t" } });
+  const saved = state.index.find((w) => w.id === id)!;
+  assert.equal(saved.saved, true);
+  assert.equal(saved.name, "Deck");
+  assert.equal(saved.thumb, "data:t");
+  assert.deepEqual(await store.read(`saved:${id}:primary`), { v: 7 });
+});
+
+test("a duplicate copies the saved version, not unsaved changes", async () => {
+  const store = memoryStore();
+  const works = createWorksStore(config(store), memoryLocal());
+  const { currentId: id } = await works.ensure("zh");
+  await works.storeFor(id).save("primary", { v: 1 });
+  await works.saveAs(id, "A");
+  await works.storeFor(id).save("primary", { v: 2 });
+
+  const index = await works.duplicate(id, "zh", true);
+  const copy = index.find((w) => w.id !== id)!;
+  assert.deepEqual(await works.storeFor(copy.id).read("primary"), { v: 1 });
+  assert.deepEqual(await store.read(`saved:${copy.id}:primary`), { v: 1 });
+});
+
+test("fingerprints follow normalize, so view-only rewrites are not changes", async () => {
+  const store = memoryStore();
+  const works = createWorksStore(
+    { ...config(store), normalize: (key, value) => (key === "primary" ? (value as { body: unknown }).body : value) },
+    memoryLocal(),
+  );
+  const { currentId: id } = await works.ensure("zh");
+  await works.storeFor(id).save("primary", { body: [1], scroll: 0 });
+  await works.saveAs(id, "A");
+  const saved = await works.savedFingerprints(id);
+  assert.equal(works.fingerprint("primary", { body: [1], scroll: 99 }), saved.get("primary"));
+  assert.notEqual(works.fingerprint("primary", { body: [1, 2], scroll: 0 }), saved.get("primary"));
+});
+
+test("saved works from before saved copies existed get one from their live copy", async () => {
+  const store = memoryStore();
+  const works = createWorksStore(config(store), memoryLocal());
+  const { currentId: id } = await works.ensure("zh");
+  await works.storeFor(id).save("primary", { v: 3 });
+  // An index written by the earlier release: saved, but no saved copy.
+  await store.save("works:index", [{ id, name: "Old", saved: true, createdAt: 1, updatedAt: 1 }]);
+  await works.ensure("zh");
+  assert.deepEqual(await store.read(`saved:${id}:primary`), { v: 3 });
+});

@@ -3,11 +3,11 @@ import { toast } from "sonner";
 import { t as tShell, useUiLanguage, type UiLanguage } from "@/shared/i18n";
 import { WorkContext, type WorkContextValue } from "@/shared/works/work-context";
 import { defaultWorkName, type WorkMeta } from "@/shared/works/works-index";
-import type { WorksState } from "@/shared/works/works-store";
+import { LOCAL_KEY, type WorksState } from "@/shared/works/works-store";
 import { WORKSPACES, type WorkspaceId } from "@/app/workspaces";
 import { worksStoreFor } from "./works-registry";
 import { tWorks } from "./strings";
-import { LeaveDialog, NameDialog } from "./work-dialogs";
+import { LeaveDialog, NameDialog, type LeaveRequest } from "./work-dialogs";
 
 /**
  * The app-level side of My works.
@@ -18,6 +18,12 @@ import { LeaveDialog, NameDialog } from "./work-dialogs";
  * current id, and the canvas is rendered again keyed on the new id, reading
  * everything from the new work's keys. The canvases' own load-on-mount and
  * save-on-change code stays as it was.
+ *
+ * The canvas always writes a live copy, so a reload loses nothing. What My
+ * works holds changes only on Save. Whether the live copy differs from the
+ * saved one is worked out from the canvas's writes: a write that follows a
+ * user action is compared with the saved copy; writes made while a work
+ * loads (no action yet) are not edits.
  */
 
 type Phase = "loading" | "ready" | "leaving";
@@ -27,9 +33,15 @@ interface ActiveWorks extends WorksState {
   phase: Phase;
 }
 
+interface SwitchOptions {
+  discardFrom?: boolean;
+  revertFrom?: boolean;
+  commitFrom?: { name?: string; thumb?: string };
+}
+
 interface Pending {
   toId: string | null;
-  discard: boolean;
+  options: SwitchOptions;
 }
 
 type LeaveChoice = "save" | "discard" | "cancel";
@@ -37,7 +49,7 @@ type LeaveChoice = "save" | "discard" | "cancel";
 interface WorksControl {
   active: ActiveWorks | null;
   current: WorkMeta | null;
-  /** Save the open work (asks for a name), or rename it when already saved. */
+  /** Save the open work (a draft is named first), or rename it when nothing changed. */
   saveCurrent(): Promise<void>;
   /** Open a work (or a new draft when id is null) in any canvas. */
   openWork(workspace: WorkspaceId, id: string | null): Promise<boolean>;
@@ -63,6 +75,24 @@ const canvasLabel = (workspace: WorkspaceId, lang: UiLanguage) => {
   return entry ? tShell(lang, entry.labelKey) : workspace;
 };
 
+/** Pointer and key input outside the works UI (header, dialogs) counts as editing. */
+function isWorksUi(target: EventTarget | null) {
+  return target instanceof Element && !!target.closest("header, [role=dialog], [data-works-ui]");
+}
+
+interface ChangeTracker {
+  workspace: WorkspaceId;
+  id: string;
+  /** When the work was opened: writes before any input after this are loading, not edits. */
+  openedAt: number;
+  /** Fingerprints of the saved copy (null for a draft, which has none). */
+  saved: Promise<Map<string, string> | null>;
+  differing: Set<string>;
+  pending: Map<string, unknown>;
+  timer: number | null;
+  running: Promise<void>;
+}
+
 export function WorksProvider({
   activeWorkspace,
   onActivateWorkspace,
@@ -83,14 +113,22 @@ export function WorksProvider({
   const busySources = useRef(new Set<string>());
   const isBusy = () => busySources.current.size > 0;
   const pendingRef = useRef<Pending | null>(null);
+  /** Latest preview per work; a saved work's list entry takes it on Save. */
+  const thumbs = useRef(new Map<string, string>());
 
   // Dialogs the flows wait on.
   const [nameRequest, setNameRequest] = useState<{ title: string; initial: string; resolve: (name: string | null) => void } | null>(null);
-  const [leaveRequest, setLeaveRequest] = useState<{ canvas: string; resolve: (choice: LeaveChoice) => void } | null>(null);
+  const [leaveRequest, setLeaveRequest] = useState<(LeaveRequest & { resolve: (choice: LeaveChoice) => void }) | null>(null);
   const askName = (title: string, initial: string) =>
     new Promise<string | null>((resolve) => setNameRequest({ title, initial, resolve }));
-  const askLeave = (workspace: WorkspaceId) =>
-    new Promise<LeaveChoice>((resolve) => setLeaveRequest({ canvas: canvasLabel(workspace, langRef.current), resolve }));
+  const askLeave = (request: LeaveRequest) => new Promise<LeaveChoice>((resolve) => setLeaveRequest({ ...request, resolve }));
+
+  /** Also updates the ref at once: a flow that awaited the change reads it before React renders. */
+  const setIndex = (workspace: WorkspaceId, index: WorkMeta[]) => {
+    const now = activeRef.current;
+    if (now && now.workspace === workspace) activeRef.current = { ...now, index };
+    setActive((prev) => (prev && prev.workspace === workspace ? { ...prev, index } : prev));
+  };
 
   // Load the works of the canvas on screen.
   useEffect(() => {
@@ -120,7 +158,7 @@ export function WorksProvider({
     if (!pending) return;
     const { workspace, currentId } = active;
     void worksStoreFor(workspace)
-      .switchWork(currentId, pending.toId, { discardFrom: pending.discard })
+      .switchWork(currentId, pending.toId, pending.options)
       .then((state) => setActive({ ...state, workspace, phase: "ready" }))
       .catch((error) => {
         console.error("Failed to switch works", error);
@@ -132,21 +170,155 @@ export function WorksProvider({
 
   const current = active?.index.find((w) => w.id === active.currentId) ?? null;
 
-  /** What to do with the open work before leaving it: keep (saved), save, discard or stay. */
-  const decideLeave = async (workspace: WorkspaceId, work: WorkMeta | undefined, index: WorkMeta[]) => {
-    if (!work || work.saved) return { go: true, discard: false };
-    if (!work.touched) return { go: true, discard: true };
-    const choice = await askLeave(workspace);
-    if (choice === "cancel") return { go: false, discard: false };
-    if (choice === "discard") return { go: true, discard: true };
-    const name = await askName(tWorks(langRef.current, "save.title"), work.nameHint || defaultWorkName(index, langRef.current));
-    if (name === null) return { go: false, discard: false };
-    await worksStoreFor(workspace).saveAs(work.id, name);
-    return { go: true, discard: false };
+  // ---- Unsaved changes of the open work -------------------------------------
+
+  const lastInputAt = useRef(0);
+  useEffect(() => {
+    const onInput = (event: Event) => {
+      if (!isWorksUi(event.target)) lastInputAt.current = Date.now();
+    };
+    // Clicks inside an iframe (the diagram editor) never reach this document;
+    // the pointer going over it, or focus moving into it, is the sign the user
+    // is working there. (Writes are still compared, so a mere hover changes nothing.)
+    const onBlur = () => {
+      if (document.activeElement instanceof HTMLIFrameElement) lastInputAt.current = Date.now();
+    };
+    const onOver = (event: Event) => {
+      if (event.target instanceof HTMLIFrameElement) lastInputAt.current = Date.now();
+    };
+    const kinds = ["pointerdown", "keydown", "paste", "drop"] as const;
+    for (const kind of kinds) document.addEventListener(kind, onInput, true);
+    document.addEventListener("pointerover", onOver, true);
+    window.addEventListener("blur", onBlur);
+    return () => {
+      for (const kind of kinds) document.removeEventListener(kind, onInput, true);
+      document.removeEventListener("pointerover", onOver, true);
+      window.removeEventListener("blur", onBlur);
+    };
+  }, []);
+  const userActiveSince = (since: number) => lastInputAt.current > since;
+
+  const trackerRef = useRef<ChangeTracker | null>(null);
+
+  /** Canvases' "write what is on screen" hooks; each gets at most 3s. */
+  const flushers = useRef(new Set<() => Promise<void>>());
+  const flushCanvas = async () => {
+    await Promise.all(
+      [...flushers.current].map((flush) =>
+        Promise.race([flush().catch((error) => console.error("Canvas flush failed", error)), new Promise((resolve) => setTimeout(resolve, 3000))]),
+      ),
+    );
   };
 
-  const leaveActive = (toId: string | null, discard: boolean) => {
-    pendingRef.current = { toId, discard };
+  const runCheck = useCallback(async (tracker: ChangeTracker) => {
+    if (tracker.timer !== null) window.clearTimeout(tracker.timer);
+    tracker.timer = null;
+    const store = worksStoreFor(tracker.workspace);
+    const saved = await tracker.saved;
+    const pending = tracker.pending;
+    tracker.pending = new Map();
+    if (!saved) return; // A draft: nothing saved to differ from.
+    for (const [key, value] of pending) {
+      if (store.fingerprint(key, value) === (saved.get(key) ?? "")) tracker.differing.delete(key);
+      else tracker.differing.add(key);
+    }
+    if (userActiveSince(tracker.openedAt)) {
+      if (store.openLocalFingerprint() === saved.get(LOCAL_KEY)) tracker.differing.delete(LOCAL_KEY);
+      else tracker.differing.add(LOCAL_KEY);
+    }
+    if (trackerRef.current !== tracker) return;
+    const index = await store.setDirty(tracker.id, tracker.differing.size > 0);
+    if (trackerRef.current === tracker) setIndex(tracker.workspace, index);
+  }, []);
+
+  /** Brings the open work's unsaved-changes flag up to date (before leaving or saving). */
+  const settleChanges = useCallback(async () => {
+    const tracker = trackerRef.current;
+    if (!tracker) return;
+    tracker.running = tracker.running.then(() => runCheck(tracker));
+    await tracker.running;
+  }, [runCheck]);
+
+  // A fresh tracker for each work opened on screen.
+  const trackedKey = active?.phase === "ready" ? `${active.workspace}:${active.currentId}` : null;
+  useEffect(() => {
+    const now = activeRef.current;
+    if (!now || now.phase !== "ready") {
+      trackerRef.current = null;
+      return;
+    }
+    const store = worksStoreFor(now.workspace);
+    const meta = now.index.find((w) => w.id === now.currentId);
+    const tracker: ChangeTracker = {
+      workspace: now.workspace,
+      id: now.currentId,
+      openedAt: Date.now(),
+      saved: meta?.saved ? store.savedFingerprints(now.currentId).catch(() => null) : Promise.resolve(null),
+      differing: new Set(),
+      pending: new Map(),
+      timer: null,
+      running: Promise.resolve(),
+    };
+    // Reopened with changes left from before a reload: find out which keys differ.
+    if (meta?.saved && meta.dirty) {
+      tracker.running = (async () => {
+        const [saved, live] = await Promise.all([tracker.saved, store.liveFingerprints(now.currentId, true)]);
+        if (!saved) return;
+        for (const key of new Set([...saved.keys(), ...live.keys()])) {
+          if ((saved.get(key) ?? "") !== (live.get(key) ?? "")) tracker.differing.add(key);
+        }
+        if (tracker.differing.size === 0) setIndex(tracker.workspace, await store.setDirty(tracker.id, false));
+      })().catch((error) => console.error("Failed to compare work", error));
+    }
+    trackerRef.current = tracker;
+    const unsubscribe = store.onWrite((id, key, value) => {
+      if (trackerRef.current !== tracker || id !== tracker.id) return;
+      if (!userActiveSince(tracker.openedAt)) return;
+      tracker.pending.set(key, value);
+      if (tracker.timer !== null) window.clearTimeout(tracker.timer);
+      tracker.timer = window.setTimeout(() => {
+        tracker.running = tracker.running.then(() => runCheck(tracker)).catch((error) => console.error("Failed to compare work", error));
+      }, 800);
+    });
+    return () => {
+      unsubscribe();
+      if (tracker.timer !== null) window.clearTimeout(tracker.timer);
+      if (trackerRef.current === tracker) trackerRef.current = null;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [trackedKey]);
+
+  /** After a save: the saved copy is the live one again. */
+  const rebaseTracker = (workspace: WorkspaceId, id: string) => {
+    const tracker = trackerRef.current;
+    if (!tracker || tracker.workspace !== workspace || tracker.id !== id) return;
+    tracker.saved = worksStoreFor(workspace).savedFingerprints(id).catch(() => null);
+    tracker.differing.clear();
+  };
+
+  // ---- Leaving, opening, saving ----------------------------------------------
+
+  /** What to do with the open work before leaving it, or null to stay. */
+  const decideLeave = async (workspace: WorkspaceId, work: WorkMeta | undefined, index: WorkMeta[]): Promise<SwitchOptions | null> => {
+    if (!work) return {};
+    if (work.saved) {
+      if (!work.dirty) return {};
+      const choice = await askLeave({ kind: "changes", name: work.name });
+      if (choice === "cancel") return null;
+      if (choice === "discard") return { revertFrom: true };
+      return { commitFrom: { thumb: thumbs.current.get(work.id) } };
+    }
+    if (!work.touched) return { discardFrom: true };
+    const choice = await askLeave({ kind: "draft", canvas: canvasLabel(workspace, langRef.current) });
+    if (choice === "cancel") return null;
+    if (choice === "discard") return { discardFrom: true };
+    const name = await askName(tWorks(langRef.current, "save.title"), work.nameHint || defaultWorkName(index, langRef.current));
+    if (name === null) return null;
+    return { commitFrom: { name, thumb: thumbs.current.get(work.id) } };
+  };
+
+  const leaveActive = (toId: string | null, options: SwitchOptions) => {
+    pendingRef.current = { toId, options };
     busySources.current.clear();
     setActive((prev) => (prev ? { ...prev, phase: "leaving" } : prev));
   };
@@ -159,10 +331,13 @@ export function WorksProvider({
         toast.info(tWorks(langRef.current, "busy.switch"));
         return false;
       }
-      const open = now.index.find((w) => w.id === now.currentId);
-      const { go, discard } = await decideLeave(workspace, open, now.index);
-      if (!go) return false;
-      leaveActive(id, discard);
+      await flushCanvas();
+      await settleChanges();
+      const fresh = activeRef.current ?? now;
+      const open = fresh.index.find((w) => w.id === fresh.currentId);
+      const options = await decideLeave(workspace, open, fresh.index);
+      if (!options) return false;
+      leaveActive(id, options);
       return true;
     }
     if (now && now.workspace !== workspace && isBusy()) {
@@ -174,9 +349,9 @@ export function WorksProvider({
     const state = await store.ensure(langRef.current);
     if (id === null || id !== state.currentId) {
       const open = state.index.find((w) => w.id === state.currentId);
-      const { go, discard } = await decideLeave(workspace, open, state.index);
-      if (!go) return false;
-      await store.switchWork(state.currentId, id, { discardFrom: discard });
+      const options = await decideLeave(workspace, open, state.index);
+      if (!options) return false;
+      await store.switchWork(state.currentId, id, options);
     }
     bump();
     onActivateWorkspace(workspace);
@@ -186,21 +361,36 @@ export function WorksProvider({
   const saveCurrent = async () => {
     const now = activeRef.current;
     if (!now || now.phase !== "ready") return;
-    const work = now.index.find((w) => w.id === now.currentId);
+    await flushCanvas();
+    await settleChanges();
+    const fresh = activeRef.current ?? now;
+    const work = fresh.index.find((w) => w.id === fresh.currentId);
     if (!work) return;
-    const name = await askName(
-      tWorks(langRef.current, work.saved ? "save.renameTitle" : "save.title"),
-      work.saved ? work.name : work.nameHint || defaultWorkName(now.index, langRef.current),
-    );
-    if (name === null) return;
-    const index = await worksStoreFor(now.workspace).saveAs(work.id, name);
-    setActive((prev) => (prev && prev.workspace === now.workspace ? { ...prev, index } : prev));
-    if (!work.saved) toast.success(tWorks(langRef.current, "save.done"));
+    const store = worksStoreFor(fresh.workspace);
+    const thumb = thumbs.current.get(work.id);
+    if (work.saved && !work.dirty) {
+      // Nothing to save: the button renames.
+      const name = await askName(tWorks(langRef.current, "save.renameTitle"), work.name);
+      if (name === null) return;
+      setIndex(fresh.workspace, await store.rename(work.id, name));
+      bump();
+      return;
+    }
+    let name: string | undefined;
+    if (!work.saved) {
+      const asked = await askName(tWorks(langRef.current, "save.title"), work.nameHint || defaultWorkName(fresh.index, langRef.current));
+      if (asked === null) return;
+      name = asked;
+    }
+    const index = await store.saveAs(work.id, name, true, thumb ? { thumb } : undefined);
+    rebaseTracker(fresh.workspace, work.id);
+    setIndex(fresh.workspace, index);
+    toast.success(tWorks(langRef.current, work.saved ? "save.updated" : "save.done"));
     bump();
   };
 
   const refreshActive = (workspace: WorkspaceId, index: WorkMeta[]) => {
-    setActive((prev) => (prev && prev.workspace === workspace ? { ...prev, index } : prev));
+    setIndex(workspace, index);
     bump();
   };
 
@@ -211,7 +401,7 @@ export function WorksProvider({
         toast.info(tWorks(langRef.current, "busy.switch"));
         return;
       }
-      leaveActive(null, true);
+      leaveActive(null, { discardFrom: true });
       return;
     }
     const store = worksStoreFor(workspace);
@@ -243,7 +433,8 @@ export function WorksProvider({
 
   // Reports from the canvas (name hint, preview, "has content") are batched.
   // Each batch remembers the work it came from: a canvas still reports while it
-  // unmounts, and that must not land on the work opened next.
+  // unmounts, and that must not land on the work opened next. A saved work's
+  // list entry changes only on Save, so only a draft's reports are written.
   const reportRef = useRef<{ target: { workspace: WorkspaceId; id: string } | null; patch: Partial<WorkMeta>; timer: number | null }>({
     target: null,
     patch: {},
@@ -257,25 +448,35 @@ export function WorksProvider({
     pending.patch = {};
     pending.target = null;
     if (!target || !Object.keys(patch).length) return;
-    void worksStoreFor(target.workspace)
-      .touch(target.id, patch)
-      .then((index) => setActive((prev) => (prev && prev.workspace === target.workspace ? { ...prev, index } : prev)))
+    const store = worksStoreFor(target.workspace);
+    void store
+      .readIndex()
+      .then((index) => {
+        if (index.find((w) => w.id === target.id)?.saved) return null;
+        return store.touch(target.id, patch);
+      })
+      .then((index) => {
+        if (index) setActive((prev) => (prev && prev.workspace === target.workspace ? { ...prev, index } : prev));
+      })
       .catch((error) => console.error("Failed to update work", error));
   }, []);
 
   const workValue = useMemo<WorkContextValue | null>(() => {
     if (!active || active.phase !== "ready") return null;
     const store = worksStoreFor(active.workspace);
+    const meta = active.index.find((w) => w.id === active.currentId);
     return {
       workId: active.currentId,
       workStore: store.storeFor(active.currentId),
-      saved: !!active.index.find((w) => w.id === active.currentId)?.saved,
+      saved: !!meta?.saved,
+      dirty: !!meta?.dirty,
       setBusy(source, busy) {
         if (busy) busySources.current.add(source);
         else busySources.current.delete(source);
       },
       report(info) {
         const target = { workspace: active.workspace, id: active.currentId };
+        if (info.thumb !== undefined) thumbs.current.set(target.id, info.thumb);
         if (reportRef.current.target && (reportRef.current.target.workspace !== target.workspace || reportRef.current.target.id !== target.id)) {
           flushReport();
         }
@@ -291,10 +492,17 @@ export function WorksProvider({
         if (!now || now.phase !== "ready") return;
         const open = now.index.find((w) => w.id === now.currentId);
         flushReport();
-        leaveActive(null, !open?.saved);
+        // A saved work goes back to its saved copy; a draft is dropped.
+        leaveActive(null, open?.saved ? { revertFrom: true } : { discardFrom: true });
       },
       save() {
         void saveCurrent();
+      },
+      registerFlush(flush) {
+        flushers.current.add(flush);
+        return () => {
+          flushers.current.delete(flush);
+        };
       },
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps

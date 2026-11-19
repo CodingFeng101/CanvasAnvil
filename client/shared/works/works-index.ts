@@ -6,7 +6,8 @@
  *
  * A canvas always has exactly one current work. Until the user presses Save it
  * is a draft: kept across reloads, but not listed. Saving names it and lists
- * it; from then on its edits keep saving on their own.
+ * it. The canvas always works on a live copy that survives reloads; the listed
+ * version changes only when the user presses Save again (`dirty` until then).
  */
 
 export interface WorkMeta {
@@ -20,6 +21,8 @@ export interface WorkMeta {
   nameHint?: string;
   /** True once the draft has any content worth asking about before it is dropped. */
   touched?: boolean;
+  /** A saved work whose live copy has changes not yet saved. */
+  dirty?: boolean;
   createdAt: number;
   updatedAt: number;
 }
@@ -50,6 +53,7 @@ export function normalizeIndex(value: unknown): WorkMeta[] {
       thumb: typeof e.thumb === "string" ? e.thumb : undefined,
       nameHint: typeof e.nameHint === "string" ? e.nameHint : undefined,
       touched: e.touched === true ? true : undefined,
+      dirty: e.dirty === true ? true : undefined,
       createdAt,
       updatedAt: typeof e.updatedAt === "number" ? e.updatedAt : createdAt,
     });

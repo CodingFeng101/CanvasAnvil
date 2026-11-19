@@ -51,12 +51,15 @@ export function NameDialog({
   );
 }
 
-/** Leaving an unsaved draft that has content: save, don't save, or stay. */
+/** A draft with content, or a saved work with unsaved changes, is being left. */
+export type LeaveRequest = { kind: "draft"; canvas: string } | { kind: "changes"; name: string };
+
+/** Leaving unsaved content: save, don't save, or stay. */
 export function LeaveDialog({
   request,
   onClose,
 }: {
-  request: { canvas: string } | null;
+  request: LeaveRequest | null;
   onClose: (choice: "save" | "discard" | "cancel") => void;
 }) {
   const t = useWorksT();
@@ -64,8 +67,12 @@ export function LeaveDialog({
     <Dialog open={!!request} onOpenChange={(open) => !open && onClose("cancel")}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>{t("leave.title")}</DialogTitle>
-          <DialogDescription>{t("leave.desc", { canvas: request?.canvas ?? "" })}</DialogDescription>
+          <DialogTitle>{request?.kind === "changes" ? t("leave.changesTitle") : t("leave.title")}</DialogTitle>
+          <DialogDescription>
+            {request?.kind === "changes"
+              ? t("leave.changesDesc", { name: request.name })
+              : t("leave.desc", { canvas: request?.canvas ?? "" })}
+          </DialogDescription>
         </DialogHeader>
         <DialogFooter>
           <Button variant="outline" onClick={() => onClose("cancel")}>

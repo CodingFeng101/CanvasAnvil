@@ -20,6 +20,7 @@ export function scopeStore(
   store: WorkspaceStore,
   prefix: string,
   onSaveError?: (error: unknown) => void,
+  onWrite?: (key: string, value: unknown) => void,
 ): ScopedStore {
   const pending = new Set<Promise<unknown>>();
   const track = <T>(promise: Promise<T>): Promise<T> => {
@@ -32,14 +33,19 @@ export function scopeStore(
   return {
     prefix,
     read: (key) => store.read(prefix + key),
-    save: (key, value) =>
-      track(
+    save: (key, value) => {
+      onWrite?.(key, value);
+      return track(
         store.save(prefix + key, value).catch((error) => {
           onSaveError?.(error);
           throw error;
         }),
-      ),
-    clear: (key) => track(store.clear(prefix + key)),
+      );
+    },
+    clear: (key) => {
+      onWrite?.(key, undefined);
+      return track(store.clear(prefix + key));
+    },
     listKeys: store.listKeys
       ? async (sub) => (await store.listKeys!(prefix + sub)).map((key) => key.slice(prefix.length))
       : undefined,
@@ -50,3 +56,5 @@ export function scopeStore(
 }
 
 export const workPrefix = (id: string) => `work:${id}:`;
+/** Where the version the user last saved is kept, key for key. */
+export const savedPrefix = (id: string) => `saved:${id}:`;

@@ -608,8 +608,6 @@ export function ChatInput({
                 button off the right edge. */}
             <div className="flex flex-wrap items-center justify-between gap-y-1.5 px-3 py-2 border-t border-border/50">
                 <div className="flex flex-wrap items-center gap-1">
-                    <SaveWorkButton />
-                    {toolbarExtras}
                     {onClearChat && (
                         <ButtonWithTooltip
                             tooltipContent={t(uiLang, "chat.clearChatTitle")}
@@ -621,6 +619,8 @@ export function ChatInput({
                             <Trash2 className="h-4 w-4" />
                         </ButtonWithTooltip>
                     )}
+                    <SaveWorkButton />
+                    {toolbarExtras}
                 </div>
 
                 <div className="ml-auto flex items-center gap-1">

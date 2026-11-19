@@ -949,6 +949,36 @@ Please fix the XML issues. Ensure cell_id values exist in the current XML and th
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [chartXML, canSaveDiagram, persist])
 
+    // Hand-made edits stay inside draw.io until an export. Before the work is
+    // saved or left, export once and write the drawing, so Save keeps what is on
+    // screen. Skipped while a tool call is already waiting on an export.
+    const canSaveDiagramRef = useRef(canSaveDiagram)
+    canSaveDiagramRef.current = canSaveDiagram
+    useEffect(() => {
+        if (!work) return
+        return work.registerFlush(async () => {
+            if (!canSaveDiagramRef.current || resolverRef.current) return
+            const xml = await new Promise<string | null>((resolve) => {
+                const done = (value: string) => {
+                    window.clearTimeout(timer)
+                    resolve(value)
+                }
+                const timer = window.setTimeout(() => {
+                    if (resolverRef.current === done) resolverRef.current = null
+                    resolve(null)
+                }, 2000)
+                resolverRef.current = done
+                if (!handleExportWithoutHistory()) {
+                    window.clearTimeout(timer)
+                    resolverRef.current = null
+                    resolve(null)
+                }
+            })
+            if (xml && xml.length > 300) await persist(DIAGRAM_DB_KEYS.diagramXml, xml)
+        })
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [work, persist])
+
     // Save XML snapshots whenever they change
     const saveXmlSnapshots = useCallback(() => {
         void persist(DIAGRAM_DB_KEYS.xmlSnapshots, Array.from(xmlSnapshotsRef.current.entries()))

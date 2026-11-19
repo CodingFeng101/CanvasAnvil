@@ -14,6 +14,8 @@ export interface WorkContextValue {
   workStore: WorkspaceStore;
   /** True once the user has saved this work (it is listed in My works). */
   saved: boolean;
+  /** A saved work with changes not yet saved (My works still has the older version). */
+  dirty: boolean;
   /**
    * A generation is running: the shell will not switch works until it ends.
    * `source` tells apart several parts of a canvas reporting at once.
@@ -23,12 +25,19 @@ export interface WorkContextValue {
   report(info: { nameHint?: string; thumb?: string; touched?: boolean }): void;
   /**
    * The canvas's clear / start-over button. An unsaved draft is discarded
-   * (after the canvas's own confirmation); a saved work stays in My works.
+   * (after the canvas's own confirmation); a saved work stays in My works as
+   * last saved (unsaved changes are dropped).
    * Either way the canvas then remounts on a fresh draft.
    */
   startOver(): void;
-  /** The Save button: names and lists a draft, or renames a saved work. */
+  /** The Save button: names and lists a draft, saves a saved work's changes, or renames it. */
   save(): void;
+  /**
+   * For a canvas that holds edits it has not written yet (the diagram editor
+   * only hands its drawing over on export): run before the work is saved or
+   * left, so what is saved is what is on screen. Returns an unregister.
+   */
+  registerFlush(flush: () => Promise<void>): () => void;
 }
 
 export const WorkContext = createContext<WorkContextValue | null>(null);

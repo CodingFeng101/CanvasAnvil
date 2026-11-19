@@ -55,6 +55,17 @@ function create(workspace: WorkspaceId): WorksStore {
         store: canvasStore,
         legacyKeys: [CANVAS_SCENE_KEY, CANVAS_CHAT_IMAGES_KEY],
         localKeys: [CANVAS_CHAT_STORAGE_KEY],
+        // Scrolling, zooming or selecting rewrites the scene but changes nothing,
+        // and loading reshapes elements (null → []) without changing them. Every
+        // real edit bumps an element's version, so id + version is the content.
+        normalize: (key, value) => {
+          if (key !== CANVAS_SCENE_KEY || !value || typeof value !== "object") return value;
+          const scene = value as { elements?: { id?: string; version?: number; isDeleted?: boolean }[]; files?: Record<string, unknown> };
+          return {
+            elements: (scene.elements ?? []).filter((element) => element && !element.isDeleted).map((element) => [element.id, element.version]),
+            files: Object.keys(scene.files ?? {}).sort(),
+          };
+        },
         onSaveError,
       });
     case "cad":

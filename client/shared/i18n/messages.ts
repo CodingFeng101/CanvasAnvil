@@ -19,8 +19,8 @@ const messages = {
 
   "reset.title": { zh: "清空对话", en: "Clear Chat" },
   "reset.descSaved": {
-    zh: "这份作品已保存在「我的作品」里，不会被删除。清空后会换成一份新的空白作品。",
-    en: "This work is saved in My works and stays there. Clearing opens a new blank work.",
+    zh: "上次保存的版本会留在「我的作品」里，不会被删除。清空后会换成一份新的空白作品，没保存的修改会丢弃。",
+    en: "The version you last saved stays in My works. Clearing opens a new blank work; unsaved changes are dropped.",
   },
   "reset.desc": {
     zh: "清空对话将同时清空当前工作台内容。此操作无法撤销。PPT 工作台会回到开始页面。",

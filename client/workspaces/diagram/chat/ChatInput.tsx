@@ -407,7 +407,6 @@ export function ChatInput({
                 <div className="flex items-center justify-between px-3 py-2 border-t border-border/50">
                     {/* Left actions */}
                     <div className="flex items-center gap-1">
-                        <SaveWorkButton />
                         <ButtonWithTooltip
                             type="button"
                             variant="ghost"
@@ -418,6 +417,7 @@ export function ChatInput({
                         >
                             <Trash2 className="h-4 w-4" />
                         </ButtonWithTooltip>
+                        <SaveWorkButton />
 
                         <ButtonWithTooltip
                             type="button"
