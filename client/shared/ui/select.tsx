@@ -65,7 +65,7 @@ function SelectContent({
       <SelectPrimitive.Content
         data-slot="select-content"
         className={cn(
-          "bg-popover text-popover-foreground data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[side=bottom]:slide-in-from-top-1 data-[side=left]:slide-in-from-right-1 data-[side=right]:slide-in-from-left-1 data-[side=top]:slide-in-from-bottom-1 relative z-[140] min-w-[8rem] overflow-x-hidden overflow-y-auto rounded-xl border shadow-soft-lg",
+          "bg-popover text-popover-foreground data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[side=bottom]:slide-in-from-top-1 data-[side=left]:slide-in-from-right-1 data-[side=right]:slide-in-from-left-1 data-[side=top]:slide-in-from-bottom-1 relative z-[140] min-w-[8rem] overflow-x-hidden overflow-y-auto rounded-xl border border-border/80 shadow-[0_8px_24px_-6px_hsl(var(--shadow-hue)/0.2),0_2px_6px_hsl(var(--shadow-hue)/0.08)]",
           // Tailwind v4's `max-h-(--var)` / `origin-(--var)` shorthands are not
           // valid in v3: the list had no height cap at all, so a long one ran
           // past the bottom of the viewport.
@@ -117,15 +117,15 @@ function SelectItem({
       data-slot="select-item"
       className={cn(
         // `outline-hidden` is another v4-only name; v3 spells it `outline-none`.
-        "focus:bg-accent focus:text-accent-foreground [&_svg:not([class*='text-'])]:text-muted-foreground relative flex w-full cursor-default items-center gap-2 rounded-md py-1.5 pr-8 pl-2 text-sm outline-none select-none data-[disabled]:pointer-events-none data-[disabled]:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4 *:[span]:last:flex *:[span]:last:items-center *:[span]:last:gap-2",
+        "focus:bg-foreground/[0.06] data-[state=checked]:text-foreground [&_svg:not([class*='text-'])]:text-muted-foreground relative flex min-h-8 w-full cursor-default items-center gap-2 rounded-lg py-1.5 pr-8 pl-2.5 text-[13px] outline-none select-none data-[disabled]:pointer-events-none data-[disabled]:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4 *:[span]:last:flex *:[span]:last:items-center *:[span]:last:gap-2",
         "transition-colors duration-fast ease-out-soft",
         className
       )}
       {...props}
     >
-      <span className="absolute right-2 flex size-3.5 items-center justify-center">
+      <span className="absolute right-2.5 flex size-3.5 items-center justify-center">
         <SelectPrimitive.ItemIndicator>
-          <CheckIcon className="size-4" />
+          <CheckIcon className="size-3.5" />
         </SelectPrimitive.ItemIndicator>
       </span>
       <SelectPrimitive.ItemText>{children}</SelectPrimitive.ItemText>

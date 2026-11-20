@@ -4,9 +4,11 @@ import type { Connect, Plugin } from "vite";
 import react from "@vitejs/plugin-react";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { readFileSync } from "node:fs";
 import { apiMiddleware } from "./server/http/vite-middleware";
 
 const root = path.dirname(fileURLToPath(import.meta.url));
+const appVersion = String(JSON.parse(readFileSync(path.join(root, "package.json"), "utf8")).version ?? "");
 
 /**
  * Runs the API inside the dev and preview servers so `npm run dev` is a single
@@ -25,6 +27,8 @@ function localApiPlugin(): Plugin {
 }
 
 export default defineConfig({
+  // Settings → About shows it.
+  define: { __APP_VERSION__: JSON.stringify(appVersion) },
   server: {
     host: "0.0.0.0",
     port: 8001,

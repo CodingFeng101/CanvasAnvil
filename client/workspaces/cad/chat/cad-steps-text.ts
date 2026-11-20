@@ -87,40 +87,7 @@ export function describeSpecStream(text: string, zh: boolean): string {
   return lines.map(line => `- ${line}`).join("\n");
 }
 
-/**
- * Parse a JSON object the model is still writing: close the open string, arrays and objects,
- * dropping a dangling key or comma, so a half-written plan can be shown as it streams.
- */
-export function parsePartialJson(text: string): any {
-  const start = text.indexOf("{");
-  if (start < 0) return null;
-  let body = text.slice(start);
-  for (let attempt = 0; attempt < 8 && body; attempt++) {
-    const stack: string[] = [];
-    let quoted = false;
-    let escaped = false;
-    let end = body.length;
-    for (let index = 0; index < body.length; index++) {
-      const character = body[index];
-      if (quoted) {
-        if (escaped) escaped = false;
-        else if (character === "\\") escaped = true;
-        else if (character === '"') quoted = false;
-        continue;
-      }
-      if (character === '"') quoted = true;
-      else if (character === "{" || character === "[") stack.push(character === "{" ? "}" : "]");
-      else if (character === "}" || character === "]") {
-        stack.pop();
-        if (!stack.length) { end = index + 1; break; }
-      }
-    }
-    const candidate = (body.slice(0, end) + (quoted ? '"' : "")).replace(/[,:\s]+$/, "");
-    try { return JSON.parse(candidate + stack.reverse().join("")); }
-    catch { body = body.slice(0, Math.max(body.lastIndexOf(",", body.length - 2), 0)); }
-  }
-  return null;
-}
+export { parsePartialJson } from "@/shared/lib/partial-json";
 
 /** The text a model should see: markers removed. */
 export const stripCadMarkers = (text: string) =>

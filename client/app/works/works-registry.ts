@@ -96,3 +96,42 @@ export function worksStoreFor(workspace: WorkspaceId): WorksStore {
   }
   return store;
 }
+
+/** Roughly how many bytes a stored value takes (text is counted per character). */
+function sizeOf(value: unknown): number {
+  if (value === null || value === undefined) return 0;
+  if (typeof Blob !== "undefined" && value instanceof Blob) return value.size;
+  if (value instanceof ArrayBuffer) return value.byteLength;
+  if (ArrayBuffer.isView(value)) return value.byteLength;
+  if (typeof value === "string") return value.length;
+  try {
+    return JSON.stringify(value)?.length ?? 0;
+  } catch {
+    return 0;
+  }
+}
+
+/** What each canvas keeps in IndexedDB, in bytes (approximate): Settings → Data. */
+export async function storageByCanvas(): Promise<Record<WorkspaceId, number>> {
+  const raw = { diagram: diagramStore, cad: cadStore, ppt: pptStore, canvas: canvasStore } as const;
+  const out = { diagram: 0, cad: 0, ppt: 0, canvas: 0 } as Record<WorkspaceId, number>;
+  for (const [id, store] of Object.entries(raw) as [WorkspaceId, typeof diagramStore][]) {
+    for (const key of (await store.listKeys?.("")) ?? []) out[id] += key.length + sizeOf(await store.read(key));
+  }
+  return out;
+}
+
+/**
+ * Everything every canvas keeps in IndexedDB (each work's live and saved
+ * copies, the works lists), as one JSON-able object: Settings → Data → Export.
+ */
+export async function exportAllWorks() {
+  const raw = { diagram: diagramStore, cad: cadStore, ppt: pptStore, canvas: canvasStore } as const;
+  const stores: Record<string, Record<string, unknown>> = {};
+  for (const [id, store] of Object.entries(raw)) {
+    const data: Record<string, unknown> = {};
+    for (const key of (await store.listKeys?.("")) ?? []) data[key] = await store.read(key);
+    stores[id] = data;
+  }
+  return { app: "CanvasAnvil", format: 1, exportedAt: new Date().toISOString(), stores };
+}

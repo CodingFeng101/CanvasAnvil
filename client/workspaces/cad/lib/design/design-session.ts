@@ -37,6 +37,9 @@ function object(value: unknown): Record<string, unknown> {
   return value as Record<string, unknown>;
 }
 
+/** Per-version designer screenshots (small JPEGs), keyed by CadDesignSession.shotKey. */
+const SHOTS_KEY = 'cad-version-shots';
+
 export class CadDesignSession {
   private store: WorkspaceStore;
   private activate: () => void;
@@ -93,6 +96,22 @@ export class CadDesignSession {
   /** The designer's 2D plan as an image, when the designer is open; for the work's preview in My works. */
   previewImage(): string | null {
     try { return this.bridge?.shot2d() ?? null; } catch { return null; }
+  }
+  /** Which saved picture belongs to a version. */
+  static shotKey(design: CadDesign): string {
+    return `${design.revision}:${design.updatedAt}`;
+  }
+  /** Keep the designer's picture of a version, so the history shows what it really looked like. */
+  async saveShot(design: CadDesign, image: string) {
+    const shots = (await this.store.read<Record<string, string>>(SHOTS_KEY).catch(() => null)) ?? {};
+    shots[CadDesignSession.shotKey(design)] = image;
+    // Only versions still in the history keep theirs.
+    const keep = new Set(this.versions().map(CadDesignSession.shotKey));
+    for (const key of Object.keys(shots)) if (!keep.has(key)) delete shots[key];
+    await this.store.save(SHOTS_KEY, shots).catch(() => {});
+  }
+  async shots(): Promise<Record<string, string>> {
+    return (await this.store.read<Record<string, string>>(SHOTS_KEY).catch(() => null)) ?? {};
   }
   private async load(preset: DesignerPreset, recovering = false): Promise<DesignerBridge> {
     this.activate();

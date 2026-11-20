@@ -4,10 +4,12 @@
  * Plain functions over plain values, so the rules (what a draft is, how a work
  * is named, the order of the list) are tested without IndexedDB.
  *
- * A canvas always has exactly one current work. Until the user presses Save it
- * is a draft: kept across reloads, but not listed. Saving names it and lists
- * it. The canvas always works on a live copy that survives reloads; the listed
- * version changes only when the user presses Save again (`dirty` until then).
+ * A canvas always has exactly one current work. Until it has content it is a
+ * draft: kept across reloads, but not listed. Once the user puts something in
+ * it, it is named on its own (from the content, else "未命名作品 N") and
+ * listed, as claude.ai lists a chat. The canvas always works on a live copy
+ * that is written as it changes, so there is no Save: what is on screen is
+ * what is kept.
  */
 
 export interface WorkMeta {
@@ -21,8 +23,12 @@ export interface WorkMeta {
   nameHint?: string;
   /** True once the draft has any content worth asking about before it is dropped. */
   touched?: boolean;
-  /** A saved work whose live copy has changes not yet saved. */
+  /** Legacy (the Save era): a saved work whose live copy had unsaved changes. Ignored now. */
   dirty?: boolean;
+  /** Pinned to the top of the sidebar's list. */
+  pinned?: boolean;
+  /** The latest request in the chat, for the sidebar's hover preview. */
+  lastPrompt?: string;
   createdAt: number;
   updatedAt: number;
 }
@@ -52,8 +58,10 @@ export function normalizeIndex(value: unknown): WorkMeta[] {
       saved: e.saved === true,
       thumb: typeof e.thumb === "string" ? e.thumb : undefined,
       nameHint: typeof e.nameHint === "string" ? e.nameHint : undefined,
+      lastPrompt: typeof e.lastPrompt === "string" ? e.lastPrompt : undefined,
       touched: e.touched === true ? true : undefined,
       dirty: e.dirty === true ? true : undefined,
+      pinned: e.pinned === true ? true : undefined,
       createdAt,
       updatedAt: typeof e.updatedAt === "number" ? e.updatedAt : createdAt,
     });
@@ -99,6 +107,11 @@ export function nameFromText(text: string | null | undefined): string {
   const collapsed = firstLine.replace(/\s+/g, " ");
   const chars = Array.from(collapsed);
   return chars.length > NAME_LIMIT ? `${chars.slice(0, NAME_LIMIT).join("")}…` : collapsed;
+}
+
+/** True for a name `defaultWorkName` hands out, which the content may replace. */
+export function isDefaultWorkName(name: string): boolean {
+  return /^(未命名作品|Untitled) \d+$/.test(name);
 }
 
 /** "未命名作品 3" / "Untitled 3": the first number not already taken in this canvas. */

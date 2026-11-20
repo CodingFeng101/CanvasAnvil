@@ -78,7 +78,10 @@ export function buildDiagramDeepThinkingImagePrompt(params: {
     globalConstraints: string
     processedFilesContext: string
     template: string
+    /** How many images the user attached (sent along with the prompt). */
+    referenceImageCount?: number
 }): string {
+    const references = params.referenceImageCount ?? 0
     const safeUserText = String(params.userText || "").trim() || "(empty)"
     const safeGlobalConstraints =
         String(params.globalConstraints || "").trim() || "(none)"
@@ -89,6 +92,13 @@ export function buildDiagramDeepThinkingImagePrompt(params: {
         .replace("{{USER_REQUEST}}", safeUserText)
         .replace("{{GLOBAL_CONSTRAINTS}}", safeGlobalConstraints)
         .replace("{{PROCESSED_FILE_CONTENT}}", safeProcessedFiles)
+        // Never mention a reference image that is not attached: image models refuse such prompts.
+        .replace(
+            "{{REFERENCE_IMAGES}}",
+            references > 0
+                ? `${references} attached. Keep their important structure and meaning, take style cues where they help, improve clarity, and do not copy their defects.`
+                : "None. Draw from the text alone.",
+        )
 }
 
 export function getImageExtensionFromMediaType(mediaType: string): string {
@@ -151,6 +161,7 @@ export async function generateDeepThinkingDiagramImage(args: {
             globalConstraints: args.globalConstraints,
             processedFilesContext: args.processedFilesContext,
             template,
+            referenceImageCount: args.imageAttachments.length,
         })
     } catch (error) {
         console.warn(
@@ -174,6 +185,7 @@ export async function generateDeepThinkingDiagramImage(args: {
             "Produce one refined diagram image suitable for downstream XML generation.",
             "N - Narrowing",
             "Do not generate a sketch, wireframe, draft, poster, or UI mockup. Prioritize clear structure, readable labels, complete coverage, balanced spacing, and unambiguous connectors.",
+            "Always answer with an image; never with text or a request for files.",
         ].join("\n\n")
     }
 

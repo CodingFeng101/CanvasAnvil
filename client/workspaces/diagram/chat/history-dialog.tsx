@@ -41,7 +41,7 @@ export function HistoryDialog({
 
     return (
         <Dialog open={showHistory} onOpenChange={onToggleHistory}>
-            <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
+            <DialogContent className="flex h-[min(760px,calc(100vh-3rem))] flex-col overflow-hidden sm:max-w-[min(68rem,calc(100%-2rem))]">
                 <DialogHeader>
                     <DialogTitle>{t("history.title")}</DialogTitle>
                 </DialogHeader>
@@ -51,7 +51,7 @@ export function HistoryDialog({
                         {t("history.empty")}
                     </div>
                 ) : (
-                    <div className="grid grid-cols-2 md:grid-cols-3 gap-4 py-4">
+                    <div className="grid min-h-0 flex-1 grid-cols-2 content-start gap-4 overflow-y-auto py-4 pr-1 md:grid-cols-3 lg:grid-cols-4">
                         {diagramHistory.map((item, index) => (
                             <div
                                 key={index}

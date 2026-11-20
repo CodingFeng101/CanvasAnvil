@@ -13,96 +13,122 @@
 
 @layer base {
   :root {
-    /* Warm ivory ground with white cards floating on top of it. */
+    /* Claude's app palette (docs/plans/claude-style-study.md §10): ivory
+       ground, white sheets, ink text. Layering comes from ink at low alpha,
+       not from colour. */
     --background: 48 33% 97%;
-    --foreground: 30 4% 10%;
+    --foreground: 60 3% 8%;
 
     --card: 0 0% 100%;
-    --card-foreground: 30 4% 10%;
+    --card-foreground: 60 3% 8%;
 
     --popover: 0 0% 100%;
-    --popover-foreground: 30 4% 10%;
+    --popover-foreground: 60 3% 8%;
 
-    /* Clay — the one saturated colour in the system. Used sparingly.
+    /* Primary is ink, as on claude.com and claude.ai: the user's own main
+       action (save, export, confirm) is a black button. `bg-primary/10`
+       chips and selected states become ink washes for free. */
+    --primary: 60 3% 8%;
+    --primary-foreground: 48 33% 97%;
+    --primary-strong: 60 3% 8%;
 
-       Two values, because clay does two jobs. `--primary` is a fill, judged
-       against the near-white text sitting on it. As body text on a light
-       ground it only reaches 3.07:1, under AA, so anything clay-coloured and
-       small uses `--primary-strong` instead (5.6:1). */
-    --primary: 15 63% 60%;
-    --primary-foreground: 48 33% 98%;
-    --primary-strong: 15 58% 42%;
+    /* Clay is reserved for what the AI does: send, generate, the brand mark.
+       Holding it to one role is what lets it mean something. */
+    --brand: 15 63% 60%;
+    --brand-hover: 15 55% 51%;
+    --brand-foreground: 0 0% 100%;
 
-    --secondary: 45 20% 93%;
-    --secondary-foreground: 30 6% 20%;
+    /* Settings → Usage: one colour per canvas (validated for colour-blind
+       separation, light and dark stepped separately). */
+    --viz-diagram: #eb6834;
+    --viz-cad: #2a78d6;
+    --viz-ppt: #1baf7a;
+    --viz-canvas: #eda100;
+    --viz-input: #6250d6;
+    --viz-output: #e87ba4;
 
-    --muted: 45 20% 94%;
-    --muted-foreground: 35 6% 42%;
+    --secondary: 48 12% 92%;
+    --secondary-foreground: 60 3% 8%;
 
-    --accent: 45 24% 91%;
-    --accent-foreground: 30 6% 18%;
+    --muted: 49 26% 92.5%;
+    --muted-foreground: 40 3% 36%;
 
-    --destructive: 5 58% 50%;
+    /* Hover wash: ink at ~6% over the ivory ground. */
+    --accent: 48 12% 92%;
+    --accent-foreground: 60 3% 8%;
+
+    --destructive: 5 49% 51%;
     --destructive-foreground: 48 33% 98%;
 
-    /* Status colours. Clay is the accent, not a status, so "added" and
-       "warning" need their own hues -- folding them into the accent would
-       lose the meaning. Both are pulled well down in chroma to sit beside it. */
+    /* Status colours. Clay is the brand, not a status, so "added" and
+       "warning" need their own hues, pulled well down in chroma. */
     --success: 145 30% 34%;
     --success-foreground: 48 33% 98%;
 
     --warning: 38 58% 40%;
     --warning-foreground: 48 33% 98%;
 
-    --border: 42 15% 88%;
-    --input: 42 15% 86%;
-    --ring: 15 63% 60%;
+    --border: 50 21% 89%;
+    --input: 50 9% 80%;
+    /* claude.com's focus colour, clay-dark. */
+    --ring: 15 50% 53%;
 
     /* Surfaces beyond shadcn's set. */
     --elevated: 0 0% 100%;
-    --sunken: 45 24% 95%;
+    --sunken: 52 33% 94%;
     --overlay: 30 8% 8%;
 
-    /* Warm shadow base. The old shadows were cool slate-blue, which reads as
-       grey haze against an ivory ground. */
     --shadow-hue: 30 20% 12%;
 
-    --radius: 0.75rem;
+    /* 8px controls, 12px cards, 18px for the big input and sheets. */
+    --radius: 0.5rem;
 
     /* Motion. Shared by CSS utilities and the JS motion system so a tween
-       written in either place lands on the same curve. */
-    --ease-out-soft: cubic-bezier(0.22, 1, 0.36, 1);
-    --ease-in-out-soft: cubic-bezier(0.65, 0, 0.35, 1);
+       written in either place lands on the same curve. Claude's curves. */
+    --ease-out-soft: cubic-bezier(0.25, 1, 0.5, 1);
+    --ease-in-out-soft: cubic-bezier(0.645, 0.045, 0.355, 1);
     --dur-fast: 150ms;
-    --dur-base: 220ms;
-    --dur-slow: 340ms;
+    --dur-base: 240ms;
+    --dur-slow: 380ms;
   }
 
+  /* claude.ai's dark theme: warm charcoal, not blue-grey. */
   .dark {
-    --background: 30 3% 12%;
-    --foreground: 45 15% 92%;
+    --background: 60 3% 15%;
+    --foreground: 48 33% 97%;
 
-    --card: 60 3% 15%;
-    --card-foreground: 45 15% 92%;
+    --card: 60 2% 18.5%;
+    --card-foreground: 48 33% 97%;
 
-    --popover: 50 3% 17%;
-    --popover-foreground: 45 15% 92%;
+    --popover: 60 2% 18.5%;
+    --popover-foreground: 48 33% 97%;
 
-    --primary: 15 63% 62%;
-    --primary-foreground: 30 5% 10%;
-    /* On the dark ground the fill value already clears AA as text (5.2:1). */
-    --primary-strong: 15 63% 62%;
+    /* Inverted: an ivory button with ink text. */
+    --primary: 48 33% 97%;
+    --primary-foreground: 60 3% 8%;
+    --primary-strong: 48 33% 97%;
 
-    --secondary: 48 3% 21%;
-    --secondary-foreground: 45 12% 90%;
+    --brand: 15 63% 60%;
+    --brand-hover: 15 63% 66%;
+    --brand-foreground: 0 0% 100%;
 
-    --muted: 48 3% 20%;
-    --muted-foreground: 42 8% 62%;
+    --viz-diagram: #d95926;
+    --viz-cad: #3987e5;
+    --viz-ppt: #199e70;
+    --viz-canvas: #c98500;
+    --viz-input: #9085e9;
+    --viz-output: #d55181;
 
-    --accent: 48 4% 24%;
-    --accent-foreground: 45 12% 92%;
+    --secondary: 60 2% 21%;
+    --secondary-foreground: 48 20% 92%;
 
-    --destructive: 5 52% 52%;
+    --muted: 60 2% 19%;
+    --muted-foreground: 48 6% 66%;
+
+    --accent: 60 2% 20.5%;
+    --accent-foreground: 48 20% 94%;
+
+    --destructive: 5 52% 56%;
     --destructive-foreground: 45 15% 94%;
 
     --success: 145 32% 55%;
@@ -111,12 +137,12 @@
     --warning: 38 60% 58%;
     --warning-foreground: 30 5% 10%;
 
-    --border: 45 4% 24%;
-    --input: 45 4% 26%;
+    --border: 60 2% 24%;
+    --input: 60 2% 30%;
     --ring: 15 63% 62%;
 
-    --elevated: 50 3% 18%;
-    --sunken: 30 3% 10%;
+    --elevated: 60 2% 18.5%;
+    --sunken: 30 3% 12%;
     --overlay: 30 6% 4%;
 
     --shadow-hue: 30 30% 2%;
@@ -257,6 +283,18 @@
     max-width: 100%;
   }
 
+  /* The ground of the workspace: ivory with a faint paper grain, so the
+     chrome reads as a page rather than a flat screen. The canvas sheet stays
+     clean. Background-image only, so it layers over any bg colour. */
+  .paper-grain {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .2 0 0 0 0 .17 0 0 0 0 .12 0 0 0 .07 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+    background-size: 180px 180px;
+  }
+
+  .dark .paper-grain {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 .97 0 0 0 0 .9 0 0 0 .035 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  }
+
   /* Paper grain for the landing ground. Cheap: one repeating gradient pair,
      no image request. */
   .bg-paper {
@@ -264,4 +302,78 @@
       radial-gradient(circle at 1px 1px, hsl(var(--foreground) / 0.035) 1px, transparent 0);
     background-size: 22px 22px;
   }
+}
+
+/* ---- Preferences (client/shared/preferences.ts mirrors them onto <html>) ---- */
+/* Settings → Appearance: text size scales the rem-based interface. */
+html[data-font-size="small"] {
+  font-size: 15px;
+}
+html[data-font-size="large"] {
+  font-size: 17.5px;
+}
+/* Settings → Appearance: compact message spacing. */
+html[data-density="compact"] [data-chat-msg] {
+  margin-top: -0.375rem;
+}
+
+html[data-reply-font="sans"] .font-voice {
+  font-family: inherit;
+}
+html[data-grain="off"] .paper-grain,
+html[data-grain="off"].dark .paper-grain {
+  background-image: none;
+}
+html[data-reduce-motion] *,
+html[data-reduce-motion] *::before,
+html[data-reduce-motion] *::after {
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.01ms !important;
+}
+
+/* The chat's readable measure: the chat column sets --chat-measure while the
+   canvas is closed, and the messages and the input keep to it, while the
+   scroller itself spans the panel (its scrollbar on the panel's edge). */
+.chat-measure {
+  width: 100%;
+  margin-inline: auto;
+  max-width: var(--chat-measure, none);
+}
+
+/* The working anvil (shared/chat/anvil-mark.tsx): the hammer strikes, sparks fly. */
+.anvil-mark .anvil-hammer {
+  transform-origin: 44px 9px;
+  transform: rotate(14deg);
+}
+.anvil-mark .anvil-sparks {
+  opacity: 0;
+}
+.anvil-mark.is-active .anvil-hammer {
+  animation: anvil-strike 0.9s cubic-bezier(0.5, 0, 0.75, 0) infinite;
+}
+.anvil-mark.is-active .anvil-sparks {
+  animation: anvil-sparks 0.9s ease-out infinite;
+  transform-origin: 25px 24px;
+}
+@keyframes anvil-strike {
+  0% { transform: rotate(14deg); }
+  45% { transform: rotate(-24deg); }
+  55% { transform: rotate(-21deg); }
+  100% { transform: rotate(14deg); }
+}
+@keyframes anvil-sparks {
+  0%, 40% { opacity: 0; transform: scale(0.6); }
+  50% { opacity: 1; transform: scale(1); }
+  80%, 100% { opacity: 0; transform: scale(1.35); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .anvil-mark.is-active .anvil-hammer,
+  .anvil-mark.is-active .anvil-sparks {
+    animation: none;
+  }
+}
+html[data-reduce-motion] .anvil-mark.is-active .anvil-hammer,
+html[data-reduce-motion] .anvil-mark.is-active .anvil-sparks {
+  animation: none;
 }

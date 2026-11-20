@@ -1,80 +1,100 @@
-import { ArrowUpRight, type LucideIcon } from "lucide-react";
+import { useState } from "react";
+import { type LucideIcon } from "lucide-react";
 import { motion } from "motion/react";
 import { cn } from "@/shared/lib/utils";
+import { useUiLanguage, type UiLanguage } from "@/shared/i18n";
 import { pressable, riseIn, staggerContainer } from "@/shared/motion";
+
+/** A greeting for the hour, the way claude.ai opens a new chat. */
+export function greetingFor(hour: number, lang: UiLanguage): string {
+  const zh = lang === "zh";
+  if (hour >= 5 && hour < 8) return zh ? "清晨好" : "Good morning";
+  if (hour >= 8 && hour < 11) return zh ? "上午好" : "Good morning";
+  if (hour >= 11 && hour < 13) return zh ? "中午好" : "Good afternoon";
+  if (hour >= 13 && hour < 17) return zh ? "午后好" : "Good afternoon";
+  if (hour >= 17 && hour < 19) return zh ? "傍晚好" : "Good evening";
+  if (hour >= 19 && hour < 23) return zh ? "晚上好" : "Good evening";
+  return zh ? "夜深了" : "Burning the midnight oil";
+}
 
 interface ChatEmptyStateProps {
   icon: LucideIcon;
   title: string;
   description: string;
-  /** Ready-to-send prompts. Picking one fills the input rather than sending it, so it can be adjusted first. */
-  examples: string[];
-  examplesLabel: string;
-  onPickExample: (text: string) => void;
   className?: string;
 }
 
 /**
- * What a chat panel shows before the first message.
- *
- * All four panels used to open on a blank column: nothing said what the
- * assistant could do or how to phrase a request, and the diagram panel's old
- * welcome screen had been lost in the refactor. One shared shape keeps the
- * four reading as one product -- a line on what this canvas is for, and a few
- * concrete requests to start from.
+ * The top half of a new work, as claude.ai opens a new chat: the hour's
+ * greeting and what this canvas is for, sitting just above the input, which
+ * the panel centres while nothing has been said. The examples and recent
+ * works sit under the input (ChatLandingExtras).
  */
-export function ChatEmptyState({
-  icon: Icon,
-  title,
-  description,
-  examples,
-  examplesLabel,
-  onPickExample,
-  className,
-}: ChatEmptyStateProps) {
+export function ChatEmptyState({ icon: Icon, title, description, className }: ChatEmptyStateProps) {
+  const lang = useUiLanguage();
+  // The hour is read once per mount, so the greeting does not change under the reader.
+  const [hour] = useState(() => new Date().getHours());
+  const greeting = greetingFor(hour, lang);
   return (
     <motion.div
       initial="hidden"
       animate="shown"
       variants={staggerContainer(0.06, 0.05)}
-      className={cn("flex h-full w-full flex-col justify-center overflow-y-auto px-5 py-8", className)}
+      className={cn("chat-measure flex h-full w-full flex-col items-center justify-end overflow-y-auto px-6 pb-7 pt-8 text-center [--chat-measure:720px]", className)}
     >
-      <motion.div variants={riseIn} className="relative mb-5 flex size-12 items-center justify-center">
-        {/* A soft halo that breathes behind the mark, so the empty panel reads
-            as waiting rather than broken. */}
-        <span aria-hidden className="absolute inset-0 rounded-2xl bg-primary/15 blur-md animate-breathe" />
-        <span className="relative flex size-12 items-center justify-center rounded-2xl border border-primary/20 bg-primary/10 text-primary-strong">
-          <Icon className="size-6" strokeWidth={1.75} />
-        </span>
-      </motion.div>
-
-      <motion.h3 variants={riseIn} className="text-[17px] font-semibold tracking-[-0.01em] text-foreground">
-        {title}
-      </motion.h3>
-      <motion.p variants={riseIn} className="mt-1.5 text-sm leading-relaxed text-muted-foreground">
-        {description}
+      <motion.h2 variants={riseIn} className="flex items-center justify-center gap-3 font-display text-[30px] font-normal leading-tight tracking-[-0.01em] text-foreground">
+        <Icon className="size-[26px] shrink-0 text-brand" strokeWidth={1.6} aria-hidden />
+        <span>{greeting}</span>
+      </motion.h2>
+      <motion.p variants={riseIn} className="mt-3 max-w-[520px] text-[14.5px] leading-[1.7] text-muted-foreground [text-wrap:balance]">
+        <span className="text-foreground/80">{title}</span>
+        {description ? <span> {description}</span> : null}
       </motion.p>
+    </motion.div>
+  );
+}
 
-      <motion.div variants={riseIn} className="mt-6 text-xs font-medium uppercase tracking-wider text-muted-foreground/80">
-        {examplesLabel}
-      </motion.div>
-      <div className="mt-2 flex flex-col gap-2">
-        {examples.map((example) => (
+/**
+ * Under the input on a new work: three requests to start from, each with the
+ * picture that request really made. Picking one sends it.
+ */
+export function ChatLandingExtras({
+  examples,
+  images,
+  onPickExample,
+  className,
+}: {
+  /** Kept for the panels' call sites; the cards carry their own pictures. */
+  icon?: LucideIcon;
+  examples: string[];
+  /** The picture each example made, in the same order. */
+  images?: string[];
+  onPickExample: (text: string) => void;
+  className?: string;
+}) {
+  const shown = examples.slice(0, 3);
+  return (
+    <motion.div initial="hidden" animate="shown" variants={staggerContainer(0.05, 0.12)} className={cn("chat-measure min-h-0 flex-1 overflow-hidden px-4 pb-6 [--chat-measure:720px]", className)}>
+      <div className={cn("grid gap-3 pt-1", shown.length === 2 ? "grid-cols-2" : "grid-cols-3")}>
+        {shown.map((example, index) => (
           <motion.button
             key={example}
             type="button"
             variants={riseIn}
             {...pressable}
+            title={example}
             onClick={() => onPickExample(example)}
-            className={cn(
-              "group flex items-start gap-3 rounded-xl border border-border/70 bg-card px-3.5 py-3 text-left text-sm leading-snug text-foreground/85 shadow-xs",
-              "transition-[border-color,background-color,color,box-shadow] duration-fast ease-out-soft",
-              "hover:border-primary/40 hover:bg-primary/[0.04] hover:text-foreground hover:shadow-soft",
-              "focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/30",
-            )}
+            className="group overflow-hidden rounded-xl border border-border/80 bg-card/60 text-left transition-[background-color,border-color,box-shadow,transform] duration-fast ease-out-soft hover:-translate-y-0.5 hover:border-foreground/20 hover:bg-card hover:shadow-soft focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/30"
           >
-            <span className="flex-1">{example}</span>
-            <ArrowUpRight className="mt-0.5 size-4 shrink-0 text-muted-foreground/60 transition-[transform,color] duration-fast ease-out-soft group-hover:-translate-y-0.5 group-hover:translate-x-0.5 group-hover:text-primary-strong" />
+            {images?.[index] && (
+              <span className="block aspect-[16/10] overflow-hidden border-b border-border/60 bg-white">
+                <img src={images[index]} alt="" loading="lazy" className="h-full w-full object-cover object-top transition-transform duration-slow ease-out-soft group-hover:scale-[1.04]" />
+              </span>
+            )}
+            {/* Padding on the outer span: inside the clamped one it would show a sliver of the third line. */}
+            <span className="block px-3 py-2">
+              <span className="line-clamp-2 text-[12.5px] leading-snug text-foreground/80 group-hover:text-foreground">{example}</span>
+            </span>
           </motion.button>
         ))}
       </div>

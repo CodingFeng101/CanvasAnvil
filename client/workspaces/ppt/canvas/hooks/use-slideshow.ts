@@ -43,6 +43,8 @@ export function useSlideshow(slideCount: number) {
   const [isOpen, setIsOpen] = useState(false);
   const [index, setIndex] = useState(0);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  // Speaker notes under the slide; N toggles them.
+  const [showNotes, setShowNotes] = useState(true);
   const rootRef = useRef<HTMLDivElement | null>(null);
   const startIndexRef = useRef<number | null>(null);
 
@@ -113,12 +115,21 @@ export function useSlideshow(slideCount: number) {
 
     const onKeyDown = (e: KeyboardEvent) => {
       if (slideCount === 0) return;
-      if (e.key === "ArrowRight" || e.key === "PageDown" || e.key === " ") {
+      if (e.key === "ArrowRight" || e.key === "ArrowDown" || e.key === "PageDown" || e.key === " " || e.key === "Enter") {
         e.preventDefault();
         next();
         return;
       }
-      if (e.key === "ArrowLeft" || e.key === "PageUp") {
+      if (e.key === "Home" || e.key === "End") {
+        e.preventDefault();
+        setIndex(e.key === "Home" ? 0 : slideCount - 1);
+        return;
+      }
+      if ((e.key === "n" || e.key === "N") && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        setShowNotes((v) => !v);
+        return;
+      }
+      if (e.key === "ArrowLeft" || e.key === "ArrowUp" || e.key === "PageUp" || e.key === "Backspace") {
         e.preventDefault();
         previous();
         return;
@@ -140,6 +151,8 @@ export function useSlideshow(slideCount: number) {
     isOpen,
     index,
     isFullscreen,
+    showNotes,
+    setShowNotes,
     rootRef,
     open,
     close,

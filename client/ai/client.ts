@@ -3,6 +3,7 @@ import { getImageChannel, getTextChannel } from "@contracts/ai";
 import { getAIConfig } from "@/ai/storage";
 import { applyUiLanguagePolicy } from "@/ai/language-policy";
 import { createLimiter } from "@/ai/limiter";
+import { reportImageMade, reportModelCall, reportUsage } from "@/ai/usage";
 import {
   MAX_GENERATION_REFERENCE_IMAGES,
   MAX_REFERENCE_IMAGES,
@@ -64,6 +65,8 @@ async function callProxy<T>(body: ProxyRequest, signal?: AbortSignal): Promise<T
     const detail = String(parsed?.error || text || "").trim();
     throw new Error(detail || `Proxy request failed with status ${response.status}`);
   }
+  if (parsed?.usage) reportUsage(parsed.usage);
+  reportModelCall(body.model);
   return parsed as T;
 }
 
@@ -221,6 +224,7 @@ export async function streamChatText(
       try { message = JSON.parse(detail)?.error || detail; } catch { /* plain text */ }
       throw new Error(message || `Stream request failed with status ${response.status}`);
     }
+    reportModelCall(model || channel.model);
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
     let buffer = "";
@@ -240,7 +244,8 @@ export async function streamChatText(
       buffer = lines.pop() ?? "";
       for (const line of lines) {
         if (!line.trim()) continue;
-        const event = JSON.parse(line) as { delta?: string; finish?: string; error?: string };
+        const event = JSON.parse(line) as { delta?: string; finish?: string; error?: string; usage?: unknown };
+        if (event.usage) reportUsage(event.usage);
         // The upstream connection dropped mid-answer ("terminated", reset sockets): hand back what
         // arrived so the caller can resume instead of losing it.
         if (event.error) return { text, finish: "interrupted", error: event.error };
@@ -284,7 +289,9 @@ export async function generateImage(request: ImageGenerationRequest, signal?: Ab
         },
         signal,
       );
-      return cleanUrl(String(result?.url || ""));
+      const url = cleanUrl(String(result?.url || ""));
+      if (url) reportImageMade();
+      return url;
     } catch (error) {
       console.error("Image Gen Error:", error);
       throw error;

@@ -20,7 +20,7 @@ import { type ReactNode, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { AlertTriangle, Check, ChevronDown, ClipboardList, Home, ImageIcon } from "lucide-react";
-import { MessageImage, Shimmer } from "@/shared/chat";
+import { AnvilMark, MessageImage, Shimmer } from "@/shared/chat";
 import { extractImageTags } from "@/shared/chat/ppt-message-tags";
 import { useUiLanguage } from "@/shared/i18n";
 import { cn } from "@/shared/lib/utils";
@@ -39,7 +39,7 @@ function Step({ icon, title, meta, state, last, defaultOpen, children }: {
         "relative z-[1] mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full border bg-background",
         state === "running" ? "border-primary/50 text-primary-strong" : state === "error" ? "border-destructive/50 text-destructive" : state === "pending" ? "border-dashed border-border text-muted-foreground/60" : "border-border text-muted-foreground",
       )}>
-        {state === "running" ? <span className="h-3 w-3 rounded-full border-2 border-current border-t-transparent animate-spin" /> : icon}
+        {state === "running" ? <AnvilMark className="size-4" /> : icon}
       </span>
       <div className="min-w-0 flex-1 pt-0.5">
         <button type="button" disabled={!hasBody} onClick={() => setOpen(!open)} aria-expanded={open}

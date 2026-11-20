@@ -239,7 +239,7 @@ test("leaving with save commits the live copy, a draft under its new name", asyn
   assert.deepEqual(await store.read(`saved:${id}:primary`), { v: 7 });
 });
 
-test("a duplicate copies the saved version, not unsaved changes", async () => {
+test("a duplicate copies the live work (saving is automatic)", async () => {
   const store = memoryStore();
   const works = createWorksStore(config(store), memoryLocal());
   const { currentId: id } = await works.ensure("zh");
@@ -249,8 +249,8 @@ test("a duplicate copies the saved version, not unsaved changes", async () => {
 
   const index = await works.duplicate(id, "zh", true);
   const copy = index.find((w) => w.id !== id)!;
-  assert.deepEqual(await works.storeFor(copy.id).read("primary"), { v: 1 });
-  assert.deepEqual(await store.read(`saved:${copy.id}:primary`), { v: 1 });
+  assert.deepEqual(await works.storeFor(copy.id).read("primary"), { v: 2 });
+  assert.deepEqual(await store.read(`saved:${copy.id}:primary`), { v: 2 });
 });
 
 test("fingerprints follow normalize, so view-only rewrites are not changes", async () => {

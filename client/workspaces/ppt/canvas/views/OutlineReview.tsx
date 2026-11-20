@@ -1,8 +1,11 @@
+import { useState } from "react";
 import { Eye, MessageSquarePlus, Plus, Sparkles, Trash2, Upload } from "lucide-react";
 import { Button } from "@/shared/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/shared/ui/dialog";
 import type { SlideData } from "@/workspaces/ppt/canvas/types";
 import type { useSlideMaterials } from "@/workspaces/ppt/canvas/hooks/use-slide-materials";
+import type { useTemplateLibrary } from "@/workspaces/ppt/canvas/hooks/use-template-library";
+import { StyleChip, StylePickerDialog } from "./StylePicker";
 
 interface OutlineReviewProps {
   slides: SlideData[];
@@ -14,6 +17,8 @@ interface OutlineReviewProps {
   onDeleteSlide: (slideId: string) => void;
   onAddSlideToChat: (slide: SlideData) => void;
   onGenerate: () => void;
+  /** The deck's style is chosen here, just before the slides are made. */
+  templateLibrary: ReturnType<typeof useTemplateLibrary>;
 }
 
 /**
@@ -32,7 +37,9 @@ export function OutlineReview({
   onDeleteSlide,
   onAddSlideToChat,
   onGenerate,
+  templateLibrary,
 }: OutlineReviewProps) {
+  const [pickingStyle, setPickingStyle] = useState(false);
   return (
     <div className="w-full h-full bg-sunken flex flex-col overflow-hidden">
         <div className="flex-1 overflow-auto p-6">
@@ -339,13 +346,23 @@ export function OutlineReview({
                 ))}
             </div>
 
-            <div className="p-6 border-t border-border bg-sunken/50 flex justify-end gap-3">
+            <div className="p-6 border-t border-border bg-sunken/50 flex items-center justify-end gap-3">
+                <div className="mr-auto min-w-0">
+                  <StyleChip templateLibrary={templateLibrary} tr={tr} onChange={() => setPickingStyle(true)} />
+                </div>
                 <Button variant="outline" onClick={onBack}>{tr("返回修改", "Back")}</Button>
                 <Button onClick={onGenerate} className="bg-primary hover:bg-primary/90" disabled={slides.length === 0}>
                     <Sparkles className="w-4 h-4 mr-2" />
                     {tr("生成完整 PPT", "Generate full deck")}
                 </Button>
             </div>
+            <StylePickerDialog
+              open={pickingStyle}
+              onOpenChange={setPickingStyle}
+              templateLibrary={templateLibrary}
+              tr={tr}
+              topic={slides.map((slide) => slide.title).join(" ")}
+            />
             <Dialog
               open={materials.preview.open}
               onOpenChange={(open) => materials.setPreview((prev) => ({ ...prev, open }))}

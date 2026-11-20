@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Excalidraw, restoreAppState, restoreElements, sceneCoordsToViewportCoords } from "@excalidraw/excalidraw";
 import "@excalidraw/excalidraw/index.css";
+import "./excalidraw-theme.css";
 import type {
   AppState,
   BinaryFiles,
@@ -207,7 +208,7 @@ export function CanvasBoard({ theme, langCode, onApiReady, onSelectedImageChange
   }
 
   return (
-    <div ref={containerRef} className="h-full w-full relative">
+    <div ref={containerRef} className="ca-board h-full w-full relative">
       <Excalidraw
         initialData={initialData || undefined}
         onChange={handleChange}

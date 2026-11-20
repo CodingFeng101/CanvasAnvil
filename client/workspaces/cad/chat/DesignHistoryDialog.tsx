@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Button } from "@/shared/ui/button";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/shared/ui/dialog";
-import type { CadDesignSession } from "../lib/design/design-session";
+import { CadDesignSession } from "../lib/design/design-session";
 import type { CadDesign, SinglePlan } from "../lib/design/types";
 import { isBuilding } from "../lib/design/types";
 
@@ -33,12 +33,14 @@ export function DesignHistoryDialog({ open, onOpenChange, session, zh }: { open:
   const [versions, setVersions] = useState<CadDesign[]>([]);
   const [selected, setSelected] = useState<number | null>(null);
   const [error, setError] = useState("");
+  const [shots, setShots] = useState<Record<string, string>>({});
   useEffect(() => {
     if (!open) return;
     setSelected(null);
     setError("");
     // Pick up manual edits in the designer before listing.
     void session.sync().then(() => setVersions(session.versions())).catch(() => setVersions(session.versions()));
+    void session.shots().then(setShots);
   }, [open, session]);
   const source = (design: CadDesign) =>
     design.lastSource === "user" ? tr("手动修改", "Manual edit") : design.lastSource === "recognize" ? tr("识别导入", "Recognized") : tr("AI 生成/修改", "AI");
@@ -55,30 +57,39 @@ export function DesignHistoryDialog({ open, onOpenChange, session, zh }: { open:
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[80vh] max-w-3xl overflow-y-auto" data-testid="cad-history-dialog">
+      <DialogContent className="flex h-[min(760px,calc(100vh-3rem))] flex-col overflow-hidden sm:max-w-[min(68rem,calc(100%-2rem))]" data-testid="cad-history-dialog">
         <DialogHeader>
           <DialogTitle>{tr("户型历史版本", "Floorplan history")}</DialogTitle>
         </DialogHeader>
         {versions.length === 0 ? (
           <div className="p-4 text-center text-muted-foreground">{tr("还没有户型版本。生成户型后，每次 AI 修改或手动修改都会存一个版本。", "No versions yet. Every AI or manual change to the floorplan is saved here.")}</div>
         ) : (
-          <div className="grid grid-cols-2 gap-4 py-4 md:grid-cols-3">
+          <div className="grid min-h-0 flex-1 grid-cols-2 content-start gap-4 overflow-y-auto py-4 pr-1 md:grid-cols-3 lg:grid-cols-4">
             {versions.map((design, index) => ({ design, index })).reverse().map(({ design, index }) => (
               <button
                 type="button"
                 key={`${index}-${design.revision}`}
                 disabled={index === current}
                 onClick={() => setSelected(index)}
-                className={`rounded-md border p-2 text-left transition-colors hover:border-primary disabled:cursor-default disabled:hover:border-border ${selected === index ? "border-primary ring-2 ring-primary" : ""}`}
+                className={`group overflow-hidden rounded-xl border border-border/80 bg-card text-left transition-[border-color,box-shadow,transform] duration-fast hover:-translate-y-0.5 hover:border-foreground/25 hover:shadow-soft disabled:cursor-default disabled:hover:translate-y-0 disabled:hover:shadow-none ${selected === index ? "border-foreground/40 ring-2 ring-ring/30" : ""}`}
               >
-                <div className="flex aspect-video items-center justify-center overflow-hidden rounded bg-white p-1">
-                  <PlanThumbnail design={design} />
+                <div className="flex aspect-video items-center justify-center overflow-hidden border-b border-border/60 bg-white">
+                  {shots[CadDesignSession.shotKey(design)] ? (
+                    // The designer's own picture of this version.
+                    <img src={shots[CadDesignSession.shotKey(design)]} alt="" className="h-full w-full object-contain" />
+                  ) : (
+                    <div className="h-full w-full p-1">
+                      <PlanThumbnail design={design} />
+                    </div>
+                  )}
                 </div>
+                <div className="px-2.5 pb-2 pt-1.5">
                 <div className="mt-1 flex items-center justify-between gap-2 text-xs">
                   <span className="font-medium">{tr(`版本 ${index + 1}`, `Version ${index + 1}`)}{index === current ? tr("（当前）", " (current)") : ""}</span>
                   <span className="text-muted-foreground">{source(design)}</span>
                 </div>
                 <div className="text-xs text-muted-foreground">{new Date(design.updatedAt).toLocaleString()}</div>
+                </div>
               </button>
             ))}
           </div>

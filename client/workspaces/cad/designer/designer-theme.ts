@@ -25,8 +25,13 @@ function variables() {
   --danger:${token('--destructive')};--surface:${token('--muted')};
   --font:${font};
 }
-html,body{background:var(--bg);color:var(--text)}`;
+html,body{background:var(--bg);color:var(--text)}${document.documentElement.classList.contains('dark') ? DARK_PLAN : ''}`;
 }
+
+// The 2D plan is painted by its JS in light colours. In dark mode it is shown inverted, hue kept:
+// lines, dimensions and labels stay readable (materials flip light/dark). Display only: exports,
+// quotes and thumbnails are drawn on canvases of their own.
+const DARK_PLAN = '#c2d{filter:invert(.92) hue-rotate(180deg)}';
 
 function rewrite(rule: CSSRule) {
   if ('cssRules' in rule) for (const child of Array.from((rule as CSSGroupingRule).cssRules)) rewrite(child);

@@ -1,0 +1,45 @@
+/*
+ * Excalidraw in Claude's colours. Its own UI is violet (#6965db); here the
+ * selected tool and primary controls are ink, islands sit on the sheet's
+ * white or charcoal, and the selection outline is Claude's accent blue
+ * (claude-style-study.md §10: clay is for the AI, blue for selection).
+ * Only Excalidraw's public CSS variables are touched, scoped to this board.
+ */
+.ca-board .excalidraw {
+  --color-primary: #141413;
+  --color-primary-darker: #000000;
+  --color-primary-darkest: #000000;
+  --color-primary-hover: #30302e;
+  --color-primary-light: #ecebe6;
+  --color-surface-primary-container: #ecebe6;
+  --color-on-primary-container: #141413;
+  --color-brand-hover: #30302e;
+  --color-brand-active: #000000;
+  --color-selection: #2c84db;
+  --island-bg-color: #ffffff;
+  --button-hover-bg: #f5f4ed;
+  --color-surface-high: #f5f4ed;
+  --color-surface-mid: #faf9f5;
+  --color-surface-low: #f5f4ed;
+  --border-radius-lg: 10px;
+  --shadow-island: 0 0 0 1px rgba(20, 20, 19, 0.08), 0 4px 16px rgba(20, 20, 19, 0.05);
+}
+
+.ca-board .excalidraw.theme--dark {
+  --color-primary: #e8e6dc;
+  --color-primary-darker: #faf9f5;
+  --color-primary-darkest: #ffffff;
+  --color-primary-hover: #faf9f5;
+  --color-primary-light: #3d3d3a;
+  --color-surface-primary-container: #3d3d3a;
+  --color-on-primary-container: #faf9f5;
+  --color-brand-hover: #faf9f5;
+  --color-brand-active: #ffffff;
+  --color-selection: #5ea2e6;
+  --island-bg-color: #30302e;
+  --button-hover-bg: #3d3d3a;
+  --color-surface-high: #3d3d3a;
+  --color-surface-mid: #262624;
+  --color-surface-low: #30302e;
+  --shadow-island: 0 0 0 1px rgba(255, 255, 255, 0.08), 0 4px 16px rgba(0, 0, 0, 0.25);
+}

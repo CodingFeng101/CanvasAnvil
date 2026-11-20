@@ -1,26 +1,15 @@
 "use client"
 
-import {
-    Brain,
-    FileText,
-    History,
-    Image as ImageIcon,
-    ScrollText,
-    Send,
-    Square,
-    Trash2,
-    Upload,
-} from "lucide-react"
+import { isSendKey } from "@/shared/preferences"
+import { History, Paperclip, SlidersHorizontal, Upload } from "lucide-react"
 import type React from "react"
 import { useCallback, useEffect, useRef, useState } from "react"
 import { toast } from "sonner"
-import { ButtonWithTooltip } from "@/shared/chat"
+import { PlusMenu, SendButton, StatusRow, type PlusMenuItem } from "@/shared/chat/composer"
+import { openSettings } from "@/shared/settings-bus"
+import { useUiLanguage } from "@/shared/i18n"
 import { ErrorToast } from "@/workspaces/diagram/chat/error-toast"
-import { GlobalConstraintsDialog } from "@/shared/chat"
-import { STORAGE_KEYS } from "@/workspaces/diagram/storage";
 import { HistoryDialog } from "@/workspaces/diagram/chat/history-dialog"
-import { ResetWarningModal } from "@/shared/chat"
-import { SaveWorkButton } from "@/shared/works/save-work-button"
 import { Textarea } from "@/shared/ui/textarea"
 import { cn } from "@/shared/lib/utils"
 import { useDiagram } from "@/workspaces/diagram/state/diagram-context"
@@ -175,12 +164,9 @@ export function ChatInput({
     const t = useDiagramT()
     const { diagramHistory } = useDiagram()
     const textareaRef = useRef<HTMLTextAreaElement>(null)
-    const imageInputRef = useRef<HTMLInputElement>(null)
     const fileInputRef = useRef<HTMLInputElement>(null)
     const [isDragging, setIsDragging] = useState(false)
     const dragDepth = useRef(0)
-    const [showClearDialog, setShowClearDialog] = useState(false)
-    const [showConstraintsDialog, setShowConstraintsDialog] = useState(false)
 
     // Check if system is currently processing
     const isProcessing = status === "streaming" || status === "submitted"
@@ -215,7 +201,7 @@ export function ChatInput({
     }
 
     const handleKeyDown = (e: React.KeyboardEvent) => {
-        if (e.key === "Enter" && !e.shiftKey) {
+        if (isSendKey(e)) {
             e.preventDefault()
             const form = e.currentTarget.closest("form")
             if (form && input.trim() && !isDisabled) {
@@ -267,20 +253,8 @@ export function ChatInput({
         }
     }
 
-    const handleImageInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const newFiles = Array.from(e.target.files || []).filter((file) =>
-            file.type.startsWith("image/"),
-        )
-        appendValidatedFiles(newFiles)
-        if (imageInputRef.current) {
-            imageInputRef.current.value = ""
-        }
-    }
-
     const handleFileInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const newFiles = Array.from(e.target.files || []).filter(
-            (file) => isPdfFile(file) || isTextFile(file) || isWordFile(file),
-        )
+        const newFiles = Array.from(e.target.files || []).filter((file) => isValidFileType(file))
         appendValidatedFiles(newFiles)
         // Reset input so same file can be selected again
         if (fileInputRef.current) {
@@ -290,16 +264,9 @@ export function ChatInput({
 
     const handleRemoveFile = (fileToRemove: File) => {
         onFileChange(files.filter((file) => file !== fileToRemove))
-        if (imageInputRef.current) {
-            imageInputRef.current.value = ""
-        }
         if (fileInputRef.current) {
             fileInputRef.current.value = ""
         }
-    }
-
-    const triggerImageInput = () => {
-        imageInputRef.current?.click()
     }
 
     const triggerFileInput = () => {
@@ -348,10 +315,28 @@ export function ChatInput({
         }
     }
 
-    const handleClear = () => {
-        onClearChat()
-        setShowClearDialog(false)
-    }
+    const hasContent = !!input.trim() && !isDisabled
+    const zh = useUiLanguage() === "zh"
+    const plusItems: PlusMenuItem[] = [
+        {
+            icon: Paperclip,
+            label: zh ? "添加图片或文件" : "Add files or photos",
+            shortcut: "Ctrl+U",
+            disabled: isDisabled,
+            onSelect: triggerFileInput,
+        },
+        {
+            icon: History,
+            label: zh ? "历史版本" : "History",
+            disabled: isDisabled || diagramHistory.length === 0,
+            onSelect: () => onToggleHistory(true),
+        },
+        {
+            icon: SlidersHorizontal,
+            label: zh ? "记忆与偏好" : "Memory",
+            onSelect: () => openSettings("constraints", "constraint-diagram"),
+        },
+    ]
 
     return (
         <form
@@ -361,214 +346,80 @@ export function ChatInput({
             onDragEnter={handleDragEnter}
             onDragLeave={handleDragLeave}
             onDrop={handleDrop}
+            onKeyDown={(e) => {
+                if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "u") {
+                    e.preventDefault()
+                    triggerFileInput()
+                }
+            }}
         >
-            {/* File previews */}
-            {files.length > 0 && (
-                <div className="mb-3">
-                    <FilePreviewList
-                        files={files}
-                        onRemoveFile={handleRemoveFile}
-                        pdfData={pdfData}
-                    />
-                </div>
-            )}
+            <HistoryDialog
+                showHistory={showHistory}
+                onToggleHistory={onToggleHistory}
+            />
+            <input
+                type="file"
+                ref={fileInputRef}
+                className="hidden"
+                onChange={handleFileInputChange}
+                accept="image/*,.pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/*,.md,.markdown,.json,.csv,.xml,.yaml,.yml,.toml,.py,.js,.ts"
+                multiple
+                disabled={isDisabled}
+            />
 
             {/* Input container */}
             <div
                 className={cn(
-                    "relative rounded-2xl border bg-card shadow-soft transition-[border-color,box-shadow,background-color] duration-base ease-out-soft",
-                    "focus-within:ring-[3px] focus-within:ring-ring/25 focus-within:border-ring focus-within:shadow-soft-lg",
+                    "relative rounded-[18px] border border-foreground/[0.12] bg-card shadow-[0_4px_20px_hsl(var(--shadow-hue)/0.04)] transition-[border-color,box-shadow,background-color] duration-base ease-out-soft",
+                    "hover:border-foreground/20 focus-within:border-foreground/25 focus-within:shadow-[0_4px_24px_hsl(var(--shadow-hue)/0.07)]",
                     isDragging
-                        ? "border-primary border-dashed bg-primary/[0.06] shadow-soft-lg"
+                        ? "border-foreground/40 border-dashed bg-foreground/[0.03]"
                         : "border-border",
                 )}
             >
                 {isDragging && (
-                    <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center rounded-2xl bg-card/70 backdrop-blur-[1px] animate-fade-in">
+                    <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center rounded-[18px] bg-card/70 backdrop-blur-[1px] animate-fade-in">
                         <span className="flex items-center gap-2 text-sm font-medium text-primary-strong">
                             <Upload className="h-4 w-4" />
                             {t("chat.drop_to_attach")}
                         </span>
                     </div>
                 )}
-                <Textarea
-                    ref={textareaRef}
-                    value={input}
-                    onChange={handleChange}
-                    onKeyDown={handleKeyDown}
-                    onPaste={handlePaste}
-                    placeholder={t("input.placeholder")}
-                    disabled={isDisabled}
-                    aria-label={t("input.aria")}
-                    className="min-h-[60px] max-h-[200px] resize-none border-0 bg-transparent px-4 py-3 text-sm focus-visible:ring-0 focus-visible:ring-offset-0 placeholder:text-muted-foreground/60"
-                />
-
-                {/* Action bar */}
-                <div className="flex items-center justify-between px-3 py-2 border-t border-border/50">
-                    {/* Left actions */}
-                    <div className="flex items-center gap-1">
-                        <ButtonWithTooltip
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => setShowClearDialog(true)}
-                            tooltipContent={t("input.clear")}
-                            className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
-                        >
-                            <Trash2 className="h-4 w-4" />
-                        </ButtonWithTooltip>
-                        <SaveWorkButton />
-
-                        <ButtonWithTooltip
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => setShowConstraintsDialog(true)}
-                            tooltipContent={t("tooltip.global_constraints")}
-                            className="h-8 w-8 p-0 text-muted-foreground hover:text-foreground"
-                        >
-                            <ScrollText className="h-4 w-4" />
-                        </ButtonWithTooltip>
-
-                        <ResetWarningModal
-                            open={showClearDialog}
-                            onOpenChange={setShowClearDialog}
-                            onClear={handleClear}
-                            labels={{
-                                title: t("reset.title"),
-                                description: t("reset.desc"),
-                                cancel: t("reset.cancel"),
-                                confirm: t("reset.confirm"),
-                            }}
-                        />
-
-                        <GlobalConstraintsDialog
-                            open={showConstraintsDialog}
-                            onOpenChange={setShowConstraintsDialog}
-                            workspaceId="diagram"
-                            storageKey={STORAGE_KEYS.globalConstraints}
-                        />
-
-                        <HistoryDialog
-                            showHistory={showHistory}
-                            onToggleHistory={onToggleHistory}
+                {files.length > 0 && (
+                    <div className="px-3 pt-3">
+                        <FilePreviewList
+                            files={files}
+                            onRemoveFile={handleRemoveFile}
+                            pdfData={pdfData}
                         />
                     </div>
-
-                    {/* Right actions */}
-                    <div className="flex items-center gap-1">
-                        <ButtonWithTooltip
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            onClick={onToggleDeepThinking}
-                            disabled={isDisabled}
-                            tooltipContent={t("tooltip.deep_thinking")}
-                            className="h-8 w-8 p-0 text-muted-foreground hover:text-foreground"
-                            aria-pressed={deepThinkingEnabled}
-                            aria-label={t("input.deep_thinking")}
-                        >
-                            <Brain
-                                className={`h-3.5 w-3.5 ${
-                                    deepThinkingEnabled
-                                        ? "text-primary-strong"
-                                        : "text-muted-foreground"
-                                }`}
-                            />
-                        </ButtonWithTooltip>
-
-                        <ButtonWithTooltip
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => onToggleHistory(true)}
-                            disabled={isDisabled || diagramHistory.length === 0}
-                            tooltipContent={t("tooltip.history")}
-                            className="h-8 w-8 p-0 text-muted-foreground hover:text-foreground"
-                        >
-                            <History className="h-4 w-4" />
-                        </ButtonWithTooltip>
-
-                        <ButtonWithTooltip
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            onClick={triggerImageInput}
-                            disabled={isDisabled}
-                            tooltipContent={t("input.upload_image")}
-                            className="h-8 w-8 p-0 text-muted-foreground hover:text-foreground"
-                        >
-                            <ImageIcon className="h-4 w-4" />
-                        </ButtonWithTooltip>
-
-                        <ButtonWithTooltip
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            onClick={triggerFileInput}
-                            disabled={isDisabled}
-                            tooltipContent={t("input.upload_file_types")}
-                            className="h-8 w-8 p-0 text-muted-foreground hover:text-foreground"
-                        >
-                            <FileText className="h-4 w-4" />
-                        </ButtonWithTooltip>
-
-                        <input
-                            type="file"
-                            ref={imageInputRef}
-                            className="hidden"
-                            onChange={handleImageInputChange}
-                            accept="image/*"
-                            multiple
-                            disabled={isDisabled}
-                        />
-
-                        <input
-                            type="file"
-                            ref={fileInputRef}
-                            className="hidden"
-                            onChange={handleFileInputChange}
-                            accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/*,.md,.markdown,.json,.csv,.xml,.yaml,.yml,.toml,.py,.js,.ts"
-                            multiple
-                            disabled={isDisabled}
-                        />
-
-                        <div className="w-px h-5 bg-border mx-1" />
-
-                        {isProcessing ? (
-                            <ButtonWithTooltip
-                                type="button"
-                                variant="default"
-                                size="sm"
-                                tooltipContent={t("input.stop")}
-                                onClick={(e) => {
-                                    e.preventDefault()
-                                    onStop?.()
-                                }}
-                                className="h-8 w-8 p-0 rounded-xl shadow-sm"
-                                aria-label={t("input.stop")}
-                            >
-                                <Square className="h-3.5 w-3.5 fill-current" />
-                            </ButtonWithTooltip>
-                        ) : (
-                            <ButtonWithTooltip
-                                type="submit"
-                                variant="default"
-                                size="sm"
-                                tooltipContent={t("input.send")}
-                                disabled={isDisabled || !input.trim()}
-                                className="h-8 w-8 p-0 rounded-xl shadow-sm"
-                                aria-label={
-                                    isDisabled ? t("input.sending") : t("input.send")
-                                }
-                            >
-                                <Send className="h-4 w-4" />
-                            </ButtonWithTooltip>
-                        )}
-                    </div>
+                )}
+                <div className="px-4 pt-3.5">
+                    <Textarea
+                        ref={textareaRef}
+                        value={input}
+                        onChange={handleChange}
+                        onKeyDown={handleKeyDown}
+                        onPaste={handlePaste}
+                        placeholder={t("input.placeholder")}
+                        disabled={isDisabled}
+                        aria-label={t("input.aria")}
+                        rows={1}
+                        className="min-h-[48px] max-h-[200px] w-full resize-none rounded-none border-0 bg-transparent p-0 text-[15px] leading-6 shadow-none focus-visible:ring-0 focus-visible:ring-offset-0 placeholder:text-muted-foreground/60"
+                    />
+                </div>
+                <div className="flex items-center justify-between gap-2 px-2.5 pb-2.5 pt-1">
+                    <PlusMenu items={plusItems} />
+                    <SendButton
+                        submit
+                        hasContent={hasContent}
+                        loading={isProcessing}
+                        onStop={onStop}
+                    />
                 </div>
             </div>
+            {/* Deep thinking sketches the diagram with the image model first, so it is named only then. */}
+            <StatusRow channels={deepThinkingEnabled ? ["image", "text"] : ["text"]} thinking={{ on: deepThinkingEnabled, onChange: () => onToggleDeepThinking() }} />
         </form>
     )
 }
-

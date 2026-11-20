@@ -10,3 +10,6 @@ export * from "@/shared/chat/file-preview-list";
 export * from "@/shared/chat/history-dialog";
 export * from "@/shared/chat/chat-input";
 export * from "@/shared/chat/chat-empty-state";
+export * from "@/shared/chat/working-indicator";
+export * from "@/shared/chat/attachment-preview";
+export * from "@/shared/chat/anvil-mark";

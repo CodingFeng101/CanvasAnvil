@@ -1,13 +1,14 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { House } from "lucide-react";
+import { CanvasPaneProvider, useCanvasPaneState } from "@/shared/canvas-pane";
 import { toast } from "sonner";
-import { cn } from "@/shared/lib/utils";
 import { t, useUiLanguage } from "@/shared/i18n";
 import {
   ResizableHandle,
   ResizablePanel,
   ResizablePanelGroup,
-  type PanelImperativeHandle,
 } from "@/shared/ui/resizable";
+import { CanvasSheet, sheetHandleClass } from "@/shared/ui/canvas-sheet";
 import { CadDesignSession } from "./lib/design/design-session";
 import type { ChatMessage } from "@/ai/client";
 import { HouseDesignerFrame } from "@/workspaces/cad/designer/HouseDesignerFrame";
@@ -74,11 +75,11 @@ export function CadWorkspace() {
 
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [chatHistory, setChatHistory] = useState<ChatMessage[]>([]);
-  const [isChatCollapsed, setIsChatCollapsed] = useState(false);
   const [cadResetTick, setCadResetTick] = useState(0);
   const [composerRequest, setComposerRequest] = useState<{ id: number; text: string; send?: boolean; assistant?: string }>();
   // The open work's store (My works); the workspace remounts when another work is opened.
   const work = useWork();
+  const pane = useCanvasPaneState({ kind: uiLang === "zh" ? "户型" : "Floor plan", icon: House, variant: "cad" });
   const designStore = useWorkStore(cadStore);
   const [designSession] = useState(() => new CadDesignSession({ store: designStore }));
   const designSnapshot = useSyncExternalStore(designSession.subscribe, designSession.getSnapshot);
@@ -90,7 +91,14 @@ export function CadWorkspace() {
     let cancelled = false;
     const timer = window.setTimeout(() => {
       const shot = designSession.previewImage();
-      if (shot) void makeThumbnail(shot).then((thumb) => thumb && !cancelled && work.report({ thumb }));
+      const design = designSession.getSnapshot().design;
+      if (shot)
+        void makeThumbnail(shot, 480).then((thumb) => {
+          if (!thumb || cancelled) return;
+          work.report({ thumb });
+          // The history dialog shows each version as the designer drew it.
+          if (design) void designSession.saveShot(design, thumb);
+        });
     }, 800);
     return () => {
       cancelled = true;
@@ -98,10 +106,18 @@ export function CadWorkspace() {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [designRevision, designSnapshot.ready, designSnapshot.busy]);
+  // A new or changed design opens the canvas, once the designer has finished with it
+  // (self-check and repair rounds), not at the first draft.
+  const seenRevision = useRef(designRevision);
+  useEffect(() => {
+    if (!designRevision || designRevision === seenRevision.current || designSnapshot.busy) return;
+    seenRevision.current = designRevision;
+    pane.value.reveal();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [designRevision, designSnapshot.busy]);
   useEffect(() => {
     void designSession.hydrate().catch((error) => console.error("CAD design restore failed", error));
   }, [designSession]);
-  const chatPanelRef = useRef<PanelImperativeHandle | null>(null);
 
   const [canRecognize, setCanRecognize] = useState(false);
   const [canQa, setCanQa] = useState(false);
@@ -152,7 +168,7 @@ export function CadWorkspace() {
       else toast.error(tr("交付检查没跑完", "The delivery check did not finish"), { id: toastId });
       const recognition = recognitionLines(designSession.getSnapshot().design?.recognition);
       setComposerRequest({ id: Date.now(), text: "", assistant: deliveryMessage(status, { ...current, recognition }, zh) });
-      if (isChatCollapsed) toggleCollapse();
+      pane.value.restore();
     } catch (reason) {
       toast.error(String((reason as Error)?.message ?? reason), { id: toastId });
     } finally {
@@ -220,21 +236,6 @@ export function CadWorkspace() {
     input.click();
   };
 
-  const toggleCollapse = () => {
-    const panel = chatPanelRef.current;
-    if (!panel) return;
-    try {
-      if (panel.isCollapsed?.() || isChatCollapsed) {
-        panel.expand();
-        setIsChatCollapsed(false);
-      } else {
-        panel.collapse();
-        setIsChatCollapsed(true);
-      }
-    } catch {
-      setIsChatCollapsed(false);
-    }
-  };
 
   const handleCadCodeAction = async (code: string, type: "diagram" | "cad" | "ppt"): Promise<CodeActionResult> => {
     if (type !== "cad") return { ok: true };
@@ -283,43 +284,13 @@ export function CadWorkspace() {
   };
 
   return (
+    <CanvasPaneProvider value={pane.value}>
     <ResizablePanelGroup orientation="horizontal" className="h-full" style={{ height: "100%" }}>
       <ResizablePanel
-        defaultSize="68%"
-        minSize="30%"
-        className={cn("transition-[flex-grow,flex-basis] duration-300 ease-in-out will-change-[flex-grow,flex-basis]")}
-      >
-        <div className="h-full w-full">
-          <HouseDesignerFrame
-            key={`cad-ws-${cadResetTick}`}
-            session={designSession}
-            hasPlan={!!cadPlan}
-            onFocus={toggleCollapse}
-            onFixIssue={(issue) => {
-              setComposerRequest({ id: Date.now(), text: tr(`请修复这个户型问题：${issue.msg}`, `Please fix this design issue: ${issue.msg}`) });
-              if (isChatCollapsed) toggleCollapse();
-            }}
-            canRecognize={canRecognize}
-            onUpload={uploadFloorplan}
-            canQa={canQa}
-            qaRunning={qaRunning}
-            onQa={() => void deliveryCheck()}
-          />
-        </div>
-      </ResizablePanel>
-
-      <ResizableHandle withHandle className="bg-border/50 hover:bg-primary/50 transition-colors w-1.5" />
-      <ResizablePanel
         id="cad-chat"
-        panelRef={chatPanelRef}
-        defaultSize="32%"
-        minSize="20%"
-        maxSize="70%"
-        collapsible
-        collapsedSize="56px"
-        onResize={(panelSize) => setIsChatCollapsed(panelSize.inPixels <= 80)}
-        className={cn("transition-[flex-grow,flex-basis] duration-300 ease-in-out will-change-[flex-grow,flex-basis]")}
+        {...pane.chatPanelProps}
       >
+        <div ref={pane.chatColumnRef} className={pane.chatColumnClassName}>
         <CadChatPanel
           key={`cad-chat-${cadResetTick}`}
           initialMessages={chatHistory}
@@ -327,10 +298,8 @@ export function CadWorkspace() {
           attachments={attachments}
           workspaceId="cad"
           mode="text"
-          collapsed={isChatCollapsed}
           title={t(uiLang, "workspace.cad.title")}
           inputPlaceholder={t(uiLang, "workspace.cad.placeholder")}
-          onToggleCollapse={toggleCollapse}
           onRemoveAttachment={(id) => setAttachments((prev) => prev.filter((a) => a.id !== id))}
           onClearAttachments={() => setAttachments([])}
           onClearWorkspace={clearWorkspace}
@@ -339,7 +308,31 @@ export function CadWorkspace() {
           cadContext={{ plan: cadPlan }}
           onCodeAction={handleCadCodeAction}
         />
+        </div>
+      </ResizablePanel>
+
+      <ResizableHandle className={sheetHandleClass} />
+
+      <ResizablePanel id="cad-canvas" {...pane.canvasPanelProps}>
+        <CanvasSheet>
+          <HouseDesignerFrame
+            key={`cad-ws-${cadResetTick}`}
+            session={designSession}
+            hasPlan={!!cadPlan}
+            onFocus={pane.value.toggleMaximize}
+            onFixIssue={(issue) => {
+              setComposerRequest({ id: Date.now(), text: tr(`请修复这个户型问题：${issue.msg}`, `Please fix this design issue: ${issue.msg}`) });
+              pane.value.restore();
+            }}
+            canRecognize={canRecognize}
+            onUpload={uploadFloorplan}
+            canQa={canQa}
+            qaRunning={qaRunning}
+            onQa={() => void deliveryCheck()}
+          />
+        </CanvasSheet>
       </ResizablePanel>
     </ResizablePanelGroup>
+    </CanvasPaneProvider>
   );
 }

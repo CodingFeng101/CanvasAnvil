@@ -1,9 +1,11 @@
 import React, { useRef, useEffect, useState, useCallback } from 'react';
-import { Check, ChevronDown, ChevronUp, Copy, FileCode, FileText, Pencil, RotateCcw } from "lucide-react";
+import { CanvasCard } from "@/shared/canvas-pane";
+import { Check, ChevronDown, ChevronUp, Copy, FileCode, FileText, Image as ImageIcon, ListOrdered, Pencil, RotateCcw } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from 'remark-gfm';
-import { MessageAttachments, MessageImage, Reasoning, ReasoningContent, ReasoningTrigger, Shimmer } from "@/shared/chat";
-import { ScrollArea } from "@/shared/ui/scroll-area";
+import { MessageAttachments, MessageImage, Reasoning, ReasoningContent, ReasoningTrigger, TokenUsageLine, WorkingIndicator, useTurnUsage } from "@/shared/chat";
+import { ChatScrollArea } from "@/shared/chat/chat-scroll";
+import { MessageEditor } from "@/shared/chat/message-editor";
 import { CodeBlock } from "@/workspaces/ppt/chat/code-block";
 import { useUiLanguage } from "@/shared/i18n";
 import { cn } from "@/shared/lib/utils";
@@ -34,6 +36,7 @@ interface ChatMessageDisplayProps {
     onEditMessage?: (messageIndex: number, newText: string) => void;
     status?: "streaming" | "submitted" | "idle" | "error" | "ready";
     onDisplayChart?: (xml: string) => void; // Callback for diagram display
+    /** Text streaming in on the canvas (the outline), counted in the working line. */
 }
 
 // Helper to split text content into regular text and file sections
@@ -42,8 +45,10 @@ export function ChatMessageDisplay({
     onRegenerate,
     onEditMessage,
     status = "idle",
-    onDisplayChart
+    onDisplayChart,
 }: ChatMessageDisplayProps) {
+    // Tokens the provider reported for this turn (all its model calls).
+    const turnUsage = useTurnUsage(status === "submitted" || status === "streaming");
     const uiLang = useUiLanguage();
     const tr = (zh: string, en: string) => (uiLang === "zh" ? zh : en);
     const scrollRootRef = useRef<HTMLDivElement>(null);
@@ -218,16 +223,12 @@ export function ChatMessageDisplay({
                 }
             }}
         >
-            <ScrollArea className="h-full w-full scrollbar-thin">
-                <div className="py-5 px-5 space-y-5">
+            <ChatScrollArea contentClassName="py-5 px-5 space-y-5">
                     {messages.map((message, messageIndex) => {
                     const userMessageText = message.role === "user" ? getMessageTextContent(message) : "";
                     const isLastAssistantMessage =
                         message.role === "assistant" &&
                         (messageIndex === messages.length - 1 || messages.slice(messageIndex + 1).every((m) => m.role !== "assistant"));
-                    const isLastUserMessage =
-                        message.role === "user" &&
-                        (messageIndex === messages.length - 1 || messages.slice(messageIndex + 1).every((m) => m.role !== "user"));
                     const isEditing = editingMessageId === message.id;
                     const messageText = getMessageTextContent(message);
                     const { images: probeImages, rest: probeWithoutImages } = extractImageTags(messageText);
@@ -249,17 +250,14 @@ export function ChatMessageDisplay({
                         hasProbePptTool ||
                         hasProbeReasoning;
                     const isAssistantEmpty = message.role === "assistant" && !hasRenderableContent;
-                    const showPendingIndicator =
-                        message.role === "user" &&
-                        isLastUserMessage &&
-                        (status === "submitted" || status === "streaming");
 
                     if (isAssistantEmpty) return null;
 
                     return (
                         <React.Fragment key={message.id}>
                         <div
-                            className={`flex w-full animate-message-in ${message.role === "user" ? "justify-end" : "justify-start"}`}
+                            data-chat-msg={message.role === "user" ? "user" : "assistant"}
+                            className={`group/msg flex w-full animate-message-in ${message.role === "user" ? "justify-end" : "justify-start"}`}
                         >
                             <div
                                 className={cn(
@@ -290,25 +288,9 @@ export function ChatMessageDisplay({
                                 <div className={cn(
                                     "relative text-sm leading-relaxed break-words overflow-hidden w-full text-foreground",
                                     message.role === "user"
-                                        ? "px-4 py-3 rounded-2xl rounded-tr-md border border-border/60 bg-muted cursor-pointer transition-[background-color,box-shadow] duration-fast ease-out-soft hover:bg-accent"
+                                        ? (isEditing ? "overflow-visible" : "px-4 py-3 rounded-2xl bg-foreground/[0.06]")
                                         : "py-1"
-                                )}
-                                role={message.role === "user" && isLastUserMessage && onEditMessage ? "button" : undefined}
-                                tabIndex={message.role === "user" && isLastUserMessage && onEditMessage ? 0 : undefined}
-                                title={message.role === "user" && isLastUserMessage && onEditMessage ? tr("点击编辑", "Click to edit") : undefined}
-                                onClick={() => {
-                                    if (isEditing || message.role !== "user" || !isLastUserMessage || !onEditMessage) return;
-                                    setEditingMessageId(message.id);
-                                    setEditText(getUserOriginalText(message));
-                                }}
-                                onKeyDown={(e) => {
-                                    if (isEditing || message.role !== "user" || !isLastUserMessage || !onEditMessage) return;
-                                    if (e.key === "Enter" || e.key === " ") {
-                                        e.preventDefault();
-                                        setEditingMessageId(message.id);
-                                        setEditText(getUserOriginalText(message));
-                                    }
-                                }}>
+                                )}>
                                     
                                     {/* Reasoning Parts */}
                                     {message.parts?.map((part, partIndex) => {
@@ -341,18 +323,15 @@ export function ChatMessageDisplay({
                                         if (isEditing && message.role === "user") {
                                             const editParts = splitInlinePptTags(editText);
                                             return (
-                                                <div className="flex flex-col gap-2 min-w-[300px]" onClick={(e) => e.stopPropagation()}>
-                                                    <div className="relative w-full">
-                                                        <textarea
-                                                            ref={editTextareaRef}
-                                                            value={editText}
-                                                            onChange={(e) => setEditText(e.target.value)}
-                                                            onClick={(e) => e.stopPropagation()}
-                                                            className="relative z-10 w-full px-3 py-2 text-sm rounded-md border border-input bg-transparent text-transparent caret-foreground resize-none focus:outline-none focus:ring-2 focus:ring-primary"
-                                                            rows={4}
-                                                        />
-                                                        <div className="pointer-events-none absolute inset-0 z-0 overflow-hidden rounded-md border border-input bg-background px-3 py-2 text-sm leading-6 whitespace-pre-wrap break-words text-foreground">
-                                                            {editParts.map((p, i) => {
+                                                <MessageEditor
+                                                    value={editText}
+                                                    onChange={setEditText}
+                                                    onCancel={() => setEditingMessageId(null)}
+                                                    onSubmit={(value) => {
+                                                        setEditingMessageId(null);
+                                                        onEditMessage?.(messageIndex, value);
+                                                    }}
+                                                    overlay={<>{editParts.map((p, i) => {
                                                                 if (p.type === "text") return <span key={`edit-t-${i}`}>{p.text}</span>;
                                                                 const kind = p.kind === "outline" ? "outline" : "slide_image";
                                                                 const label = p.title ? tr(`第 ${p.n} 页：${p.title}`, `Slide ${p.n}: ${p.title}`) : tr(`第 ${p.n} 页`, `Slide ${p.n}`);
@@ -377,33 +356,8 @@ export function ChatMessageDisplay({
                                                                         {label}
                                                                     </span>
                                                                 );
-                                                            })}
-                                                        </div>
-                                                    </div>
-                                                    <div className="flex justify-end gap-2">
-                                                        <button
-                                                            onClick={(e) => {
-                                                                e.stopPropagation();
-                                                                setEditingMessageId(null);
-                                                            }}
-                                                            className="px-3 py-1 text-xs rounded bg-muted hover:bg-muted/80 text-foreground"
-                                                        >
-                                                            {tr("取消", "Cancel")}
-                                                        </button>
-                                                        <button
-                                                            onClick={(e) => {
-                                                                e.stopPropagation();
-                                                                if (editText.trim() && onEditMessage) {
-                                                                    onEditMessage(messageIndex, editText.trim());
-                                                                    setEditingMessageId(null);
-                                                                }
-                                                            }}
-                                                            className="px-3 py-1 text-xs rounded bg-primary hover:bg-primary/90 text-primary-foreground"
-                                                        >
-                                                            {tr("重新发送", "Resend")}
-                                                        </button>
-                                                    </div>
-                                                </div>
+                                                            })}</>}
+                                                />
                                             );
                                         }
 
@@ -425,29 +379,20 @@ export function ChatMessageDisplay({
                                                 )}
                                                 {pptTags.length > 0 && (
                                                     <div className="flex flex-wrap gap-1.5">
-                                                        {pptTags.map((t, i) => (
-                                                            <span
-                                                                key={`${message.id}-ppttag-${i}-${t.n}`}
-                                                                className={cn(
-                                                                    "inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] leading-4",
-                                                                    message.role === "user"
-                                                                        ? t.kind === "outline"
-                                                                            ? "border-primary/25 bg-primary/[0.08] text-primary-strong"
-                                                                            : "border-border bg-muted text-foreground/80"
-                                                                        : "border-border bg-muted/40 text-foreground"
-                                                                )}
-                                                            >
+                                                        {pptTags.map((t, i) => {
+                                                            const Icon = t.kind === "outline" ? ListOrdered : ImageIcon;
+                                                            const page = tr(`第 ${t.n} 页`, `Slide ${t.n}`);
+                                                            return (
                                                                 <span
-                                                                    className={cn(
-                                                                        "mr-1 inline-flex h-4 w-4 items-center justify-center rounded-full text-[10px] font-semibold",
-                                                                        t.kind === "outline" ? "bg-primary text-primary-foreground" : "bg-foreground/70 text-background"
-                                                                    )}
+                                                                    key={`${message.id}-ppttag-${i}-${t.n}`}
+                                                                    title={t.title ? `${page} · ${t.title}` : page}
+                                                                    className="inline-flex max-w-[260px] items-center gap-1.5 rounded-md bg-foreground/[0.06] px-2 py-1 text-[12.5px] text-foreground/85"
                                                                 >
-                                                                    {t.kind === "outline" ? "T" : "P"}
+                                                                    <Icon className="size-3.5 shrink-0 text-muted-foreground" />
+                                                                    <span className="truncate">{t.title ? `${page} · ${t.title}` : page}</span>
                                                                 </span>
-                                                                {t.title ? tr(`第 ${t.n} 页：${t.title}`, `Slide ${t.n}: ${t.title}`) : tr(`第 ${t.n} 页`, `Slide ${t.n}`)}
-                                                            </span>
-                                                        ))}
+                                                            );
+                                                        })}
                                                     </div>
                                                 )}
                                                 {sections.map((section, idx) => {
@@ -570,7 +515,7 @@ export function ChatMessageDisplay({
                                                     }
                                                     return (
                                                         <div key={idx} className={cn(
-                                                            "prose prose-sm max-w-none break-words",
+                                                            "prose prose-sm font-voice text-[15px] max-w-none break-words",
                                                         )}>
                                                             <ReactMarkdown
                                                                 remarkPlugins={[remarkGfm]}
@@ -650,7 +595,7 @@ export function ChatMessageDisplay({
                                 </div>
 
                                 {/* Actions */}
-                                <div className="flex items-center gap-1 mt-2 px-1">
+                                <div className={cn("flex items-center gap-1 mt-2 px-1", message.role === "user" && "opacity-0 transition-opacity duration-fast group-hover/msg:opacity-100 focus-within:opacity-100")}>
                                     {message.role === "user" && !isEditing && userMessageText && (
                                         <>
                                             <button
@@ -661,7 +606,7 @@ export function ChatMessageDisplay({
                                             >
                                                 {copiedMessageId === message.id ? <Check className="h-3.5 w-3.5 text-success" /> : <Copy className="h-3.5 w-3.5" />}
                                             </button>
-                                            {onEditMessage && isLastUserMessage && (
+                                            {onEditMessage && status !== "streaming" && status !== "submitted" && (
                                                 <button
                                                     type="button"
                                                     onClick={() => {
@@ -705,35 +650,16 @@ export function ChatMessageDisplay({
                                 </div>
                             </div>
                         </div>
-                        {showPendingIndicator && (
-                            <div className="flex w-full justify-start animate-message-in mt-3">
-                                <div className="max-w-[85%] min-w-0">
-                                    <Shimmer as="span" className="py-1 text-sm" duration={1.6}>
-                                        {tr("思考中...", "Thinking...")}
-                                    </Shimmer>
-                                </div>
-                            </div>
-                        )}
                         </React.Fragment>
                     );
                     })}
+                    {(status === "submitted" || status === "streaming") && (
+                        <WorkingIndicator kind="ppt" className="mt-3 animate-message-in" usage={turnUsage} />
+                    )}
+                    {status !== "submitted" && status !== "streaming" && messages[messages.length - 1]?.role === "assistant" && <TokenUsageLine usage={turnUsage} />}
+                    {status !== "submitted" && status !== "streaming" && messages[messages.length - 1]?.role === "assistant" && <CanvasCard />}
                     <div ref={messagesEndRef} />
-                </div>
-            </ScrollArea>
-            {!isAtBottom && messages.length > 0 && (
-                <button
-                    type="button"
-                    onClick={() => {
-                        userScrolledUpRef.current = false;
-                        setIsAtBottom(true);
-                        scrollToBottom("smooth");
-                    }}
-                    className="absolute bottom-4 right-4 z-20 inline-flex items-center gap-1 rounded-full border border-border bg-background/90 backdrop-blur px-3 py-1.5 text-xs text-foreground shadow-md hover:bg-background"
-                >
-                    <ChevronDown className="w-3.5 h-3.5" />
-                    {tr("回到底部", "Back to bottom")}
-                </button>
-            )}
+            </ChatScrollArea>
         </div>
     );
 }

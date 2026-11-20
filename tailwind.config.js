@@ -19,7 +19,13 @@ export default {
       fontFamily: {
         // Source Serif 4 stands in for Copernicus; Inter for Styrene. Both are
         // self-hosted (see client/main.tsx) so there is no CDN round trip.
-        display: ['"Source Serif 4 Variable"', 'Georgia', '"Songti SC"', '"Noto Serif SC"', 'serif'],
+        // Headings: short, so the Noto Serif SC webfont (sliced by unicode
+        // range, only the glyphs used are fetched) keeps Chinese in serif too.
+        display: ['"Source Serif 4 Variable"', '"Noto Serif SC"', '"Songti SC"', 'Georgia', 'serif'],
+        // The AI's voice, as on claude.ai: serif for Latin text; CJK falls
+        // to the system's Songti on macOS and to YaHei elsewhere rather than
+        // pulling a large serif font for every reply.
+        voice: ['"Source Serif 4 Variable"', 'Georgia', '"Songti SC"', '"PingFang SC"', '"Microsoft YaHei"', '"Noto Sans SC"', 'serif'],
         sans: ['"Inter Variable"', '-apple-system', 'BlinkMacSystemFont', '"PingFang SC"', '"Microsoft YaHei"', '"Noto Sans SC"', 'sans-serif'],
         mono: ['ui-monospace', 'SFMono-Regular', '"SF Mono"', 'Consolas', 'monospace'],
       },
@@ -32,6 +38,11 @@ export default {
         elevated: "hsl(var(--elevated))",
         sunken: "hsl(var(--sunken))",
         overlay: "hsl(var(--overlay))",
+        brand: {
+          DEFAULT: "hsl(var(--brand))",
+          hover: "hsl(var(--brand-hover))",
+          foreground: "hsl(var(--brand-foreground))",
+        },
         primary: {
           DEFAULT: "hsl(var(--primary))",
           foreground: "hsl(var(--primary-foreground))",
@@ -95,13 +106,13 @@ export default {
             "--tw-prose-body": "hsl(var(--foreground) / 0.88)",
             "--tw-prose-headings": "hsl(var(--foreground))",
             "--tw-prose-lead": "hsl(var(--muted-foreground))",
-            "--tw-prose-links": "hsl(var(--primary-strong))",
+            "--tw-prose-links": "hsl(var(--foreground))",
             "--tw-prose-bold": "hsl(var(--foreground))",
             "--tw-prose-counters": "hsl(var(--muted-foreground))",
             "--tw-prose-bullets": "hsl(var(--muted-foreground) / 0.6)",
             "--tw-prose-hr": "hsl(var(--border))",
             "--tw-prose-quotes": "hsl(var(--foreground) / 0.9)",
-            "--tw-prose-quote-borders": "hsl(var(--primary) / 0.4)",
+            "--tw-prose-quote-borders": "hsl(var(--foreground) / 0.15)",
             "--tw-prose-captions": "hsl(var(--muted-foreground))",
             "--tw-prose-code": "hsl(var(--foreground))",
             "--tw-prose-pre-code": "hsl(var(--foreground))",
@@ -110,13 +121,13 @@ export default {
             "--tw-prose-td-borders": "hsl(var(--border) / 0.6)",
 
             maxWidth: "none",
-            lineHeight: "1.72",
+            lineHeight: "1.8",
 
-            // Assistant headings stay on the UI stack: the display serif has
-            // no CJK coverage, so Chinese headings dropped to a system serif.
+            // Replies speak in the voice serif (set on the prose container),
+            // and so do their headings, at Claude's medium weight.
             "h1, h2, h3, h4": {
-              letterSpacing: "-0.015em",
-              fontWeight: "600",
+              letterSpacing: "-0.01em",
+              fontWeight: "500",
             },
 
             // The plugin wraps inline code in literal backticks; a tinted chip
@@ -124,11 +135,11 @@ export default {
             "code::before": { content: '""' },
             "code::after": { content: '""' },
             ":not(pre) > code": {
-              backgroundColor: "hsl(var(--muted))",
-              border: "1px solid hsl(var(--border) / 0.6)",
-              borderRadius: "0.3rem",
-              padding: "0.1em 0.35em",
-              fontWeight: "500",
+              backgroundColor: "hsl(var(--foreground) / 0.05)",
+              borderRadius: "4px",
+              padding: "0.1em 0.3em",
+              fontWeight: "400",
+              fontSize: "0.86em",
             },
 
             // A rule, not a box, and upright rather than italic.
@@ -142,25 +153,26 @@ export default {
             "blockquote p:last-of-type::after": { content: '""' },
 
             a: {
-              fontWeight: "500",
+              fontWeight: "400",
+              textDecorationColor: "hsl(var(--foreground) / 0.35)",
               textDecorationThickness: "1px",
               textUnderlineOffset: "2px",
             },
 
             // Hairlines only; the plugin's default header rule is heavy.
-            "thead th": { fontWeight: "600", borderBottomWidth: "1px" },
+            "thead th": { fontWeight: "500", borderBottomWidth: "1px" },
             hr: { borderTopWidth: "1px" },
           },
         },
       },
       transitionTimingFunction: {
-        "out-soft": "cubic-bezier(0.22, 1, 0.36, 1)",
-        "in-out-soft": "cubic-bezier(0.65, 0, 0.35, 1)",
+        "out-soft": "var(--ease-out-soft)",
+        "in-out-soft": "var(--ease-in-out-soft)",
       },
       transitionDuration: {
         fast: "150ms",
-        base: "220ms",
-        slow: "340ms",
+        base: "240ms",
+        slow: "380ms",
       },
       keyframes: {
         "rise-in": {

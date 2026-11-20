@@ -8,6 +8,7 @@ const messages = {
   // Matches "CAD 助手" and "PPT 助手" in the shell dictionary, so the
   // three panels are named the same way.
   "chat.panel.title": { zh: "图表助手", en: "Diagram Assistant" },
+  "canvas.kind": { zh: "图表", en: "Diagram" },
 
   // draw.io editor loading
   "drawio.load_failed": { zh: "编辑器加载失败", en: "The editor failed to load" },
@@ -18,7 +19,7 @@ const messages = {
   "drawio.retry": { zh: "重试", en: "Retry" },
 
   // ChatInput
-  "input.placeholder": { zh: "描述你想画的图表，或上传图片、文档…", en: "Describe the diagram you want, or upload an image or document…" },
+  "input.placeholder": { zh: "说说你想画的图，或递给我一张图片、一份文档…", en: "Describe the diagram, or hand me an image or a document…" },
   "input.clear": { zh: "清空对话", en: "Clear conversation" },
   "input.upload_image": { zh: "上传图片", en: "Upload image" },
   "input.upload_file_types": { zh: "上传文件（.pdf、.docx、.txt）", en: "Upload file (.pdf, .docx, .txt)" },
@@ -46,7 +47,7 @@ const messages = {
   // ChatMessageDisplay
   "message.parsing_files": { zh: "正在解析文件...", en: "Parsing files..." },
   // Kept identical to the CAD and PPT panels so the three read as one product.
-  "message.thinking": { zh: "思考中...", en: "Thinking..." },
+  "message.thinking": { zh: "斟酌中…", en: "Mulling it over…" },
   "chat.drop_to_attach": { zh: "松开以添加文件", en: "Drop to attach" },
   "message.copy": { zh: "复制消息", en: "Copy message" },
   "message.copied": { zh: "已复制", en: "Copied!" },
@@ -90,7 +91,7 @@ const messages = {
   "history.close": { zh: "关闭", en: "Close" },
 
   // GlobalConstraintsDialog
-  "tooltip.global_constraints": { zh: "全局约束", en: "Global Constraints" },
+  "tooltip.global_constraints": { zh: "记忆", en: "Memory" },
 
   // Tool call cards. These were the last hardcoded English in the panel: the
   // card sat directly above a fully translated code block.
@@ -98,6 +99,21 @@ const messages = {
   "tool.edit_diagram": { zh: "编辑图表", en: "Edit Diagram" },
   "tool.append_diagram": { zh: "追加图表", en: "Append Diagram" },
   "tool.get_shape_library": { zh: "读取图形库", en: "Get Shape Library" },
+  "tool.status.running": { zh: "进行中…", en: "Running…" },
+  "message.sketching": { zh: "画草图中", en: "Sketching" },
+  "chat.sketch": { zh: "深度思考草图 · 照着它来画", en: "Deep-thinking sketch · the diagram follows it" },
+  "steps.sketching": { zh: "画草图中…", en: "Sketching…" },
+  "steps.reading": { zh: "读取文件中…", en: "Reading files…" },
+  "steps.read": { zh: "读取文件", en: "Read files" },
+  "steps.read_meta": { zh: "{n} 个文件 · 用时 {s}s", en: "{n} files · {s}s" },
+  "steps.read_failed": { zh: "文件没读出来", en: "Couldn't read the files" },
+  "steps.images": { zh: "看参考图", en: "Reference images" },
+  "steps.images_meta": { zh: "{n} 张 · 草图照着它们画", en: "{n} · the sketch follows them" },
+  "steps.sketch": { zh: "草图", en: "Sketch" },
+  "steps.sketch_meta": { zh: "用时 {n}s · 照着它来画", en: "{n}s · the diagram follows it" },
+  "steps.sketch_failed": { zh: "草图没画出来", en: "No sketch" },
+  "steps.sketch_fallback": { zh: "改为直接按文字画", en: "Drawing from the text instead" },
+  "steps.sketch_open": { zh: "点开看大图", en: "Open full size" },
   "tool.status.complete": { zh: "完成", en: "Complete" },
   "tool.status.truncated": { zh: "已截断", en: "Truncated" },
   "tool.status.error": { zh: "错误", en: "Error" },
@@ -108,7 +124,7 @@ const messages = {
   "common.busy": { zh: "系统忙碌中，请稍后...", en: "System is busy, please wait..." },
 
   // A diagram tool call shown as steps: thinking, drawing, correction
-  "steps.thinking": { zh: "思考中…", en: "Thinking…" },
+  "steps.thinking": { zh: "斟酌中…", en: "Mulling it over…" },
   "steps.thought": { zh: "思考", en: "Thinking" },
   "steps.draw": { zh: "绘制图表", en: "Drawing the diagram" },
   "steps.append": { zh: "续写图表", en: "Continuing the diagram" },

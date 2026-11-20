@@ -1,6 +1,7 @@
 "use client"
 
-import { FileCode, FileText, Loader2, X } from "lucide-react"
+import { Loader2, X } from "lucide-react"
+import { AttachmentPreview, fileExtension, formatSize, type PreviewTarget } from "@/shared/chat/attachment-preview"
 import { useEffect, useRef, useState } from "react"
 import { isPdfFile, isTextFile } from "@/shared/files"
 import { type FileData } from "@/shared/files/use-file-processor"
@@ -26,7 +27,7 @@ export function FilePreviewList({
 }: FilePreviewListProps) {
     const uiLang = useUiLanguage()
     const trText = (zhText: string, enText: string) => (uiLang === "zh" ? zhText : enText)
-    const [selectedImage, setSelectedImage] = useState<string | null>(null)
+    const [preview, setPreview] = useState<PreviewTarget | null>(null)
     const [imageUrls, setImageUrls] = useState<Map<File, string>>(new Map())
     const imageUrlsRef = useRef<Map<File, string>>(new Map())
 
@@ -69,114 +70,68 @@ export function FilePreviewList({
         }
     }, [])
 
-    // Clear selected image if its URL was revoked
-    useEffect(() => {
-        if (
-            selectedImage &&
-            !Array.from(imageUrls.values()).includes(selectedImage)
-        ) {
-            setSelectedImage(null)
-        }
-    }, [imageUrls, selectedImage])
-
     if (files.length === 0) return null
 
     return (
         <>
-            <div className="flex flex-wrap gap-2 mt-2">
+            <div className="mt-2 flex flex-wrap gap-2">
                 {files.map((file, index) => {
                     const imageUrl = imageUrls.get(file) || null
-                    const pdfInfo = pdfData.get(file)
+                    const info = pdfData.get(file)
                     const isImage = file.type.startsWith("image/")
-                    const isPdf = isPdfFile(file)
-                    const isText = isTextFile(file)
-                    const secondary = pdfInfo?.isExtracting
-                        ? trText("解析中...", "Reading...")
-                        : pdfInfo?.charCount
-                            ? trText(`${formatCharCount(pdfInfo.charCount)} 字符`, `${formatCharCount(pdfInfo.charCount)} chars`)
-                            : isPdf
-                                ? trText("PDF 文档", "PDF")
-                                : isText
-                                    ? trText("文本", "Text")
-                                    : ""
+                    const secondary = info?.isExtracting
+                        ? trText("解析中…", "Reading…")
+                        : info?.charCount
+                            ? trText(`${formatCharCount(info.charCount)} 字`, `${formatCharCount(info.charCount)} chars`)
+                            : formatSize(file.size)
+                    const open = () =>
+                        setPreview(
+                            isImage && imageUrl
+                                ? { name: file.name, imageUrl }
+                                : { name: file.name, file, text: !isPdfFile(file) && !isTextFile(file) ? info?.text : undefined },
+                        )
                     return (
-                        <div key={file.name + index} className="group animate-rise-in" style={{ animationDelay: `${Math.min(index, 6) * 40}ms` }}>
-                            <div
-                                className="flex items-center gap-2.5 w-[260px] max-w-full rounded-xl border border-border/70 bg-card px-3 py-2 shadow-xs transition-[border-color,box-shadow,transform] duration-fast ease-out-soft hover:-translate-y-px hover:border-border hover:shadow-soft"
+                        <div
+                            key={file.name + index}
+                            className="group/att relative animate-rise-in"
+                            style={{ animationDelay: `${Math.min(index, 6) * 40}ms` }}
+                        >
+                            <button
+                                type="button"
+                                title={trText(`预览 ${file.name}`, `Preview ${file.name}`)}
+                                onClick={open}
+                                className="block size-[104px] overflow-hidden rounded-xl border border-border/80 bg-card text-left shadow-xs transition-[border-color,box-shadow,transform] duration-fast ease-out-soft hover:-translate-y-px hover:border-foreground/25 hover:shadow-soft focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/30"
                             >
-                                <div
-                                    className={`h-11 w-11 shrink-0 overflow-hidden rounded-lg bg-muted ring-1 ring-inset ring-border/60 flex items-center justify-center ${
-                                        isImage && imageUrl ? "cursor-pointer transition-transform duration-base ease-out-soft hover:scale-[1.04]" : ""
-                                    }`}
-                                    onClick={() => {
-                                        if (isImage && imageUrl) setSelectedImage(imageUrl)
-                                    }}
-                                >
-                                    {isImage && imageUrl ? (
-                                        <img
-                                            src={imageUrl}
-                                            alt={file.name}
-                                            className="object-cover w-full h-full"
-                                        />
-                                    ) : (
-                                        <>
-                                            {pdfInfo?.isExtracting ? (
-                                                <Loader2 className="h-5 w-5 text-primary-strong animate-spin" />
-                                            ) : isPdf ? (
-                                                <FileText className="h-5 w-5 text-muted-foreground" />
-                                            ) : (
-                                                <FileCode className="h-5 w-5 text-muted-foreground" />
-                                            )}
-                                        </>
-                                    )}
-                                </div>
-
-                                <div className="min-w-0 flex-1">
-                                    <div className="truncate text-xs font-medium text-foreground">{file.name}</div>
-                                    {secondary ? (
-                                        <div className="text-[10px] text-muted-foreground truncate">
-                                            {secondary}
-                                        </div>
-                                    ) : null}
-                                </div>
-
-                                <button
-                                    type="button"
-                                    onClick={() => onRemoveFile(file)}
-                                    className="shrink-0 rounded-md p-1 text-muted-foreground opacity-0 transition-[opacity,color,background-color,transform] duration-fast ease-out-soft hover:bg-destructive/10 hover:text-destructive active:scale-90 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/30 group-hover:opacity-100"
-                                    aria-label={trText("移除文件", "Remove file")}
-                                >
-                                    <X className="h-4 w-4" />
-                                </button>
-                            </div>
+                                {isImage && imageUrl ? (
+                                    <img src={imageUrl} alt={file.name} className="h-full w-full object-cover" />
+                                ) : (
+                                    <span className="flex h-full flex-col justify-between p-2.5">
+                                        <span className="line-clamp-3 break-all text-[12px] font-medium leading-snug text-foreground">{file.name}</span>
+                                        <span className="flex items-center gap-1.5">
+                                            <span className="rounded border border-border/90 bg-background px-1 py-px text-[10px] font-medium tracking-wide text-muted-foreground">
+                                                {fileExtension(file.name)}
+                                            </span>
+                                            <span className="flex min-w-0 items-center gap-1 truncate text-[10.5px] text-muted-foreground">
+                                                {info?.isExtracting && <Loader2 className="size-3 animate-spin" />}
+                                                {secondary}
+                                            </span>
+                                        </span>
+                                    </span>
+                                )}
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => onRemoveFile(file)}
+                                aria-label={trText("移除文件", "Remove file")}
+                                className="absolute -right-1.5 -top-1.5 flex size-5 items-center justify-center rounded-full border border-border bg-card text-muted-foreground opacity-0 shadow-xs transition-opacity duration-fast hover:text-foreground focus-visible:opacity-100 group-hover/att:opacity-100"
+                            >
+                                <X className="size-3" />
+                            </button>
                         </div>
                     )
                 })}
             </div>
-
-            {/* Image Modal/Lightbox */}
-            {selectedImage && (
-                <div
-                    className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4"
-                    onClick={() => setSelectedImage(null)}
-                >
-                    <button
-                        className="absolute top-4 right-4 z-10 bg-white text-black rounded-full p-2 hover:bg-white/85 transition-colors"
-                        onClick={() => setSelectedImage(null)}
-                        aria-label={trText("关闭", "Close")}
-                    >
-                        <X className="h-6 w-6" />
-                    </button>
-                    <div className="relative w-auto h-auto max-w-[90vw] max-h-[90vh]">
-                        <img
-                            src={selectedImage}
-                            alt={trText("上传图片的全尺寸预览", "Full size preview of uploaded diagram or image")}
-                            className="object-contain max-w-full max-h-[90vh] w-auto h-auto"
-                            onClick={(e) => e.stopPropagation()}
-                        />
-                    </div>
-                </div>
-            )}
+            <AttachmentPreview target={preview} onClose={() => setPreview(null)} />
         </>
     )
 }

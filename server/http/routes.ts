@@ -10,6 +10,7 @@ import {
 import { POST as postLogFileParser } from "../routes/log-file-parser";
 import { POST as postLogSave } from "../routes/log-save";
 import { POST as postPptAi, POST_STREAM as postPptAiStream } from "../routes/ppt-ai";
+import { GET as getSkills, GET_ZIP as getSkillZip, POST_INSTALL as postSkillInstall } from "../routes/skills";
 import { POST as postThirdPartyParser } from "../routes/third-party-parser";
 
 /**
@@ -35,6 +36,9 @@ export const API_ROUTES: Record<string, RouteHandler> = {
   "POST /api/editable-export": postEditableExport,
   "GET /api/editable-export/file": getEditableExportFile,
   "GET /api/editable-export/artifact": getEditableExportArtifact,
+  "GET /api/skills": getSkills,
+  "GET /api/skills/zip": getSkillZip,
+  "POST /api/skills/install": postSkillInstall,
 };
 
 export function routeKey(method: string | undefined, pathname: string) {

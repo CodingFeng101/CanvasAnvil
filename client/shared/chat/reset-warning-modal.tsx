@@ -1,4 +1,6 @@
 import { Button } from "@/shared/ui/button"
+import { useEffect } from "react"
+import { usePreferences } from "@/shared/preferences"
 import {
     Dialog,
     DialogContent,
@@ -38,12 +40,19 @@ export function ResetWarningModal({
     labels,
 }: ResetWarningModalProps) {
     const uiLang = useUiLanguage()
-    // A saved work is kept in My works, so nothing is lost and "cannot be undone" would be wrong.
-    const saved = !!useWork()?.saved
+    // In the app every work with content is kept on its own, so nothing is lost and "cannot be undone" would be wrong.
+    const saved = !!useWork()
     const title = labels?.title ?? t(uiLang, "reset.title")
     const description = saved ? t(uiLang, "reset.descSaved") : labels?.description ?? t(uiLang, "reset.desc")
     const cancel = labels?.cancel ?? t(uiLang, "common.cancel")
     const confirm = labels?.confirm ?? t(uiLang, "common.clear")
+    // Settings → General can skip the question: clear straight away.
+    const ask = usePreferences().confirmClear
+    useEffect(() => {
+        if (open && !ask) onClear()
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [open, ask])
+    if (!ask) return null
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>

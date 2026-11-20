@@ -1,12 +1,14 @@
 import { useRef, useState } from "react";
+import { Paintbrush } from "lucide-react";
+import { CanvasPaneProvider, useCanvasPaneState } from "@/shared/canvas-pane";
 import { CaptureUpdateAction, newElementWith } from "@excalidraw/excalidraw";
 import type { ExcalidrawImperativeAPI } from "@excalidraw/excalidraw/types";
 import {
   ResizableHandle,
   ResizablePanel,
   ResizablePanelGroup,
-  type PanelImperativeHandle,
 } from "@/shared/ui/resizable";
+import { CanvasSheet, sheetHandleClass } from "@/shared/ui/canvas-sheet";
 import { useUiLanguage } from "@/shared/i18n";
 import { useTheme } from "@/shared/theme";
 import {
@@ -22,10 +24,9 @@ import { ChatPanel } from "@/workspaces/canvas/chat/ChatPanel";
 export function CanvasWorkspace() {
   const uiLang = useUiLanguage();
   const { isDark } = useTheme();
+  const pane = useCanvasPaneState({ kind: uiLang === "zh" ? "画面" : "Picture", icon: Paintbrush, variant: "canvas" });
 
   const excalidrawApiRef = useRef<ExcalidrawImperativeAPI | null>(null);
-  const chatPanelRef = useRef<PanelImperativeHandle | null>(null);
-  const [isChatCollapsed, setIsChatCollapsed] = useState(false);
   const [selectedImage, setSelectedImage] = useState<SelectedImageInfo | null>(null);
   const [versions, setVersions] = useState<ImageVersion[]>([]);
   // Written once the imperative API is available, purely to make that moment
@@ -34,17 +35,6 @@ export function CanvasWorkspace() {
   // nudge to re-resolve once the canvas is actually ready.
   const [, setCanvasReady] = useState(false);
 
-  const toggleCollapse = () => {
-    const panel = chatPanelRef.current;
-    if (!panel) return;
-    if (panel.isCollapsed()) {
-      panel.expand();
-      setIsChatCollapsed(false);
-    } else {
-      panel.collapse();
-      setIsChatCollapsed(true);
-    }
-  };
 
   const handleSelectedImageChange = (info: SelectedImageInfo | null) => {
     setSelectedImage(info);
@@ -57,6 +47,7 @@ export function CanvasWorkspace() {
     if (!api) return null;
     try {
       const { elementId } = await insertGeneratedImage(api, dataUrl, { note: prompt });
+      pane.value.reveal();
       return elementId;
     } catch (e) {
       console.error("Failed to place generated image on the canvas", e);
@@ -113,36 +104,14 @@ export function CanvasWorkspace() {
   };
 
   return (
+    <CanvasPaneProvider value={pane.value}>
     <ResizablePanelGroup orientation="horizontal" className="h-full" style={{ height: "100%" }}>
-      <ResizablePanel defaultSize="68%" minSize="30%">
-        <div className="h-full w-full relative bg-muted/20">
-          <CanvasBoard
-            theme={isDark ? "dark" : "light"}
-            langCode={uiLang === "zh" ? "zh-CN" : "en"}
-            onApiReady={(api) => {
-              excalidrawApiRef.current = api;
-              setCanvasReady(true);
-            }}
-            onSelectedImageChange={handleSelectedImageChange}
-          />
-        </div>
-      </ResizablePanel>
-
-      <ResizableHandle withHandle className="bg-border/50 hover:bg-primary/50 transition-colors w-1.5" />
-
       <ResizablePanel
         id="canvas-chat"
-        panelRef={chatPanelRef}
-        defaultSize="32%"
-        minSize="20%"
-        maxSize="70%"
-        collapsible
-        collapsedSize="56px"
-        onResize={(panelSize) => setIsChatCollapsed(panelSize.inPixels <= 80)}
+        {...pane.chatPanelProps}
       >
+        <div ref={pane.chatColumnRef} className={pane.chatColumnClassName}>
         <ChatPanel
-          collapsed={isChatCollapsed}
-          onToggleCollapse={toggleCollapse}
           onImageGenerated={handleImageGenerated}
           resolveCanvasImage={resolveCanvasImage}
           canAnnotateEdit={selectedImage !== null}
@@ -153,7 +122,25 @@ export function CanvasWorkspace() {
           onSelectVersion={handleSelectVersion}
           onClearAll={handleClearAll}
         />
+        </div>
+      </ResizablePanel>
+
+      <ResizableHandle className={sheetHandleClass} />
+
+      <ResizablePanel id="canvas-board" {...pane.canvasPanelProps}>
+        <CanvasSheet>
+          <CanvasBoard
+            theme={isDark ? "dark" : "light"}
+            langCode={uiLang === "zh" ? "zh-CN" : "en"}
+            onApiReady={(api) => {
+              excalidrawApiRef.current = api;
+              setCanvasReady(true);
+            }}
+            onSelectedImageChange={handleSelectedImageChange}
+          />
+        </CanvasSheet>
       </ResizablePanel>
     </ResizablePanelGroup>
+    </CanvasPaneProvider>
   );
 }

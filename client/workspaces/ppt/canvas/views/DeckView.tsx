@@ -6,19 +6,16 @@ import {
   Loader2,
   Maximize2,
   MessageSquarePlus,
+  PanelLeftClose,
+  PanelLeftOpen,
   Minimize2,
   Presentation,
   Sparkles,
   X,
 } from "lucide-react";
+import { useState } from "react";
 import { motion } from "motion/react";
 import { ScaleToFit } from "@/shared/ui/scale-to-fit";
-import {
-  ContextMenu,
-  ContextMenuContent,
-  ContextMenuItem,
-  ContextMenuTrigger,
-} from "@/shared/ui/context-menu";
 import { Button } from "@/shared/ui/button";
 import {
   Select,
@@ -67,6 +64,10 @@ import type { useSlideshow } from "@/workspaces/ppt/canvas/hooks/use-slideshow";
 const SHOW_EDITABLE_EXPORT = true;
 
 /** The deck as this screen needs to see it: the slides, and how to resolve one. */
+
+const RAIL_KEY = "canvasanvil:ppt-rail-width";
+const RAIL_MIN = 160;
+const RAIL_MAX = 420;
 export interface DeckViewModel {
   slides: SlideData[];
   currentSlide: SlideData | undefined;
@@ -151,6 +152,26 @@ export function DeckView({
   tr,
   uiLang,
 }: DeckViewProps) {
+  // The thumbnail rail: dragged wider or narrower by its right edge, or hidden.
+  const [railWidth, setRailWidth] = useState(() => {
+    try { return Math.min(RAIL_MAX, Math.max(RAIL_MIN, Number(localStorage.getItem(RAIL_KEY)) || 256)); } catch { return 256; }
+  });
+  const [railOpen, setRailOpen] = useState(true);
+  const startRailDrag = (event: React.PointerEvent) => {
+    event.preventDefault();
+    const startX = event.clientX, startWidth = railWidth;
+    let width = startWidth;
+    const move = (e: PointerEvent) => { width = Math.min(RAIL_MAX, Math.max(RAIL_MIN, startWidth + e.clientX - startX)); setRailWidth(width); };
+    const up = () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+      document.body.style.cursor = "";
+      try { localStorage.setItem(RAIL_KEY, String(Math.round(width))); } catch { /* not kept */ }
+    };
+    document.body.style.cursor = "col-resize";
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+  };
   const renderScaledSlideScene = (
     slide: SlideData,
     _editable = false,
@@ -185,7 +206,14 @@ export function DeckView({
       {/* Toolbar */}
       <div className="relative z-50 h-14 px-4 bg-card border-b border-border flex justify-between items-center shadow-sm">
         <div className="flex items-center gap-4">
-            <h2 className="font-semibold text-sm text-foreground">{tr("PPT 演示文稿", "PPT Deck")}</h2>
+            <button
+                type="button"
+                onClick={() => setRailOpen((open) => !open)}
+                aria-label={railOpen ? tr("收起页面列表", "Hide slide list") : tr("展开页面列表", "Show slide list")}
+                className="flex size-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+            >
+                {railOpen ? <PanelLeftClose className="size-4" /> : <PanelLeftOpen className="size-4" />}
+            </button>
             <button
                 onClick={actions.backToStart}
                 title={tr("返回开始", "Back to start")}
@@ -288,14 +316,14 @@ export function DeckView({
       {/* Main View */}
       <div className="flex-1 flex overflow-hidden">
         {/* Thumbnails */}
-        <div className="w-64 bg-sunken border-r border-border overflow-y-auto p-4 space-y-4">
+        {railOpen && (
+        <div className="relative shrink-0" style={{ width: railWidth }}>
+        <div className="h-full bg-sunken border-r border-border overflow-y-auto p-4 space-y-4">
           {deck.slides.map((slide, index) => {
             const hasGeneratedImage = deck.getBackgroundUrl(slide.id);
             const slideFailure = inputs.beautify.failures[slide.id];
             return (
-            <ContextMenu key={slide.id || index}>
-                <ContextMenuTrigger asChild>
-                    <div 
+                    <div key={slide.id || index} 
                     onClick={() => deck.setCurrentIndex(index)}
                     style={{ animationDelay: `${Math.min(index, 8) * 35}ms` }}
                     className={`animate-rise-in cursor-pointer border-2 rounded-lg overflow-hidden relative aspect-[16/9] group transition-[border-color,box-shadow,transform] duration-base ease-out-soft ${
@@ -308,15 +336,14 @@ export function DeckView({
                       className="absolute top-1 left-1 z-20"
                       onClick={(e) => e.stopPropagation()}
                     >
-                      <Button
-                        size="sm"
-                        variant="destructive"
-                        className="h-6 px-2 text-[10px] gap-1 shadow-sm opacity-0 group-hover:opacity-100 transition-opacity"
+                      <button
+                        type="button"
+                        className="flex h-6 items-center gap-1 rounded-md bg-background/90 px-2 text-[11px] text-foreground shadow-sm ring-1 ring-border backdrop-blur-sm opacity-0 transition-opacity hover:bg-background group-hover:opacity-100 focus-visible:opacity-100"
                         onClick={() => actions.addSlideToChat(slide)}
                       >
-                        <Presentation className="w-3 h-3" />
+                        <MessageSquarePlus className="size-3" />
                         {tr("加入对话", "Add to chat")}
-                      </Button>
+                      </button>
                     </div>
                     {/* Thumbnail Preview */}
                     {hasGeneratedImage ? (
@@ -352,14 +379,6 @@ export function DeckView({
                       </div>
                     ) : null}
                     </div>
-                </ContextMenuTrigger>
-                <ContextMenuContent>
-                    <ContextMenuItem onClick={() => actions.addSlideToChat(slide)} className="gap-2">
-                        <MessageSquarePlus className="w-4 h-4" />
-                        <span>{tr("把此页添加到对话", "Add this slide to chat")}</span>
-                    </ContextMenuItem>
-                </ContextMenuContent>
-            </ContextMenu>
           )})}
           
           {deck.slides.length === 0 && (
@@ -368,13 +387,23 @@ export function DeckView({
                     <Presentation className="w-6 h-6 text-muted-foreground" />
                 </div>
                 <p className="text-sm text-muted-foreground">
-                  {uiLang === "zh" ? "在右侧对话框中输入需求" : "Describe your needs in the chat on the right"}
+                  {uiLang === "zh" ? "在左侧对话框中输入需求" : "Describe your needs in the chat on the left"}
                   <br />
                   {uiLang === "zh" ? "让 AI 为您生成 PPT" : "Let AI generate your PPT"}
                 </p>
              </div>
           )}
         </div>
+          <div
+            role="separator"
+            aria-orientation="vertical"
+            aria-label={tr("拖动调整页面列表宽度", "Drag to resize the slide list")}
+            onPointerDown={startRailDrag}
+            onDoubleClick={() => setRailWidth(256)}
+            className="absolute inset-y-0 -right-1 z-10 w-2 cursor-col-resize after:absolute after:inset-y-0 after:left-1/2 after:w-px after:-translate-x-1/2 after:bg-transparent after:transition-colors hover:after:bg-primary/50"
+          />
+        </div>
+        )}
 
         {/* Preview */}
         <div className="flex-1 p-4 flex items-center justify-center bg-accent/50 overflow-auto relative">
@@ -433,8 +462,6 @@ export function DeckView({
             </div>
           ) : null}
           {deck.currentSlide ? (
-             <ContextMenu>
-                <ContextMenuTrigger asChild>
                     <div 
                         ref={layout.canvasRef}
                         className="relative w-full max-w-[1100px] bg-white shadow-2xl rounded-sm overflow-hidden flex flex-col transition-transform duration-300 outline-none"
@@ -489,14 +516,6 @@ export function DeckView({
                             </div>
                         )}
                     </div>
-                </ContextMenuTrigger>
-                <ContextMenuContent>
-                    <ContextMenuItem onClick={() => deck.currentSlide && actions.addSlideToChat(deck.currentSlide)} className="gap-2">
-                        <MessageSquarePlus className="w-4 h-4" />
-                        <span>{tr("把此页添加到对话", "Add this slide to the chat")}</span>
-                    </ContextMenuItem>
-                </ContextMenuContent>
-            </ContextMenu>
           ) : (
             <div className="text-muted-foreground flex flex-col items-center">
               <ImageIcon className="w-16 h-16 mb-4 opacity-20" />
@@ -507,108 +526,125 @@ export function DeckView({
       </div>
 
       <Dialog open={slideshow.isOpen} onOpenChange={(open) => { if (!open) slideshow.close(); }}>
-        <DialogContent className="inset-0 left-0 top-0 translate-x-0 translate-y-0 w-screen h-screen max-w-none sm:max-w-none rounded-none p-0 bg-black/95 border-none">
-          <div ref={slideshow.rootRef} className="w-full h-full flex flex-col">
-          <div className="h-16 px-6 flex items-center justify-between text-white/90 bg-black/50 backdrop-blur-sm z-50">
-            <div className="text-sm font-medium">
-              {deck.slides.length > 0 ? `${uiLang === "zh" ? "第" : "Slide "}${slideshow.index + 1} / ${deck.slides.length}${uiLang === "zh" ? " 页" : ""}` : ""}
+        <DialogContent className="block [&>button:last-child]:hidden inset-0 left-0 top-0 translate-x-0 translate-y-0 w-screen h-screen max-w-none sm:max-w-none rounded-none p-0 bg-[#0d0d0c] border-none">
+          <DialogTitle className="sr-only">{tr("放映", "Slideshow")}</DialogTitle>
+          {(() => {
+            const current = deck.slides[slideshow.index];
+            const total = deck.slides.length;
+            const note = (current?.note || "").trim();
+            const hasNotes = deck.slides.some((slide) => (slide.note || "").trim());
+            const notesOn = slideshow.showNotes && hasNotes;
+            // Room for the top bar, the bottom controls and, when shown, the notes.
+            const reserved = 56 + 64 + (notesOn ? 168 : 0);
+            const slideDims = getSlideshowDimensions({
+              width: layout.window.width,
+              height: layout.window.width ? Math.max(240, layout.window.height - reserved) / 0.85 : 0,
+            });
+            const slideWidth = typeof slideDims.width === "number" ? slideDims.width : 1100;
+            const slideHeight = typeof slideDims.height === "number" ? slideDims.height : 619;
+            const barButton = "flex h-8 items-center gap-1.5 rounded-md px-2.5 text-[13px] text-white/70 transition-colors hover:bg-white/10 hover:text-white";
+            return (
+          <div ref={slideshow.rootRef} className="group/show flex h-full w-full flex-col bg-[#0d0d0c] text-white">
+            {/* Top bar: fades away until the pointer comes near it. */}
+            <div className="flex h-14 shrink-0 items-center justify-between px-5 opacity-0 transition-opacity duration-300 hover:opacity-100 focus-within:opacity-100">
+              <span className="min-w-0 truncate text-[13px] text-white/60">{current?.title || ""}</span>
+              <div className="flex items-center gap-1">
+                {hasNotes ? (
+                  <button type="button" className={barButton} onClick={() => slideshow.setShowNotes((v) => !v)} aria-pressed={notesOn}>
+                    {slideshow.showNotes ? tr("隐藏备注", "Hide notes") : tr("显示备注", "Show notes")}
+                    <kbd className="ml-1 rounded border border-white/20 px-1 text-[10px] text-white/50">N</kbd>
+                  </button>
+                ) : null}
+                <button
+                  type="button"
+                  className={barButton}
+                  onClick={() => { if (slideshow.isFullscreen) void slideshow.exitFullscreen(); else void slideshow.enterFullscreen(); }}
+                >
+                  {slideshow.isFullscreen ? <Minimize2 className="size-4" /> : <Maximize2 className="size-4" />}
+                  {slideshow.isFullscreen ? tr("退出全屏", "Exit fullscreen") : tr("全屏", "Fullscreen")}
+                </button>
+                <button type="button" className={barButton} onClick={slideshow.close}>
+                  <X className="size-4" />
+                  {tr("退出放映", "End show")}
+                </button>
+              </div>
             </div>
-            <div className="flex items-center gap-4">
-              <Button
-                variant="ghost"
-                size="sm"
-                title={slideshow.isFullscreen ? tr("退出全屏", "Exit fullscreen") : tr("进入全屏", "Enter fullscreen")}
-                className="text-white hover:text-white hover:bg-white/10 gap-2"
-                onClick={() => {
-                  if (slideshow.isFullscreen) {
-                    void slideshow.exitFullscreen();
-                  } else {
-                    void slideshow.enterFullscreen();
-                  }
-                }}
-              >
-                {slideshow.isFullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
-                {slideshow.isFullscreen ? tr("退出全屏", "Exit fullscreen") : tr("全屏", "Fullscreen")}
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="text-white hover:text-white hover:bg-white/10 gap-2"
-                onClick={slideshow.close}
-              >
-                <X className="w-4 h-4" />
-                {tr("退出", "Close")}
-              </Button>
-            </div>
-          </div>
-          
-          <div className="flex-1 flex items-center justify-center p-8 overflow-hidden bg-black/90">
-            {deck.slides[slideshow.index] ? (
-              (() => {
-                const slideDims = getSlideshowDimensions(layout.window);
-                const slideWidth = typeof slideDims.width === "number" ? slideDims.width : 1100;
-                const slideHeight = typeof slideDims.height === "number" ? slideDims.height : 619;
-                return (
-              <div className="relative w-full h-full flex items-center justify-center">
-                  <div 
-                    className="relative bg-white shadow-2xl overflow-hidden rounded-lg mx-auto"
-                    style={{
-                      width: slideDims.width,
-                      height: slideDims.height
-                    }}
-                  >
-                  {deck.getBackgroundUrl(deck.slides[slideshow.index].id) ? (
-                    renderScaledSlideScene(deck.slides[slideshow.index], false, slideWidth, slideHeight)
+
+            {/* The slide: click the left third to go back, elsewhere to go on. */}
+            <div className="flex min-h-0 flex-1 items-center justify-center px-6">
+              {current ? (
+                <div
+                  className="relative cursor-pointer overflow-hidden rounded-md bg-white shadow-[0_24px_80px_rgba(0,0,0,0.55)]"
+                  style={{ width: slideDims.width, height: slideDims.height }}
+                  onClick={(event) => {
+                    const box = event.currentTarget.getBoundingClientRect();
+                    if (event.clientX - box.left < box.width / 3) slideshow.previous();
+                    else slideshow.next();
+                  }}
+                >
+                  {deck.getBackgroundUrl(current.id) ? (
+                    renderScaledSlideScene(current, false, slideWidth, slideHeight)
                   ) : (
-                    <div className="w-full h-full p-16 flex flex-col">
-                      <h1 className="text-5xl font-bold mb-12 text-[#141413] border-b-4 border-[#C96442] pb-6 w-fit pr-16">
-                        {deck.slides[slideshow.index].title}
+                    <div className="flex h-full w-full flex-col p-[6%]">
+                      <h1 className="mb-[5%] w-fit border-b-4 border-[#C96442] pb-[2%] pr-[8%] font-bold text-[#141413]" style={{ fontSize: slideWidth * 0.042 }}>
+                        {current.title}
                       </h1>
-                      <div className="flex-1 space-y-8">
-                        {(deck.slides[slideshow.index].content || []).map((point, i) => (
-                          <div key={i} className="flex gap-6 text-3xl text-[#3B3833] leading-relaxed items-start">
-                            <span className="text-primary-strong mt-2">•</span>
+                      <div className="flex-1 space-y-[2.5%]" style={{ fontSize: slideWidth * 0.024 }}>
+                        {(current.content || []).map((point, i) => (
+                          <div key={i} className="flex items-start gap-[2%] leading-relaxed text-[#3B3833]">
+                            <span className="text-primary-strong">•</span>
                             <span>{point}</span>
                           </div>
                         ))}
                       </div>
-                      <div className="mt-auto pt-8 flex justify-between text-lg text-[#6E6A62] border-t border-[#E3DFD7]">
-                        <span>Generated by Unified AI Workspace</span>
-                        <span>{slideshow.index + 1}</span>
-                      </div>
                     </div>
                   )}
                 </div>
-              </div>
-                );
-              })()
-            ) : null}
-          </div>
-
-          <div className="h-20 px-4 flex items-center justify-center gap-8 pb-4">
-            <Button
-              variant="outline"
-              size="lg"
-              className="bg-white/10 border-white/20 text-white hover:bg-white/20 hover:text-white rounded-full w-12 h-12 p-0"
-              onClick={slideshow.previous}
-              disabled={deck.slides.length <= 1}
-            >
-              <ArrowLeft className="w-6 h-6" />
-            </Button>
-            <div className="text-white/50 text-sm font-medium">
-                {slideshow.index + 1} / {deck.slides.length}
+              ) : null}
             </div>
-            <Button
-              variant="outline"
-              size="lg"
-              className="bg-white/10 border-white/20 text-white hover:bg-white/20 hover:text-white rounded-full w-12 h-12 p-0"
-              onClick={slideshow.next}
-              disabled={deck.slides.length <= 1}
-            >
-              <ArrowRight className="w-6 h-6" />
-            </Button>
+
+            {/* Speaker notes, under the slide, as wide as the slide. */}
+            {notesOn ? (
+              <div className="mx-auto mt-4 h-[152px] shrink-0 overflow-y-auto rounded-lg bg-white/[0.06] px-5 py-3.5" style={{ width: slideDims.width }}>
+                <p className="mb-1.5 text-[11px] font-medium tracking-wider text-white/40">{tr("演讲备注", "SPEAKER NOTES")}</p>
+                {note ? (
+                  <p className="whitespace-pre-wrap text-[15px] leading-relaxed text-white/85">{note}</p>
+                ) : (
+                  <p className="text-[14px] text-white/35">{tr("这一页没有备注", "No notes for this slide")}</p>
+                )}
+              </div>
+            ) : null}
+
+            {/* Controls and progress. */}
+            <div className="flex h-16 shrink-0 items-center justify-center gap-5">
+              <button
+                type="button"
+                aria-label={tr("上一页", "Previous slide")}
+                className="flex size-9 items-center justify-center rounded-full text-white/70 transition-colors hover:bg-white/10 hover:text-white disabled:opacity-30"
+                onClick={slideshow.previous}
+                disabled={total <= 1}
+              >
+                <ArrowLeft className="size-5" />
+              </button>
+              <div className="flex w-[220px] flex-col items-center gap-1.5">
+                <span className="text-[12px] tabular-nums text-white/55">{total ? `${slideshow.index + 1} / ${total}` : ""}</span>
+                <div className="h-[3px] w-full overflow-hidden rounded-full bg-white/10">
+                  <div className="h-full rounded-full bg-white/60 transition-[width] duration-300" style={{ width: total ? `${((slideshow.index + 1) / total) * 100}%` : 0 }} />
+                </div>
+              </div>
+              <button
+                type="button"
+                aria-label={tr("下一页", "Next slide")}
+                className="flex size-9 items-center justify-center rounded-full text-white/70 transition-colors hover:bg-white/10 hover:text-white disabled:opacity-30"
+                onClick={slideshow.next}
+                disabled={total <= 1}
+              >
+                <ArrowRight className="size-5" />
+              </button>
+            </div>
           </div>
-          </div>
+            );
+          })()}
         </DialogContent>
       </Dialog>
       <Dialog open={actions.backConfirmOpen} onOpenChange={actions.setBackConfirmOpen}>

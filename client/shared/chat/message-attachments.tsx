@@ -1,4 +1,4 @@
-import { FileText } from "lucide-react";
+import { fileExtension } from "@/shared/chat/attachment-preview";
 import { cn } from "@/shared/lib/utils";
 import { MessageImage } from "@/shared/chat/message-image";
 
@@ -49,18 +49,14 @@ export function MessageAttachments({
         <span
           key={`att-file-${index}`}
           title={file.filename}
-          className="inline-flex max-w-[200px] items-center gap-2 rounded-xl border border-border/70 bg-card px-2.5 py-2 shadow-xs"
+          className="flex size-[104px] shrink-0 flex-col justify-between rounded-xl border border-border/80 bg-card p-2.5 shadow-xs"
         >
-          <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground">
-            <FileText className="h-4 w-4" />
-          </span>
-          <span className="min-w-0">
-            <span className="block truncate text-xs font-medium text-foreground">
-              {file.filename || "file"}
+          <span className="line-clamp-3 break-all text-[12px] font-medium leading-snug text-foreground">{file.filename || "file"}</span>
+          <span className="flex items-center gap-1.5">
+            <span className="rounded border border-border/90 bg-background px-1 py-px text-[10px] font-medium tracking-wide text-muted-foreground">
+              {file.fileType === "pdf" ? "PDF" : file.filename ? fileExtension(file.filename) : "TXT"}
             </span>
-            <span className="block text-[10px] uppercase tracking-wide text-muted-foreground">
-              {file.fileType === "pdf" ? "PDF" : "TXT"}
-            </span>
+            {file.charCount ? <span className="truncate text-[10.5px] text-muted-foreground">{file.charCount >= 1000 ? `${(file.charCount / 1000).toFixed(1)}k` : file.charCount}</span> : null}
           </span>
         </span>
       ))}

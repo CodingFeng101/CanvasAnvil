@@ -1,13 +1,14 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { toast } from "sonner";
-import { t as tShell, useUiLanguage, type UiLanguage } from "@/shared/i18n";
-import { WorkContext, type WorkContextValue } from "@/shared/works/work-context";
-import { defaultWorkName, type WorkMeta } from "@/shared/works/works-index";
-import { LOCAL_KEY, type WorksState } from "@/shared/works/works-store";
+import { t as tShell, useUiLanguage } from "@/shared/i18n";
+import { announceTaskDone } from "@/shared/task-done";
+import { recordDuration, recordUse } from "@/shared/usage-stats";
+import { OPEN_WORKS_EVENT, WorkContext, type WorkContextValue } from "@/shared/works/work-context";
+import { defaultWorkName, isDefaultWorkName, listedWorks, type WorkMeta } from "@/shared/works/works-index";
+import { type WorksState } from "@/shared/works/works-store";
 import { WORKSPACES, type WorkspaceId } from "@/app/workspaces";
 import { worksStoreFor } from "./works-registry";
 import { tWorks } from "./strings";
-import { LeaveDialog, NameDialog, type LeaveRequest } from "./work-dialogs";
 
 /**
  * The app-level side of My works.
@@ -19,11 +20,10 @@ import { LeaveDialog, NameDialog, type LeaveRequest } from "./work-dialogs";
  * everything from the new work's keys. The canvases' own load-on-mount and
  * save-on-change code stays as it was.
  *
- * The canvas always writes a live copy, so a reload loses nothing. What My
- * works holds changes only on Save. Whether the live copy differs from the
- * saved one is worked out from the canvas's writes: a write that follows a
- * user action is compared with the saved copy; writes made while a work
- * loads (no action yet) are not edits.
+ * The canvas always writes a live copy, so a reload loses nothing, and there
+ * is no Save: like a chat on claude.ai, a work is listed (and named) on its
+ * own once it has content, and what is on screen is what is kept. Only an
+ * empty draft is dropped when it is left.
  */
 
 type Phase = "loading" | "ready" | "leaving";
@@ -44,17 +44,16 @@ interface Pending {
   options: SwitchOptions;
 }
 
-type LeaveChoice = "save" | "discard" | "cancel";
-
 interface WorksControl {
   active: ActiveWorks | null;
   current: WorkMeta | null;
-  /** Save the open work (a draft is named first), or rename it when nothing changed. */
-  saveCurrent(): Promise<void>;
   /** Open a work (or a new draft when id is null) in any canvas. */
   openWork(workspace: WorkspaceId, id: string | null): Promise<boolean>;
+  /** Go to a canvas on its latest work (the sidebar's canvas rows). */
+  openCanvas(workspace: WorkspaceId): Promise<boolean>;
   removeWork(workspace: WorkspaceId, id: string): Promise<void>;
   renameWork(workspace: WorkspaceId, id: string, name: string): Promise<void>;
+  pinWork(workspace: WorkspaceId, id: string, pinned: boolean): Promise<void>;
   duplicateWork(workspace: WorkspaceId, id: string): Promise<void>;
   /** Every canvas's works (migrating any canvas not opened yet). */
   loadAll(): Promise<Record<WorkspaceId, WorksState>>;
@@ -68,29 +67,6 @@ export function useWorksControl(): WorksControl {
   const control = useContext(WorksControlContext);
   if (!control) throw new Error("useWorksControl outside WorksProvider");
   return control;
-}
-
-const canvasLabel = (workspace: WorkspaceId, lang: UiLanguage) => {
-  const entry = WORKSPACES.find((w) => w.id === workspace);
-  return entry ? tShell(lang, entry.labelKey) : workspace;
-};
-
-/** Pointer and key input outside the works UI (header, dialogs) counts as editing. */
-function isWorksUi(target: EventTarget | null) {
-  return target instanceof Element && !!target.closest("header, [role=dialog], [data-works-ui]");
-}
-
-interface ChangeTracker {
-  workspace: WorkspaceId;
-  id: string;
-  /** When the work was opened: writes before any input after this are loading, not edits. */
-  openedAt: number;
-  /** Fingerprints of the saved copy (null for a draft, which has none). */
-  saved: Promise<Map<string, string> | null>;
-  differing: Set<string>;
-  pending: Map<string, unknown>;
-  timer: number | null;
-  running: Promise<void>;
 }
 
 export function WorksProvider({
@@ -111,17 +87,11 @@ export function WorksProvider({
   const [revision, setRevision] = useState(0);
   const bump = () => setRevision((n) => n + 1);
   const busySources = useRef(new Set<string>());
+  const busySince = useRef<{ canvas: string; at: number } | null>(null);
   const isBusy = () => busySources.current.size > 0;
   const pendingRef = useRef<Pending | null>(null);
-  /** Latest preview per work; a saved work's list entry takes it on Save. */
+  /** Latest preview per work, handed to a draft listed as it is left. */
   const thumbs = useRef(new Map<string, string>());
-
-  // Dialogs the flows wait on.
-  const [nameRequest, setNameRequest] = useState<{ title: string; initial: string; resolve: (name: string | null) => void } | null>(null);
-  const [leaveRequest, setLeaveRequest] = useState<(LeaveRequest & { resolve: (choice: LeaveChoice) => void }) | null>(null);
-  const askName = (title: string, initial: string) =>
-    new Promise<string | null>((resolve) => setNameRequest({ title, initial, resolve }));
-  const askLeave = (request: LeaveRequest) => new Promise<LeaveChoice>((resolve) => setLeaveRequest({ ...request, resolve }));
 
   /** Also updates the ref at once: a flow that awaited the change reads it before React renders. */
   const setIndex = (workspace: WorkspaceId, index: WorkMeta[]) => {
@@ -134,6 +104,7 @@ export function WorksProvider({
   useEffect(() => {
     let cancelled = false;
     busySources.current.clear();
+    busySince.current = null;
     setActive((prev) => (prev?.workspace === activeWorkspace ? prev : null));
     void worksStoreFor(activeWorkspace)
       .ensure(langRef.current)
@@ -170,35 +141,7 @@ export function WorksProvider({
 
   const current = active?.index.find((w) => w.id === active.currentId) ?? null;
 
-  // ---- Unsaved changes of the open work -------------------------------------
-
-  const lastInputAt = useRef(0);
-  useEffect(() => {
-    const onInput = (event: Event) => {
-      if (!isWorksUi(event.target)) lastInputAt.current = Date.now();
-    };
-    // Clicks inside an iframe (the diagram editor) never reach this document;
-    // the pointer going over it, or focus moving into it, is the sign the user
-    // is working there. (Writes are still compared, so a mere hover changes nothing.)
-    const onBlur = () => {
-      if (document.activeElement instanceof HTMLIFrameElement) lastInputAt.current = Date.now();
-    };
-    const onOver = (event: Event) => {
-      if (event.target instanceof HTMLIFrameElement) lastInputAt.current = Date.now();
-    };
-    const kinds = ["pointerdown", "keydown", "paste", "drop"] as const;
-    for (const kind of kinds) document.addEventListener(kind, onInput, true);
-    document.addEventListener("pointerover", onOver, true);
-    window.addEventListener("blur", onBlur);
-    return () => {
-      for (const kind of kinds) document.removeEventListener(kind, onInput, true);
-      document.removeEventListener("pointerover", onOver, true);
-      window.removeEventListener("blur", onBlur);
-    };
-  }, []);
-  const userActiveSince = (since: number) => lastInputAt.current > since;
-
-  const trackerRef = useRef<ChangeTracker | null>(null);
+  // ---- Writing what is on screen ---------------------------------------------
 
   /** Canvases' "write what is on screen" hooks; each gets at most 3s. */
   const flushers = useRef(new Set<() => Promise<void>>());
@@ -210,116 +153,64 @@ export function WorksProvider({
     );
   };
 
-  const runCheck = useCallback(async (tracker: ChangeTracker) => {
-    if (tracker.timer !== null) window.clearTimeout(tracker.timer);
-    tracker.timer = null;
-    const store = worksStoreFor(tracker.workspace);
-    const saved = await tracker.saved;
-    const pending = tracker.pending;
-    tracker.pending = new Map();
-    if (!saved) return; // A draft: nothing saved to differ from.
-    for (const [key, value] of pending) {
-      if (store.fingerprint(key, value) === (saved.get(key) ?? "")) tracker.differing.delete(key);
-      else tracker.differing.add(key);
+  // Reports from the canvas (name hint, preview, "has content") are batched.
+  // Each batch remembers the work it came from: a canvas still reports while it
+  // unmounts, and that must not land on the work opened next. Saving is
+  // automatic: once the draft has content and its first message has been
+  // sent, it is listed, named from that message (or "未命名作品 N"); later reports keep its preview and
+  // time up to date, and a better name replaces a default one.
+  const reportRef = useRef<{ target: { workspace: WorkspaceId; id: string } | null; patch: Partial<WorkMeta>; timer: number | null }>({
+    target: null,
+    patch: {},
+    timer: null,
+  });
+  const flushReport = useCallback(async () => {
+    const pending = reportRef.current;
+    if (pending.timer !== null) window.clearTimeout(pending.timer);
+    pending.timer = null;
+    const { patch, target } = pending;
+    pending.patch = {};
+    pending.target = null;
+    if (!target || !Object.keys(patch).length) return;
+    const store = worksStoreFor(target.workspace);
+    try {
+      const before = (await store.readIndex()).find((w) => w.id === target.id);
+      if (!before) return;
+      let index = await store.touch(target.id, patch);
+      const now = activeRef.current;
+      const isOpen = !!now && now.phase === "ready" && now.workspace === target.workspace && now.currentId === target.id;
+      const hint = (patch.nameHint ?? before.nameHint)?.trim();
+      // A new work joins the list (and gets its name in the header) once its first message is sent,
+      // not while it is blank or something is only being typed.
+      const sent = !!(patch.lastPrompt ?? before.lastPrompt);
+      if (!before.saved && (before.touched || patch.touched) && sent && isOpen) {
+        // A work being left is listed by its leave instead (commitFrom).
+        index = await store.saveAs(target.id, hint || defaultWorkName(index, langRef.current), true);
+      } else if (before.saved && patch.nameHint?.trim() && isDefaultWorkName(before.name)) {
+        index = await store.rename(target.id, patch.nameHint.trim());
+      }
+      setActive((prev) => (prev && prev.workspace === target.workspace ? { ...prev, index } : prev));
+      bump();
+    } catch (error) {
+      console.error("Failed to update work", error);
     }
-    if (userActiveSince(tracker.openedAt)) {
-      if (store.openLocalFingerprint() === saved.get(LOCAL_KEY)) tracker.differing.delete(LOCAL_KEY);
-      else tracker.differing.add(LOCAL_KEY);
-    }
-    if (trackerRef.current !== tracker) return;
-    const index = await store.setDirty(tracker.id, tracker.differing.size > 0);
-    if (trackerRef.current === tracker) setIndex(tracker.workspace, index);
   }, []);
 
-  /** Brings the open work's unsaved-changes flag up to date (before leaving or saving). */
-  const settleChanges = useCallback(async () => {
-    const tracker = trackerRef.current;
-    if (!tracker) return;
-    tracker.running = tracker.running.then(() => runCheck(tracker));
-    await tracker.running;
-  }, [runCheck]);
+  // ---- Leaving, opening ------------------------------------------------------
 
-  // A fresh tracker for each work opened on screen.
-  const trackedKey = active?.phase === "ready" ? `${active.workspace}:${active.currentId}` : null;
-  useEffect(() => {
-    const now = activeRef.current;
-    if (!now || now.phase !== "ready") {
-      trackerRef.current = null;
-      return;
-    }
-    const store = worksStoreFor(now.workspace);
-    const meta = now.index.find((w) => w.id === now.currentId);
-    const tracker: ChangeTracker = {
-      workspace: now.workspace,
-      id: now.currentId,
-      openedAt: Date.now(),
-      saved: meta?.saved ? store.savedFingerprints(now.currentId).catch(() => null) : Promise.resolve(null),
-      differing: new Set(),
-      pending: new Map(),
-      timer: null,
-      running: Promise.resolve(),
-    };
-    // Reopened with changes left from before a reload: find out which keys differ.
-    if (meta?.saved && meta.dirty) {
-      tracker.running = (async () => {
-        const [saved, live] = await Promise.all([tracker.saved, store.liveFingerprints(now.currentId, true)]);
-        if (!saved) return;
-        for (const key of new Set([...saved.keys(), ...live.keys()])) {
-          if ((saved.get(key) ?? "") !== (live.get(key) ?? "")) tracker.differing.add(key);
-        }
-        if (tracker.differing.size === 0) setIndex(tracker.workspace, await store.setDirty(tracker.id, false));
-      })().catch((error) => console.error("Failed to compare work", error));
-    }
-    trackerRef.current = tracker;
-    const unsubscribe = store.onWrite((id, key, value) => {
-      if (trackerRef.current !== tracker || id !== tracker.id) return;
-      if (!userActiveSince(tracker.openedAt)) return;
-      tracker.pending.set(key, value);
-      if (tracker.timer !== null) window.clearTimeout(tracker.timer);
-      tracker.timer = window.setTimeout(() => {
-        tracker.running = tracker.running.then(() => runCheck(tracker)).catch((error) => console.error("Failed to compare work", error));
-      }, 800);
-    });
-    return () => {
-      unsubscribe();
-      if (tracker.timer !== null) window.clearTimeout(tracker.timer);
-      if (trackerRef.current === tracker) trackerRef.current = null;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [trackedKey]);
-
-  /** After a save: the saved copy is the live one again. */
-  const rebaseTracker = (workspace: WorkspaceId, id: string) => {
-    const tracker = trackerRef.current;
-    if (!tracker || tracker.workspace !== workspace || tracker.id !== id) return;
-    tracker.saved = worksStoreFor(workspace).savedFingerprints(id).catch(() => null);
-    tracker.differing.clear();
-  };
-
-  // ---- Leaving, opening, saving ----------------------------------------------
-
-  /** What to do with the open work before leaving it, or null to stay. */
-  const decideLeave = async (workspace: WorkspaceId, work: WorkMeta | undefined, index: WorkMeta[]): Promise<SwitchOptions | null> => {
-    if (!work) return {};
-    if (work.saved) {
-      if (!work.dirty) return {};
-      const choice = await askLeave({ kind: "changes", name: work.name });
-      if (choice === "cancel") return null;
-      if (choice === "discard") return { revertFrom: true };
-      return { commitFrom: { thumb: thumbs.current.get(work.id) } };
-    }
+  /** What to do with the open work before leaving it: keep what has content, drop an empty draft. */
+  const leaveOptions = (work: WorkMeta | undefined, index: WorkMeta[]): SwitchOptions => {
+    if (!work || work.saved) return {};
     if (!work.touched) return { discardFrom: true };
-    const choice = await askLeave({ kind: "draft", canvas: canvasLabel(workspace, langRef.current) });
-    if (choice === "cancel") return null;
-    if (choice === "discard") return { discardFrom: true };
-    const name = await askName(tWorks(langRef.current, "save.title"), work.nameHint || defaultWorkName(index, langRef.current));
-    if (name === null) return null;
-    return { commitFrom: { name, thumb: thumbs.current.get(work.id) } };
+    return { commitFrom: { name: work.nameHint?.trim() || defaultWorkName(index, langRef.current), thumb: thumbs.current.get(work.id) } };
   };
 
   const leaveActive = (toId: string | null, options: SwitchOptions) => {
     pendingRef.current = { toId, options };
     busySources.current.clear();
+    busySince.current = null;
+    // The ref at once too: a report flushed meanwhile must see the work is being left.
+    if (activeRef.current) activeRef.current = { ...activeRef.current, phase: "leaving" };
     setActive((prev) => (prev ? { ...prev, phase: "leaving" } : prev));
   };
 
@@ -332,12 +223,10 @@ export function WorksProvider({
         return false;
       }
       await flushCanvas();
-      await settleChanges();
+      await flushReport();
       const fresh = activeRef.current ?? now;
-      const open = fresh.index.find((w) => w.id === fresh.currentId);
-      const options = await decideLeave(workspace, open, fresh.index);
-      if (!options) return false;
-      leaveActive(id, options);
+      if (fresh.phase !== "ready") return false;
+      leaveActive(id, leaveOptions(fresh.index.find((w) => w.id === fresh.currentId), fresh.index));
       return true;
     }
     if (now && now.workspace !== workspace && isBusy()) {
@@ -348,45 +237,31 @@ export function WorksProvider({
     const store = worksStoreFor(workspace);
     const state = await store.ensure(langRef.current);
     if (id === null || id !== state.currentId) {
-      const open = state.index.find((w) => w.id === state.currentId);
-      const options = await decideLeave(workspace, open, state.index);
-      if (!options) return false;
-      await store.switchWork(state.currentId, id, options);
+      await store.switchWork(state.currentId, id, leaveOptions(state.index.find((w) => w.id === state.currentId), state.index));
     }
     bump();
     onActivateWorkspace(workspace);
     return true;
   };
 
-  const saveCurrent = async () => {
+  /**
+   * A canvas picked in the sidebar opens on what was last worked on there:
+   * the work it had open, unless that is a blank draft (a "new" never used,
+   * a deck started over), then its most recent listed work.
+   */
+  const openCanvas = async (workspace: WorkspaceId): Promise<boolean> => {
     const now = activeRef.current;
-    if (!now || now.phase !== "ready") return;
-    await flushCanvas();
-    await settleChanges();
-    const fresh = activeRef.current ?? now;
-    const work = fresh.index.find((w) => w.id === fresh.currentId);
-    if (!work) return;
-    const store = worksStoreFor(fresh.workspace);
-    const thumb = thumbs.current.get(work.id);
-    if (work.saved && !work.dirty) {
-      // Nothing to save: the button renames.
-      const name = await askName(tWorks(langRef.current, "save.renameTitle"), work.name);
-      if (name === null) return;
-      setIndex(fresh.workspace, await store.rename(work.id, name));
-      bump();
-      return;
+    if (now && now.workspace === workspace) return true;
+    try {
+      const state = await worksStoreFor(workspace).ensure(langRef.current);
+      const open = state.index.find((w) => w.id === state.currentId);
+      const latest = listedWorks(state.index)[0];
+      if (!open?.saved && !open?.touched && latest) return await openWork(workspace, latest.id);
+    } catch (error) {
+      console.error("Failed to read works", error);
     }
-    let name: string | undefined;
-    if (!work.saved) {
-      const asked = await askName(tWorks(langRef.current, "save.title"), work.nameHint || defaultWorkName(fresh.index, langRef.current));
-      if (asked === null) return;
-      name = asked;
-    }
-    const index = await store.saveAs(work.id, name, true, thumb ? { thumb } : undefined);
-    rebaseTracker(fresh.workspace, work.id);
-    setIndex(fresh.workspace, index);
-    toast.success(tWorks(langRef.current, work.saved ? "save.updated" : "save.done"));
-    bump();
+    onActivateWorkspace(workspace);
+    return true;
   };
 
   const refreshActive = (workspace: WorkspaceId, index: WorkMeta[]) => {
@@ -418,6 +293,10 @@ export function WorksProvider({
     refreshActive(workspace, await worksStoreFor(workspace).rename(id, name));
   };
 
+  const pinWork = async (workspace: WorkspaceId, id: string, pinned: boolean) => {
+    refreshActive(workspace, await worksStoreFor(workspace).setPinned(id, pinned));
+  };
+
   const duplicateWork = async (workspace: WorkspaceId, id: string) => {
     const now = activeRef.current;
     const isOpen = !!now && now.workspace === workspace && now.currentId === id;
@@ -431,36 +310,6 @@ export function WorksProvider({
     return Object.fromEntries(entries) as Record<WorkspaceId, WorksState>;
   };
 
-  // Reports from the canvas (name hint, preview, "has content") are batched.
-  // Each batch remembers the work it came from: a canvas still reports while it
-  // unmounts, and that must not land on the work opened next. A saved work's
-  // list entry changes only on Save, so only a draft's reports are written.
-  const reportRef = useRef<{ target: { workspace: WorkspaceId; id: string } | null; patch: Partial<WorkMeta>; timer: number | null }>({
-    target: null,
-    patch: {},
-    timer: null,
-  });
-  const flushReport = useCallback(() => {
-    const pending = reportRef.current;
-    if (pending.timer !== null) window.clearTimeout(pending.timer);
-    pending.timer = null;
-    const { patch, target } = pending;
-    pending.patch = {};
-    pending.target = null;
-    if (!target || !Object.keys(patch).length) return;
-    const store = worksStoreFor(target.workspace);
-    void store
-      .readIndex()
-      .then((index) => {
-        if (index.find((w) => w.id === target.id)?.saved) return null;
-        return store.touch(target.id, patch);
-      })
-      .then((index) => {
-        if (index) setActive((prev) => (prev && prev.workspace === target.workspace ? { ...prev, index } : prev));
-      })
-      .catch((error) => console.error("Failed to update work", error));
-  }, []);
-
   const workValue = useMemo<WorkContextValue | null>(() => {
     if (!active || active.phase !== "ready") return null;
     const store = worksStoreFor(active.workspace);
@@ -469,10 +318,38 @@ export function WorksProvider({
       workId: active.currentId,
       workStore: store.storeFor(active.currentId),
       saved: !!meta?.saved,
-      dirty: !!meta?.dirty,
+      name: meta?.saved ? meta.name : "",
+      thumb: thumbs.current.get(active.currentId) ?? meta?.thumb,
+      openWork(id) {
+        void openWork(active.workspace, id);
+      },
+      showAllWorks() {
+        window.dispatchEvent(new CustomEvent(OPEN_WORKS_EVENT));
+      },
+      rename(name) {
+        if (meta?.saved && name.trim()) void renameWork(active.workspace, active.currentId, name.trim());
+      },
       setBusy(source, busy) {
+        const wasBusy = busySources.current.size > 0;
         if (busy) busySources.current.add(source);
         else busySources.current.delete(source);
+        // A generation just started on this canvas: Settings → Usage counts it.
+        if (!wasBusy && busySources.current.size > 0) {
+          recordUse(active.workspace);
+          busySince.current = { canvas: active.workspace, at: Date.now() };
+        }
+        // And finished: how long it took.
+        if (wasBusy && busySources.current.size === 0 && busySince.current) {
+          recordDuration(busySince.current.canvas, Date.now() - busySince.current.at);
+          busySince.current = null;
+        }
+        // The last generation on this canvas just ended: tell the user, if they asked to be told.
+        if (wasBusy && busySources.current.size === 0) {
+          const name = meta?.saved ? meta.name : "";
+          const zh = langRef.current === "zh";
+          const canvas = tShell(langRef.current, WORKSPACES.find((w) => w.id === active.workspace)!.labelKey);
+          announceTaskDone(zh ? `${canvas} · 画好了` : `${canvas} · Done`, name || (zh ? "回来看看吧。" : "Come and have a look."));
+        }
       },
       report(info) {
         const target = { workspace: active.workspace, id: active.currentId };
@@ -484,19 +361,19 @@ export function WorksProvider({
         pending.target = target;
         if (info.nameHint !== undefined) pending.patch.nameHint = info.nameHint;
         if (info.thumb !== undefined) pending.patch.thumb = info.thumb;
+        if (info.lastPrompt !== undefined && info.lastPrompt.slice(0, 200) !== meta?.lastPrompt) pending.patch.lastPrompt = info.lastPrompt.slice(0, 200);
         if (info.touched) pending.patch.touched = true;
-        if (pending.timer === null) pending.timer = window.setTimeout(flushReport, 1500);
+        if (pending.timer === null) pending.timer = window.setTimeout(() => void flushReport(), 1500);
       },
       startOver() {
         const now = activeRef.current;
         if (!now || now.phase !== "ready") return;
-        const open = now.index.find((w) => w.id === now.currentId);
-        flushReport();
-        // A saved work goes back to its saved copy; a draft is dropped.
-        leaveActive(null, open?.saved ? { revertFrom: true } : { discardFrom: true });
-      },
-      save() {
-        void saveCurrent();
+        // What is there stays in the list (an empty draft is dropped); the canvas opens a blank one.
+        void flushReport().then(() => {
+          const fresh = activeRef.current;
+          if (!fresh || fresh.phase !== "ready" || fresh.currentId !== now.currentId) return;
+          leaveActive(null, leaveOptions(fresh.index.find((w) => w.id === fresh.currentId), fresh.index));
+        });
       },
       registerFlush(flush) {
         flushers.current.add(flush);
@@ -509,15 +386,16 @@ export function WorksProvider({
   }, [active?.workspace, active?.currentId, active?.phase, active?.index, flushReport]);
 
   // A report still waiting when the work changes belongs to the work being left.
-  useEffect(() => () => flushReport(), [active?.currentId, active?.workspace, flushReport]);
+  useEffect(() => () => void flushReport(), [active?.currentId, active?.workspace, flushReport]);
 
   const control: WorksControl = {
     active,
     current,
-    saveCurrent,
     openWork,
+    openCanvas,
     removeWork: removeWorkFn,
     renameWork,
+    pinWork,
     duplicateWork,
     loadAll,
     revision,
@@ -528,20 +406,6 @@ export function WorksProvider({
       {/* Right after a canvas switch `active` still holds the previous canvas's
           works until the effect above runs; the new canvas must not mount on them. */}
       <WorkHostContext.Provider value={active?.workspace === activeWorkspace ? workValue : null}>{children}</WorkHostContext.Provider>
-      <NameDialog
-        request={nameRequest}
-        onClose={(name) => {
-          nameRequest?.resolve(name);
-          setNameRequest(null);
-        }}
-      />
-      <LeaveDialog
-        request={leaveRequest}
-        onClose={(choice) => {
-          leaveRequest?.resolve(choice);
-          setLeaveRequest(null);
-        }}
-      />
     </WorksControlContext.Provider>
   );
 }

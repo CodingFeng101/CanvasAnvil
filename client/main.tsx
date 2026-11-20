@@ -5,11 +5,15 @@ import { createRoot } from 'react-dom/client'
 // page get fetched.
 import '@fontsource-variable/source-serif-4'
 import '@fontsource-variable/inter'
+// Serif CJK for headings only (font-display); body text never asks for it.
+import '@fontsource/noto-serif-sc/500.css'
 import App from '@/app/App'
+import { HoverHints } from '@/shared/ui/hover-hints'
 import './index.css'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <App />
+    <HoverHints />
   </StrictMode>,
 )

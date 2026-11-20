@@ -1,22 +1,26 @@
 import { usePendingPrompt } from "@/shared/pending-prompt";
+import { useReportBusy, useReportLastPrompt } from '@/shared/works/work-context';
+import { useSendAfterRender } from '@/shared/chat/use-send-after-render';
+import { ChatTitle } from '@/shared/chat/chat-title';
+import { constraintsFor } from '@/shared/constraints';
+import { CanvasOpenButton } from "@/shared/canvas-pane";
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { PanelRightClose, PanelRightOpen, Pencil, Presentation, RefreshCw } from 'lucide-react';
+import { Presentation } from 'lucide-react';
 import { cn } from '@/shared/lib/utils';
 import { streamChatMessage, generatePptProxyChatMessage, ChatMessage, getAIConfig } from '@/ai/client';
 
-import { ButtonWithTooltip } from '@/shared/chat';
-import { ChatEmptyState, ChatInput } from '@/shared/chat';
+import { StatusSelect } from '@/shared/chat/composer';
+import { ChatEmptyState,
+  ChatLandingExtras, ChatInput } from '@/shared/chat';
 import { chatStorageKey, loadChatHistory, saveChatHistory } from '@/shared/chat/chat-storage';
 import { createAssistantUpdater } from '@/shared/chat/assistant-stream';
 import { getChatErrorText } from '@/shared/chat/chat-errors';
 import { PPT_WORKSPACE_STORAGE_KEY } from '@/workspaces/ppt/storage';
 import { ChatMessageDisplay, UIMessage } from '@/workspaces/ppt/chat/ChatMessageDisplay';
-import { STORAGE_GLOBAL_CONSTRAINTS_KEY } from '@/shared/chat';
 import { HistoryDialog, HistoryItem } from '@/shared/chat';
 import { ResetWarningModal } from '@/shared/chat';
 import { t, useUiLanguage } from "@/shared/i18n";
 import {
-  alternativeKind,
   detectCreationKind,
   isPdfName,
   type CreationKind,
@@ -48,9 +52,6 @@ interface ChatPanelProps {
   /** Only ever "ppt": the PPT shell is this panel's single caller. */
   workspaceId?: "ppt";
   hideHistoryButton?: boolean;
-  collapsed?: boolean;
-  onToggleCollapse?: () => void;
-  collapseLocked?: boolean;
   title?: string;
   inputPlaceholder?: string;
   // History props
@@ -74,18 +75,8 @@ interface ChatPanelProps {
   /** The style picked on the canvas, shown next to the input. */
   selectedTemplate?: { name: string; previewSrc: string } | null;
   onDraftChange?: (text: string) => void;
+  /** The outline streaming in on the canvas, for the working line's token count. */
 }
-
-const KIND_LABEL: Record<CreationKind, [zh: string, en: string]> = {
-  idea: ["一句主题", "a topic"],
-  outline: ["一份提纲", "an outline"],
-  beautify: ["旧文件换风格", "a file to restyle"],
-};
-const KIND_SWITCH: Record<CreationKind, [zh: string, en: string]> = {
-  idea: ["当作主题", "Treat as topic"],
-  outline: ["当作提纲", "Treat as outline"],
-  beautify: ["换风格", "Restyle it"],
-};
 
 // Convert internal ChatMessage to UIMessage
 
@@ -102,9 +93,6 @@ export function ChatPanel({
     chatModel,
     workspaceId = 'ppt',
     hideHistoryButton = false,
-    collapsed = false,
-    onToggleCollapse,
-    collapseLocked = false,
     title,
     inputPlaceholder,
     history = [],
@@ -126,6 +114,9 @@ export function ChatPanel({
   const [messages, setMessages] = useState<ChatMessage[]>(() =>
     loadChatHistory(storageKey, initialMessages),
   );
+  useReportLastPrompt(
+    [...messages].reverse().find((m) => m.role === "user" && typeof m.content === "string")?.content as string | undefined,
+  );
 
   const [input, setInput] = useState('');
   const [pptInputSegments, setPptInputSegments] = useState<Array<{ type: "text"; text: string } | { type: "ppt"; slideId: string; label: string; tag: string; tokenKind: "outline" | "slide_image" }>>([
@@ -137,6 +128,8 @@ export function ChatPanel({
     setPptInputSegments([{ type: "text", text }]);
   });
   const [isLoading, setIsLoading] = useState(false);
+  // Writing the outline counts as work in progress (no switching away, a chime when done, Settings → Usage).
+  useReportBusy(isLoading);
   const [showHistory, setShowHistory] = useState(false);
   const [showResetWarning, setShowResetWarning] = useState(false);
   const autoRetryCountRef = useRef(0);
@@ -169,21 +162,17 @@ export function ChatPanel({
   const starting = stage === "start" && Boolean(onStartCreation);
   const draftText = pptInputSegments.map((s) => (s.type === "text" ? s.text : "")).join("");
   const draftFileNames = files.map((f) => f.name);
-  const draftKey = `${draftText}\n${draftFileNames.join("|")}`;
-  /** The user's correction of the reading, good for the draft it was made on. */
-  const [kindOverride, setKindOverride] = useState<{ key: string; kind: CreationKind } | null>(null);
-  const detectedKind = detectCreationKind(draftText, draftFileNames);
-  const creationKind = kindOverride?.key === draftKey ? kindOverride.kind : detectedKind;
-  const otherKind = alternativeKind(creationKind, draftText);
+  const creationKind = detectCreationKind(draftText, draftFileNames);
   useEffect(() => {
     onDraftChange?.(starting ? draftText : "");
   }, [draftText, starting, onDraftChange]);
 
-const getPptLabel = (slideId: string, title: string) => {
+const getPptLabel = (slideId: string, title: string, zh: boolean) => {
   const m = String(slideId || "").match(/(\d+)/);
   const n = m ? Number(m[1]) : NaN;
   if (!Number.isNaN(n)) {
-    return title ? `Slide ${n}: ${title}` : `Slide ${n}`;
+    const page = zh ? `第 ${n} 页` : `Slide ${n}`;
+    return title ? `${page} · ${title}` : page;
   }
   return title || slideId;
 };
@@ -206,10 +195,10 @@ const getPptTag = (slideId: string, title: string, kind: "outline" | "slide_imag
   }, []);
 
   const enqueuePptToken = useCallback((slideId: string, title: string, kind: "outline" | "slide_image") => {
-    const label = getPptLabel(slideId, title);
+    const label = getPptLabel(slideId, title, uiLang === "zh");
     pptInsertQueueRef.current.push({ slideId, title, label, kind });
     pumpPptInsertQueue();
-  }, [pumpPptInsertQueue]);
+  }, [pumpPptInsertQueue, uiLang]);
 
   useEffect(() => {
     const prev = prevPptDraftCountRef.current;
@@ -321,7 +310,6 @@ const getPptTag = (slideId: string, title: string, kind: "outline" | "slide_imag
     setPptInputSegments([{ type: "text", text: "" }]);
     setPptClearTick((x) => x + 1);
     setFiles([]);
-    setKindOverride(null);
     setIsLoading(true);
 
     let result: CreationResult;
@@ -343,8 +331,8 @@ const getPptTag = (slideId: string, title: string, kind: "outline" | "slide_imag
             `Done: ${result.count ?? 0} pages${style}${result.failed ? `, ${result.failed} failed (use "Retry failed" at the top left)` : ""}. Tell me what to change.`,
           )
         : trText(
-            `提纲放在左边了，一共 ${result.count ?? 0} 页${style}。想改哪页直接说，也可以在左边直接改；确认后点“生成完整 PPT”。`,
-            `The outline is on the left: ${result.count ?? 0} slides${style}. Tell me what to change or edit it there, then press "Generate full PPT".`,
+            `大纲放在右边了，一共 ${result.count ?? 0} 页。想改哪页直接说，也可以在右边直接改；改好后在下面挑一套风格，再点“生成完整 PPT”。`,
+            `The outline is on the right: ${result.count ?? 0} slides. Tell me what to change or edit it there; then pick a style at the bottom and press "Generate full deck".`,
           );
     setMessages((prev) => {
       const last = prev[prev.length - 1];
@@ -353,6 +341,7 @@ const getPptTag = (slideId: string, title: string, kind: "outline" | "slide_imag
     setIsLoading(false);
   };
 
+  const sendExample = useSendAfterRender(() => void handleSend());
   const handleSend = async () => {
     if (starting) return startCreation();
     const rawInput = pptInputSegments
@@ -549,8 +538,7 @@ const getPptTag = (slideId: string, title: string, kind: "outline" | "slide_imag
       // Get Global Config
       const config = getAIConfig();
       // Load global constraints from storage (scoped by workspaceId)
-      const constraintsKey = workspaceId ? `${STORAGE_GLOBAL_CONSTRAINTS_KEY}-${workspaceId}` : STORAGE_GLOBAL_CONSTRAINTS_KEY;
-      const globalConstraints = typeof window !== 'undefined' ? localStorage.getItem(constraintsKey) || '' : '';
+      const globalConstraints = constraintsFor('ppt');
       const globalSystemPrompt = config.systemPrompt || '';
       
       const systemContent = [systemPrompt, globalSystemPrompt, globalConstraints].filter(Boolean).join('\n\n');
@@ -615,8 +603,7 @@ const getPptTag = (slideId: string, title: string, kind: "outline" | "slide_imag
 
   const runTextChat = async (baseMessages: ChatMessage[]) => {
     const config = getAIConfig();
-    const constraintsKey = workspaceId ? `${STORAGE_GLOBAL_CONSTRAINTS_KEY}-${workspaceId}` : STORAGE_GLOBAL_CONSTRAINTS_KEY;
-    const globalConstraints = typeof window !== 'undefined' ? localStorage.getItem(constraintsKey) || '' : '';
+    const globalConstraints = constraintsFor('ppt');
     const globalSystemPrompt = config.systemPrompt || '';
     const systemContent = [systemPrompt, globalSystemPrompt, globalConstraints].filter(Boolean).join('\n\n');
     const lastUserText = String(baseMessages[baseMessages.length - 1]?.content || "");
@@ -733,43 +720,17 @@ const getPptTag = (slideId: string, title: string, kind: "outline" | "slide_imag
       parts: [{ type: 'text', text: msg.content }] 
   }));
 
-  if (collapsed) {
-      return (
-          <div className={cn("h-full flex flex-col items-center pt-4 bg-card border border-border/30 rounded-xl", className)}>
-              <ButtonWithTooltip
-                tooltipContent={t(uiLang, "chat.expand")}
-                variant="ghost"
-                size="icon"
-                onClick={onToggleCollapse}
-                className="hover:bg-accent transition-colors"
-              >
-                  <PanelRightOpen className="h-5 w-5 text-muted-foreground" />
-              </ButtonWithTooltip>
-          </div>
-      );
-  }
 
   return (
-    <div className={cn("h-full flex flex-col bg-card animate-slide-in-right relative", className)}>
+    <div className={cn("h-full flex flex-col bg-transparent animate-fade-in relative", className)}>
       {/* Header */}
-      <div className="px-5 py-4 border-b border-border/50">
+      <div className="flex h-12 shrink-0 flex-col justify-center px-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <span className="text-base font-semibold tracking-tight whitespace-nowrap">{resolvedTitle}</span>
+            <ChatTitle fallback={resolvedTitle} />
           </div>
           <div className="flex items-center gap-1">
-            {onToggleCollapse && (
-                <ButtonWithTooltip
-                  tooltipContent={collapseLocked ? t(uiLang, "chat.collapseLocked") : t(uiLang, "chat.collapse")}
-                  variant="ghost"
-                  size="icon"
-                  onClick={onToggleCollapse}
-                  disabled={collapseLocked}
-                  className="hover:bg-accent transition-colors rounded-md"
-                >
-                    <PanelRightClose className="w-4 h-4 text-muted-foreground" />
-                </ButtonWithTooltip>
-            )}
+            <CanvasOpenButton />
           </div>
         </div>
       </div>
@@ -779,32 +740,15 @@ const getPptTag = (slideId: string, title: string, kind: "outline" | "slide_imag
         {!isLoading && !uiMessages.some((m) => m.role === "user" || m.role === "assistant") ? (
           <ChatEmptyState
             icon={Presentation}
-            title={starting ? trText("从一个主题开始", "Start from a topic") : t(uiLang, "empty.ppt.title")}
+            title={starting ? trText("从一个题目开始", "Begin with a topic") : t(uiLang, "empty.ppt.title")}
             description={
               starting
                 ? trText(
-                    "左边先挑一套风格，然后告诉我主题、贴一份提纲，或者把旧 PDF 拖进来换风格。",
-                    "Pick a style on the left, then give me a topic, paste an outline, or drop in a PDF to restyle.",
+                    "告诉我题目、贴一份提纲，或把旧 PDF 拖进来，换一身衣裳。先出大纲，改好后再挑风格、生成整套。",
+                    "Give me a topic, paste an outline, or drop in an old PDF to dress it anew. An outline comes first; then pick a style and make the deck.",
                   )
                 : t(uiLang, "empty.ppt.desc")
             }
-            examplesLabel={t(uiLang, "empty.examplesLabel")}
-            examples={
-              starting
-                ? [
-                    trText("新员工入职培训，一小时讲完，轻松一点", "Onboarding for new hires, one hour, light in tone"),
-                    trText("第三季度复盘，给管理层看，10 页以内", "Q3 review for the management team, 10 slides at most"),
-                    trText(
-                      "一、项目背景\n- 现状与痛点\n二、方案\n- 整体架构\n- 排期与分工\n三、预期收益",
-                      "1. Background\n- Where we are\n2. Proposal\n- Architecture\n- Schedule and owners\n3. Expected gains",
-                    ),
-                  ]
-                : [t(uiLang, "empty.ppt.ex1"), t(uiLang, "empty.ppt.ex2"), t(uiLang, "empty.ppt.ex3")]
-            }
-            onPickExample={(text) => {
-              setPptInputSegments([{ type: "text", text }]);
-              setPptInputFocusTick((tick) => tick + 1);
-            }}
           />
         ) : (
           <ChatMessageDisplay
@@ -818,8 +762,9 @@ const getPptTag = (slideId: string, title: string, kind: "outline" | "slide_imag
       </div>
 
       {/* Input */}
-      <div className="p-4 border-t border-border/50 bg-card/50">
-        <ChatInput 
+      <div className={`chat-measure px-4 pb-4 pt-2${(!isLoading && !uiMessages.some((m) => m.role === "user" || m.role === "assistant")) ? " [--chat-measure:720px]" : ""}`}>
+        <ChatInput
+          constraintScope="ppt" 
             workspaceId="ppt"
             input={input}
             setInput={setInput}
@@ -831,43 +776,20 @@ const getPptTag = (slideId: string, title: string, kind: "outline" | "slide_imag
             historyDisabled={history.length === 0}
             onFilesChange={setFiles}
             files={files}
-            toolbarExtras={starting ? undefined : (
-              <>
-                <ButtonWithTooltip
-                  tooltipContent={trText(
-                    "改图：在当前这版画面上修改，保留原有构图",
-                    "Edit: change the current image, keeping its composition",
-                  )}
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setImageMode("edit")}
-                  className={cn(
-                    "h-8 w-8 p-0",
-                    imageMode === "edit"
-                      ? "bg-primary/10 text-primary-strong hover:bg-primary/15"
-                      : "text-muted-foreground hover:text-foreground",
-                  )}
-                >
-                  <Pencil className="h-4 w-4" />
-                </ButtonWithTooltip>
-                <ButtonWithTooltip
-                  tooltipContent={trText(
-                    "重画：整页重新生成，构图可以大改",
-                    "Redraw: generate the slide again from scratch",
-                  )}
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setImageMode("regenerate")}
-                  className={cn(
-                    "h-8 w-8 p-0",
-                    imageMode === "regenerate"
-                      ? "bg-primary/10 text-primary-strong hover:bg-primary/15"
-                      : "text-muted-foreground hover:text-foreground",
-                  )}
-                >
-                  <RefreshCw className="h-4 w-4" />
-                </ButtonWithTooltip>
-              </>
+            // Before the slides exist only the text model works (topic, outline);
+            // pictures, and editing or redrawing them, come once the deck is made.
+            statusChannels={stage === "slides" ? ["image", "text"] : ["text"]}
+            statusExtras={stage !== "slides" ? undefined : (
+              <StatusSelect<"edit" | "regenerate">
+                label={trText("改图：保留构图修改当前画面；重画：整页重新生成", "Edit keeps the composition; Redraw starts the slide over")}
+                value={imageMode}
+                changed={imageMode === "regenerate"}
+                onChange={setImageMode}
+                options={[
+                  { value: "edit", label: trText("改图", "Edit") },
+                  { value: "regenerate", label: trText("重画", "Redraw") },
+                ]}
+              />
             )}
             uploadMode={starting ? "filesOnly" : "imagesOnly"}
             placeholder={
@@ -886,36 +808,9 @@ const getPptTag = (slideId: string, title: string, kind: "outline" | "slide_imag
               pumpPptInsertQueue();
             }}
             bottomChips={
+              // Topic or outline is worked out behind the scenes; nothing to show while starting.
               starting
-                ? (
-                  <div className="flex flex-wrap items-center gap-1.5 text-xs">
-                    <span className="inline-flex h-6 max-w-full items-center gap-1.5 rounded-md bg-muted pl-1 pr-2 text-muted-foreground">
-                      {selectedTemplate ? (
-                        <img src={selectedTemplate.previewSrc} alt="" className="h-[17px] w-[30px] rounded-[3px] object-cover" />
-                      ) : null}
-                      <span className={cn("truncate", !selectedTemplate && "pl-1")}>
-                        {selectedTemplate ? selectedTemplate.name : trText("还没选风格", "No style picked")}
-                      </span>
-                    </span>
-                    {draftText.trim() || files.length > 0 ? (
-                      <span className="inline-flex h-6 items-center gap-1 rounded-md bg-primary/10 px-2 text-primary-strong">
-                        {trText(`识别为${KIND_LABEL[creationKind][0]}`, `Read as ${KIND_LABEL[creationKind][1]}`)}
-                        {otherKind ? (
-                          <>
-                            <span aria-hidden>·</span>
-                            <button
-                              type="button"
-                              onClick={() => setKindOverride({ key: draftKey, kind: otherKind })}
-                              className="text-muted-foreground underline underline-offset-2 hover:text-foreground"
-                            >
-                              {trText(KIND_SWITCH[otherKind][0], KIND_SWITCH[otherKind][1])}
-                            </button>
-                          </>
-                        ) : null}
-                      </span>
-                    ) : null}
-                  </div>
-                )
+                ? null
                 : attachments.length > 0
                 ? (
                   <div className="space-y-2">
@@ -951,6 +846,14 @@ const getPptTag = (slideId: string, title: string, kind: "outline" | "slide_imag
             }
         />
       </div>
+      {(!isLoading && !uiMessages.some((m) => m.role === "user" || m.role === "assistant")) && <ChatLandingExtras icon={Presentation} images={["/examples/portal/ppt-deck-sm.webp", "/examples/portal/ppt-4-sm.webp", "/examples/portal/ppt-2-sm.webp"]} examples={
+              // Each request with the deck it made (public/examples/portal).
+              [t(uiLang, "empty.ppt.ex1"), t(uiLang, "empty.ppt.ex2"), t(uiLang, "empty.ppt.ex3")]
+            } onPickExample={(text) => {
+              // Sent as it is, not left in the box.
+              setPptInputSegments([{ type: "text", text }]);
+              sendExample();
+            }} />}
 
       {/* Dialogs */}
       <HistoryDialog 

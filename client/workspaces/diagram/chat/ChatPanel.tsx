@@ -1,16 +1,18 @@
 "use client"
 
 import { usePendingPrompt } from "@/shared/pending-prompt"
+import { useSendAfterRender } from "@/shared/chat/use-send-after-render"
+import { ChatTitle } from "@/shared/chat/chat-title"
+import { constraintsFor } from "@/shared/constraints"
+import { CanvasOpenButton, useCanvasPane } from "@/shared/canvas-pane";
 import { useChat } from "@ai-sdk/react"
 import {
     Layers,
-    PanelRightClose,
-    PanelRightOpen,
 } from "lucide-react"
 import type React from "react"
 import { useCallback, useEffect, useRef, useState } from "react"
 import { Toaster, toast } from "sonner"
-import { ButtonWithTooltip, ChatEmptyState } from "@/shared/chat"
+import { ChatEmptyState, ChatLandingExtras } from "@/shared/chat"
 import { t as tShell, useUiLanguage } from "@/shared/i18n"
 import { ChatInput } from "@/workspaces/diagram/chat/ChatInput"
 import {
@@ -22,7 +24,7 @@ import {
     toStorableMessages,
     type DiagramSession,
 } from "@/workspaces/diagram/storage";
-import { useReportBusy, useWork, useWorkStore } from "@/shared/works/work-context";
+import { useReportBusy, useReportLastPrompt, useWork, useWorkStore } from "@/shared/works/work-context";
 import { nameFromText } from "@/shared/works/works-index";
 import { makeThumbnail } from "@/shared/works/thumbnail";
 import { useDiagram } from "@/workspaces/diagram/state/diagram-context"
@@ -50,6 +52,7 @@ import {
 } from "@/workspaces/diagram/lib/layout-corrections"
 import type { TidyResult } from "@/workspaces/diagram/lib/tidy-layout"
 import { ChatMessageDisplay } from "./ChatMessageDisplay"
+import { reportModelCall, reportUsage } from "@/ai/usage"
 
 // Small values stay in localStorage; the messages, snapshots and diagram XML
 // live in the IndexedDB store (see ../storage.ts).
@@ -71,8 +74,6 @@ interface ChatMessage {
 }
 
 interface ChatPanelProps {
-    isVisible: boolean
-    onToggleVisibility: () => void
     isMobile?: boolean
 }
 
@@ -187,8 +188,6 @@ function hasToolErrors(messages: ChatMessage[]): boolean {
 }
 
 export default function ChatPanel({
-    isVisible,
-    onToggleVisibility,
     isMobile = false,
 }: ChatPanelProps) {
     const {
@@ -365,6 +364,9 @@ export default function ChatPanel({
     // Under My works the store is the open work's, and the shell has already
     // done the localStorage copy into the first work.
     const work = useWork()
+    const canvasPane = useCanvasPane()
+    const canvasPaneRef = useRef(canvasPane)
+    canvasPaneRef.current = canvasPane
     const sessionStore = useWorkStore(diagramStore)
     const sessionLoadRef = useRef<Promise<DiagramSession> | null>(null)
     const loadSavedSession = useCallback(() => {
@@ -413,6 +415,11 @@ export default function ChatPanel({
         // message list, the XML code block and the persistence effects below
         // all rerun per token, and the page stutters while a reply streams.
         experimental_throttle: 100,
+        // The provider's token counts (sent with the reply) for Settings → Usage.
+        onFinish: ({ message }: { message?: { metadata?: { usage?: unknown; model?: unknown } } }) => {
+            reportUsage(message?.metadata?.usage)
+            reportModelCall(message?.metadata?.model)
+        },
         onError: (error: unknown) => {
             setIsParsingFiles(false)
             console.error('[ChatPanel] useChat error:', error)
@@ -541,6 +548,7 @@ ${xml}
                             "[display_diagram] Success! Adding tool output with state: output-available",
                         )
                     }
+                    canvasPaneRef.current?.reveal()
                     addToolOutput({
                         tool: "display_diagram",
                         toolCallId: toolCall.toolCallId,
@@ -644,6 +652,7 @@ ${isMxCellXmlComplete(combinedXml) ? "Please fix the appended XML and continue o
                     assembledDiagramXmlRef.current = ""
                     noteCorrection(toolCall.toolCallId, fullXml, shown, true, diagramLayoutRef.current)
                     arrangeLater(toolCall.toolCallId, fullXml, diagramLayoutRef.current)
+                    canvasPaneRef.current?.reveal()
                     addToolOutput({
                         tool: "append_diagram",
                         toolCallId: toolCall.toolCallId,
@@ -710,6 +719,7 @@ Please fix the XML issues. Ensure cell_id values exist in the current XML and th
                         chartXMLRef.current = editedXml
                         assembledDiagramXmlRef.current = ""
                         noteCorrection(toolCall.toolCallId, editedOriginal, shown, false)
+                        canvasPaneRef.current?.reveal()
                         addToolOutput({
                             tool: "edit_diagram",
                             toolCallId: toolCall.toolCallId,
@@ -838,6 +848,8 @@ Please fix the XML issues. Ensure cell_id values exist in the current XML and th
     const firstUser = (messages as Array<{ role: string; parts?: Array<{ type: string; text?: string }> }>).find(
         (m) => m.role === "user",
     )
+    const lastUser = [...(messages as Array<{ role: string; parts?: Array<{ type: string; text?: string }> }>)].reverse().find((m) => m.role === "user")
+    useReportLastPrompt(lastUser?.parts?.find((part) => part.type === "text")?.text)
     const firstRequest = firstUser?.parts?.find((part) => part.type === "text")
     useEffect(() => {
         if (!work || !firstRequest?.text) return
@@ -849,7 +861,8 @@ Please fix the XML issues. Ensure cell_id values exist in the current XML and th
         if (!work || !latestSvg || latestSvg.length > 2_000_000) return
         let cancelled = false
         void makeThumbnail(latestSvg).then((thumb) => {
-            if (thumb && !cancelled) work.report({ thumb, touched: true })
+            // A picture alone (the blank page has one too) does not make the work worth keeping.
+            if (thumb && !cancelled) work.report({ thumb })
         })
         return () => {
             cancelled = true
@@ -1037,6 +1050,7 @@ Please fix the XML issues. Ensure cell_id values exist in the current XML and th
         }
     }, [sessionId, restored, canSaveDiagram, persist, saveMessagesNow, saveXmlSnapshots])
 
+    const sendExample = useSendAfterRender(() => void onFormSubmit({ preventDefault() {} } as React.FormEvent<HTMLFormElement>))
     const onFormSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
         e.preventDefault()
         const isProcessing = status === "streaming" || status === "submitted"
@@ -1201,7 +1215,7 @@ Please fix the XML issues. Ensure cell_id values exist in the current XML and th
         const { accessCode, ai } = getAIConfig()
         const modelToUse = String(ai.textModel || defaultModel || "").trim()
         const imageModelToUse = String(ai.imageModel || "").trim()
-        const globalConstraints = localStorage.getItem(STORAGE_KEYS.globalConstraints) || ""
+        const globalConstraints = constraintsFor("diagram")
 
         // Safe parts access
         const safeParts = Array.isArray(parts) ? parts : []
@@ -1497,25 +1511,10 @@ Please fix the XML issues. Ensure cell_id values exist in the current XML and th
     }
 
     // Collapsed view (desktop only)
-    if (!isVisible && !isMobile) {
-        return (
-            <div className="h-full flex flex-col items-center pt-4 bg-card border border-border/30 rounded-xl">
-                <ButtonWithTooltip
-                    tooltipContent={t("chat.panel.show")}
-                    variant="ghost"
-                    size="icon"
-                    onClick={onToggleVisibility}
-                    className="hover:bg-accent transition-colors"
-                >
-                    <PanelRightOpen className="h-5 w-5 text-muted-foreground" />
-                </ButtonWithTooltip>
-            </div>
-        )
-    }
 
     // Full view
     return (
-        <div className="h-full flex flex-col bg-card animate-slide-in-right relative">
+        <div className="h-full flex flex-col bg-transparent animate-fade-in relative">
             <Toaster
                 position="top-center"
                 richColors
@@ -1528,26 +1527,14 @@ Please fix the XML issues. Ensure cell_id values exist in the current XML and th
             />
             {/* Header */}
             <header
-                className={`${isMobile ? "px-3 py-2" : "px-5 py-4"} border-b border-border/50`}
+                className={`${isMobile ? "px-3 py-2" : "flex h-12 shrink-0 flex-col justify-center px-4"}`}
             >
                 <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
-                        <span className="text-base font-semibold tracking-tight whitespace-nowrap">
-                            {t("chat.panel.title")}
-                        </span>
+                        <ChatTitle fallback={t("chat.panel.title")} />
                     </div>
                     <div className="flex items-center gap-1">
-                        {!isMobile && (
-                            <ButtonWithTooltip
-                                tooltipContent={t("chat.panel.hide")}
-                                variant="ghost"
-                                size="icon"
-                                onClick={onToggleVisibility}
-                                className="hover:bg-accent"
-                            >
-                                <PanelRightClose className="w-4 h-4 text-muted-foreground" />
-                            </ButtonWithTooltip>
-                        )}
+                        {!isMobile && <CanvasOpenButton />}
                     </div>
                 </div>
             </header>
@@ -1559,16 +1546,6 @@ Please fix the XML issues. Ensure cell_id values exist in the current XML and th
                         icon={Layers}
                         title={tShell(uiLang, "empty.diagram.title")}
                         description={tShell(uiLang, "empty.diagram.desc")}
-                        examplesLabel={tShell(uiLang, "empty.examplesLabel")}
-                        examples={[
-                            tShell(uiLang, "empty.diagram.ex1"),
-                            tShell(uiLang, "empty.diagram.ex2"),
-                            tShell(uiLang, "empty.diagram.ex3"),
-                        ]}
-                        onPickExample={(text) => {
-                            setInput(text)
-                            setInputFocusTick((tick) => tick + 1)
-                        }}
                     />
                 ) : (
                     <ChatMessageDisplay
@@ -1577,6 +1554,7 @@ Please fix the XML issues. Ensure cell_id values exist in the current XML and th
                         onRegenerate={handleRegenerate}
                         status={status}
                         isParsingFiles={isParsingFiles}
+                        sketching={deepThinkingEnabled && status === "submitted"}
                         onEditMessage={handleEditMessage}
                     />
                 )}
@@ -1584,7 +1562,7 @@ Please fix the XML issues. Ensure cell_id values exist in the current XML and th
 
             {/* Input */}
             <footer
-                className={`${isMobile ? "p-2" : "p-4"} border-t border-border/50 bg-card/50`}
+                className={`chat-measure ${isMobile ? "p-2" : "px-4 pb-4 pt-2"}${(messages.length === 0 && status !== "submitted" && status !== "streaming") ? " [--chat-measure:720px]" : ""}`}
             >
                 <ChatInput
                     input={input}
@@ -1629,6 +1607,15 @@ Please fix the XML issues. Ensure cell_id values exist in the current XML and th
                     }
                 />
             </footer>
+      {(messages.length === 0 && status !== "submitted" && status !== "streaming") && <ChatLandingExtras icon={Layers} images={["/examples/portal/diagram-1-sm.webp", "/examples/portal/diagram-2-sm.webp", "/examples/portal/diagram-3-sm.webp"]} examples={[
+                            tShell(uiLang, "empty.diagram.ex1"),
+                            tShell(uiLang, "empty.diagram.ex2"),
+                            tShell(uiLang, "empty.diagram.ex3"),
+                        ]} onPickExample={(text) => {
+                            // Sent as it is, not left in the box.
+                            setInput(text)
+                            sendExample()
+                        }} />}
         </div>
     )
 }

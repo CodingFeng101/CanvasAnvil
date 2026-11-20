@@ -1,5 +1,5 @@
 import { generateImage } from "../ai/image"
-import { generateText, streamText } from "../ai/text"
+import { generateTextWithUsage, streamText } from "../ai/text"
 import { IMAGE_QUALITIES, IMAGE_SIZES, getImageChannel, getTextChannel, normalizeAIConfig } from "../../contracts/ai"
 import type { AIConfig, ImageQuality, ImageSize, MultimodalMessage } from "../../contracts/ai"
 
@@ -49,8 +49,8 @@ export async function POST(req: Request) {
                 return badRequest("Missing text model, API key, or messages.")
             }
 
-            const content = await generateText({ channel, messages })
-            return Response.json({ content }, { headers: jsonHeaders })
+            const { text: content, usage } = await generateTextWithUsage({ channel, messages })
+            return Response.json({ content, ...(usage && { usage }) }, { headers: jsonHeaders })
         }
 
         if (body.kind === "image") {

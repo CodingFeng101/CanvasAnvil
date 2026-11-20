@@ -1,7 +1,7 @@
 import { useControllableState } from "@radix-ui/react-use-controllable-state"
-import { BrainIcon, ChevronDownIcon } from "lucide-react"
+import { ChevronRightIcon } from "lucide-react"
 import type { ComponentProps, ReactNode } from "react"
-import { createContext, memo, useContext, useEffect, useState } from "react"
+import { createContext, memo, useContext, useEffect, useRef, useState } from "react"
 import {
     Collapsible,
     CollapsibleContent,
@@ -9,7 +9,9 @@ import {
 } from "@/shared/ui/collapsible"
 import { useUiLanguage } from "@/shared/i18n"
 import { cn } from "@/shared/lib/utils"
+import { getPreferences } from "@/shared/preferences"
 import { Shimmer } from "@/shared/chat/shimmer"
+import { AnvilMark } from "@/shared/chat/anvil-mark"
 
 type ReasoningContextValue = {
     isStreaming: boolean
@@ -75,7 +77,8 @@ export const Reasoning = memo(
         }, [isStreaming, startTime, setDuration])
 
         useEffect(() => {
-            if (defaultOpen && !isStreaming && isOpen && !hasAutoClosed) {
+            // Settings → Canvas: "keep thinking open" leaves it as it is.
+            if (defaultOpen && !isStreaming && isOpen && !hasAutoClosed && !getPreferences().thinkingOpen) {
                 const timer = setTimeout(() => {
                     setIsOpen(false)
                     setHasAutoClosed(true)
@@ -94,7 +97,7 @@ export const Reasoning = memo(
                 value={{ isStreaming, isOpen, setIsOpen, duration }}
             >
                 <Collapsible
-                    className={cn("not-prose mb-4", className)}
+                    className={cn("not-prose mb-3", className)}
                     onOpenChange={handleOpenChange}
                     open={isOpen}
                     {...props}
@@ -124,31 +127,31 @@ export const ReasoningTrigger = memo(
         const tr = (zhText: string, enText: string) => (uiLang === "zh" ? zhText : enText)
         const fallbackGetThinkingMessage = (thinking: boolean, durationSec?: number) => {
             if (thinking || durationSec === 0) {
-                return <Shimmer duration={1}>{tr("思考中...", "Thinking...")}</Shimmer>
+                return <Shimmer as="span" duration={1.4}>{tr("思考中…", "Thinking…")}</Shimmer>
             }
             if (durationSec === undefined) {
-                return <p>{tr("已思考数秒", "Thought for a few seconds")}</p>
+                return <span>{tr("已思考数秒", "Thought for a few seconds")}</span>
             }
-            return <p>{tr(`已思考 ${durationSec} 秒`, `Thought for ${durationSec} seconds`)}</p>
+            return <span>{tr(`已思考 ${durationSec} 秒`, `Thought for ${durationSec}s`)}</span>
         }
         const thinkingMessage = (getThinkingMessage || fallbackGetThinkingMessage)(isStreaming, duration)
 
         return (
             <CollapsibleTrigger
                 className={cn(
-                    "flex w-full items-center gap-2 text-muted-foreground text-sm transition-colors hover:text-foreground",
+                    "group/think inline-flex items-center gap-1.5 rounded-md py-0.5 text-[13px] text-muted-foreground transition-colors hover:text-foreground",
                     className,
                 )}
                 {...props}
             >
                 {children ?? (
                     <>
-                        <BrainIcon className="size-4" />
+                        <ThinkingGlyph active={isStreaming} />
                         {thinkingMessage}
-                        <ChevronDownIcon
+                        <ChevronRightIcon
                             className={cn(
-                                "size-4 transition-transform",
-                                isOpen ? "rotate-180" : "rotate-0",
+                                "size-3.5 opacity-60 transition-transform duration-fast group-hover/think:opacity-100",
+                                isOpen && "rotate-90",
                             )}
                         />
                     </>
@@ -158,6 +161,11 @@ export const ReasoningTrigger = memo(
     },
 )
 
+/** The anvil, striking while the model thinks, at rest once it is done. */
+function ThinkingGlyph({ active }: { active: boolean }) {
+    return <AnvilMark active={active} className={cn("size-4", active ? "text-brand" : "text-muted-foreground")} />
+}
+
 export type ReasoningContentProps = ComponentProps<
     typeof CollapsibleContent
 > & {
@@ -165,18 +173,33 @@ export type ReasoningContentProps = ComponentProps<
 }
 
 export const ReasoningContent = memo(
-    ({ className, children, ...props }: ReasoningContentProps) => (
-        <CollapsibleContent
-            className={cn(
-                "mt-4 text-sm",
-                "data-[state=closed]:fade-out-0 data-[state=closed]:slide-out-to-top-2 data-[state=open]:slide-in-from-top-2 text-muted-foreground outline-none data-[state=closed]:animate-out data-[state=open]:animate-in",
-                className,
-            )}
-            {...props}
-        >
-            <div className="whitespace-pre-wrap">{children}</div>
-        </CollapsibleContent>
-    ),
+    ({ className, children, ...props }: ReasoningContentProps) => {
+        const { isStreaming } = useReasoning()
+        const ref = useRef<HTMLDivElement>(null)
+        // While it streams, keep the newest line in view inside the capped box.
+        useEffect(() => {
+            if (isStreaming && ref.current) ref.current.scrollTop = ref.current.scrollHeight
+        }, [children, isStreaming])
+        return (
+            <CollapsibleContent
+                className={cn(
+                    "mt-1.5 outline-none data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:animate-in data-[state=open]:fade-in-0",
+                    className,
+                )}
+                {...props}
+            >
+                <div
+                    ref={ref}
+                    className={cn(
+                        "ml-[6px] border-l-2 border-border/80 pl-3.5 text-[13px] leading-relaxed text-muted-foreground whitespace-pre-wrap",
+                        isStreaming && "max-h-[180px] overflow-y-auto scrollbar-thin [mask-image:linear-gradient(to_bottom,transparent,black_24px)]",
+                    )}
+                >
+                    {children}
+                </div>
+            </CollapsibleContent>
+        )
+    },
 )
 
 Reasoning.displayName = "Reasoning"

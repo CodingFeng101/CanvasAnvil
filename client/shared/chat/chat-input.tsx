@@ -1,11 +1,12 @@
 import React, { useRef, useEffect, useMemo, useState, useCallback } from 'react';
-import { Send, FileText, ImageIcon, History, Square, Trash2, Upload } from 'lucide-react';
-import { SaveWorkButton } from '@/shared/works/save-work-button';
+import { isSendKey } from "@/shared/preferences";
+import { History, Paperclip, SlidersHorizontal, Upload } from 'lucide-react';
 import { cn } from '@/shared/lib/utils';
-import { ButtonWithTooltip } from '@/shared/chat';
+import { GhostHint, PlusMenu, SendButton, StatusRow, type ModelChannel, type PlusMenuItem } from '@/shared/chat/composer';
+import { openSettings } from '@/shared/settings-bus';
 import { FilePreviewList } from '@/shared/chat';
 import { type FileWorkspace, useFileProcessor } from '@/shared/files/use-file-processor';
-import { t, useUiLanguage } from "@/shared/i18n";
+import { useUiLanguage } from "@/shared/i18n";
 
 type RichInputSegment =
     | { type: "text"; text: string }
@@ -24,8 +25,16 @@ interface ChatInputProps {
     files?: File[]; // Controlled files
     placeholder?: string;
     topChips?: React.ReactNode;
-    /** Workspace-specific controls, shown beside the toolbar's own buttons. */
-    toolbarExtras?: React.ReactNode;
+    /** The canvas's own options, as quiet text under the box, bottom right (see composer.tsx). */
+    statusExtras?: React.ReactNode;
+    /** Which models the line under the box names: the ones this canvas calls right now. */
+    statusChannels?: ModelChannel[];
+    /** Extra entries for the "+" menu. */
+    menuItems?: PlusMenuItem[];
+    /** A suggestion shown in the empty box; Tab puts it in. */
+    suggestion?: string;
+    /** Which canvas's constraints the + menu opens. */
+    constraintScope?: "diagram" | "cad" | "ppt" | "canvas";
     bottomChips?: React.ReactNode;
     focusKey?: string | number;
     richSegments?: RichInputSegment[];
@@ -38,6 +47,10 @@ interface ChatInputProps {
     workspaceId?: FileWorkspace;
 }
 
+// Lucide's list and image glyphs, inlined: the chips are built as plain DOM inside the editable box.
+const SLIDE_ICON_OUTLINE = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 6h11M10 12h11M10 18h11M4 6h1v4M4 10h2M6 18H4c0-1 2-2 2-3s-1-1.5-2-1"/></svg>';
+const SLIDE_ICON_PICTURE = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.1-3.1a2 2 0 0 0-2.8 0L6 21"/></svg>';
+
 /** File objects keep their identity, so a member-wise check is enough. */
 function sameFileList(a: File[], b: File[]): boolean {
     return a.length === b.length && a.every((file, i) => file === b[i]);
@@ -49,14 +62,17 @@ export function ChatInput({
     onSubmit,
     isLoading,
     onStop,
-    onClearChat,
     onToggleHistory,
     historyDisabled = false,
     onFilesChange,
     files: controlledFiles,
     placeholder,
     topChips,
-    toolbarExtras,
+    statusExtras,
+    statusChannels,
+    menuItems = [],
+    suggestion,
+    constraintScope,
     bottomChips,
     focusKey,
     richSegments,
@@ -74,7 +90,6 @@ export function ChatInput({
     const richRef = useRef<HTMLDivElement>(null);
     const richSavedRangeRef = useRef<Range | null>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
-    const imageInputRef = useRef<HTMLInputElement>(null);
     const richAppliedRef = useRef<string>("");
     const [richHasFocus, setRichHasFocus] = useState(false);
     
@@ -103,7 +118,12 @@ export function ChatInput({
     }, [files, onFilesChange]);
 
     const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-        if (e.key === 'Enter' && !e.shiftKey) {
+        if (e.key === "Tab" && !e.shiftKey && suggestion && !input.trim()) {
+            e.preventDefault();
+            setInput(suggestion);
+            return;
+        }
+        if (isSendKey(e)) {
             e.preventDefault();
             if (isLoading) onStop?.();
             else onSubmit();
@@ -195,15 +215,13 @@ export function ChatInput({
         el.setAttribute("data-tag", segment.tag);
         el.setAttribute("data-token-kind", segment.tokenKind);
         el.setAttribute("contenteditable", "false");
-        el.className = isOutline
-            ? "inline-flex items-center gap-1.5 rounded-full border border-primary/30 bg-primary/[0.08] px-2 py-0.5 text-xs font-medium text-primary-strong align-middle"
-            : "inline-flex items-center gap-1.5 rounded-full border border-destructive/25 bg-destructive/[0.08] px-2 py-0.5 text-xs font-medium text-destructive align-middle";
+        // A quiet reference chip, like an attachment: a small icon (outline list or slide picture) and the page.
+        el.className = "mx-0.5 inline-flex max-w-[260px] items-center gap-1.5 rounded-md bg-foreground/[0.07] px-1.5 py-px align-middle text-[13px] leading-6 text-foreground/85";
         const icon = document.createElement("span");
-        icon.className = isOutline
-            ? "inline-flex h-4 w-4 items-center justify-center rounded-full bg-primary text-[10px] font-semibold text-primary-foreground"
-            : "inline-flex h-4 w-4 items-center justify-center rounded-full bg-destructive text-[10px] font-semibold text-destructive-foreground";
-        icon.textContent = isOutline ? "T" : "P";
+        icon.className = "inline-flex shrink-0 text-muted-foreground";
+        icon.innerHTML = isOutline ? SLIDE_ICON_OUTLINE : SLIDE_ICON_PICTURE;
         const text = document.createElement("span");
+        text.className = "truncate";
         text.textContent = segment.label;
         el.appendChild(icon);
         el.appendChild(text);
@@ -340,7 +358,8 @@ export function ChatInput({
             .replace(/[ \t]+\n/g, "\n");
     }, [richSegments]);
 
-    const showRichPlaceholder = isRich && !richPlainText.trim() && !richHasFocus;
+    // Like the plain box: the hint stays while the box is empty, focused or not.
+    const showRichPlaceholder = isRich && !richPlainText.trim();
 
     const filterByUploadMode = (incoming: File[]) => {
         if (uploadMode === "imagesOnly") return incoming.filter((f) => f.type.startsWith("image/"));
@@ -396,7 +415,6 @@ export function ChatInput({
         if (dragDepth.current === 0) setIsDragOver(false);
     };
 
-    const handleImageUpload = () => imageInputRef.current?.click();
     const handleFileUpload = () => fileInputRef.current?.click();
 
     const onFileInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -412,13 +430,43 @@ export function ChatInput({
         setFiles(files.filter(f => f !== fileToRemove));
     };
 
+    const hasText = isRich ? richPlainText.trim().length > 0 : input.trim().length > 0;
+    const canUpload = uploadMode !== "none";
+    const plusItems: PlusMenuItem[] = [
+        ...(canUpload
+            ? [{
+                icon: Paperclip,
+                label: uploadMode === "imagesOnly"
+                    ? trText("添加图片", "Add photos")
+                    : uploadMode === "filesOnly"
+                      ? trText("添加文件", "Add files")
+                      : trText("添加图片或文件", "Add files or photos"),
+                shortcut: "Ctrl+U",
+                onSelect: handleFileUpload,
+            }]
+            : []),
+        ...(onToggleHistory
+            ? [{ icon: History, label: trText("历史版本", "History"), disabled: historyDisabled, onSelect: onToggleHistory }]
+            : []),
+        ...menuItems,
+        { icon: SlidersHorizontal, label: trText("记忆与偏好", "Memory"), onSelect: () => openSettings("constraints", constraintScope ? `constraint-${constraintScope}` : undefined) },
+    ];
+
     return (
         <div
+            onKeyDown={(e) => {
+                if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "u" && canUpload) {
+                    e.preventDefault();
+                    handleFileUpload();
+                }
+            }}
+        >
+        <div
             className={cn(
-                "relative rounded-2xl border bg-card shadow-soft transition-[border-color,box-shadow,background-color] duration-base ease-out-soft",
-                "focus-within:ring-[3px] focus-within:ring-ring/25 focus-within:border-ring focus-within:shadow-soft-lg",
+                "relative rounded-[18px] border border-foreground/[0.12] bg-card shadow-[0_4px_20px_hsl(var(--shadow-hue)/0.04)] transition-[border-color,box-shadow,background-color] duration-base ease-out-soft",
+                "hover:border-foreground/20 focus-within:border-foreground/25 focus-within:shadow-[0_4px_24px_hsl(var(--shadow-hue)/0.07)]",
                 isDragOver
-                    ? "border-primary border-dashed bg-primary/[0.06] shadow-soft-lg"
+                    ? "border-foreground/40 border-dashed bg-foreground/[0.03]"
                     : "border-border",
             )}
             onDragOver={(e) => e.preventDefault()}
@@ -426,32 +474,24 @@ export function ChatInput({
             onDragLeave={handleDragLeave}
             onDrop={handleDrop}
         >
-            {isDragOver && uploadMode !== "none" && (
-                <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center rounded-2xl bg-card/70 backdrop-blur-[1px] animate-fade-in">
+            {isDragOver && canUpload && (
+                <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center rounded-[18px] bg-card/70 backdrop-blur-[1px] animate-fade-in">
                     <span className="flex items-center gap-2 text-sm font-medium text-primary-strong">
                         <Upload className="h-4 w-4" />
                         {trText("松开以添加文件", "Drop to attach")}
                     </span>
                 </div>
             )}
-            {(uploadMode === "all" || uploadMode === "imagesOnly") && (
-                <input
-                    type="file"
-                    multiple
-                    accept="image/*"
-                    className="hidden"
-                    ref={imageInputRef}
-                    onChange={onFileInputChange}
-                />
-            )}
-            {(uploadMode === "all" || uploadMode === "filesOnly") && (
+            {canUpload && (
                 <input
                     type="file"
                     multiple
                     accept={
-                        uploadMode === "filesOnly"
-                            ? ".pdf,application/pdf,text/*,.txt,.md,.markdown,.json,.csv,.xml,.yaml,.yml,.toml"
-                            : "image/*,.pdf,application/pdf,text/*,.txt,.md,.markdown,.json,.csv,.xml,.yaml,.yml,.toml"
+                        uploadMode === "imagesOnly"
+                            ? "image/*"
+                            : uploadMode === "filesOnly"
+                              ? ".pdf,application/pdf,text/*,.txt,.md,.markdown,.json,.csv,.xml,.yaml,.yml,.toml"
+                              : "image/*,.pdf,application/pdf,text/*,.txt,.md,.markdown,.json,.csv,.xml,.yaml,.yml,.toml"
                     }
                     className="hidden"
                     ref={fileInputRef}
@@ -461,8 +501,8 @@ export function ChatInput({
 
             {files.length > 0 && (
                 <div className="px-3 pt-3">
-                    <FilePreviewList 
-                        files={files} 
+                    <FilePreviewList
+                        files={files}
                         onRemoveFile={removeFile}
                         pdfData={pdfData}
                     />
@@ -475,11 +515,13 @@ export function ChatInput({
                 </div>
             )}
 
-            <div className="px-3 pt-2">
+            {/* The words on top, the buttons on a row of their own under them (claude.ai's box). */}
+            <div className="px-4 pt-3.5">
+                <div className="relative min-w-0">
                 {isRich ? (
                     <div className="relative">
                         {showRichPlaceholder && (
-                            <div className="pointer-events-none absolute left-1 top-2 text-[15px] leading-6 text-muted-foreground/60">
+                            <div className="pointer-events-none absolute left-0 top-0 truncate text-[15px] leading-6 text-muted-foreground/60">
                                 {placeholder || trText("请输入消息...", "Type your message...")}
                             </div>
                         )}
@@ -488,7 +530,7 @@ export function ChatInput({
                             contentEditable
                             suppressContentEditableWarning
                             onKeyDown={(e) => {
-                                if (e.key === "Enter" && !e.shiftKey) {
+                                if (isSendKey(e)) {
                                     e.preventDefault();
                                     if (isLoading) onStop?.();
                                     else onSubmit();
@@ -577,24 +619,35 @@ export function ChatInput({
                                 }
                             }}
                             className={cn(
-                                "w-full bg-transparent border-none px-1 py-2 focus:ring-0 transition-all outline-none text-[15px] leading-6 max-h-[360px] overflow-y-auto min-h-[48px] whitespace-pre-wrap break-words"
+                                "w-full bg-transparent border-none p-0 focus:ring-0 outline-none text-[15px] leading-6 max-h-[360px] overflow-y-auto min-h-[48px] whitespace-pre-wrap break-words"
                             )}
                         />
                     </div>
                 ) : (
+                    <>
+                    {suggestion && !input && <GhostHint text={suggestion} />}
                     <textarea
                         ref={textareaRef}
                         value={input}
                         onChange={(e) => setInput(e.target.value)}
                         onKeyDown={handleKeyDown}
                         onPaste={handlePaste}
-                        placeholder={placeholder || trText("请输入消息...", "Type your message...")}
-                        className={cn(
-                            "w-full resize-none bg-transparent border-none px-1 py-2 focus:ring-0 transition-all outline-none text-[15px] leading-6 max-h-[360px] overflow-y-auto min-h-[48px]"
-                        )}
+                        placeholder={suggestion ? "" : placeholder || trText("请输入消息...", "Type your message...")}
+                        className="block w-full resize-none bg-transparent border-none p-0 focus:ring-0 outline-none text-[15px] leading-6 max-h-[360px] overflow-y-auto min-h-[48px] placeholder:text-muted-foreground/60"
                         rows={1}
                     />
+                    </>
                 )}
+                </div>
+            </div>
+            <div className="flex items-center justify-between gap-2 px-2.5 pb-2.5 pt-1">
+                <PlusMenu items={plusItems} />
+                <SendButton
+                    hasContent={hasText || files.length > 0}
+                    loading={isLoading}
+                    onSend={onSubmit}
+                    onStop={onStop}
+                />
             </div>
 
             {bottomChips && (
@@ -602,110 +655,8 @@ export function ChatInput({
                     {bottomChips}
                 </div>
             )}
-
-            {/* Wraps rather than overflowing: in a narrow panel the canvas
-                toolbar's size and quality pickers used to push the send
-                button off the right edge. */}
-            <div className="flex flex-wrap items-center justify-between gap-y-1.5 px-3 py-2 border-t border-border/50">
-                <div className="flex flex-wrap items-center gap-1">
-                    {onClearChat && (
-                        <ButtonWithTooltip
-                            tooltipContent={t(uiLang, "chat.clearChatTitle")}
-                            variant="ghost"
-                            size="sm"
-                            onClick={onClearChat}
-                            className="h-8 w-8 p-0 text-muted-foreground transition-[color,background-color,transform] duration-fast ease-out-soft hover:text-destructive hover:bg-destructive/10 active:scale-90"
-                        >
-                            <Trash2 className="h-4 w-4" />
-                        </ButtonWithTooltip>
-                    )}
-                    <SaveWorkButton />
-                    {toolbarExtras}
-                </div>
-
-                <div className="ml-auto flex items-center gap-1">
-                    {onToggleHistory && (
-                        <ButtonWithTooltip
-                            tooltipContent={t(uiLang, "chat.historyTitle")}
-                            variant="ghost"
-                            size="sm"
-                            onClick={onToggleHistory}
-                            disabled={historyDisabled}
-                            className="h-8 w-8 p-0 text-muted-foreground transition-[color,background-color,transform] duration-fast ease-out-soft hover:text-foreground active:scale-90"
-                        >
-                            <History className="h-4 w-4" />
-                        </ButtonWithTooltip>
-                    )}
-
-                    {(uploadMode === "all" || uploadMode === "imagesOnly") && (
-                        <ButtonWithTooltip
-                            tooltipContent={t(uiLang, "chat.uploadImage")}
-                            variant="ghost"
-                            size="sm"
-                            onClick={handleImageUpload}
-                            className="h-8 w-8 p-0 text-muted-foreground transition-[color,background-color,transform] duration-fast ease-out-soft hover:text-foreground active:scale-90"
-                        >
-                            <ImageIcon className="h-4 w-4" />
-                        </ButtonWithTooltip>
-                    )}
-
-                    {(uploadMode === "all" || uploadMode === "filesOnly") && (
-                        <ButtonWithTooltip
-                            tooltipContent={t(uiLang, "chat.uploadFile")}
-                            variant="ghost"
-                            size="sm"
-                            onClick={handleFileUpload}
-                            className="h-8 w-8 p-0 text-muted-foreground transition-[color,background-color,transform] duration-fast ease-out-soft hover:text-foreground active:scale-90"
-                        >
-                            <FileText className="h-4 w-4" />
-                        </ButtonWithTooltip>
-                    )}
-
-                    <div className="w-px h-5 bg-border mx-1" />
-
-                    {(() => {
-                        const hasText = isRich ? richPlainText.trim().length > 0 : input.trim().length > 0;
-                        const hasFiles = files.length > 0;
-                        if (isLoading) {
-                            return (
-                                <ButtonWithTooltip
-                                    tooltipContent={t(uiLang, "chat.stop")}
-                                    variant="default"
-                                    size="sm"
-                                    onClick={(e) => {
-                                        e.preventDefault();
-                                        onStop?.();
-                                    }}
-                                    disabled={!onStop}
-                                    className="h-8 w-8 p-0 rounded-xl shadow-sm"
-                                    aria-label={t(uiLang, "chat.stop")}
-                                >
-                                    <Square className="h-3.5 w-3.5 fill-current" />
-                                </ButtonWithTooltip>
-                            );
-                        }
-                        return (
-                            <ButtonWithTooltip
-                                type="button"
-                                onClick={onSubmit}
-                                tooltipContent={t(uiLang, "chat.send")}
-                                disabled={!hasText && !hasFiles}
-                                variant="default"
-                                size="sm"
-                                className={cn(
-                                    "h-8 w-8 p-0 rounded-xl shadow-xs transition-[transform,opacity,background-color] duration-fast ease-out-soft active:scale-90",
-                                    (!hasText && !hasFiles) ? "opacity-50" : ""
-                                )}
-                                aria-label={t(uiLang, "chat.send")}
-                            >
-                                <Send className="h-4 w-4" />
-                            </ButtonWithTooltip>
-                        );
-                    })()}
-                </div>
-            </div>
+        </div>
+        <StatusRow channels={statusChannels}>{statusExtras}</StatusRow>
         </div>
     );
 }
-
-

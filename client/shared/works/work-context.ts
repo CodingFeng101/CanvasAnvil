@@ -12,33 +12,40 @@ export interface WorkContextValue {
   workId: string;
   /** The canvas's store, scoped to this work. */
   workStore: WorkspaceStore;
-  /** True once the user has saved this work (it is listed in My works). */
+  /** True once the work has content and is listed (saving is automatic). */
   saved: boolean;
-  /** A saved work with changes not yet saved (My works still has the older version). */
-  dirty: boolean;
+  /** The work's name once it is listed, else "". */
+  name: string;
+  /** Rename the listed work (the chat header's title). */
+  rename(name: string): void;
+  /** The latest preview image of the work, when the canvas has made one. */
+  thumb?: string;
   /**
    * A generation is running: the shell will not switch works until it ends.
    * `source` tells apart several parts of a canvas reporting at once.
    */
   setBusy(source: string, busy: boolean): void;
   /** A name from the content (deck title, first request) and/or a preview image. */
-  report(info: { nameHint?: string; thumb?: string; touched?: boolean }): void;
+  report(info: { nameHint?: string; thumb?: string; touched?: boolean; lastPrompt?: string }): void;
   /**
-   * The canvas's clear / start-over button. An unsaved draft is discarded
-   * (after the canvas's own confirmation); a saved work stays in My works as
-   * last saved (unsaved changes are dropped).
-   * Either way the canvas then remounts on a fresh draft.
+   * The canvas's clear / start-over button. The work stays in the list as it
+   * is (an empty draft is dropped), and the canvas remounts on a fresh draft.
    */
   startOver(): void;
-  /** The Save button: names and lists a draft, saves a saved work's changes, or renames it. */
-  save(): void;
   /**
    * For a canvas that holds edits it has not written yet (the diagram editor
-   * only hands its drawing over on export): run before the work is saved or
-   * left, so what is saved is what is on screen. Returns an unregister.
+   * only hands its drawing over on export): run before the work is
+   * left, so what is kept is what is on screen. Returns an unregister.
    */
   registerFlush(flush: () => Promise<void>): () => void;
+  /** Open another work of this canvas. */
+  openWork?(id: string): void;
+  /** Open "My works" on this canvas. */
+  showAllWorks?(): void;
 }
+
+/** Asks the sidebar's "My works" to open (the new-work page's "View all"). */
+export const OPEN_WORKS_EVENT = "canvasanvil:open-works";
 
 export const WorkContext = createContext<WorkContextValue | null>(null);
 
@@ -61,4 +68,15 @@ export function useReportBusy(busy: boolean) {
     ref.current?.setBusy(source, busy);
   }, [busy, source]);
   useEffect(() => () => ref.current?.setBusy(source, false), [source]);
+}
+
+/** Keeps the work's latest request in the list, for the sidebar's hover preview. */
+export function useReportLastPrompt(text: string | undefined) {
+  const work = useWork();
+  const ref = useRef(work);
+  ref.current = work;
+  const clean = (text || "").replace(/\[\[[^\]]*\]\]/g, "").replace(/\s+/g, " ").trim();
+  useEffect(() => {
+    if (clean) ref.current?.report({ lastPrompt: clean });
+  }, [clean]);
 }

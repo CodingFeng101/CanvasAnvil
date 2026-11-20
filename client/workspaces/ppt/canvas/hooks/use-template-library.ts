@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { generateImage } from "@/ai/client";
 import { getTemplateGenerationPrompt } from "@/workspaces/ppt/lib/ppt-prompts";
 import { PPT_TEMPLATE_LIBRARY_KEY, pptStore } from "@/workspaces/ppt/storage";
@@ -18,6 +18,12 @@ import {
 import type { TemplateItem, UploadTemplate } from "@/workspaces/ppt/canvas/types";
 
 type Translate = (zh: string, en: string) => string;
+
+/**
+ * The library is open in two places at once (the deck's style picker and My
+ * works' template library); a change saved by one tells the other to re-read.
+ */
+const LIBRARY_CHANGED = "canvasanvil:ppt-template-library";
 
 export interface TemplateLibraryOptions {
   /** Selection restored from the persisted workspace, if there was one. */
@@ -45,42 +51,56 @@ export function useTemplateLibrary({ initialSelectedTemplateId, uiLang, tr }: Te
   const [generatorIsGenerating, setGeneratorIsGenerating] = useState(false);
   const [generatorCategoryId, setGeneratorCategoryId] = useState("other");
 
+  const [instanceId] = useState(() => Math.random().toString(36).slice(2));
+  /** Set while state is being replaced by what another instance saved, so it is not saved back. */
+  const fromOtherRef = useRef(false);
+
   // Load from IndexedDB. The useState initialisers above read the older
   // localStorage copy so the picker is populated on the very first paint;
   // this replaces it, and the persist effect then clears the legacy keys.
   useEffect(() => {
     let cancelled = false;
-
-    void (async () => {
+    const load = async (fromOther: boolean) => {
       try {
         const persisted = await pptStore.read<{
           uploadedTemplates?: unknown;
           hiddenPresetTemplateIds?: unknown;
         }>(PPT_TEMPLATE_LIBRARY_KEY);
         if (cancelled || !persisted || typeof persisted !== "object") return;
+        if (fromOther) fromOtherRef.current = true;
         setUploadedTemplates(normalizePersistedUploadedTemplates(persisted.uploadedTemplates));
         setHiddenPresetTemplateIds(normalizePersistedStringArray(persisted.hiddenPresetTemplateIds));
       } catch (e) {
         console.error("Failed to load persisted PPT template library from IndexedDB", e);
       } finally {
-        if (!cancelled) setIsHydrated(true);
+        if (!cancelled && !fromOther) setIsHydrated(true);
       }
-    })();
-
+    };
+    void load(false);
+    const onChanged = (event: Event) => {
+      if ((event as CustomEvent<string>).detail !== instanceId) void load(true);
+    };
+    window.addEventListener(LIBRARY_CHANGED, onChanged);
     return () => {
       cancelled = true;
+      window.removeEventListener(LIBRARY_CHANGED, onChanged);
     };
-  }, []);
+  }, [instanceId]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
     // Writing before the load above finishes would save the legacy snapshot
     // over the real library.
     if (!isHydrated) return;
+    if (fromOtherRef.current) {
+      fromOtherRef.current = false;
+      return;
+    }
 
     void pptStore
       .save(PPT_TEMPLATE_LIBRARY_KEY, { uploadedTemplates, hiddenPresetTemplateIds, updatedAt: Date.now() })
       .then(() => {
+        window.dispatchEvent(new CustomEvent(LIBRARY_CHANGED, { detail: instanceId }));
         try {
           localStorage.removeItem(PPT_TEMPLATE_UPLOADS_KEY);
           localStorage.removeItem(PPT_TEMPLATE_HIDDEN_PRESETS_KEY);
@@ -91,7 +111,7 @@ export function useTemplateLibrary({ initialSelectedTemplateId, uiLang, tr }: Te
       .catch((e) => {
         console.error("Failed to persist PPT template library to IndexedDB", e);
       });
-  }, [uploadedTemplates, hiddenPresetTemplateIds, isHydrated]);
+  }, [uploadedTemplates, hiddenPresetTemplateIds, isHydrated, instanceId]);
 
   const templates: TemplateItem[] = useMemo(
     () => [

@@ -14,8 +14,8 @@
  * can be switched: an older one would replace whatever the canvas holds now.
  */
 
-import { BrainIcon, ChevronDown, FileCode, Wand2 } from "lucide-react"
-import { type ReactNode, useState } from "react"
+import { BrainIcon, ChevronDown, FileCode, FileText, ImageIcon, Images, Wand2 } from "lucide-react"
+import { type ReactNode, useEffect, useState } from "react"
 import { Shimmer } from "@/shared/chat"
 import { cn } from "@/shared/lib/utils"
 import { parseLayout } from "@/workspaces/diagram/lib/arrange"
@@ -101,6 +101,127 @@ function Step({
                 {hasBody && (open || !collapsible) && <div className="mt-1.5">{children}</div>}
             </div>
         </li>
+    )
+}
+
+/**
+ * What happens before the diagram, as steps: reading the uploaded files, the
+ * user's reference images and deep thinking's sketch (being drawn, the
+ * picture, or why there is none).
+ */
+export type SketchData = {
+    files?: { state: "running" | "done" | "error"; names?: string[]; seconds?: number; error?: string }
+    images?: number
+    state?: "running" | "done" | "error"
+    url?: string
+    seconds?: number
+    error?: string
+}
+
+function useSeconds(running: boolean) {
+    const [start] = useState(() => Date.now())
+    const [, tick] = useState(0)
+    useEffect(() => {
+        if (!running) return
+        const id = window.setInterval(() => tick((n) => n + 1), 1000)
+        return () => window.clearInterval(id)
+    }, [running])
+    return Math.floor((Date.now() - start) / 1000)
+}
+
+export function SketchStep({ data }: { data: SketchData }) {
+    const t = useDiagramT()
+    // Older messages carry only the url.
+    const sketch = data.state ?? (data.url ? "done" : undefined)
+    const files = data.files
+    const seconds = useSeconds(files?.state === "running" || sketch === "running")
+    const url = data.url ?? ""
+    const names = files?.names ?? []
+    return (
+        <ol className="my-3 list-none pl-0">
+            {files && (
+                <Step
+                    icon={<FileText className="h-3.5 w-3.5" />}
+                    title={
+                        files.state === "running" ? (
+                            <Shimmer duration={1}>{t("steps.reading")}</Shimmer>
+                        ) : files.state === "done" ? (
+                            t("steps.read")
+                        ) : (
+                            t("steps.read_failed")
+                        )
+                    }
+                    meta={
+                        files.state === "running" ? (
+                            <span className="tabular-nums">{seconds}s</span>
+                        ) : (
+                            t("steps.read_meta", { n: names.length, s: files.seconds ?? 0 })
+                        )
+                    }
+                    state={files.state === "error" ? "warning" : files.state}
+                    last={!data.images && !sketch}
+                    defaultOpen={false}
+                >
+                    {names.length > 0 || files.error ? (
+                        <div className="space-y-1 text-sm text-muted-foreground">
+                            {names.map((name, i) => (
+                                <p key={i} className="truncate">
+                                    {name}
+                                </p>
+                            ))}
+                            {files.error && <p className="text-xs whitespace-pre-wrap">{files.error}</p>}
+                        </div>
+                    ) : null}
+                </Step>
+            )}
+            {!!data.images && (
+                <Step
+                    icon={<Images className="h-3.5 w-3.5" />}
+                    title={t("steps.images")}
+                    meta={t("steps.images_meta", { n: data.images })}
+                    state="done"
+                    last={!sketch}
+                />
+            )}
+            {sketch && (
+                <Step
+                    icon={<ImageIcon className="h-3.5 w-3.5" />}
+                    title={
+                        sketch === "running" ? (
+                            <Shimmer duration={1}>{t("steps.sketching")}</Shimmer>
+                        ) : sketch === "done" ? (
+                            t("steps.sketch")
+                        ) : (
+                            t("steps.sketch_failed")
+                        )
+                    }
+                    meta={
+                        sketch === "running" ? (
+                            <span className="tabular-nums">{seconds}s</span>
+                        ) : sketch === "done" ? (
+                            data.seconds !== undefined ? t("steps.sketch_meta", { n: data.seconds }) : t("chat.sketch")
+                        ) : (
+                            t("steps.sketch_fallback")
+                        )
+                    }
+                    state={sketch === "error" ? "warning" : sketch}
+                    last
+                >
+                    {sketch === "done" && url ? (
+                        <button
+                            type="button"
+                            onClick={() => window.open(url, "_blank", "noopener,noreferrer")}
+                            aria-label={t("steps.sketch_open")}
+                            className="block w-full max-w-[420px] overflow-hidden rounded-xl border border-border/80 bg-white transition-shadow hover:shadow-soft"
+                        >
+                            <img src={url} alt="" className="block max-h-[260px] w-full object-contain" />
+                        </button>
+                    ) : sketch === "error" && data.error ? (
+                        <p className="text-xs text-muted-foreground whitespace-pre-wrap">{data.error}</p>
+                    ) : null}
+                </Step>
+            )}
+        </ol>
     )
 }
 

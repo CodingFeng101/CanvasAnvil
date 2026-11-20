@@ -1,6 +1,10 @@
 import { usePendingPrompt } from "@/shared/pending-prompt";
+
+import { ChatTitle } from "@/shared/chat/chat-title";
+import { constraintsFor } from "@/shared/constraints";
+import { CanvasOpenButton } from "@/shared/canvas-pane";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
-import { Home, PanelRightClose, PanelRightOpen } from "lucide-react";
+import { Home } from "lucide-react";
 import { cn } from "@/shared/lib/utils";
 import {
   streamChatText,
@@ -12,14 +16,13 @@ import {
 import {
   ChatInput,
   ChatEmptyState,
-  ButtonWithTooltip,
+  ChatLandingExtras,
   ResetWarningModal,
-  STORAGE_GLOBAL_CONSTRAINTS_KEY,
 } from "@/shared/chat";
 import { ChatMessageDisplay, type UIMessage } from "./ChatMessageDisplay";
 import { DesignHistoryDialog } from "./DesignHistoryDialog";
 import { CAD_CONFIRM, applyPicks, describeSpecStream, generateMessage, parseCadSteps, parsePartialJson, planMessage, recognitionLines, stripCadMarkers, takePicks, validDecisions } from "./cad-steps-text";
-import { useUiLanguage } from "@/shared/i18n";
+import { t, useUiLanguage } from "@/shared/i18n";
 import {
   chatStorageKey,
   loadChatHistory,
@@ -48,7 +51,7 @@ import {
 } from "../lib/chat-prompt";
 import { extractImageTags } from "@/shared/chat/ppt-message-tags";
 import { CAD_CHAT_IMAGE_PREFIX, cadStore } from "../storage";
-import { useReportBusy, useWork, useWorkStore } from "@/shared/works/work-context";
+import { useReportBusy, useReportLastPrompt, useWork, useWorkStore } from "@/shared/works/work-context";
 import { nameFromText } from "@/shared/works/works-index";
 
 /** Chat history drops inline images on save; images saved by earlier versions are kept here by id and put back on load. */
@@ -78,9 +81,6 @@ interface ChatPanelProps {
   /** Only ever "cad": the CAD shell is this panel's single caller. */
   workspaceId?: "cad";
   mode?: "text" | "ppt_image";
-  collapsed?: boolean;
-  onToggleCollapse?: () => void;
-  collapseLocked?: boolean;
   title?: string;
   inputPlaceholder?: string;
   onClearAttachments?: () => void;
@@ -137,6 +137,7 @@ export function ChatPanel(props: ChatPanelProps) {
   const imageStore = useWorkStore(cadStore);
   // My works: no switching while a reply runs; the first request names the work.
   useReportBusy(loading);
+  useReportLastPrompt([...messages].reverse().find((m) => m.role === "user" && typeof m.content === "string" && !m.content.startsWith("[["))?.content as string | undefined);
   const firstRequest = messages.find((m) => m.role === "user" && typeof m.content === "string")?.content as string | undefined;
   useEffect(() => {
     if (!work || !firstRequest) return;
@@ -212,10 +213,7 @@ export function ChatPanel(props: ChatPanelProps) {
         "Confirm the floorplan in the designer first, then export the quote and drawings.",
       );
       const global = getAIConfig();
-      const constraints =
-        localStorage.getItem(
-          `${STORAGE_GLOBAL_CONSTRAINTS_KEY}-${workspaceId}`,
-        ) ?? "";
+      const constraints = constraintsFor("cad");
       const system = [
         global.systemPrompt,
         constraints,
@@ -292,9 +290,31 @@ export function ChatPanel(props: ChatPanelProps) {
           { role: "system", content: [prompt, system].join("\n\n") },
           ...request,
         ];
-        const show = typeof stream === "function" ? stream : stream ? updateAssistant : () => {};
+        const target = typeof stream === "function" ? stream : stream ? updateAssistant : null;
+        // At most one repaint every 80ms while text streams in: drawing every token
+        // re-renders the whole chat and makes the stream stutter.
+        let pending: string | null = null;
+        let timer = 0;
+        const show = (text: string) => {
+          if (!target) return;
+          pending = text;
+          if (timer) return;
+          timer = window.setTimeout(() => {
+            timer = 0;
+            const latest = pending;
+            pending = null;
+            if (latest !== null) target(latest);
+          }, 80);
+        };
+        const stopShowing = () => {
+          window.clearTimeout(timer);
+          timer = 0;
+          if (pending !== null && target) target(pending);
+          pending = null;
+        };
         // A full floorplan JSON is long; when the model runs out of output tokens ("length"),
         // ask it to carry on from where it stopped and join the pieces instead of starting over.
+        try {
         return await retryCadTextRequest(async () => {
           let total = "";
           let messagesForPart = modelMessages;
@@ -327,6 +347,9 @@ export function ChatPanel(props: ChatPanelProps) {
           }
           return total;
         }, controller.signal);
+        } finally {
+          stopShowing();
+        }
       };
       const callPayload = async (
         prompt: string,
@@ -351,7 +374,8 @@ export function ChatPanel(props: ChatPanelProps) {
             ...textOnlyRequest,
             { role: 'assistant', content: response || '(empty model response)' },
             { role: 'user', content: `上次返回内容不是合法 JSON，解析报错：\n${why}\n请改正这一处（以及同类错误），保持原需求，完整重发一个指定类型的 CAD JSON 对象，不要解释，不要省略字段，不要输出注释，坐标只写数字不要写算式。 / Your last answer is not valid JSON (see the error above). Fix it and return one complete valid CAD JSON payload for the same request; numbers only, no expressions or comments.` },
-          ], show);
+          ], false);
+          // The second answer is not streamed into the block: it would write the same plan out a second time.
           return { payload: parseCadPayload(repaired), text: repaired, repairRounds: 1 };
         }
       };
@@ -518,8 +542,13 @@ export function ChatPanel(props: ChatPanelProps) {
         let repairRound = 0;
         const loggedRetry = async (feedback: string, summary: string) => {
           repairRound++;
-          showStage(checking, tr(`AI 修复第 ${repairRound} 轮…`, `Model repair round ${repairRound}…`));
-          return await retry(feedback, summary);
+          // What this round fixes, in a few lines, so the repair can be followed.
+          const issues = feedback.split("\n").map((line) => line.trim().replace(/^[-•*]\s*/, "")).filter(Boolean).slice(0, 4);
+          const what = issues.map((line) => `- ${line.length > 80 ? `${line.slice(0, 80)}…` : line}`).join("\n");
+          showStage(checking, `${tr(`AI 修复第 ${repairRound} 轮，正在处理：`, `Model repair round ${repairRound}, fixing:`)}\n${what}`);
+          const fixed = await retry(feedback, summary);
+          log.push(`↻ ${tr(`第 ${repairRound} 轮修复`, `Repair round ${repairRound}`)}：${issues.slice(0, 2).join(tr("；", "; ")) || tr("按自检结果调整", "adjusted from the check")}`);
+          return fixed;
         };
         const result = await session.applyModelOutput(payload, loggedRetry, {
           signal: controller.signal,
@@ -757,30 +786,16 @@ export function ChatPanel(props: ChatPanelProps) {
       return false;
     }
   };
-  if (props.collapsed)
-    return (
-      <div className="h-full flex justify-center pt-4">
-        <ButtonWithTooltip
-          tooltipContent={tr("展开", "Expand")}
-          onClick={props.onToggleCollapse}
-        >
-          <PanelRightOpen />
-        </ButtonWithTooltip>
-      </div>
-    );
   return (
     <div
-      className={cn("h-full flex flex-col bg-card", props.className)}
+      className={cn("h-full flex flex-col animate-fade-in", props.className)}
       data-testid="cad-chat-panel"
     >
-      <div className="flex items-center justify-between border-b p-4">
-        <strong>{props.title ?? tr("AI 助手", "AI Assistant")}</strong>
-        <button
-          onClick={props.onToggleCollapse}
-          disabled={props.collapseLocked}
-        >
-          <PanelRightClose className="h-4 w-4" />
-        </button>
+      <div className="flex h-12 shrink-0 items-center justify-between px-4">
+        <ChatTitle fallback={props.title ?? tr("AI 助手", "AI Assistant")} />
+        <div className="flex items-center gap-1">
+        <CanvasOpenButton />
+        </div>
       </div>
       {loading && (
         <span data-testid="cad-chat-busy" className="sr-only">
@@ -819,20 +834,14 @@ export function ChatPanel(props: ChatPanelProps) {
         ) : (
           <ChatEmptyState
             icon={Home}
-            title={tr("从需求开始", "Start with your requirements")}
-            description={tr(
-              "描述户型、面积和生活方式",
-              "Describe your rooms, area and lifestyle",
-            )}
-            examplesLabel={tr("试试这些需求", "Try a request")}
-            examples={["两室一厅 80㎡，三口之家"]}
-            onPickExample={setInput}
+            title={t(language, "empty.cad.title")}
+            description={t(language, "empty.cad.desc")}
           />
         )}
       </div>
       {snapshot.lastResult && (
         <div
-          className="border-t p-2 text-xs"
+          className="chat-measure border-t p-2 text-xs"
           data-testid="cad-chat-design-result"
           data-rounds={snapshot.lastResult.rounds}
         >
@@ -876,8 +885,9 @@ export function ChatPanel(props: ChatPanelProps) {
           )}
         </div>
       )}
-      <div className="border-t p-4" data-testid="cad-chat-composer">
+      <div className={`chat-measure px-4 pb-4 pt-2${(!messages.length) ? " [--chat-measure:720px]" : ""}`} data-testid="cad-chat-composer">
         <ChatInput
+          constraintScope="cad"
           workspaceId="cad"
           input={input}
           setInput={setInput}
@@ -905,6 +915,7 @@ export function ChatPanel(props: ChatPanelProps) {
           }
         />
       </div>
+      {!messages.length && <ChatLandingExtras icon={Home} images={["/examples/portal/cad-plan-sm.webp", "/examples/portal/cad-1-sm.webp", "/examples/portal/cad-3d-sm.webp"]} examples={[t(language, "empty.cad.ex1"), t(language, "empty.cad.ex2"), t(language, "empty.cad.ex3")]} onPickExample={(text) => void run(text)} />}
       <DesignHistoryDialog
         open={showHistory}
         onOpenChange={setShowHistory}

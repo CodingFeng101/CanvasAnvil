@@ -8,10 +8,8 @@ const buttonVariants = cva(
   [
     "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-lg text-sm font-medium",
     "transition-[background-color,border-color,color,box-shadow,transform,opacity] duration-fast ease-out-soft",
-    // The press has to undershoot the rest position, otherwise a click on a
-    // lifted button reads as nothing happening. `active:` sorts after `hover:`
-    // so it wins while the pointer is down.
-    "active:translate-y-px",
+    // A small press, as on claude.ai.
+    "active:scale-[0.98]",
     "disabled:pointer-events-none disabled:opacity-50",
     "[&_svg]:pointer-events-none [&_svg:not([class*='size-'])]:size-4 shrink-0 [&_svg]:shrink-0",
     "outline-none focus-visible:border-ring focus-visible:ring-ring/35 focus-visible:ring-[3px]",
@@ -20,20 +18,23 @@ const buttonVariants = cva(
   {
     variants: {
       variant: {
-        // Disabled goes neutral rather than half-transparent: a 50%-opacity
-        // clay block read as a broken or loading button, not an unavailable one.
+        // Claude's buttons stay put on hover: the colour shifts, nothing
+        // lifts. Disabled goes neutral rather than half-transparent.
         default:
-          "bg-primary text-primary-foreground shadow-xs hover:bg-primary/90 hover:shadow-soft hover:-translate-y-px disabled:bg-muted disabled:text-muted-foreground disabled:shadow-none disabled:opacity-100",
+          "bg-primary text-primary-foreground hover:bg-primary/85 disabled:bg-muted disabled:text-muted-foreground disabled:opacity-100",
+        // Clay: only for what the AI does (send, generate).
+        brand:
+          "bg-brand text-brand-foreground hover:bg-brand-hover disabled:bg-muted disabled:text-muted-foreground disabled:opacity-100",
         destructive:
-          "bg-destructive text-destructive-foreground shadow-xs hover:bg-destructive/90 hover:-translate-y-px focus-visible:ring-destructive/30",
+          "bg-destructive text-destructive-foreground hover:bg-destructive/90 focus-visible:ring-destructive/30",
         outline:
-          "border border-border bg-card text-foreground shadow-xs hover:bg-accent hover:text-accent-foreground hover:-translate-y-px hover:shadow-soft",
+          "border border-input bg-transparent text-foreground hover:bg-foreground/[0.05]",
         secondary:
-          "bg-secondary text-secondary-foreground shadow-xs hover:bg-secondary/70 hover:-translate-y-px",
+          "bg-foreground/[0.06] text-foreground hover:bg-foreground/10",
         ghost:
-          "hover:bg-accent hover:text-accent-foreground",
+          "text-muted-foreground hover:bg-foreground/[0.06] hover:text-foreground",
         link:
-          "text-primary-strong underline-offset-4 hover:underline active:translate-y-0",
+          "text-foreground underline decoration-foreground/30 underline-offset-4 hover:decoration-foreground active:translate-y-0",
       },
       size: {
         default: "h-9 px-4 py-2 has-[>svg]:px-3",

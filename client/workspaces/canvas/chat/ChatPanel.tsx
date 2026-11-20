@@ -1,13 +1,19 @@
 import { usePendingPrompt } from "@/shared/pending-prompt";
+import { useSendAfterRender } from "@/shared/chat/use-send-after-render";
+import { ChatTitle } from "@/shared/chat/chat-title";
+import { CanvasOpenButton } from "@/shared/canvas-pane";
 import { useEffect, useRef, useState } from "react";
-import { Maximize2, Paintbrush, PanelRightClose, PanelRightOpen, Sparkles, Wand2 } from "lucide-react";
+import { Paintbrush } from "lucide-react";
+import { toast } from "sonner";
+import { StatusSelect } from "@/shared/chat/composer";
+import { constraintsFor } from "@/shared/constraints";
 import { IMAGE_QUALITIES, IMAGE_SIZES } from "@contracts/ai";
 import { cn } from "@/shared/lib/utils";
 import { generateImage, type ImageQuality, type ImageSize } from "@/ai/client";
-import { ButtonWithTooltip, ChatEmptyState, ChatInput, ResetWarningModal } from "@/shared/chat";
+import { ChatEmptyState,
+  ChatLandingExtras, ChatInput, ResetWarningModal } from "@/shared/chat";
 import { chatStorageKey, loadChatHistory, saveChatHistory } from "@/shared/chat/chat-storage";
 import { t, useUiLanguage } from "@/shared/i18n";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/shared/ui/select";
 import type { AnnotatedEditOptions, AnnotatedEditPreview, AnnotatedEditResult } from "@/workspaces/canvas/canvas/annotated-edit";
 import type { ImageVersion } from "@/workspaces/canvas/canvas/lineage";
 import { referencedChatImageIds, withCanvasImageRef, withChatImageRef } from "@/workspaces/canvas/chat/canvas-image-ref";
@@ -21,7 +27,7 @@ import {
 import { ChatMessageDisplay, type CanvasChatMessage } from "@/workspaces/canvas/chat/ChatMessageDisplay";
 import { VersionStrip } from "@/workspaces/canvas/chat/version-strip";
 import { canvasStore } from "@/workspaces/canvas/storage";
-import { useReportBusy, useWork, useWorkStore } from "@/shared/works/work-context";
+import { useReportBusy, useReportLastPrompt, useWork, useWorkStore } from "@/shared/works/work-context";
 import { nameFromText } from "@/shared/works/works-index";
 
 const STORAGE_KEY = chatStorageKey("canvas");
@@ -54,8 +60,6 @@ function loadImageOptions(): { size: ImageSize; quality: ImageQuality } {
 
 interface ChatPanelProps {
   className?: string;
-  collapsed?: boolean;
-  onToggleCollapse?: () => void;
   /** Places the picture on the canvas and returns the element it was placed as, so the chat message can reference it. */
   onImageGenerated: (dataUrl: string, prompt: string) => Promise<string | null>;
   /** Looks up a picture's current data URL by canvas element id, for messages reloaded with their image data stripped out. */
@@ -75,8 +79,6 @@ interface ChatPanelProps {
 
 export function ChatPanel({
   className,
-  collapsed = false,
-  onToggleCollapse,
   onImageGenerated,
   resolveCanvasImage,
   canAnnotateEdit,
@@ -101,10 +103,11 @@ export function ChatPanel({
   const [isGenerating, setIsGenerating] = useState(false);
   const [showResetWarning, setShowResetWarning] = useState(false);
   const [imageOptions, setImageOptions] = useState(loadImageOptions);
-  const [focusTick, setFocusTick] = useState(0);
+  const [focusTick] = useState(0);
 
   // My works: no switching mid-generation; the first request names the work.
   useReportBusy(isGenerating);
+  useReportLastPrompt([...messages].reverse().find((m) => m.role === "user")?.content);
   const firstRequest = messages.find((m) => m.role === "user")?.content;
   useEffect(() => {
     if (!work || !firstRequest) return;
@@ -114,9 +117,11 @@ export function ChatPanel({
   }, [firstRequest]);
 
   /** An example from the empty state goes into the input, not straight to the model, so it can be adjusted first. */
+  // An example is sent as it is, not left in the box to send by hand.
+  const sendExample = useSendAfterRender(() => handleSubmit());
   const pickExample = (text: string) => {
     setInput(text);
-    setFocusTick((tick) => tick + 1);
+    sendExample();
   };
   // Bumped by "clear". A request still in flight when the user clears belongs
   // to the conversation that was just wiped: without this, its reply would
@@ -173,19 +178,48 @@ export function ChatPanel({
     saveChatHistory(STORAGE_KEY, next);
   };
 
-  const handleSubmit = async () => {
+  // Once a picture is on the canvas, the empty box suggests editing it by its
+  // annotation (Tab puts the words in); sending those words runs that edit.
+  const hasPicture = messages.some((m) => m.role === "assistant" && m.content.includes("[[IMAGE|"));
+  const annotateSuggestion = tr("按标注修改选中的图片", "Edit the selected picture by its annotation");
+
+  const handleSubmit = () => {
     const prompt = input.trim();
     if (!prompt || isGenerating) return;
-
-    const userMessage: CanvasChatMessage = { id: makeId(), role: "user", content: prompt };
-    const withUser = [...messages, userMessage];
-    persist(withUser);
+    if (prompt.startsWith(annotateSuggestion)) {
+      if (!canAnnotateEdit) {
+        toast.info(t(uiLang, "workspace.canvas.annotateEditHint"));
+        return;
+      }
+      void handleAnnotatedEdit(prompt.slice(annotateSuggestion.length).replace(/^[\s:：,，。.]+/, ""));
+      return;
+    }
     setInput("");
+    void generateFrom(prompt, messages);
+  };
+
+  /** Editing a message of yours: what came after it goes, and the picture is drawn again. */
+  const handleEditMessage = (index: number, text: string) => {
+    if (isGenerating || messages[index]?.role !== "user") return;
+    void generateFrom(text, messages.slice(0, index));
+  };
+
+  const generateFrom = async (prompt: string, base: CanvasChatMessage[]) => {
+    const userMessage: CanvasChatMessage = { id: makeId(), role: "user", content: prompt };
+    const withUser = [...base, userMessage];
+    persist(withUser);
     setIsGenerating(true);
     const epoch = clearEpochRef.current;
 
     try {
-      const url = await generateImage({ prompt, size: imageOptions.size, quality: imageOptions.quality });
+      const constraints = constraintsFor("canvas");
+      const url = await generateImage({
+        prompt: constraints ? `${prompt}
+
+${constraints}` : prompt,
+        size: imageOptions.size,
+        quality: imageOptions.quality,
+      });
       if (!url) throw new Error("empty result");
       if (epoch !== clearEpochRef.current) return;
       const elementId = await onImageGenerated(url, prompt);
@@ -213,9 +247,9 @@ export function ChatPanel({
     }
   };
 
-  const handleAnnotatedEdit = async () => {
+  const handleAnnotatedEdit = async (override?: string) => {
     if (!canAnnotateEdit || isGenerating) return;
-    const instruction = input.trim();
+    const instruction = (override ?? input).trim();
     const instructionText =
       instruction || tr("根据画布上的标注修改选中的图片", "Edit the selected image based on the canvas annotation");
 
@@ -306,21 +340,6 @@ export function ChatPanel({
     setShowResetWarning(false);
   };
 
-  if (collapsed) {
-    return (
-      <div className={cn("h-full flex flex-col items-center pt-4 bg-card border border-border/30 rounded-xl", className)}>
-        <ButtonWithTooltip
-          tooltipContent={t(uiLang, "chat.expand")}
-          variant="ghost"
-          size="icon"
-          onClick={onToggleCollapse}
-          className="hover:bg-accent transition-colors"
-        >
-          <PanelRightOpen className="h-5 w-5 text-muted-foreground" />
-        </ButtonWithTooltip>
-      </div>
-    );
-  }
 
   const qualityLabel = (quality: ImageQuality) =>
     quality === "auto"
@@ -332,23 +351,13 @@ export function ChatPanel({
           : tr("高", "High");
 
   return (
-    <div className={cn("h-full flex flex-col bg-card animate-slide-in-right relative", className)}>
-      <div className="px-5 py-4 border-b border-border/50">
+    <div className={cn("h-full flex flex-col bg-transparent animate-fade-in relative", className)}>
+      <div className="flex h-12 shrink-0 flex-col justify-center px-4">
         <div className="flex items-center justify-between">
-          <span className="text-base font-semibold tracking-tight whitespace-nowrap">
-            {t(uiLang, "workspace.canvas.title")}
-          </span>
-          {onToggleCollapse && (
-            <ButtonWithTooltip
-              tooltipContent={t(uiLang, "chat.collapse")}
-              variant="ghost"
-              size="icon"
-              onClick={onToggleCollapse}
-              className="hover:bg-accent transition-colors rounded-md"
-            >
-              <PanelRightClose className="w-4 h-4 text-muted-foreground" />
-            </ButtonWithTooltip>
-          )}
+          <ChatTitle fallback={t(uiLang, "workspace.canvas.title")} />
+          <div className="flex items-center gap-1">
+          <CanvasOpenButton />
+          </div>
         </div>
       </div>
 
@@ -358,99 +367,57 @@ export function ChatPanel({
             icon={Paintbrush}
             title={t(uiLang, "empty.canvas.title")}
             description={t(uiLang, "empty.canvas.desc")}
-            examplesLabel={t(uiLang, "empty.examplesLabel")}
-            examples={[t(uiLang, "empty.canvas.ex1"), t(uiLang, "empty.canvas.ex2"), t(uiLang, "empty.canvas.ex3")]}
-            onPickExample={pickExample}
           />
         ) : (
           <ChatMessageDisplay
             messages={messages}
             isGenerating={isGenerating}
+            onEditMessage={handleEditMessage}
             resolveCanvasImage={resolveCanvasImage}
             chatImages={chatImages}
           />
         )}
       </div>
 
-      <div className="p-4 border-t border-border/50 bg-card/50">
+      <div className={`chat-measure px-4 pb-4 pt-2${(messages.length === 0 && !isGenerating) ? " [--chat-measure:720px]" : ""}`}>
         <VersionStrip
           versions={imageVersions}
           activeElementId={activeImageElementId}
           onSelectVersion={onSelectVersion}
         />
         <ChatInput
+          constraintScope="canvas"
           input={input}
           setInput={setInput}
           onSubmit={handleSubmit}
           isLoading={isGenerating}
-          onClearChat={() => setShowResetWarning(true)}
           uploadMode="none"
           focusKey={focusTick || undefined}
           placeholder={t(uiLang, "workspace.canvas.placeholder")}
-          toolbarExtras={
+          suggestion={hasPicture && !isGenerating ? annotateSuggestion : undefined}
+          // Pictures come from the image model; marks on a picture are read by the text model first.
+          statusChannels={hasPicture ? ["image", "text"] : ["image"]}
+          statusExtras={
             <>
-              <ButtonWithTooltip
-                tooltipContent={
-                  canAnnotateEdit
-                    ? t(uiLang, "workspace.canvas.annotateEdit")
-                    : t(uiLang, "workspace.canvas.annotateEditHint")
-                }
-                variant="ghost"
-                size="sm"
-                onClick={handleAnnotatedEdit}
-                disabled={!canAnnotateEdit || isGenerating}
-                className="h-8 w-8 p-0 text-muted-foreground transition-colors hover:text-foreground hover:bg-accent"
-              >
-                <Wand2 className="h-4 w-4" />
-              </ButtonWithTooltip>
-
-              <div className="w-px h-5 bg-border mx-1" />
-
-              <Select
+              <StatusSelect<ImageSize>
+                label={tr("图片尺寸", "Image size")}
                 value={imageOptions.size}
-                onValueChange={(value) => updateImageOptions({ size: value as ImageSize })}
-              >
-                <SelectTrigger
-                  size="sm"
-                  className="h-8 gap-1 px-2 text-xs"
-                  title={tr("图片尺寸", "Image size")}
-                >
-                  <Maximize2 className="h-3.5 w-3.5 text-muted-foreground" />
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {IMAGE_SIZES.map((size) => (
-                    <SelectItem key={size} value={size} className="text-xs">
-                      {size === "auto" ? tr("自动尺寸", "Auto size") : size.replace("x", " × ")}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-
-              <Select
+                changed={imageOptions.size !== "auto"}
+                onChange={(size) => updateImageOptions({ size })}
+                options={IMAGE_SIZES.map((size) => ({ value: size, label: size === "auto" ? tr("自动尺寸", "Auto size") : size.replace("x", " × ") }))}
+              />
+              <StatusSelect<ImageQuality>
+                label={tr("清晰度", "Quality")}
                 value={imageOptions.quality}
-                onValueChange={(value) => updateImageOptions({ quality: value as ImageQuality })}
-              >
-                <SelectTrigger
-                  size="sm"
-                  className="h-8 gap-1 px-2 text-xs"
-                  title={tr("清晰度", "Quality")}
-                >
-                  <Sparkles className="h-3.5 w-3.5 text-muted-foreground" />
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {IMAGE_QUALITIES.map((quality) => (
-                    <SelectItem key={quality} value={quality} className="text-xs">
-                      {qualityLabel(quality)}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                changed={imageOptions.quality !== "auto"}
+                onChange={(quality) => updateImageOptions({ quality })}
+                options={IMAGE_QUALITIES.map((quality) => ({ value: quality, label: quality === "auto" ? tr("自动清晰度", "Auto quality") : qualityLabel(quality) }))}
+              />
             </>
           }
         />
       </div>
+      {(messages.length === 0 && !isGenerating) && <ChatLandingExtras icon={Paintbrush} images={["/examples/portal/canvas-pic-v1-sm.webp", "/examples/portal/canvas-pic-v2-sm.webp"]} examples={[t(uiLang, "empty.canvas.ex1"), t(uiLang, "empty.canvas.ex2")]} onPickExample={pickExample} />}
 
 
       <ResetWarningModal

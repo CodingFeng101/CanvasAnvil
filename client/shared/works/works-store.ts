@@ -23,8 +23,9 @@ import {
  *   saved:<id>:<key>      the version the user last saved, key for key
  *
  * The canvas always reads and writes the live copy (`work:`), so nothing is
- * lost on a reload. Save copies the live copy over the saved one; leaving
- * with "don't save" copies the saved one back.
+ * lost on a reload, and the live copy is the work. The saved copy is taken
+ * when a draft is first listed (and was what Save wrote, before saving became
+ * automatic); nothing reads it back any more except an explicit revert.
  *
  * localStorage keeps holding the open work's small state under the canvas's
  * original keys, so the code that reads them synchronously stays as it is.
@@ -399,12 +400,23 @@ export function createWorksStore(config: WorksConfig, local: LocalArea = browser
       });
     },
 
+    /** Pins or unpins a work; does not count as activity. */
+    setPinned(id: string, pinned: boolean): Promise<WorkMeta[]> {
+      return serial(async () => {
+        const index = patchWork(await readIndex(), id, { pinned: pinned || undefined });
+        await writeIndex(index);
+        return index;
+      });
+    },
+
     /** Records activity, a preview or a name hint; unknown ids are ignored. */
-    touch(id: string, patch: Pick<Partial<WorkMeta>, "thumb" | "nameHint" | "touched"> = {}): Promise<WorkMeta[]> {
+    touch(id: string, patch: Pick<Partial<WorkMeta>, "thumb" | "nameHint" | "touched" | "lastPrompt"> = {}): Promise<WorkMeta[]> {
       return serial(async () => {
         const before = await readIndex();
         if (!before.some((w) => w.id === id)) return before;
-        const index = patchWork(before, id, { ...patch, updatedAt: Date.now() });
+        // Recording the latest request alone (done on every open) is not an edit: the work keeps its place.
+        const edit = Object.keys(patch).some((key) => key !== "lastPrompt");
+        const index = patchWork(before, id, edit ? { ...patch, updatedAt: Date.now() } : patch);
         await writeIndex(index);
         return index;
       });
@@ -424,14 +436,10 @@ export function createWorksStore(config: WorksConfig, local: LocalArea = browser
           thumb: source.thumb,
           nameHint: source.nameHint,
         };
-        // The copy is of what was saved; unsaved changes stay with the original.
-        if (await hasSaved(id)) {
-          await copyAll(savedPrefix(id), workPrefix(copy.id));
-        } else {
-          await copyAll(workPrefix(id), workPrefix(copy.id));
-          // The open work's localStorage values are live, not in its snapshot.
-          if (isOpen) await store.save(workPrefix(copy.id) + LOCAL_SNAPSHOT_KEY, snapshotLocal());
-        }
+        // The copy is of the live work: with saving automatic, that is the work.
+        await copyAll(workPrefix(id), workPrefix(copy.id));
+        // The open work's localStorage values are live, not in its snapshot.
+        if (isOpen) await store.save(workPrefix(copy.id) + LOCAL_SNAPSHOT_KEY, snapshotLocal());
         await copyAll(workPrefix(copy.id), savedPrefix(copy.id));
         const next = upsertWork(index, copy);
         await writeIndex(next);

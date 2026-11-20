@@ -6,7 +6,7 @@ import { parseJsonLoose } from "./lib/parse-json";
 import { extractPdfPagesAsImages, isPdfFile } from "./lib/deck-source";
 import { GenerationProgress } from "./views/GenerationProgress";
 import { OutlineReview } from "./views/OutlineReview";
-import { StyleLibrary } from "./views/StyleLibrary";
+import { PptStart } from "./views/StylePicker";
 import type { CreationRequest, CreationResult } from "@/workspaces/ppt/lib/creation-intent";
 import { DeckView } from "./views/DeckView";
 import {
@@ -45,6 +45,7 @@ import { generateChatMessage } from '@/ai/client';
 import {
   PLAN_TIMEOUT_MS,
   pptService,
+  partialOutlinePages,
   PptPage,
   type PptElement,
   type PptTextBlock,
@@ -106,6 +107,7 @@ interface PptCanvasProps {
   /** What is being typed in the chat, for the style library's suggestions. */
   draftText?: string;
   onTemplateChange?: (template: { name: string; previewSrc: string } | null) => void;
+  /** The outline text as it streams in (for the chat's token count); "" when it is done. */
 }
 
 export function PptCanvas({
@@ -1384,6 +1386,26 @@ export function PptCanvas({
   /** Redraws a slide's editor unless the user is typing in it. */
 
 
+  // The outline as it streams: slide titles shown on the canvas one by one.
+  const [outlineDraft, setOutlineDraft] = useState<string[]>([]);
+  const watchOutline = () => {
+    let timer = 0;
+    let latest = "";
+    const flush = () => {
+      timer = 0;
+      setOutlineDraft(partialOutlinePages(latest).map((page) => page.title));
+    };
+    const onText = (text: string) => {
+      latest = text;
+      if (!timer) timer = window.setTimeout(flush, 120);
+    };
+    const done = () => {
+      window.clearTimeout(timer);
+      setOutlineDraft([]);
+    };
+    return { onText, done };
+  };
+
   const resetGenerationState = () => {
       setGeneratedImages({});
       setImageVersions({});
@@ -1617,6 +1639,7 @@ export function PptCanvas({
       try {
         const referenceVisualAssets = await buildReferenceVisualAssetsWithCaptions();
         dispatchCreation({ type: "progress", current: 0, total: 0, message: tr("正在生成计划...", "Generating plan...") });
+        const watch = watchOutline();
         const pages = await pptService.generatePlanFromOutline(
           outlineText,
           uiLang as "zh" | "en",
@@ -1627,8 +1650,8 @@ export function PptCanvas({
             sourceFile: x.sourceFileName,
             sourcePage: x.sourcePage,
           })),
-          templateImage || undefined,
-        );
+          watch.onText,
+        ).finally(watch.done);
         const slides: SlideData[] = pages.map((p, i) => ({
             id: p.id || `slide-${i + 1}`,
             title: normalizeLocalizedSlideTitle(p.title, uiLang as "zh" | "en", i + 1),
@@ -1660,6 +1683,7 @@ export function PptCanvas({
     try {
         const referenceVisualAssets = await buildReferenceVisualAssetsWithCaptions();
         dispatchCreation({ type: "progress", current: 0, total: 0, message: tr("正在生成大纲...", "Generating outline...") });
+        const watch = watchOutline();
         const pages = await pptService.generateOutline(
           ideaText,
           uiLang as "zh" | "en",
@@ -1670,8 +1694,8 @@ export function PptCanvas({
             sourceFile: x.sourceFileName,
             sourcePage: x.sourcePage,
           })),
-          templateImage || undefined,
-        );
+          watch.onText,
+        ).finally(watch.done);
         if (!Array.isArray(pages) || pages.length === 0) {
             throw new Error("Invalid outline response");
         }
@@ -2144,8 +2168,8 @@ export function PptCanvas({
   const firstSlideImage = firstSlide ? generatedImages[firstSlide.id] : undefined;
   useEffect(() => {
     if (!work || !isPersistenceHydrated) return;
-    const touched = localSlides.length > 0 || !!ideaInput.trim() || !!outlineInput.trim();
-    if (!touched) return;
+    // Only an outline or slides count: words still being typed are not a work yet.
+    if (localSlides.length === 0) return;
     const nameHint = nameFromText(firstSlide?.title || ideaInput || outlineInput);
     work.report({ touched: true, ...(nameHint ? { nameHint } : {}) });
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -2273,10 +2297,10 @@ export function PptCanvas({
     });
   };
 
-  // Render Creation Wizard
+  // Before a deck: what it is about is said in the chat; the style comes at the outline.
   if (activeSlides.length === 0 && (creationStep === 'idle' || creationStep === 'input' || creationStep === 'done')) {
     return (
-      <StyleLibrary templateLibrary={templateLibrary} progress={progress} tr={tr} draftText={draftText} />
+      <PptStart progress={progress} tr={tr} templateLibrary={templateLibrary} outlineDraft={outlineDraft} />
     );
   }
 
@@ -2293,6 +2317,7 @@ export function PptCanvas({
         onDeleteSlide={handleDeleteOutlineSlide}
         onAddSlideToChat={handleAddSlideToChat}
         onGenerate={handleGenerateFullPpt}
+        templateLibrary={templateLibrary}
       />
     );
   }

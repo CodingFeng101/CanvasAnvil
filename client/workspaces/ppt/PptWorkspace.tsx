@@ -1,13 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { Presentation } from "lucide-react";
+import { CanvasPaneProvider, useCanvasPaneState } from "@/shared/canvas-pane";
 import type { CreationRequest, CreationResult } from "@/workspaces/ppt/lib/creation-intent";
-import { cn } from "@/shared/lib/utils";
 import { t, useUiLanguage } from "@/shared/i18n";
 import {
   ResizableHandle,
   ResizablePanel,
   ResizablePanelGroup,
-  type PanelImperativeHandle,
 } from "@/shared/ui/resizable";
+import { CanvasSheet, sheetHandleClass } from "@/shared/ui/canvas-sheet";
 import { PPT_OUTLINE_EDIT_SYSTEM_PROMPT, PPT_SLIDES_EDIT_SYSTEM_PROMPT } from "@/workspaces/ppt/lib/prompts";
 import {
   PPT_CHAT_STORAGE_KEY,
@@ -36,6 +37,7 @@ type CodeActionResult = { ok: boolean; retry?: boolean; error?: string };
 export function PptWorkspace() {
   const uiLang = useUiLanguage();
   const work = useWork();
+  const pane = useCanvasPaneState({ kind: uiLang === "zh" ? "演示文稿" : "Deck", icon: Presentation, variant: "ppt" });
   const didMountRef = useRef(false);
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [pptIncomingEdit, setPptIncomingEdit] = useState<{ id: string; payload: string } | null>(null);
@@ -66,22 +68,23 @@ export function PptWorkspace() {
     }
   });
 
-  const [isChatCollapsed, setIsChatCollapsed] = useState(false);
-  const chatPanelRef = useRef<PanelImperativeHandle | null>(null);
 
   /** The first message of a deck goes to the canvas, which owns the template, the files and the flows. */
   const [creationRequest, setCreationRequest] = useState<(CreationRequest & { id: string }) | null>(null);
   const creationResolvers = useRef(new Map<string, (result: CreationResult) => void>());
   const [draftText, setDraftText] = useState("");
   const [selectedTemplate, setSelectedTemplate] = useState<{ name: string; previewSrc: string } | null>(null);
+  const revealCanvas = pane.value.reveal;
   const startCreation = useCallback(
     (request: CreationRequest) =>
       new Promise<CreationResult>((resolve) => {
         const id = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
         creationResolvers.current.set(id, resolve);
         setCreationRequest({ ...request, id });
+        // The deck is made on the canvas: open it to show the work going on.
+        revealCanvas();
       }),
-    [],
+    [revealCanvas],
   );
   const handleCreationHandled = useCallback((id: string, result: CreationResult) => {
     creationResolvers.current.get(id)?.(result);
@@ -129,21 +132,6 @@ export function PptWorkspace() {
     }
   }, [pptStage]);
 
-  const toggleCollapse = () => {
-    const panel = chatPanelRef.current;
-    if (!panel) return;
-    try {
-      if (panel.isCollapsed?.() || isChatCollapsed) {
-        panel.expand();
-        setIsChatCollapsed(false);
-      } else {
-        panel.collapse();
-        setIsChatCollapsed(true);
-      }
-    } catch {
-      setIsChatCollapsed(false);
-    }
-  };
 
   const addToHistory = (content: string, type: HistoryItem["type"]) => {
     const item: HistoryItem = {
@@ -270,17 +258,50 @@ export function PptWorkspace() {
   };
 
   return (
+    <CanvasPaneProvider value={pane.value}>
     <ResizablePanelGroup
       orientation="horizontal"
       className="h-full"
       style={{ height: "100%" }}
     >
+      {/* The chat is there from the start: a deck is asked for in it, as on the other canvases. */}
       <ResizablePanel
-        defaultSize="68%"
-        minSize="30%"
-        className={cn("transition-[flex-grow,flex-basis] duration-300 ease-in-out will-change-[flex-grow,flex-basis]")}
+        id="ppt-chat"
+        {...pane.chatPanelProps}
       >
-        <div className="h-full w-full relative bg-muted/20">
+        <div ref={pane.chatColumnRef} className={pane.chatColumnClassName}>
+        <PptChatPanel
+          key="ppt"
+          systemPrompt={pptStage === "slides" ? PPT_SLIDES_EDIT_SYSTEM_PROMPT : PPT_OUTLINE_EDIT_SYSTEM_PROMPT}
+          initialMessages={chatHistory}
+          onMessagesChange={setChatHistory}
+          attachments={attachments}
+          workspaceId="ppt"
+          hideHistoryButton
+          title={t(uiLang, "workspace.ppt.title")}
+          inputPlaceholder={t(uiLang, "workspace.ppt.placeholder")}
+          onRemoveAttachment={(id) => setAttachments((prev) => prev.filter((a) => a.id !== id))}
+          onClearAttachments={() => setAttachments([])}
+          pptDraftSlides={pptDraftSlides}
+          onClearPptDraftSlides={() => setPptDraftSlides([])}
+          onClearWorkspace={clearWorkspace}
+          onStartOver={work ? clearWorkspace : undefined}
+          history={versionHistory}
+          onRestore={handleRestore}
+          onClearVersionHistory={() => setVersionHistory([])}
+          onCodeAction={handlePptCodeAction}
+          stage={pptStage}
+          onStartCreation={startCreation}
+          selectedTemplate={selectedTemplate}
+          onDraftChange={setDraftText}
+        />
+        </div>
+      </ResizablePanel>
+
+      <ResizableHandle className={sheetHandleClass} />
+
+      <ResizablePanel id="ppt-canvas" {...pane.canvasPanelProps}>
+        <CanvasSheet>
           <PptCanvas
             key={`ppt-${pptResetTick}`}
             onAddToChat={handleAddToChat}
@@ -294,54 +315,9 @@ export function PptWorkspace() {
             draftText={draftText}
             onTemplateChange={setSelectedTemplate}
           />
-        </div>
+        </CanvasSheet>
       </ResizablePanel>
-
-      {/* The chat is there from the start: a deck is asked for in it, as on the other canvases. */}
-      {(
-        <>
-          <ResizableHandle withHandle className="bg-border/50 hover:bg-primary/50 transition-colors w-1.5" />
-          <ResizablePanel
-            id="ppt-chat"
-            panelRef={chatPanelRef}
-            defaultSize="32%"
-            minSize="20%"
-            maxSize="70%"
-            collapsible
-            collapsedSize="56px"
-            onResize={(panelSize) => setIsChatCollapsed(panelSize.inPixels <= 80)}
-            className={cn("transition-[flex-grow,flex-basis] duration-300 ease-in-out will-change-[flex-grow,flex-basis]")}
-          >
-            <PptChatPanel
-              key="ppt"
-              systemPrompt={pptStage === "slides" ? PPT_SLIDES_EDIT_SYSTEM_PROMPT : PPT_OUTLINE_EDIT_SYSTEM_PROMPT}
-              initialMessages={chatHistory}
-              onMessagesChange={setChatHistory}
-              attachments={attachments}
-              workspaceId="ppt"
-              hideHistoryButton
-              collapsed={isChatCollapsed}
-              title={t(uiLang, "workspace.ppt.title")}
-              inputPlaceholder={t(uiLang, "workspace.ppt.placeholder")}
-              onToggleCollapse={toggleCollapse}
-              onRemoveAttachment={(id) => setAttachments((prev) => prev.filter((a) => a.id !== id))}
-              onClearAttachments={() => setAttachments([])}
-              pptDraftSlides={pptDraftSlides}
-              onClearPptDraftSlides={() => setPptDraftSlides([])}
-              onClearWorkspace={clearWorkspace}
-              onStartOver={work ? clearWorkspace : undefined}
-              history={versionHistory}
-              onRestore={handleRestore}
-              onClearVersionHistory={() => setVersionHistory([])}
-              onCodeAction={handlePptCodeAction}
-              stage={pptStage}
-              onStartCreation={startCreation}
-              selectedTemplate={selectedTemplate}
-              onDraftChange={setDraftText}
-            />
-          </ResizablePanel>
-        </>
-      )}
     </ResizablePanelGroup>
+    </CanvasPaneProvider>
   );
 }

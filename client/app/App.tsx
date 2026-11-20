@@ -1,20 +1,20 @@
 import { Suspense, useEffect, useRef, useState } from "react";
-import { Monitor, Moon, Sun } from "lucide-react";
-import { AnimatePresence, MotionConfig, motion } from "motion/react";
+import { getPreferences, usePreferences } from "@/shared/preferences";
+import { MotionConfig, motion } from "motion/react";
 import { Toaster } from "sonner";
-import { BrandIcon } from "@/app/BrandIcon";
+import { AppSidebar } from "@/app/AppSidebar";
 import { ErrorBoundary } from "@/app/ErrorBoundary";
 import { DEFAULT_WORKSPACE, WORKSPACES, isWorkspaceId, type WorkspaceId } from "@/app/workspaces";
-import { SettingsDialog } from "@/app/SettingsDialog";
 import { WorkHost, WorksProvider } from "@/app/works/works-provider";
-import { WorksButton } from "@/app/works/works-dialog";
 import { LandingPage } from "@/pages/LandingPage";
 import { TutorialsPage } from "@/pages/tutorials/TutorialsPage";
 import { cn } from "@/shared/lib/utils";
-import { setUiLanguage, t, useUiLanguage, type UiLanguage } from "@/shared/i18n";
-import { SPRING, TWEEN } from "@/shared/motion";
-import { applyTheme, useTheme, type Theme } from "@/shared/theme";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/shared/ui/tooltip";
+import { TWEEN } from "@/shared/motion";
+import { applyTheme } from "@/shared/theme";
+import { setStatsCanvas, startUsageStats } from "@/shared/usage-stats";
+
+// Settings → Usage counts tokens and images from here on.
+startUsageStats();
 
 const APP_VIEW_STORAGE_KEY = "CanvasAnvil-app-view-v1";
 const APP_WORKSPACE_STORAGE_KEY = "CanvasAnvil-active-workspace-v1";
@@ -47,159 +47,35 @@ function SkeletonBlock({ className }: { className?: string }) {
 
 /**
  * Shown while a workspace's chunk loads: the shape of the screen about to
- * appear -- canvas on the left, chat on the right -- rather than a lone
- * spinner on a blank page, so the switch reads as the layout filling in.
+ * appear -- chat on the left, the canvas sheet on the right -- rather than a
+ * lone spinner, so the switch reads as the layout filling in.
  */
 function WorkspaceFallback() {
   return (
     <div className="flex h-full w-full animate-fade-in" aria-busy="true">
-      <div className="flex-[68] p-6">
-        <SkeletonBlock className="h-full w-full rounded-2xl" />
-      </div>
-      <div className="flex flex-[32] flex-col border-l border-border/50 bg-card">
-        <div className="flex items-center justify-between border-b border-border/50 px-5 py-4">
-          <SkeletonBlock className="h-5 w-24 rounded-md" />
-          <SkeletonBlock className="size-7 rounded-md" />
-        </div>
-        <div className="flex flex-1 flex-col justify-center gap-3 px-5">
-          <SkeletonBlock className="size-12 rounded-2xl" />
-          <SkeletonBlock className="h-5 w-2/3 rounded-md" />
+      <div className="flex flex-[32] flex-col px-5 py-4">
+        <SkeletonBlock className="h-4 w-28 rounded-md" />
+        <div className="flex flex-1 flex-col justify-center gap-3">
+          <SkeletonBlock className="h-7 w-2/3 rounded-md" />
           <SkeletonBlock className="h-4 w-full rounded-md" />
-          <SkeletonBlock className="mt-4 h-12 w-full" />
-          <SkeletonBlock className="h-12 w-full" />
+          <SkeletonBlock className="mt-4 h-9 w-full" />
+          <SkeletonBlock className="h-9 w-full" />
         </div>
-        <div className="border-t border-border/50 p-4">
-          <SkeletonBlock className="h-[104px] w-full rounded-2xl" />
-        </div>
+        <SkeletonBlock className="h-[104px] w-full rounded-2xl" />
       </div>
-    </div>
-  );
-}
-
-const THEME_ORDER: Theme[] = ["light", "dark", "system"];
-const THEME_ICON = { light: Sun, dark: Moon, system: Monitor } as const;
-
-function ThemeToggle() {
-  const uiLang = useUiLanguage();
-  const { theme, setTheme } = useTheme();
-  const Icon = THEME_ICON[theme];
-
-  const label =
-    uiLang === "zh"
-      ? { light: "浅色", dark: "深色", system: "跟随系统" }[theme]
-      : { light: "Light", dark: "Dark", system: "System" }[theme];
-
-  return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <button
-          type="button"
-          aria-label={label}
-          onClick={() => setTheme(THEME_ORDER[(THEME_ORDER.indexOf(theme) + 1) % THEME_ORDER.length])}
-          className="flex size-9 items-center justify-center rounded-lg text-muted-foreground transition-[background-color,color] duration-fast ease-out-soft hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/30"
-        >
-          {/* The icon swaps rather than cross-dissolving in place, so the
-              three-way cycle stays legible at a glance. */}
-          <AnimatePresence mode="wait" initial={false}>
-            <motion.span
-              key={theme}
-              initial={{ opacity: 0, rotate: -70, scale: 0.7 }}
-              animate={{ opacity: 1, rotate: 0, scale: 1 }}
-              exit={{ opacity: 0, rotate: 70, scale: 0.7 }}
-              transition={TWEEN.fast}
-              className="flex items-center justify-center"
-            >
-              <Icon className="size-[18px]" />
-            </motion.span>
-          </AnimatePresence>
-        </button>
-      </TooltipTrigger>
-      <TooltipContent side="bottom">{label}</TooltipContent>
-    </Tooltip>
-  );
-}
-
-/**
- * One-click language switch beside the theme toggle. Inside a workspace the
- * only way to change language used to be the settings dialog, while the
- * portal had its own button in the header -- now both are one click.
- */
-function LanguageToggle() {
-  const uiLang = useUiLanguage();
-  const next: UiLanguage = uiLang === "zh" ? "en" : "zh";
-  const label = uiLang === "zh" ? "Switch to English" : "切换到中文";
-
-  return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <button
-          type="button"
-          aria-label={label}
-          onClick={() => setUiLanguage(next)}
-          className="flex h-9 min-w-9 items-center justify-center rounded-lg px-2 text-[13px] font-semibold text-muted-foreground transition-[background-color,color] duration-fast ease-out-soft hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/30"
-        >
-          <AnimatePresence mode="wait" initial={false}>
-            <motion.span
-              key={uiLang}
-              initial={{ opacity: 0, y: 6 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -6 }}
-              transition={TWEEN.fast}
-            >
-              {uiLang === "zh" ? "EN" : "中"}
-            </motion.span>
-          </AnimatePresence>
-        </button>
-      </TooltipTrigger>
-      <TooltipContent side="bottom">{label}</TooltipContent>
-    </Tooltip>
-  );
-}
-
-function WorkspaceSwitcher({
-  active,
-  onSelect,
-}: {
-  active: WorkspaceId;
-  onSelect: (id: WorkspaceId) => void;
-}) {
-  const uiLang = useUiLanguage();
-
-  return (
-    <div className="flex min-w-max items-center gap-0.5 rounded-xl border border-border/60 bg-sunken p-1">
-      {WORKSPACES.map(({ id, labelKey, icon: Icon }) => {
-        const isActive = active === id;
-        return (
-          <button
-            key={id}
-            onClick={() => onSelect(id)}
-            className={cn(
-              "relative flex items-center gap-2 rounded-lg px-3.5 py-1.5 text-sm font-medium",
-              "transition-colors duration-fast ease-out-soft focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/30",
-              isActive ? "text-foreground" : "text-muted-foreground hover:text-foreground",
-            )}
-          >
-            {/* One shared element slides between tabs instead of three
-                independent backgrounds fading in and out. */}
-            {isActive && (
-              <motion.span
-                layoutId="workspace-tab"
-                transition={SPRING.snap}
-                className="absolute inset-0 rounded-lg bg-card shadow-xs ring-1 ring-border/60"
-              />
-            )}
-            <Icon className="relative z-10 size-4" />
-            <span className="relative z-10">{t(uiLang, labelKey)}</span>
-          </button>
-        );
-      })}
+      <div className="flex-[68] py-2 pr-2">
+        <SkeletonBlock className="h-full w-full rounded-xl" />
+      </div>
     </div>
   );
 }
 
 export default function App() {
+  const prefs = usePreferences();
   const [showLanding, setShowLanding] = useState(() => {
     if (typeof window === "undefined") return true;
+    const startOn = getPreferences().startOn;
+    if (startOn !== "last") return startOn === "home";
     return localStorage.getItem(APP_VIEW_STORAGE_KEY) !== "workspace";
   });
   const [activeWorkspace, setActiveWorkspace] = useState<WorkspaceId>(readStoredWorkspace);
@@ -241,11 +117,12 @@ export default function App() {
 
   useEffect(() => {
     localStorage.setItem(APP_WORKSPACE_STORAGE_KEY, activeWorkspace);
+    setStatsCanvas(activeWorkspace);
   }, [activeWorkspace]);
 
   if (showTutorials) {
     return (
-      <MotionConfig reducedMotion="user">
+      <MotionConfig reducedMotion={prefs.reduceMotion ? "always" : "user"}>
         <TutorialsPage
           onBack={closeTutorials}
           onEnterWorkspace={(workspace) => {
@@ -262,7 +139,7 @@ export default function App() {
 
   if (showLanding) {
     return (
-      <MotionConfig reducedMotion="user">
+      <MotionConfig reducedMotion={prefs.reduceMotion ? "always" : "user"}>
         <LandingPage
           onStart={(workspace) => {
             if (workspace) setActiveWorkspace(workspace);
@@ -280,34 +157,14 @@ export default function App() {
   return (
     // `reducedMotion="user"` is the single gate for the JS side; index.css
     // carries the equivalent for CSS transitions.
-    <MotionConfig reducedMotion="user">
+    <MotionConfig reducedMotion={prefs.reduceMotion ? "always" : "user"}>
       <WorksProvider activeWorkspace={active.id} onActivateWorkspace={setActiveWorkspace}>
-      <div className="h-screen w-screen flex flex-col bg-background overflow-hidden font-sans">
+      <div className="paper-grain flex h-screen w-screen flex-col overflow-hidden bg-background font-sans md:flex-row">
         <Toaster position="top-center" richColors />
 
-        <header className="h-14 shrink-0 border-b border-border/60 grid grid-cols-[1fr_auto_1fr] items-center gap-4 px-4 bg-background/85 backdrop-blur-md supports-[backdrop-filter]:bg-background/70 z-50">
-          <button
-            type="button"
-            className="group flex items-center gap-2 justify-self-start rounded-lg px-1.5 py-1 transition-colors duration-fast ease-out-soft hover:bg-accent/60 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/30"
-            onClick={() => setShowLanding(true)}
-          >
-            <BrandIcon className="h-7 w-7 transition-transform duration-base ease-out-soft group-hover:-rotate-6" />
-            <span className="font-display text-[17px] font-semibold tracking-[-0.015em]">CanvasAnvil</span>
-          </button>
+        <AppSidebar active={activeWorkspace} onSelect={setActiveWorkspace} onHome={() => setShowLanding(true)} />
 
-          <div className="justify-self-center max-w-full overflow-x-auto">
-            <WorkspaceSwitcher active={activeWorkspace} onSelect={setActiveWorkspace} />
-          </div>
-
-          <div className="flex items-center gap-1 justify-self-end">
-            <WorksButton />
-            <LanguageToggle />
-            <ThemeToggle />
-            <SettingsDialog />
-          </div>
-        </header>
-
-        <div className="flex-1 overflow-hidden relative">
+        <main className="relative min-h-0 min-w-0 flex-1 overflow-hidden">
           <ErrorBoundary>
             {/* Keyed so switching canvases unmounts the previous one rather than
                 reusing its state under a different workspace. Entrance only —
@@ -316,7 +173,7 @@ export default function App() {
                 transform on the wrapper, which makes it the containing block
                 for every `position: fixed` descendant -- so any modal or
                 lightbox opened inside a workspace was clipped to below the
-                header instead of covering the viewport.
+                sidebar's edge instead of covering the viewport.
 
                 The fade sits above WorkHost and Suspense so it mounts with the
                 canvas switch itself. Mounted below them -- after the works are
@@ -336,7 +193,7 @@ export default function App() {
               </WorkHost>
             </motion.div>
           </ErrorBoundary>
-        </div>
+        </main>
       </div>
       </WorksProvider>
     </MotionConfig>

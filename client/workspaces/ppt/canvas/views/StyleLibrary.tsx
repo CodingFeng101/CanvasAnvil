@@ -5,7 +5,6 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/shared/ui/di
 import { Textarea } from "@/shared/ui/textarea";
 import { cn } from "@/shared/lib/utils";
 import { TEMPLATE_CATEGORIES } from "@/workspaces/ppt/canvas/lib/constants";
-import type { CreationProgress } from "@/workspaces/ppt/canvas/lib/creation-machine";
 import type { useTemplateLibrary } from "@/workspaces/ppt/canvas/hooks/use-template-library";
 import { recommendCategoryId, topicOf } from "@/workspaces/ppt/lib/creation-intent";
 
@@ -18,20 +17,25 @@ type Template = Library["templates"][number];
 
 interface StyleLibraryProps {
   templateLibrary: Library;
-  progress: CreationProgress;
   tr: (zh: string, en: string) => string;
-  /** What is being typed in the chat, so the library can suggest styles for it. */
-  draftText: string;
+  /** What the deck is about, so the library can suggest styles for it. */
+  draftText?: string;
+  /**
+   * "picker": choosing the deck's style (the outline step); a click applies it.
+   * "library": My works' template library, for looking through, adding and deleting.
+   */
+  variant?: "picker" | "library";
+  /** Called after a style is chosen in the picker. */
+  onPicked?: () => void;
 }
 
 /**
- * The canvas before a deck exists: the style library.
- *
- * The request itself -- a topic, an outline, a PDF to restyle -- is given in
- * the chat panel, as on the other canvases. This side only answers "what
- * should it look like".
+ * The style library: the built-in slide styles plus the ones the user has
+ * uploaded or generated. The deck's style is chosen from it at the outline
+ * step; My works shows the same library to look after it.
  */
-export function StyleLibrary({ templateLibrary, progress, tr, draftText }: StyleLibraryProps) {
+export function StyleLibrary({ templateLibrary, tr, draftText = "", variant = "picker", onPicked }: StyleLibraryProps) {
+  const picking = variant === "picker";
   const [active, setActive] = useState<string>(ALL);
   const [query, setQuery] = useState("");
   const uploadRef = useRef<HTMLInputElement | null>(null);
@@ -79,22 +83,28 @@ export function StyleLibrary({ templateLibrary, progress, tr, draftText }: Style
   const categoryForNewTemplate = activeId === ALL || activeId === MINE ? "other" : activeId;
 
   const tile = (t: Template) => {
-    const selected = selectedTemplateId === t.id;
+    const selected = picking && selectedTemplateId === t.id;
+    const pick = () => {
+      if (!picking) return;
+      void templateLibrary.selectTemplate(t);
+      onPicked?.();
+    };
     return (
       <div
         key={t.id}
-        role="button"
-        tabIndex={0}
-        aria-pressed={selected}
-        onClick={() => void templateLibrary.selectTemplate(t)}
+        role={picking ? "button" : undefined}
+        tabIndex={picking ? 0 : undefined}
+        aria-pressed={picking ? selected : undefined}
+        onClick={pick}
         onKeyDown={(e) => {
           if (e.key === "Enter" || e.key === " ") {
             e.preventDefault();
-            void templateLibrary.selectTemplate(t);
+            pick();
           }
         }}
         className={cn(
-          "group relative aspect-video cursor-pointer overflow-hidden rounded-lg bg-muted outline-none",
+          "group relative aspect-video overflow-hidden rounded-lg bg-muted outline-none",
+          picking && "cursor-pointer",
           "transition-[transform,box-shadow] duration-base ease-out-soft hover:-translate-y-0.5 hover:shadow-soft-lg",
           "focus-visible:ring-[3px] focus-visible:ring-ring/35",
           selected ? "ring-2 ring-primary ring-offset-2 ring-offset-background" : "ring-1 ring-border",
@@ -115,7 +125,7 @@ export function StyleLibrary({ templateLibrary, progress, tr, draftText }: Style
         <div
           className={cn(
             "pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/75 to-transparent px-2.5 pb-1.5 pt-6 text-xs text-white transition-opacity",
-            selected ? "opacity-100" : "opacity-0 group-hover:opacity-100",
+            selected || !picking ? "opacity-100" : "opacity-0 group-hover:opacity-100",
           )}
         >
           {t.name}
@@ -127,27 +137,9 @@ export function StyleLibrary({ templateLibrary, progress, tr, draftText }: Style
   const grid = "grid gap-3.5 grid-cols-[repeat(auto-fill,minmax(190px,1fr))]";
 
   return (
-    <div className="h-full w-full overflow-auto">
-      <div className="mx-auto max-w-6xl px-8 pb-12 pt-8">
-        <h1 className="font-display text-[28px] font-semibold leading-tight tracking-[-0.02em] text-foreground">
-          {tr("先挑一套", "Pick a ")}
-          <span className="text-primary-strong">{tr("风格", "style")}</span>
-        </h1>
-        <p className="mt-1.5 text-sm text-muted-foreground">
-          {tr(
-            "风格只决定配色和质感，版式会按每一页的内容重新排。选好后在右边说你要讲什么。",
-            "A style sets palette and texture only; each slide is laid out for its own content. Then tell the assistant what the deck is about.",
-          )}
-        </p>
-
-        {progress.message ? (
-          <div className="mt-4 flex items-center gap-2 text-sm font-medium text-primary-strong" role="status">
-            <Loader2 className="h-4 w-4 animate-spin" />
-            {progress.message}
-          </div>
-        ) : null}
-
-        <div className="mt-5 flex flex-wrap items-center gap-2">
+    <div className="w-full">
+      <div className="pb-2">
+        <div className="flex flex-wrap items-center gap-2">
           <label className="flex h-9 min-w-[220px] flex-1 items-center gap-2 rounded-lg border border-border bg-card px-3 text-muted-foreground shadow-xs focus-within:border-ring focus-within:ring-[3px] focus-within:ring-ring/25">
             <Search className="h-4 w-4 shrink-0" />
             <input
@@ -193,21 +185,21 @@ export function StyleLibrary({ templateLibrary, progress, tr, draftText }: Style
           ))}
         </div>
 
-        {recommended.length > 0 && !needle && activeId === ALL ? (
-          <section className="mt-7">
+        {picking && recommended.length > 0 && !needle && activeId === ALL ? (
+          <section className="mt-6">
             <div className="mb-3 flex items-baseline gap-2">
               <h2 className="text-sm font-semibold text-foreground">
                 {tr("适合「", "Fits \"")}
                 <span className="text-primary-strong">{topic}</span>
                 {tr("」", "\"")}
               </h2>
-              <span className="text-xs text-muted-foreground">{tr("根据右边写的内容挑的", "Picked from what you wrote")}</span>
+              <span className="text-xs text-muted-foreground">{tr("按大纲内容挑的", "Picked from the outline")}</span>
             </div>
             <div className={grid}>{recommended.map(tile)}</div>
           </section>
         ) : null}
 
-        <section className="mt-7">
+        <section className="mt-6">
           <div className="mb-3 flex items-baseline gap-2">
             <h2 className="text-sm font-semibold text-foreground">{activeId === ALL ? tr("全部风格", "All styles") : activeLabel}</h2>
             <span className="text-xs tabular-nums text-muted-foreground">{visible.length}</span>

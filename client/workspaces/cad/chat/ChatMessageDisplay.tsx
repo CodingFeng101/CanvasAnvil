@@ -1,9 +1,11 @@
 import React, { useRef, useEffect, useState, useCallback } from 'react';
+import { CanvasCard } from "@/shared/canvas-pane";
 import { Check, ChevronDown, ChevronUp, Copy, FileCode, FileText, Pencil, RotateCcw } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from 'remark-gfm';
-import { MessageAttachments, MessageImage, Reasoning, ReasoningContent, ReasoningTrigger, Shimmer } from "@/shared/chat";
-import { ScrollArea } from "@/shared/ui/scroll-area";
+import { MessageAttachments, MessageImage, Reasoning, ReasoningContent, ReasoningTrigger, TokenUsageLine, WorkingIndicator, useTurnUsage } from "@/shared/chat";
+import { ChatScrollArea } from "@/shared/chat/chat-scroll";
+import { MessageEditor } from "@/shared/chat/message-editor";
 import { CodeBlock } from "@/workspaces/cad/chat/code-block";
 import { CadSteps } from "@/workspaces/cad/chat/CadSteps";
 import { CAD_CONFIRM, parseCadSteps } from "@/workspaces/cad/chat/cad-steps-text";
@@ -109,6 +111,8 @@ export function ChatMessageDisplay({
     onDisplayChart,
     onCadAction,
 }: ChatMessageDisplayProps) {
+    // Tokens the provider reported for this turn (all its model calls).
+    const turnUsage = useTurnUsage(status === "submitted" || status === "streaming");
     const uiLang = useUiLanguage();
     const tr = (zh: string, en: string) => (uiLang === "zh" ? zh : en);
     const scrollRootRef = useRef<HTMLDivElement>(null);
@@ -283,16 +287,12 @@ export function ChatMessageDisplay({
                 }
             }}
         >
-            <ScrollArea className="h-full w-full scrollbar-thin">
-                <div className="py-5 px-5 space-y-5">
+            <ChatScrollArea contentClassName="py-5 px-5 space-y-5">
                     {messages.map((message, messageIndex) => {
                     const userMessageText = message.role === "user" ? getMessageTextContent(message) : "";
                     const isLastAssistantMessage =
                         message.role === "assistant" &&
                         (messageIndex === messages.length - 1 || messages.slice(messageIndex + 1).every((m) => m.role !== "assistant"));
-                    const isLastUserMessage =
-                        message.role === "user" &&
-                        (messageIndex === messages.length - 1 || messages.slice(messageIndex + 1).every((m) => m.role !== "user"));
                     const isEditing = editingMessageId === message.id;
                     const messageText = getMessageTextContent(message);
                     const { images: probeImages, rest: probeWithoutImages } = extractImageTags(messageText);
@@ -314,12 +314,6 @@ export function ChatMessageDisplay({
                         hasProbePptTool ||
                         hasProbeReasoning;
                     const isAssistantEmpty = message.role === "assistant" && !hasRenderableContent;
-                    const showPendingIndicator =
-                        message.role === "user" &&
-                        isLastUserMessage &&
-                        (status === "submitted" || status === "streaming") &&
-                        // A step chain shows its own progress.
-                        !parseCadSteps(messages[messageIndex + 1] ? getMessageTextContent(messages[messageIndex + 1]) : "");
 
                     if (isAssistantEmpty) return null;
                     // The step chain's confirm button sends a hidden message; the chain shows it as "confirmed".
@@ -329,7 +323,7 @@ export function ChatMessageDisplay({
                         const nextText = next ? getMessageTextContent(next) : "";
                         return (
                             // The scroll area's content grows to fit its widest child; clip so a long summary truncates.
-                            <div key={message.id} className="w-full min-w-0 max-w-full overflow-hidden [contain:inline-size] animate-message-in">
+                            <div key={message.id} data-chat-msg="assistant" className="w-full min-w-0 max-w-full overflow-hidden [contain:inline-size] animate-message-in">
                                 <CadSteps
                                     text={messageText}
                                     followUp={!next ? "none" : nextText.startsWith(CAD_CONFIRM) ? "confirmed" : "feedback"}
@@ -343,7 +337,8 @@ export function ChatMessageDisplay({
                     return (
                         <React.Fragment key={message.id}>
                         <div
-                            className={`flex w-full animate-message-in ${message.role === "user" ? "justify-end" : "justify-start"}`}
+                            data-chat-msg={message.role === "user" ? "user" : "assistant"}
+                            className={`group/msg flex w-full animate-message-in ${message.role === "user" ? "justify-end" : "justify-start"}`}
                         >
                             <div
                                 className={cn(
@@ -370,28 +365,10 @@ export function ChatMessageDisplay({
                                     message.role === "assistant"
                                         ? ""
                                     : message.role === "user"
-                                            ? "px-4 py-3 bg-muted text-foreground rounded-2xl rounded-br-md border border-border/60 transition-[background-color] duration-fast ease-out-soft"
+                                            ? "px-4 py-3 bg-foreground/[0.06] text-foreground rounded-2xl transition-[background-color] duration-fast ease-out-soft"
                                             : "px-4 py-3 bg-destructive/10 text-destructive border border-destructive/20 rounded-2xl rounded-bl-md",
-                                    message.role === "user" && isLastUserMessage && onEditMessage
-                                        ? "cursor-pointer hover:bg-accent"
-                                        : ""
-                                )}
-                                role={message.role === "user" && isLastUserMessage && onEditMessage ? "button" : undefined}
-                                tabIndex={message.role === "user" && isLastUserMessage && onEditMessage ? 0 : undefined}
-                                title={message.role === "user" && isLastUserMessage && onEditMessage ? tr("点击编辑", "Click to edit") : undefined}
-                                onClick={() => {
-                                    if (isEditing || message.role !== "user" || !isLastUserMessage || !onEditMessage) return;
-                                    setEditingMessageId(message.id);
-                                    setEditText(getUserOriginalText(message));
-                                }}
-                                onKeyDown={(e) => {
-                                    if (isEditing || message.role !== "user" || !isLastUserMessage || !onEditMessage) return;
-                                    if (e.key === "Enter" || e.key === " ") {
-                                        e.preventDefault();
-                                        setEditingMessageId(message.id);
-                                        setEditText(getUserOriginalText(message));
-                                    }
-                                }}>
+                                    isEditing && "!overflow-visible !bg-transparent !p-0"
+                                )}>
                                     
                                     {/* Reasoning Parts */}
                                     {message.parts?.map((part, partIndex) => {
@@ -424,18 +401,15 @@ export function ChatMessageDisplay({
                                         if (isEditing && message.role === "user") {
                                             const editParts = splitInlinePptTags(editText);
                                             return (
-                                                <div className="flex flex-col gap-2 min-w-[300px]" onClick={(e) => e.stopPropagation()}>
-                                                    <div className="relative w-full">
-                                                        <textarea
-                                                            ref={editTextareaRef}
-                                                            value={editText}
-                                                            onChange={(e) => setEditText(e.target.value)}
-                                                            onClick={(e) => e.stopPropagation()}
-                                                            className="relative z-10 w-full px-3 py-2 text-sm rounded-md border border-input bg-transparent text-transparent caret-foreground resize-none focus:outline-none focus:ring-2 focus:ring-primary"
-                                                            rows={4}
-                                                        />
-                                                        <div className="pointer-events-none absolute inset-0 z-0 overflow-hidden rounded-md border border-input bg-background px-3 py-2 text-sm leading-6 whitespace-pre-wrap break-words text-foreground">
-                                                            {editParts.map((p, i) => {
+                                                <MessageEditor
+                                                    value={editText}
+                                                    onChange={setEditText}
+                                                    onCancel={() => setEditingMessageId(null)}
+                                                    onSubmit={(value) => {
+                                                        setEditingMessageId(null);
+                                                        onEditMessage?.(messageIndex, value);
+                                                    }}
+                                                    overlay={<>{editParts.map((p, i) => {
                                                                 if (p.type === "text") return <span key={`edit-t-${i}`}>{p.text}</span>;
                                                                 const kind = p.kind === "outline" ? "outline" : "slide_image";
                                                                 const label = p.title ? tr(`第 ${p.n} 页：${p.title}`, `Slide ${p.n}: ${p.title}`) : tr(`第 ${p.n} 页`, `Slide ${p.n}`);
@@ -460,33 +434,8 @@ export function ChatMessageDisplay({
                                                                         {label}
                                                                     </span>
                                                                 );
-                                                            })}
-                                                        </div>
-                                                    </div>
-                                                    <div className="flex justify-end gap-2">
-                                                        <button
-                                                            onClick={(e) => {
-                                                                e.stopPropagation();
-                                                                setEditingMessageId(null);
-                                                            }}
-                                                            className="px-3 py-1 text-xs rounded bg-muted hover:bg-muted/80 text-foreground"
-                                                        >
-                                                            {tr("取消", "Cancel")}
-                                                        </button>
-                                                        <button
-                                                            onClick={(e) => {
-                                                                e.stopPropagation();
-                                                                if (editText.trim() && onEditMessage) {
-                                                                    onEditMessage(messageIndex, editText.trim());
-                                                                    setEditingMessageId(null);
-                                                                }
-                                                            }}
-                                                            className="px-3 py-1 text-xs rounded bg-primary hover:bg-primary/90 text-primary-foreground"
-                                                        >
-                                                            {tr("重新发送", "Resend")}
-                                                        </button>
-                                                    </div>
-                                                </div>
+                                                            })}</>}
+                                                />
                                             );
                                         }
 
@@ -656,7 +605,7 @@ export function ChatMessageDisplay({
                                                             // No `dark:prose-invert`: the prose variables are driven
                                                             // from the tokens now, and invert would overwrite them
                                                             // with the plugin's own greys.
-                                                            "prose prose-sm max-w-none break-words [overflow-wrap:anywhere] [&>*:first-child]:mt-0 [&>*:last-child]:mb-0"
+                                                            "prose prose-sm font-voice text-[15px] max-w-none break-words [overflow-wrap:anywhere] [&>*:first-child]:mt-0 [&>*:last-child]:mb-0"
                                                         )}>
                                                             <ReactMarkdown
                                                                 remarkPlugins={[remarkGfm]}
@@ -773,7 +722,7 @@ export function ChatMessageDisplay({
                                 </div>
 
                                 {/* Actions */}
-                                <div className="order-2 flex items-center gap-1 mt-2 px-1">
+                                <div className={cn("order-2 flex items-center gap-1 mt-2 px-1", message.role === "user" && "opacity-0 transition-opacity duration-fast group-hover/msg:opacity-100 focus-within:opacity-100")}>
                                     {message.role === "user" && !isEditing && userMessageText && (
                                         <>
                                             <button
@@ -784,7 +733,7 @@ export function ChatMessageDisplay({
                                             >
                                                 {copiedMessageId === message.id ? <Check className="h-3.5 w-3.5 text-success" /> : <Copy className="h-3.5 w-3.5" />}
                                             </button>
-                                            {onEditMessage && isLastUserMessage && (
+                                            {onEditMessage && status !== "streaming" && status !== "submitted" && (
                                                 <button
                                                     type="button"
                                                     onClick={() => {
@@ -828,36 +777,16 @@ export function ChatMessageDisplay({
                                 </div>
                             </div>
                         </div>
-                        {showPendingIndicator && (
-                            <div className="flex w-full justify-start animate-message-in mt-3">
-                                <div className="max-w-[85%] min-w-0">
-                                    <Shimmer as="span" className="py-1 text-sm" duration={1.6}>
-                                        {tr("思考中...", "Thinking...")}
-                                    </Shimmer>
-                                </div>
-                            </div>
-                        )}
                         </React.Fragment>
                     );
                     })}
+                    {(status === "submitted" || status === "streaming") && (
+                        <WorkingIndicator kind="cad" className="mt-3 animate-message-in" usage={turnUsage} />
+                    )}
+                    {status !== "submitted" && status !== "streaming" && messages[messages.length - 1]?.role === "assistant" && <TokenUsageLine usage={turnUsage} />}
+                    {status !== "submitted" && status !== "streaming" && messages[messages.length - 1]?.role === "assistant" && <CanvasCard />}
                     <div ref={messagesEndRef} />
-                </div>
-            </ScrollArea>
-            {!isAtBottom && messages.length > 0 && (
-                <button
-                    type="button"
-                    onClick={() => {
-                        userScrolledUpRef.current = false;
-                        setIsAtBottom(true);
-                        scrollToBottom("smooth");
-                    }}
-                    className="absolute bottom-4 right-4 z-20 inline-flex items-center gap-1 rounded-full border border-border bg-background/90 backdrop-blur px-3 py-1.5 text-xs text-foreground shadow-md hover:bg-background"
-                    title={tr("回到底部", "Back to bottom")}
-                >
-                    <ChevronDown className="w-3.5 h-3.5" />
-                    {tr("回到底部", "Back to bottom")}
-                </button>
-            )}
+            </ChatScrollArea>
         </div>
     );
 }

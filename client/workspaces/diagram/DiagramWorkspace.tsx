@@ -1,12 +1,14 @@
-import { useEffect, useRef, useState } from "react"
+import { type ReactNode, useEffect, useRef, useState } from "react"
+import { Layers } from "lucide-react"
+import { CanvasPaneProvider, useCanvasPaneState } from "@/shared/canvas-pane"
 import { DrawIoEmbed } from "react-drawio"
 import ChatPanel from "@/workspaces/diagram/chat/ChatPanel"
 import {
     ResizableHandle,
     ResizablePanel,
     ResizablePanelGroup,
-    type PanelImperativeHandle,
 } from "@/shared/ui/resizable"
+import { CanvasSheet, sheetHandleClass } from "@/shared/ui/canvas-sheet"
 import { DiagramProvider, useDiagram } from "@/workspaces/diagram/state/diagram-context"
 import { useTheme } from "@/shared/theme"
 import { Button } from "@/shared/ui/button"
@@ -19,16 +21,35 @@ const DRAWIO_SOURCES = drawioSources(
         : "",
 )
 
+/**
+ * draw.io's chrome in Claude's colours, sent through its `configure` message
+ * (its `css` option), since the editor lives in a cross-origin iframe. Its
+ * blue primary button and active page tab become ink; the toolbar and footer
+ * sit on the ivory ground. Diagram content is not touched.
+ */
+function drawioChromeCss(dark: boolean) {
+    const ink = dark ? "#faf9f5" : "#141413"
+    const onInk = dark ? "#141413" : "#faf9f5"
+    const ground = dark ? "#262624" : "#faf9f5"
+    const wash = dark ? "rgba(255,255,255,.08)" : "rgba(20,20,19,.06)"
+    return [
+        `.geBtn.gePrimaryBtn,.gePrimaryBtn{background:${ink}!important;border-color:${ink}!important;color:${onInk}!important;border-radius:8px!important;box-shadow:none!important;background-image:none!important}`,
+        `.geActivePage,.geTabItem.geActivePage{color:${ink}!important;background:${wash}!important;border-color:transparent!important;border-radius:6px!important}`,
+        `.geToolbarContainer,.geFooterContainer,.geTabContainer,.geMenubarContainer{background:${ground}!important;border-color:${wash}!important}`,
+        `.geToolbar .geButton:hover,.geTabItem:hover{background:${wash}!important}`,
+        `.geToolbar .geButton.geActiveButton,.geSelectedButton{background:${wash}!important}`,
+    ].join("")
+}
+
 function DiagramCanvas() {
     const { drawioRef, handleDiagramExport, onDrawioLoad, resetDrawioReady, isDrawioReady } =
         useDiagram()
     const t = useDiagramT()
+    const pane = useCanvasPaneState({ kind: t("canvas.kind"), icon: Layers, variant: "diagram" })
     const [isMobile, setIsMobile] = useState(false)
-    const [isChatVisible, setIsChatVisible] = useState(true)
     // Theme is app-wide now; this canvas only mirrors it into the draw.io embed.
     const { isDark: darkMode, resolved } = useTheme()
 
-    const chatPanelRef = useRef<PanelImperativeHandle>(null)
 
     // The embed is keyed on the theme, so a change from anywhere -- the app
     // header, or the OS while set to "system" -- remounts it. Reset first so
@@ -88,25 +109,15 @@ function DiagramCanvas() {
         return () => window.removeEventListener("resize", checkMobile)
     }, [])
 
-    const toggleChatPanel = () => {
-        const panel = chatPanelRef.current
-        if (panel) {
-            if (panel.isCollapsed()) {
-                panel.expand()
-                setIsChatVisible(true)
-            } else {
-                panel.collapse()
-                setIsChatVisible(false)
-            }
-        }
-    }
 
-    // Keyboard shortcut for toggling chat panel
+    // Ctrl/Cmd+B: enlarge the canvas over the chat, or bring the chat back.
+    const paneRef = useRef(pane.value)
+    paneRef.current = pane.value
     useEffect(() => {
         const handleKeyDown = (event: KeyboardEvent) => {
             if ((event.ctrlKey || event.metaKey) && event.key === "b") {
                 event.preventDefault()
-                toggleChatPanel()
+                paneRef.current.toggleMaximize()
             }
         }
 
@@ -114,80 +125,98 @@ function DiagramCanvas() {
         return () => window.removeEventListener("keydown", handleKeyDown)
     }, [])
 
+    // Chat first on a desktop, as on claude.ai; on a phone the canvas stays on top.
+    const canvasPanel = (
+        <ResizablePanel
+            id="drawio-panel"
+            {...(isMobile ? { defaultSize: "50%", minSize: "20%" } : pane.canvasPanelProps)}
+        >
+            {/* On a desktop the canvas is a sheet beside the chat; on a
+                phone it stays flush, stacked above the chat. */}
+            <DiagramSheet flush={isMobile}>
+                <div className="h-full overflow-hidden">
+                    <DrawIoEmbed
+                        key={`drawio-${darkMode}-${sourceIndex}-${loadAttempt}`}
+                        ref={drawioRef}
+                        onExport={handleDiagramExport}
+                        onLoad={onEditorLoad}
+                        baseUrl={DRAWIO_SOURCES[sourceIndex]}
+                        urlParameters={{
+                            ui: "min",
+                            spin: true,
+                            libraries: false,
+                            saveAndExit: false,
+                            // Works are saved with the app's own Save; draw.io's did nothing.
+                            noSaveBtn: true,
+                            noExitBtn: true,
+                            dark: darkMode,
+                        }}
+                        configuration={{ css: drawioChromeCss(darkMode) }}
+                    />
+                </div>
+                {loadFailed && (
+                    <div
+                        role="alert"
+                        className="absolute inset-0 flex items-center justify-center bg-background/95 p-6"
+                    >
+                        <div className="max-w-sm text-center space-y-3">
+                            <p className="text-base font-medium">{t("drawio.load_failed")}</p>
+                            <p className="text-sm text-muted-foreground">{t("drawio.load_failed_hint")}</p>
+                            <Button onClick={retryDrawio}>{t("drawio.retry")}</Button>
+                        </div>
+                    </div>
+                )}
+            </DiagramSheet>
+        </ResizablePanel>
+    )
+
+    const chatPanel = (
+        <ResizablePanel
+            id="chat-panel"
+            {...(isMobile ? { defaultSize: "50%", minSize: "20%", maxSize: "80%" } : pane.chatPanelProps)}
+        >
+            <div ref={pane.chatColumnRef} className={isMobile ? "h-full" : pane.chatColumnClassName}>
+                <ChatPanel
+                    isMobile={isMobile}
+                />
+            </div>
+        </ResizablePanel>
+    )
+
+    const handle = <ResizableHandle id="resize-handle" className={isMobile ? undefined : sheetHandleClass} />
+
     return (
-        <div className="h-full bg-background relative overflow-hidden">
+        <CanvasPaneProvider value={pane.value}>
+        <div className="h-full relative overflow-hidden">
             <ResizablePanelGroup
                 id="main-panel-group-v3"
                 key={isMobile ? "mobile" : "desktop"}
                 orientation={isMobile ? "vertical" : "horizontal"}
                 className="h-full"
             >
-                {/* Draw.io Canvas */}
-                <ResizablePanel
-                    id="drawio-panel"
-                    defaultSize={isMobile ? "50%" : "67%"}
-                    minSize="20%"
-                >
-                    {/* Flush, to match the chat panel: the resize handle is the
-                        only divider, so insets and rounding just leak the page
-                        ground through at the seams. */}
-                    <div className="h-full relative">
-                        <div className="h-full overflow-hidden">
-                            <DrawIoEmbed
-                                key={`drawio-${darkMode}-${sourceIndex}-${loadAttempt}`}
-                                ref={drawioRef}
-                                onExport={handleDiagramExport}
-                                onLoad={onEditorLoad}
-                                baseUrl={DRAWIO_SOURCES[sourceIndex]}
-                                urlParameters={{
-                                    ui: "min",
-                                    spin: true,
-                                    libraries: false,
-                                    saveAndExit: false,
-                                    noExitBtn: true,
-                                    dark: darkMode,
-                                }}
-                            />
-                        </div>
-                        {loadFailed && (
-                            <div
-                                role="alert"
-                                className="absolute inset-0 flex items-center justify-center bg-background/95 p-6"
-                            >
-                                <div className="max-w-sm text-center space-y-3">
-                                    <p className="text-base font-medium">{t("drawio.load_failed")}</p>
-                                    <p className="text-sm text-muted-foreground">{t("drawio.load_failed_hint")}</p>
-                                    <Button onClick={retryDrawio}>{t("drawio.retry")}</Button>
-                                </div>
-                            </div>
-                        )}
-                    </div>
-                </ResizablePanel>
-
-                <ResizableHandle withHandle id="resize-handle" />
-
-                {/* Chat Panel */}
-                <ResizablePanel
-                    id="chat-panel"
-                    panelRef={chatPanelRef}
-                    defaultSize={isMobile ? "50%" : "33%"}
-                    minSize={isMobile ? "20%" : "15%"}
-                    maxSize={isMobile ? "80%" : "50%"}
-                    collapsible={!isMobile}
-                    collapsedSize={isMobile ? "0%" : "3%"}
-                    onResize={(panelSize) => setIsChatVisible(panelSize.inPixels > 80)}
-                >
-                    <div className="h-full">
-                        <ChatPanel
-                            isVisible={isChatVisible}
-                            onToggleVisibility={toggleChatPanel}
-                            isMobile={isMobile}
-                        />
-                    </div>
-                </ResizablePanel>
+                {isMobile ? (
+                    <>
+                        {canvasPanel}
+                        {handle}
+                        {chatPanel}
+                    </>
+                ) : (
+                    <>
+                        {chatPanel}
+                        {handle}
+                        {canvasPanel}
+                    </>
+                )}
             </ResizablePanelGroup>
         </div>
+        </CanvasPaneProvider>
     )
+}
+
+/** The draw.io canvas: a sheet on a desktop, flush on a phone. */
+function DiagramSheet({ flush, children }: { flush: boolean; children: ReactNode }) {
+    if (flush) return <div className="h-full relative">{children}</div>
+    return <CanvasSheet>{children}</CanvasSheet>
 }
 
 /**

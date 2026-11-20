@@ -1,4 +1,5 @@
-import { generateChatMessage, generateImage, generateVisionChatMessage } from "@/ai/client"
+import { generateChatMessage, generateImage, streamChatText } from "@/ai/client"
+import { parsePartialJson } from "@/shared/lib/partial-json"
 import { FREEFORM, PPTX_SHAPE, type ShapeName } from "@/workspaces/ppt/lib/shapes"
 import { buildRisenPrompt } from "./risen-prompt"
 import { buildEditPagePrompt, buildPageImagePrompt, buildPlanPrompt } from "./slide-prompts"
@@ -912,6 +913,30 @@ export const PLAN_TIMEOUT_MS = 300_000;
 export const SLIDE_IMAGE_TIMEOUT_MS = 240_000;
 const SLIDE_IMAGE_ATTEMPTS = 2;
 
+/**
+ * The outline as it streams: whatever slides can already be read from the
+ * half-written JSON (an array of slides, or an object with "slides").
+ */
+export function partialOutlinePages(raw: string): PptPage[] {
+    const at = raw.search(/[[{]/)
+    if (at < 0) return []
+    const body = raw.slice(at)
+    const parsed = body[0] === "[" ? parsePartialJson(`{"slides":${body}`) : parsePartialJson(body)
+    return normalizePages(parsed).filter((page) => page.title.trim())
+}
+
+/** The plan request, streamed when the caller wants to watch it arrive. */
+async function requestPlan(prompt: string, onText?: (text: string) => void): Promise<string> {
+    const messages = [
+        { role: "system" as const, content: PPT_OUTLINE_SYSTEM },
+        { role: "user" as const, content: prompt },
+    ]
+    if (!onText) return await generateChatMessage(messages, undefined, { timeoutMs: PLAN_TIMEOUT_MS })
+    const { text, finish, error } = await streamChatText(messages, onText, undefined, { timeoutMs: PLAN_TIMEOUT_MS })
+    if (finish === "interrupted" && !text) throw new Error(error || "Outline stream interrupted")
+    return text
+}
+
 export const pptService = {
     // A1. PlanFromIdeaAgent
 
@@ -920,26 +945,13 @@ export const pptService = {
         uiLanguage: "zh" | "en" = "zh",
         referenceFiles?: ReferenceFileInput[],
         referenceImageAssets?: ReferenceImageAssetInput[],
-        templateImageUrl?: string,
+        onText?: (text: string) => void,
     ): Promise<PptPage[]> => {
-        const templateImage = String(templateImageUrl || "").trim();
-        const hasTemplate = Boolean(templateImage);
+        // The style is picked after the outline, so the outline is written from the content alone.
         const refText = formatReferenceFiles(referenceFiles);
         const imageAssetText = formatReferenceImageAssets(referenceImageAssets);
-        const prompt = buildPlanPrompt({ mode: "idea", input: topic, uiLanguage, referenceText: refText, imageAssetText, hasTemplate });
-
-        const response = hasTemplate
-            ? await generateVisionChatMessage(PPT_OUTLINE_SYSTEM, prompt, [templateImage], undefined, {
-                  timeoutMs: PLAN_TIMEOUT_MS,
-              })
-            : await generateChatMessage(
-                  [
-                      { role: "system", content: PPT_OUTLINE_SYSTEM },
-                      { role: "user", content: prompt },
-                  ],
-                  undefined,
-                  { timeoutMs: PLAN_TIMEOUT_MS },
-              );
+        const prompt = buildPlanPrompt({ mode: "idea", input: topic, uiLanguage, referenceText: refText, imageAssetText, hasTemplate: false });
+        const response = await requestPlan(prompt, onText);
 
         try {
             const parsed = parseJsonLoose(response);
@@ -964,25 +976,12 @@ export const pptService = {
         uiLanguage: "zh" | "en" = "zh",
         referenceFiles?: ReferenceFileInput[],
         referenceImageAssets?: ReferenceImageAssetInput[],
-        templateImageUrl?: string,
+        onText?: (text: string) => void,
     ): Promise<PptPage[]> => {
-        const templateImage = String(templateImageUrl || "").trim();
-        const hasTemplate = Boolean(templateImage);
         const refText = formatReferenceFiles(referenceFiles);
         const imageAssetText = formatReferenceImageAssets(referenceImageAssets);
-        const prompt = buildPlanPrompt({ mode: "outline", input: outlineText, uiLanguage, referenceText: refText, imageAssetText, hasTemplate });
-        const response = hasTemplate
-            ? await generateVisionChatMessage(PPT_OUTLINE_SYSTEM, prompt, [templateImage], undefined, {
-                  timeoutMs: PLAN_TIMEOUT_MS,
-              })
-            : await generateChatMessage(
-                  [
-                      { role: "system", content: PPT_OUTLINE_SYSTEM },
-                      { role: "user", content: prompt },
-                  ],
-                  undefined,
-                  { timeoutMs: PLAN_TIMEOUT_MS },
-              );
+        const prompt = buildPlanPrompt({ mode: "outline", input: outlineText, uiLanguage, referenceText: refText, imageAssetText, hasTemplate: false });
+        const response = await requestPlan(prompt, onText);
         try {
             const parsed = parseJsonLoose(response);
             const pages = normalizePages(parsed).map((p, i) => ({

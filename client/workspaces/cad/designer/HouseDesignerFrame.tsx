@@ -116,7 +116,7 @@ export function HouseDesignerFrame({ session, onFocus, onFixIssue, canRecognize 
     setRuntimeError(String(reason));
   }); };
   if (hydrated && !snapshot.design && !snapshot.busy && !request) return <div className="flex h-full flex-col items-center justify-center gap-4 bg-background" data-testid="cad-design-empty">
-    <p className="text-muted-foreground">{hasPlan ? tr('设计方案已在右侧对话里，确认后会在这里生成户型', 'The design plan is in the chat on the right; confirm it there to generate the floorplan here.') : tr('在右侧描述需求，先出设计方案；或上传原始户型图', 'Describe your needs on the right to get a design plan, or upload an existing floorplan.')}</p>
+    <p className="text-muted-foreground">{hasPlan ? tr('设计方案已在左侧对话里，确认后会在这里生成户型', 'The design plan is in the chat on the left; confirm it there to generate the floorplan here.') : tr('在左侧描述需求，先出设计方案；或上传原始户型图', 'Describe your needs on the left to get a design plan, or upload an existing floorplan.')}</p>
     {canRecognize && <button className="rounded border px-4 py-2" onClick={onUpload}>{tr('上传原始户型图', 'Upload original floorplan')}</button>}
   </div>;
 

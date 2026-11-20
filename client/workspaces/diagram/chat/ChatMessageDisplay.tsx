@@ -1,6 +1,7 @@
 "use client"
 
 import remarkGfm from "remark-gfm"
+import { CanvasCard } from "@/shared/canvas-pane"
 import { cn } from "@/shared/lib/utils"
 import {
     getMessageTextContent,
@@ -36,8 +37,11 @@ import {
     Cpu,
     FileCode,
     FileText,
+    ListPlus,
+    PenLine,
     Pencil,
     RotateCcw,
+    Shapes,
     X,
 } from "lucide-react"
 import Image from "@/shared/ui/image"
@@ -49,9 +53,12 @@ import {
     Reasoning,
     ReasoningContent,
     ReasoningTrigger,
-    Shimmer,
+    TokenUsageLine,
+    WorkingIndicator,
 } from "@/shared/chat"
-import { ScrollArea } from "@/shared/ui/scroll-area"
+import { toTokenUsage } from "@/ai/usage"
+import { ChatScrollArea } from "@/shared/chat/chat-scroll"
+import { MessageEditor } from "@/shared/chat/message-editor"
 import { useDiagramT } from "@/workspaces/diagram/lib/translations"
 import {
     applyDiagramOperations,
@@ -61,7 +68,7 @@ import {
 import { convertToLegalXml, replaceNodes, validateMxCellStructure } from "@/workspaces/diagram/lib/drawio-xml"
 import { tidyIfBetter } from "@/workspaces/diagram/lib/arrange"
 import { CodeBlock } from "./code-block"
-import { DiagramSteps } from "./DiagramSteps"
+import { DiagramSteps, SketchStep, type SketchData } from "./DiagramSteps"
 
 /** Tool calls that put a diagram on the canvas are shown as a chain of steps. */
 const DIAGRAM_TOOLS = new Set(["tool-display_diagram", "tool-append_diagram", "tool-edit_diagram"])
@@ -131,6 +138,8 @@ interface ChatMessageDisplayProps {
     onEditMessage?: (messageIndex: number, newText: string) => void
     status?: "streaming" | "submitted" | "idle" | "error" | "ready"
     isParsingFiles?: boolean
+    /** Deep thinking is drawing its sketch (nothing has streamed yet). */
+    sketching?: boolean
 }
 
 export function ChatMessageDisplay({
@@ -140,6 +149,7 @@ export function ChatMessageDisplay({
     onEditMessage,
     status = "idle",
     isParsingFiles = false,
+    sketching = false,
 }: ChatMessageDisplayProps) {
     const t = useDiagramT()
     const { chartXML, loadDiagram: onDisplayChart } = useDiagram()
@@ -272,10 +282,15 @@ export function ChatMessageDisplay({
     )
 
     useEffect(() => {
-        if (messagesEndRef.current) {
-            messagesEndRef.current.scrollIntoView({ behavior: "smooth" })
-        }
-    }, [messages])
+        const end = messagesEndRef.current
+        if (!end) return
+        // Follow the reply only while the reader is at the bottom, and without
+        // a smooth glide per token: restarting that animation on every chunk
+        // is what made streaming stutter.
+        const viewport = end.closest<HTMLElement>('[data-slot="scroll-area-viewport"]')
+        if (viewport && viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight > 240) return
+        end.scrollIntoView({ behavior: status === "streaming" ? "auto" : "smooth", block: "end" })
+    }, [messages, status])
 
     useEffect(() => {
         if (!messages.length) {
@@ -422,20 +437,18 @@ export function ChatMessageDisplay({
         return (
             <div
                 key={callId}
-                className="my-3 rounded-xl border border-border/60 bg-muted/30 overflow-hidden"
+                className="my-3 rounded-xl border border-border/70 bg-card/60 overflow-hidden animate-message-in"
             >
-                <div className="flex items-center justify-between px-4 py-3 bg-muted/50">
+                <div className="flex items-center justify-between px-3.5 py-2.5">
                     <div className="flex items-center gap-2">
-                        <div className="w-6 h-6 rounded-md bg-primary/10 flex items-center justify-center">
-                            <Cpu className="w-3.5 h-3.5 text-primary-strong" />
-                        </div>
+                        <ToolIcon name={toolName} running={state === "input-streaming"} />
                         <span className="text-sm font-medium text-foreground/80">
                             {getToolDisplayName(toolName)}
                         </span>
                     </div>
                     <div className="flex items-center gap-2">
                         {state === "input-streaming" && (
-                            <div className="h-4 w-4 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+                            <span className="text-xs text-muted-foreground">{t("tool.status.running")}</span>
                         )}
                         {state === "output-available" && (
                             <span className="text-xs font-medium text-success bg-success/[0.08] px-2 py-0.5 rounded-full">
@@ -536,11 +549,9 @@ export function ChatMessageDisplay({
     }
 
     return (
-        <ScrollArea className="h-full w-full scrollbar-thin">
-            {messages.length === 0 ? (
-                <div className="py-4 px-4" />
-            ) : (
-                <div className="py-4 px-4 space-y-4">
+        <ChatScrollArea contentClassName="py-4 px-4">
+            {messages.length > 0 && (
+                <div className="space-y-4">
                     {messages.map((message, messageIndex) => {
                         const userMessageText =
                             message.role === "user"
@@ -552,24 +563,13 @@ export function ChatMessageDisplay({
                                 messages
                                     .slice(messageIndex + 1)
                                     .every((m) => m.role !== "assistant"))
-                        const isLastUserMessage =
-                            message.role === "user" &&
-                            (messageIndex === messages.length - 1 ||
-                                messages
-                                    .slice(messageIndex + 1)
-                                    .every((m) => m.role !== "user"))
                         const isEditing = editingMessageId === message.id
                         const assistantTextContent = getMessageTextContent(message)
-                        const showPendingIndicator =
-                            message.role === "user" &&
-                            isLastUserMessage &&
-                            (isParsingFiles ||
-                                status === "submitted" ||
-                                status === "streaming")
                         return (
                             <Fragment key={message.id}>
                                 <div
-                                    className={`flex w-full ${
+                                    data-chat-msg={message.role === "user" ? "user" : "assistant"}
+                                    className={`group/msg flex w-full ${
                                         message.role === "user"
                                             ? "justify-end items-start"
                                             : "justify-start"
@@ -584,83 +584,19 @@ export function ChatMessageDisplay({
                                 <div className="max-w-[95%] min-w-0">
                                     {/* Edit mode for user messages */}
                                     {isEditing && message.role === "user" ? (
-                                        <div className="flex flex-col gap-2">
-                                            <textarea
-                                                ref={editTextareaRef}
-                                                value={editText}
-                                                onChange={(e) =>
-                                                    setEditText(e.target.value)
-                                                }
-                                                className="w-full min-w-[300px] px-4 py-3 text-sm rounded-2xl border border-primary bg-background text-foreground resize-none focus:outline-none focus:ring-2 focus:ring-primary"
-                                                rows={Math.min(
-                                                    editText.split("\n")
-                                                        .length + 1,
-                                                    6,
-                                                )}
-                                                onKeyDown={(e) => {
-                                                    if (e.key === "Escape") {
-                                                        setEditingMessageId(
-                                                            null,
-                                                        )
-                                                        setEditText("")
-                                                    } else if (
-                                                        e.key === "Enter" &&
-                                                        (e.metaKey || e.ctrlKey)
-                                                    ) {
-                                                        e.preventDefault()
-                                                        if (
-                                                            editText.trim() &&
-                                                            onEditMessage
-                                                        ) {
-                                                            onEditMessage(
-                                                                messageIndex,
-                                                                editText.trim(),
-                                                            )
-                                                            setEditingMessageId(
-                                                                null,
-                                                            )
-                                                            setEditText("")
-                                                        }
-                                                    }
-                                                }}
-                                            />
-                                            <div className="flex justify-end gap-2">
-                                                <button
-                                                    type="button"
-                                                    onClick={() => {
-                                                        setEditingMessageId(
-                                                            null,
-                                                        )
-                                                        setEditText("")
-                                                    }}
-                                                    className="px-3 py-1.5 text-xs rounded-lg bg-muted hover:bg-muted/80 transition-colors"
-                                                >
-                                                    {t("message.edit.cancel")}
-                                                </button>
-                                                <button
-                                                    type="button"
-                                                    onClick={() => {
-                                                        if (
-                                                            editText.trim() &&
-                                                            onEditMessage
-                                                        ) {
-                                                            onEditMessage(
-                                                                messageIndex,
-                                                                editText.trim(),
-                                                            )
-                                                            setEditingMessageId(
-                                                                null,
-                                                            )
-                                                            setEditText("")
-                                                        }
-                                                    }}
-                                                    disabled={!editText.trim()}
-                                                    className="px-3 py-1.5 text-xs rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 transition-colors"
-                                                >
-                                                    {t("message.edit.save")}
-                                                </button>
-                                            </div>
-                                        </div>
+                                        <MessageEditor
+                                            value={editText}
+                                            onChange={setEditText}
+                                            onCancel={() => {
+                                                setEditingMessageId(null)
+                                                setEditText("")
+                                            }}
+                                            onSubmit={(value) => {
+                                                setEditingMessageId(null)
+                                                setEditText("")
+                                                onEditMessage?.(messageIndex, value)
+                                            }}
+                                        />
                                     ) : (
                                         /* Render parts in order, grouping consecutive text/file parts into bubbles */
                                         (() => {
@@ -760,7 +696,7 @@ export function ChatMessageDisplay({
                                             })
 
                                             const groups: {
-                                                type: "content" | "tool" | "reasoning"
+                                                type: "content" | "tool" | "reasoning" | "sketch"
                                                 parts: typeof parts
                                                 startIndex: number
                                             }[] = []
@@ -777,6 +713,20 @@ export function ChatMessageDisplay({
                                                     if (String(part.text ?? "").trim()) {
                                                         groups.push({
                                                             type: "reasoning",
+                                                            parts: [part],
+                                                            startIndex: index,
+                                                        })
+                                                    }
+                                                    return
+                                                }
+                                                // Deep thinking's draft picture, drawn before the diagram.
+                                                if (
+                                                    message.role === "assistant" &&
+                                                    part.type === "data-sketch"
+                                                ) {
+                                                    if ((part as any).data?.url || (part as any).data?.state || (part as any).data?.files) {
+                                                        groups.push({
+                                                            type: "sketch",
                                                             parts: [part],
                                                             startIndex: index,
                                                         })
@@ -840,6 +790,14 @@ export function ChatMessageDisplay({
                                             return groups.map(
                                                 (group, groupIndex) => {
                                                     if (consumed.has(groupIndex)) return null
+                                                    if (group.type === "sketch") {
+                                                        return (
+                                                            <SketchStep
+                                                                key={`${message.id}-sketch-${group.startIndex}`}
+                                                                data={((group.parts[0] as any).data ?? {}) as SketchData}
+                                                            />
+                                                        )
+                                                    }
                                                     if (group.type === "reasoning") {
                                                         const part = group.parts[0]
                                                         const isStreamingReasoning =
@@ -1004,7 +962,7 @@ export function ChatMessageDisplay({
                                                             <div className={message.role === "user" ? "flex flex-col items-end gap-1.5" : ""}>
                                                             {message.role === "user" &&
                                                                 !isEditing && (
-                                                                    <div className="order-2 flex items-center gap-1 self-end">
+                                                                    <div className="order-2 flex items-center gap-1 self-end opacity-0 transition-opacity duration-fast group-hover/msg:opacity-100 focus-within:opacity-100">
                                                                         <button
                                                                             type="button"
                                                                             onClick={() =>
@@ -1044,7 +1002,7 @@ export function ChatMessageDisplay({
                                                                             )}
                                                                         </button>
                                                                         {onEditMessage &&
-                                                                            isLastUserMessage && (
+                                                                            status !== "streaming" && status !== "submitted" && (
                                                                                 <button
                                                                                     type="button"
                                                                                     onClick={() => {
@@ -1075,75 +1033,12 @@ export function ChatMessageDisplay({
                                                                 className={`order-1 w-full text-sm leading-relaxed ${
                                                                 message.role ===
                                                                 "user"
-                                                                    ? "px-4 py-3 bg-muted text-foreground rounded-2xl rounded-br-md border border-border/60 transition-[background-color] duration-fast ease-out-soft"
+                                                                    ? "px-4 py-3 bg-foreground/[0.06] text-foreground rounded-2xl transition-[background-color] duration-fast ease-out-soft"
                                                                     : message.role ===
                                                                         "system"
                                                                       ? "px-4 py-3 bg-destructive/10 text-destructive border border-destructive/20 rounded-2xl rounded-bl-md"
                                                                       : "py-1 text-foreground"
-                                                            } ${message.role === "user" && isLastUserMessage && onEditMessage ? "cursor-pointer hover:bg-accent" : ""}`}
-                                                            role={
-                                                                message.role ===
-                                                                    "user" &&
-                                                                isLastUserMessage &&
-                                                                onEditMessage
-                                                                    ? "button"
-                                                                    : undefined
-                                                            }
-                                                            tabIndex={
-                                                                message.role ===
-                                                                    "user" &&
-                                                                isLastUserMessage &&
-                                                                onEditMessage
-                                                                    ? 0
-                                                                    : undefined
-                                                            }
-                                                            onClick={() => {
-                                                                if (
-                                                                    message.role ===
-                                                                        "user" &&
-                                                                    isLastUserMessage &&
-                                                                    onEditMessage
-                                                                ) {
-                                                                    setEditingMessageId(
-                                                                        message.id,
-                                                                    )
-                                                                    setEditText(
-                                                                        getUserOriginalText(
-                                                                            message,
-                                                                        ),
-                                                                    )
-                                                                }
-                                                            }}
-                                                            onKeyDown={(e) => {
-                                                                if (
-                                                                    (e.key ===
-                                                                        "Enter" ||
-                                                                        e.key ===
-                                                                            " ") &&
-                                                                    message.role ===
-                                                                        "user" &&
-                                                                    isLastUserMessage &&
-                                                                    onEditMessage
-                                                                ) {
-                                                                    e.preventDefault()
-                                                                    setEditingMessageId(
-                                                                        message.id,
-                                                                    )
-                                                                    setEditText(
-                                                                        getUserOriginalText(
-                                                                            message,
-                                                                        ),
-                                                                    )
-                                                                }
-                                                            }}
-                                                                title={
-                                                                message.role ===
-                                                                    "user" &&
-                                                                isLastUserMessage &&
-                                                                onEditMessage
-                                                                    ? t("message.edit")
-                                                                    : undefined
-                                                            }
+                                                            }`}
                                                         >
                                                                 {textParts.map(
                                                                 (
@@ -1187,7 +1082,7 @@ export function ChatMessageDisplay({
                                                                                             <div
                                                                                                 key={`${message.id}-textsection-${partIndex}-${sectionIndex}`}
                                                                                                 className={cn(
-                                                                                                    "prose prose-sm max-w-none break-words [&>*:first-child]:mt-0 [&>*:last-child]:mb-0",
+                                                                                                    "prose prose-sm font-voice text-[15px] max-w-none break-words [&>*:first-child]:mt-0 [&>*:last-child]:mb-0",
                                                                                                 )}
                                                                                             >
                                                                                                 <ReactMarkdown
@@ -1380,24 +1275,35 @@ export function ChatMessageDisplay({
                                         )}
                                 </div>
                                 </div>
-                                {showPendingIndicator && (
-                                    <div className="flex w-full justify-start animate-message-in mt-3">
-                                        <div className="max-w-[85%] min-w-0">
-                                            <Shimmer as="span" className="py-1 text-sm" duration={1.6}>
-                                                {isParsingFiles
-                                                    ? t("message.parsing_files")
-                                                    : t("message.thinking")}
-                                            </Shimmer>
-                                        </div>
-                                    </div>
-                                )}
                             </Fragment>
                         )
                     })}
+                    {(isParsingFiles || status === "submitted" || status === "streaming") && (
+                        <WorkingIndicator kind="diagram" className="mt-3 animate-message-in" label={isParsingFiles ? t("message.parsing_files") : sketching && messages[messages.length - 1]?.role !== "assistant" ? t("message.sketching") : undefined} />
+                    )}
+                    {status !== "submitted" && status !== "streaming" && messages[messages.length - 1]?.role === "assistant" && (
+                        // The provider's counts, sent with the reply (server/routes/chat.ts).
+                        <TokenUsageLine usage={toTokenUsage((messages[messages.length - 1] as { metadata?: { usage?: unknown } }).metadata?.usage)} />
+                    )}
+                    {status !== "submitted" && status !== "streaming" && messages[messages.length - 1]?.role === "assistant" && <CanvasCard />}
                 </div>
             )}
             <div ref={messagesEndRef} />
-        </ScrollArea>
+        </ChatScrollArea>
     )
 }
 
+
+
+/** Each tool call gets its own small icon, as Claude Code marks its actions. */
+function ToolIcon({ name, running }: { name: string; running: boolean }) {
+    const Icon =
+        name === "display_diagram" ? PenLine : name === "edit_diagram" ? Pencil : name === "append_diagram" ? ListPlus : name === "get_shape_library" ? Shapes : Cpu
+    return (
+        <span
+            className={`flex h-6 w-6 items-center justify-center rounded-md ${running ? "bg-brand/10 text-brand" : "bg-foreground/[0.05] text-foreground/70"}`}
+        >
+            <Icon className={`h-3.5 w-3.5 ${running ? "animate-pulse" : ""}`} />
+        </span>
+    )
+}
