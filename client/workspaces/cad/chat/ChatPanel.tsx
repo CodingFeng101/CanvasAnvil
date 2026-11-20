@@ -1,3 +1,4 @@
+import { usePendingPrompt } from "@/shared/pending-prompt";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { Home, PanelRightClose, PanelRightOpen } from "lucide-react";
 import { cn } from "@/shared/lib/utils";
@@ -128,6 +129,8 @@ export function ChatPanel(props: ChatPanelProps) {
     closeInterruptedStep(loadChatHistory(chatStorageKey(workspaceId), props.initialMessages ?? []), language === "zh"),
   );
   const [input, setInput] = useState("");
+  // A sentence written on the portal lands here once, unsent.
+  usePendingPrompt("cad", setInput);
   const [files, setFiles] = useState<File[]>([]);
   const [loading, setLoading] = useState(false);
   const work = useWork();

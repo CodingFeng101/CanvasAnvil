@@ -1,3 +1,4 @@
+import { usePendingPrompt } from "@/shared/pending-prompt";
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { PanelRightClose, PanelRightOpen, Pencil, Presentation, RefreshCw } from 'lucide-react';
 import { cn } from '@/shared/lib/utils';
@@ -130,6 +131,11 @@ export function ChatPanel({
   const [pptInputSegments, setPptInputSegments] = useState<Array<{ type: "text"; text: string } | { type: "ppt"; slideId: string; label: string; tag: string; tokenKind: "outline" | "slide_image" }>>([
     { type: "text", text: "" }
   ]);
+  // A sentence written on the portal lands here once, unsent.
+  usePendingPrompt("ppt", (text) => {
+    setInput(text);
+    setPptInputSegments([{ type: "text", text }]);
+  });
   const [isLoading, setIsLoading] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
   const [showResetWarning, setShowResetWarning] = useState(false);

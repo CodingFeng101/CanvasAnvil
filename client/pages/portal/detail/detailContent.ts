@@ -116,7 +116,7 @@ export const DETAIL: Record<PortalWorkspace, DetailContent> = {
       { title: { zh: "导出", en: "Export" }, text: { zh: "可编辑 PPTX 或 PDF。", en: "Editable PPTX or PDF." } },
     ],
     works: [
-      { title: { zh: "AI 智能体行业报告", en: "AI agents report" }, img: img("ppt-edit") },
+      { title: { zh: "AI 智能体行业报告", en: "AI agents report" }, img: img("ppt-deck") },
       { title: { zh: "AI 内容创作流程", en: "AI content workflow" }, img: img("ppt-1") },
       { title: { zh: "智能协作增长", en: "Smart collaboration" }, img: img("ppt-2") },
       { title: { zh: "商业创新演示", en: "Business innovation" }, img: img("ppt-3") },
@@ -130,8 +130,8 @@ export const DETAIL: Record<PortalWorkspace, DetailContent> = {
       en: "A sentence puts a picture on the board. Arrows, circles, strokes or a few words mark what to change; the marks are read, a revised version is made, and every version stays in the lineage.",
     },
     cta: { zh: "开始创作", en: "Start creating" },
-    hero: "/examples/canvas/03.svg",
-    heroAlt: { zh: "白板上的灯塔插画，第二版", en: "A lighthouse picture on the board, version 2" },
+    hero: img("canvas-mark"),
+    heroAlt: { zh: "在白板上圈出绿植，写上换成一束向日葵", en: "The plant circled on the board, marked: sunflowers instead" },
     trio: [
       { title: { zh: "一句话上板", en: "A sentence, on the board" }, text: { zh: "生成的图片自动放到白板空位，旁边能接着画。", en: "The picture lands in free space, with room to draw beside it." } },
       { title: { zh: "标注就是指令", en: "Marks are instructions" }, text: { zh: "发送前能预览它会看到的标注，并显示它读出的修改意图。", en: "Preview the marks before sending, and see the change it read from them." } },
@@ -146,11 +146,11 @@ export const DETAIL: Record<PortalWorkspace, DetailContent> = {
       { title: { zh: "版本对比", en: "Compare" }, text: { zh: "在谱系里切换。", en: "Switch in the lineage." } },
     ],
     works: [
-      { title: { zh: "一句话生成图片", en: "A picture from a sentence" }, img: "/examples/canvas/01.svg" },
-      { title: { zh: "在图上圈画标注", en: "Marked up on the board" }, img: "/examples/canvas/02.svg" },
-      { title: { zh: "按标注生成新版", en: "A new version from the marks" }, img: "/examples/canvas/03.svg" },
-      { title: { zh: "版本谱系对比", en: "Comparing versions" }, img: "/examples/canvas/04.svg" },
+      { title: { zh: "一句话生成图片", en: "A picture from a sentence" }, img: img("canvas-board") },
+      { title: { zh: "在图上圈画标注", en: "Marked up on the board" }, img: img("canvas-mark") },
+      { title: { zh: "按标注生成新版", en: "A new version from the marks" }, img: img("canvas-edit") },
+      { title: { zh: "两版并排对比", en: "Comparing versions" }, img: img("canvas-versions") },
     ],
-    placeholder: { zh: "比如：海边的灯塔，黄昏，水彩", en: "e.g. a lighthouse by the sea at dusk, watercolour" },
+    placeholder: { zh: "比如：午后窗边的水彩插画，书桌上有咖啡和绿植", en: "e.g. a watercolour of a sunny window with coffee and a plant" },
   },
 };

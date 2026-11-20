@@ -83,60 +83,70 @@ export function FillSentence({ lang, onEnter }: { lang: UiLanguage; onEnter: (k:
         </div>
 
         <div className="p-lib">
-          <div>
-            <h4>{t(FILL.canvases, lang)}</h4>
-            <ul>
-              {CANVAS_ORDER.map((k) => (
-                <li key={k}>
-                  <button
-                    type="button"
-                    data-on={k === ck}
-                    onClick={() => {
-                      setCk(k);
-                      setCi(0);
-                    }}
-                  >
-                    {t(CANVAS[k].name, lang)}
-                  </button>
-                </li>
-              ))}
-            </ul>
-          </div>
+          <div className="p-lib-side">
+            <div>
+              <h4>{t(FILL.canvases, lang)}</h4>
+              <ul>
+                {CANVAS_ORDER.map((k) => (
+                  <li key={k}>
+                    <button
+                      type="button"
+                      data-on={k === ck}
+                      onClick={() => {
+                        setCk(k);
+                        setCi(0);
+                      }}
+                    >
+                      {t(CANVAS[k].name, lang)}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </div>
 
-          <div className="p-stack">
-            <div className="p-sheet" style={{ background: CANVAS[others[0]].swatch }} />
-            <div className="p-sheet p-sheet-2" style={{ background: CANVAS[others[1]].swatch }} />
-            <div className="p-stack-base" style={{ background: CANVAS[ck].swatch }}>
-              <div key={`${ck}-${ci}`} className="p-art">
-                <div className="p-art-bar">
-                  <i />
-                  <i />
-                  <i />
-                  <span style={{ marginLeft: 6 }}>
-                    {t(item.type, lang)} · {t(CANVAS[ck].name, lang)}
-                  </span>
-                </div>
-                <img src={workSrc(item.img)} alt={t(item.type, lang)} loading="lazy" decoding="async" />
-              </div>
-              <button type="button" className="p-btn p-btn-ink p-btn-sm p-stack-go" onClick={() => onEnter(ck, sentence)}>
-                {t(FILL.go, lang)}
-              </button>
+            <div className="p-lib-uses">
+              <h4>{t(FILL.uses, lang)}</h4>
+              <ul>
+                {FILL_LIBRARY[ck].map((it, i) => (
+                  <li key={i}>
+                    <button type="button" data-on={i === ci} onClick={() => setCi(i)}>
+                      {t(it.type, lang)}
+                    </button>
+                    <small>{t(FILL.useFor, lang).replace("{use}", t(it.use, lang))}</small>
+                  </li>
+                ))}
+              </ul>
             </div>
           </div>
 
-          <div className="p-lib-right">
-            <h4>{t(FILL.uses, lang)}</h4>
-            <ul>
-              {FILL_LIBRARY[ck].map((it, i) => (
-                <li key={i}>
-                  <button type="button" data-on={i === ci} onClick={() => setCi(i)}>
-                    {t(it.type, lang)}
-                  </button>
-                  <small>{t(FILL.useFor, lang).replace("{use}", t(it.use, lang))}</small>
-                </li>
-              ))}
-            </ul>
-          </div>
+          <figure className="p-show">
+            <div className="p-stack">
+              <div className="p-sheet" style={{ background: CANVAS[others[0]].swatch }} />
+              <div className="p-sheet p-sheet-2" style={{ background: CANVAS[others[1]].swatch }} />
+              <div className="p-stack-base" style={{ background: CANVAS[ck].swatch }}>
+                <div key={`${ck}-${ci}`} className="p-art">
+                  <div className="p-art-bar">
+                    <i />
+                    <i />
+                    <i />
+                    <span>
+                      {t(item.type, lang)} · {t(CANVAS[ck].name, lang)}
+                    </span>
+                  </div>
+                  {/* contain, not cover: floor plans and slides keep their edges */}
+                  <div className="p-art-img">
+                    <img src={workSrc(item.img)} alt={t(item.type, lang)} loading="lazy" decoding="async" />
+                  </div>
+                </div>
+              </div>
+            </div>
+            <figcaption className="p-show-cap">
+              <span>{t(FILL.carry, lang)}</span>
+              <button type="button" className="p-btn p-btn-ink" onClick={() => onEnter(ck, sentence)}>
+                {t(FILL.go, lang)}
+              </button>
+            </figcaption>
+          </figure>
         </div>
       </div>
     </section>

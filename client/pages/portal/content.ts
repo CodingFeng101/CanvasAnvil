@@ -78,12 +78,13 @@ export const HERO_WORKS: Array<{ k: PortalWorkspace; img: string; name: L }> = [
   { k: "ppt", img: "ppt-academic", name: { zh: "学术答辩 · 封面", en: "Thesis defense · cover" } },
   { k: "ppt", img: "ppt-business", name: { zh: "季度复盘 · 第 4 页", en: "Quarterly review · p.4" } },
   { k: "ppt", img: "ppt-creative", name: { zh: "品牌提案 · 第 2 页", en: "Brand pitch · p.2" } },
-  { k: "canvas", img: "/examples/canvas/01.svg", name: { zh: "海边灯塔 · v1", en: "Lighthouse · v1" } },
-  { k: "canvas", img: "/examples/canvas/02.svg", name: { zh: "圈出天空", en: "Circle the sky" } },
-  { k: "canvas", img: "/examples/canvas/03.svg", name: { zh: "加一群海鸥 · v2", en: "Add gulls · v2" } },
-  { k: "canvas", img: "/examples/canvas/04.svg", name: { zh: "版本谱系", en: "Version tree" } },
+  { k: "ppt", img: "ppt-deck", name: { zh: "AI 智能体行业报告 · 8 页", en: "AI agents report · 8 slides" } },
+  { k: "canvas", img: "canvas-pic-v1", name: { zh: "午后窗边 · v1", en: "Afternoon window · v1" } },
+  { k: "canvas", img: "canvas-mark", name: { zh: "圈出绿植", en: "Circle the plant" } },
+  { k: "canvas", img: "canvas-pic-v2", name: { zh: "换成向日葵 · v2", en: "Sunflowers instead · v2" } },
+  { k: "canvas", img: "canvas-versions", name: { zh: "两版对比", en: "Two versions" } },
 ];
-/** A canvas svg is used as-is; anything else is a portal webp name. */
+/** A path is used as-is; anything else is a portal webp name. */
 export const workSrc = (name: string, size: "sm" | "md" = "md") => (name.startsWith("/") ? name : img(name, size));
 
 export const INTRO = {
@@ -120,24 +121,18 @@ export const INTRO = {
 export const STORY = {
   title: { zh: ["一张书桌，", "四种", "画布"], en: ["One", "desk,", "four", "canvases"] } as Record<UiLanguage, string[]>,
   sub: { zh: "从一句话开始，到一份交得出去的文件。", en: "From a single sentence to a file you can hand in." },
-  inputHint: { zh: "描述你想改的地方…", en: "Describe what to change…" },
   more: { zh: "了解{name} →", en: "More about {name} →" },
   another: { zh: "换一句话 ↗", en: "Try another ↗" },
   replay: { zh: "重播 ↻", en: "Replay ↻" },
+  next: { zh: "继续向下滚动 · 下一个：{name}", en: "Keep scrolling · next: {name}" },
 };
 
 export type StoryScene = {
   k: PortalWorkspace;
   title: L;
   text: L;
-  prompt: L;
-  steps: L[];
-  img: string;
-  after?: string;
-  /** Hand-drawn circle, as [left, top, width, height] in % of the canvas area. */
-  circle: [number, number, number, number];
-  note: L;
-  exports: L[];
+  /** Real screenshots of the canvas at work, shown one after another. */
+  shots: Array<{ img: string; cap: L }>;
 };
 
 export const STORY_SCENES: StoryScene[] = [
@@ -148,17 +143,11 @@ export const STORY_SCENES: StoryScene[] = [
       zh: "思维导图、流程图、系统架构。模型只说这是什么版式，位置交给布局算法；画完自动体检、重新排版，原图和矫正版随时切换。",
       en: "Mind maps, flowcharts, architectures. The model only decides the kind of layout and an algorithm places everything; each diagram is checked and re-laid out, and you can switch back to the original any time.",
     },
-    prompt: { zh: "画一张新产品上市计划的思维导图", en: "A mind map for a new product launch" },
-    steps: [
-      { zh: "理出 4 条主线", en: "Find 4 main branches" },
-      { zh: "生成节点与连线", en: "Nodes and links" },
-      { zh: "自动体检，重新排版", en: "Check and re-lay out" },
+    shots: [
+      { img: img("shot-diagram-1"), cap: { zh: "一句话描述，边想边画", en: "Describe it; nodes appear as it thinks" } },
+      { img: img("shot-diagram-2"), cap: { zh: "节点和连线一次画好", en: "Nodes and links, all at once" } },
+      { img: img("shot-diagram-3"), cap: { zh: "自动体检，布局矫正后更整齐", en: "Checked and re-laid out, tidier" } },
     ],
-    img: img("dg-before"),
-    after: img("dg-after"),
-    circle: [26, 48, 50, 30],
-    note: { zh: "布局矫正：体检 54 → 90 分", en: "Layout fix: score 54 → 90" },
-    exports: [{ zh: "draw.io", en: "draw.io" }, { zh: "PNG", en: "PNG" }, { zh: "SVG", en: "SVG" }],
   },
   {
     k: "cad",
@@ -167,16 +156,11 @@ export const STORY_SCENES: StoryScene[] = [
       zh: "AI 只写设计意图，墙、门窗和家具交给程序来摆，自检到零错误。户型是结构化数据，所以能精确修改，一键看 3D，导出施工图和报价。",
       en: "AI writes only the design intent; walls, doors and furniture are placed by code and checked to zero errors. The plan is structured data, so edits are exact, 3D is one click away, and drawings and a quote come out at the end.",
     },
-    prompt: { zh: "三室两厅 110㎡，现代原木风", en: "110㎡, three bedrooms, warm modern wood" },
-    steps: [
-      { zh: "整理设计方案", en: "Draft the brief" },
-      { zh: "生成户型", en: "Lay out the plan" },
-      { zh: "自查零错误", en: "Self-check: no errors" },
+    shots: [
+      { img: img("shot-cad-1"), cap: { zh: "说一句“儿童房加一张书桌”，只改那一处", en: "“Add a desk to the kid's room” changes only that" } },
+      { img: img("shot-cad-2"), cap: { zh: "一键 3D 鸟瞰", en: "3D in one click" } },
+      { img: img("shot-cad-3"), cap: { zh: "导出施工图 PDF、DXF 和报价", en: "Drawing PDF, DXF and a quote" } },
     ],
-    img: img("cad-plan"),
-    circle: [38, 44, 26, 20],
-    note: { zh: "儿童房加一张书桌，其他不变", en: "Add a desk to the kid's room, keep the rest" },
-    exports: [{ zh: "施工图 PDF", en: "Drawings PDF" }, { zh: "DXF", en: "DXF" }, { zh: "报价单", en: "Quote" }],
   },
   {
     k: "ppt",
@@ -185,16 +169,12 @@ export const STORY_SCENES: StoryScene[] = [
       zh: "先挑一套风格，一句话出整套。导出的不是整页图片：底图、图标和文字分层还原，打开 PowerPoint 就能接着改。",
       en: "Pick a style and one sentence makes the deck. The export is not a stack of pictures: background, icons and text come back as layers you can edit in PowerPoint.",
     },
-    prompt: { zh: "AI 智能体行业报告，12 页", en: "A 12-slide report on AI agents" },
-    steps: [
-      { zh: "挑一套风格", en: "Pick a style" },
-      { zh: "拟定大纲", en: "Outline" },
-      { zh: "逐页生成", en: "Generate slide by slide" },
+    shots: [
+      { img: img("shot-ppt-1"), cap: { zh: "给一句主题，先出大纲", en: "A topic first becomes an outline" } },
+      { img: img("shot-ppt-2"), cap: { zh: "大纲逐页可改，再生成", en: "Edit the outline slide by slide" } },
+      { img: img("shot-ppt-3"), cap: { zh: "整套生成，哪页不满意改哪页", en: "The whole deck; redo any slide" } },
+      { img: img("shot-ppt-4"), cap: { zh: "导出 PPTX，在 PowerPoint 里逐字可改", en: "Export PPTX; every word editable in PowerPoint" } },
     ],
-    img: img("ppt-edit"),
-    circle: [32, 2, 66, 22],
-    note: { zh: "在 PowerPoint 里直接改标题", en: "Edit the title right in PowerPoint" },
-    exports: [{ zh: "可编辑 PPTX", en: "Editable PPTX" }, { zh: "PDF", en: "PDF" }],
   },
   {
     k: "canvas",
@@ -203,16 +183,12 @@ export const STORY_SCENES: StoryScene[] = [
       zh: "一句话生成图片放上白板，用箭头、圈选或几个字标出要改的地方，新版本和旧版本排在一起，随时对比。",
       en: "A sentence puts a picture on the board. Arrows, circles or a few words mark what to change, and every new version sits beside the old one.",
     },
-    prompt: { zh: "海边的灯塔，黄昏", en: "A lighthouse by the sea at dusk" },
-    steps: [
-      { zh: "生成图片", en: "Generate the picture" },
-      { zh: "放上白板", en: "Place it on the board" },
+    shots: [
+      { img: img("shot-canvas-1"), cap: { zh: "一句话生成，放上白板", en: "From a sentence onto the board" } },
+      { img: img("shot-canvas-2"), cap: { zh: "圈出绿植，写上“换成一束向日葵”", en: "Circle the plant: “sunflowers instead”" } },
+      { img: img("shot-canvas-3"), cap: { zh: "读懂标注，生成新版", en: "The marks become a new version" } },
+      { img: img("shot-canvas-4"), cap: { zh: "两版并排，随时对比", en: "Both versions side by side" } },
     ],
-    img: "/examples/canvas/01.svg",
-    after: "/examples/canvas/03.svg",
-    circle: [44, 34, 20, 18],
-    note: { zh: "天空里加一群海鸥", en: "Add gulls to the sky" },
-    exports: [{ zh: "v1 → v2", en: "v1 → v2" }, { zh: "PNG", en: "PNG" }],
   },
 ];
 
@@ -224,6 +200,7 @@ export const FILL = {
   uses: { zh: "用途", en: "Use" },
   useFor: { zh: "用在{use}", en: "for {use}" },
   go: { zh: "用这句话开始 →", en: "Start with this →" },
+  carry: { zh: "这句话会填进画布的输入框，改一改再发送。", en: "The sentence lands in the canvas input, ready to edit and send." },
 };
 
 export type FillItem = { type: L; use: L; img: string };
@@ -241,16 +218,15 @@ export const FILL_LIBRARY: Record<PortalWorkspace, FillItem[]> = {
     { type: { zh: "水电点位图", en: "wiring plan" }, use: { zh: "出租房翻新", en: "a rental refit" }, img: img("cad-mep") },
   ],
   ppt: [
-    { type: { zh: "行业报告", en: "industry report" }, use: { zh: "组会", en: "a lab meeting" }, img: img("ppt-edit") },
+    { type: { zh: "行业报告", en: "industry report" }, use: { zh: "组会", en: "a lab meeting" }, img: img("ppt-deck") },
     { type: { zh: "增长方案", en: "growth plan" }, use: { zh: "季度述职", en: "a quarterly review" }, img: img("ppt-2") },
     { type: { zh: "创新提案", en: "innovation pitch" }, use: { zh: "路演", en: "a pitch day" }, img: img("ppt-3") },
     { type: { zh: "转型规划", en: "transition plan" }, use: { zh: "课程分享", en: "a class talk" }, img: img("ppt-4") },
   ],
   canvas: [
-    { type: { zh: "海报草图", en: "poster sketch" }, use: { zh: "活动宣传", en: "an event" }, img: "/examples/canvas/01.svg" },
-    { type: { zh: "插画构思", en: "illustration idea" }, use: { zh: "绘本创作", en: "a picture book" }, img: "/examples/canvas/02.svg" },
-    { type: { zh: "产品概念图", en: "product concept" }, use: { zh: "需求讨论", en: "a product discussion" }, img: "/examples/canvas/03.svg" },
-    { type: { zh: "灵感板", en: "mood board" }, use: { zh: "风格探索", en: "exploring a style" }, img: "/examples/canvas/04.svg" },
+    { type: { zh: "水彩插画", en: "watercolour" }, use: { zh: "文章配图", en: "an article" }, img: img("canvas-board") },
+    { type: { zh: "静物插画", en: "still life" }, use: { zh: "绘本创作", en: "a picture book" }, img: img("canvas-edit") },
+    { type: { zh: "两版对比图", en: "side-by-side versions" }, use: { zh: "方案讨论", en: "a design discussion" }, img: img("canvas-versions") },
   ],
 };
 
@@ -280,14 +256,79 @@ export const WORKS = {
     zh: "每个画布都能存多份作品。点保存才更新，没保存的草稿不会进列表；离开时有改动，会问你保存还是放弃。",
     en: "Keep several works in every canvas. A work changes only when you press Save, drafts stay out of the list, and leaving with changes asks whether to save them.",
   },
+  /** Each work opens a small gallery of the real files behind it. */
   items: [
-    { k: "diagram" as PortalWorkspace, img: "diagram-2", name: { zh: "智能问答系统架构", en: "Q&A system architecture" }, date: { zh: "11 月 18 日", en: "Nov 18" } },
-    { k: "cad" as PortalWorkspace, img: "cad-plan", name: { zh: "110㎡ 现代原木风三室", en: "110㎡ three-bed, warm wood" }, date: { zh: "11 月 17 日", en: "Nov 17" } },
-    { k: "ppt" as PortalWorkspace, img: "ppt-2", name: { zh: "智能协作增长", en: "Smart collaboration" }, date: { zh: "11 月 15 日", en: "Nov 15" } },
-    { k: "canvas" as PortalWorkspace, img: "/examples/canvas/04.svg", name: { zh: "海边灯塔", en: "Lighthouse" }, date: { zh: "11 月 12 日", en: "Nov 12" } },
-    { k: "diagram" as PortalWorkspace, img: "diagram-3", name: { zh: "项目实施路线图", en: "Project roadmap" }, date: { zh: "11 月 9 日", en: "Nov 9" } },
-    { k: "ppt" as PortalWorkspace, img: "ppt-4", name: { zh: "低碳校园转型", en: "Low-carbon campus" }, date: { zh: "11 月 3 日", en: "Nov 3" } },
+    {
+      k: "diagram" as PortalWorkspace,
+      img: "dg-after",
+      name: { zh: "新产品上市计划", en: "Product launch plan" },
+      date: { zh: "11 月 18 日", en: "Nov 18" },
+      gallery: [
+        { img: "dg-after", cap: { zh: "自动排版后", en: "After auto layout" } },
+        { img: "dg-before", cap: { zh: "排版前", en: "Before" } },
+      ],
+    },
+    {
+      k: "cad" as PortalWorkspace,
+      img: "cad-plan",
+      name: { zh: "110㎡ 现代原木风三室", en: "110㎡ three-bed, warm wood" },
+      date: { zh: "11 月 17 日", en: "Nov 17" },
+      gallery: [
+        { img: "cad-plan", cap: { zh: "平面布置图", en: "Furnished plan" } },
+        { img: "cad-3d", cap: { zh: "3D 鸟瞰", en: "3D view" } },
+        { img: "cad-quotes", cap: { zh: "算量报价", en: "Quantities & quote" } },
+        { img: "cad-ceiling", cap: { zh: "顶面灯位", en: "Lighting plan" } },
+        { img: "cad-mep", cap: { zh: "水电点位", en: "Wiring plan" } },
+      ],
+    },
+    {
+      k: "ppt" as PortalWorkspace,
+      img: "ppt-deck",
+      name: { zh: "2026 AI 智能体行业报告", en: "2026 AI agents report" },
+      date: { zh: "11 月 15 日", en: "Nov 15" },
+      gallery: [
+        { img: "ppt-deck", cap: { zh: "整套 8 页里的 6 页", en: "Six of the eight slides" } },
+        { img: "ppt-edit", cap: { zh: "导出后在 PowerPoint 里逐字可改", en: "Every word editable in PowerPoint" } },
+      ],
+    },
+    {
+      k: "canvas" as PortalWorkspace,
+      img: "canvas-versions",
+      name: { zh: "午后窗边 · 两版", en: "Afternoon window · two versions" },
+      date: { zh: "11 月 12 日", en: "Nov 12" },
+      gallery: [
+        { img: "canvas-board", cap: { zh: "一句话生成，放上白板", en: "From a sentence onto the board" } },
+        { img: "canvas-mark", cap: { zh: "圈出绿植，写上：换成一束向日葵", en: "Circle the plant: sunflowers instead" } },
+        { img: "canvas-edit", cap: { zh: "按标注生成新版", en: "A new version from the marks" } },
+        { img: "canvas-versions", cap: { zh: "两版并排对比", en: "Both versions side by side" } },
+      ],
+    },
+    {
+      k: "diagram" as PortalWorkspace,
+      img: "diagram-3",
+      name: { zh: "项目实施路线图", en: "Project roadmap" },
+      date: { zh: "11 月 9 日", en: "Nov 9" },
+      gallery: [
+        { img: "diagram-3", cap: { zh: "项目实施路线图", en: "Project roadmap" } },
+      ],
+    },
+    {
+      k: "ppt" as PortalWorkspace,
+      img: "ppt-4",
+      name: { zh: "低碳校园转型", en: "Low-carbon campus" },
+      date: { zh: "11 月 3 日", en: "Nov 3" },
+      gallery: [
+        { img: "ppt-4", cap: { zh: "整套 9 页", en: "The 9-slide deck" } },
+      ],
+    },
   ],
+};
+
+export const WORK_VIEW = {
+  open: { zh: "打开{name} →", en: "Open {name} →" },
+  close: { zh: "关闭", en: "Close" },
+  prev: { zh: "上一张", en: "Previous" },
+  next: { zh: "下一张", en: "Next" },
 };
 
 export const FAQ = {

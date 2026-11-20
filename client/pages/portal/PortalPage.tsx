@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import "@fontsource/noto-serif-sc/500.css";
 import { setUiLanguage, useUiLanguage } from "@/shared/i18n";
 import "./portal.css";
 import type { PortalWorkspace } from "./data";

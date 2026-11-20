@@ -1,3 +1,4 @@
+import { usePendingPrompt } from "@/shared/pending-prompt";
 import { useEffect, useRef, useState } from "react";
 import { Maximize2, Paintbrush, PanelRightClose, PanelRightOpen, Sparkles, Wand2 } from "lucide-react";
 import { IMAGE_QUALITIES, IMAGE_SIZES } from "@contracts/ai";
@@ -95,6 +96,8 @@ export function ChatPanel({
     loadChatHistory(STORAGE_KEY, []).map((m) => ({ ...m, id: makeId() })),
   );
   const [input, setInput] = useState("");
+  // A sentence written on the portal lands here once, unsent.
+  usePendingPrompt("canvas", setInput);
   const [isGenerating, setIsGenerating] = useState(false);
   const [showResetWarning, setShowResetWarning] = useState(false);
   const [imageOptions, setImageOptions] = useState(loadImageOptions);

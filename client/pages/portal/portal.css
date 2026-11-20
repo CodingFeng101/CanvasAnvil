@@ -7,6 +7,20 @@
  * The reference implementation is docs/plans/portal-mockup-claude.html.
  */
 
+/*
+ * Noto Serif SC 500 cut down to the characters the portal's copy uses
+ * (scripts/subset-portal-font.py). The unicode-range keeps the English page
+ * from downloading it; any other character falls back to the system serif.
+ */
+@font-face {
+  font-family: "Portal Serif SC";
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("./fonts/portal-serif-sc.woff") format("woff");
+  unicode-range: U+3000-303F, U+3400-4DBF, U+4E00-9FFF, U+FF00-FFEF;
+}
+
 .portal {
   --p-bg: #faf9f5;
   --p-bg-2: #f5f4ed;
@@ -24,7 +38,7 @@
   --p-ease-word: cubic-bezier(0.25, 1, 0.5, 1);
   --p-ease-soft: cubic-bezier(0.215, 0.61, 0.355, 1);
   --p-ease-out: cubic-bezier(0.23, 1, 0.32, 1);
-  --p-serif: "Source Serif 4 Variable", "Noto Serif SC", "Songti SC", Georgia, serif;
+  --p-serif: "Source Serif 4 Variable", "Portal Serif SC", "Noto Serif SC", "Songti SC", "SimSun", Georgia, serif;
   --p-sans: "Inter Variable", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
   --p-mono: ui-monospace, "JetBrains Mono", Consolas, monospace;
 
@@ -95,6 +109,12 @@
 .portal .p-rule { height: 1px; background: var(--p-line); transform-origin: left; transform: scaleX(0); transition: transform 0.8s var(--p-ease-soft); }
 .portal .p-in .p-rule { transform: scaleX(1); }
 
+/*
+ * Sections far below the fold skip layout and paint until they come near,
+ * which keeps the first frames of the page light.
+ */
+.portal :is(.p-edit, .p-works, .p-faq, .p-footer) { content-visibility: auto; contain-intrinsic-size: auto 900px; }
+
 /* ---- S0 nav ---- */
 .portal .p-nav { position: sticky; top: 0; z-index: 40; background: rgba(250, 249, 245, 0.92); transition: box-shadow 0.3s; animation: p-nav-in 0.6s var(--p-ease-soft) both; }
 .portal .p-nav[data-scrolled="true"] { box-shadow: 0 1px 0 var(--p-line); }
@@ -146,7 +166,7 @@
 
 /* ---- S2 intro ---- */
 .portal .p-s2 { padding: 40px 0 128px; }
-.portal .p-video { width: min(760px, 100%); aspect-ratio: 16 / 9; margin: 0 auto 18px; border-radius: 20px; background: var(--p-bg-3); position: relative; overflow: hidden; box-shadow: 0 0 0 1px var(--p-line), var(--p-shadow-2); }
+.portal .p-video { width: min(980px, 100%); aspect-ratio: 16 / 9; margin: 0 auto 18px; border-radius: 20px; background: var(--p-bg-3); position: relative; overflow: hidden; box-shadow: 0 0 0 1px var(--p-line), var(--p-shadow-2); }
 .portal .p-video video,
 .portal .p-video img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
 .portal .p-video-play { position: absolute; inset: 0; display: grid; place-items: center; cursor: pointer; }
@@ -164,16 +184,19 @@
 .portal .p-hand[data-draw="true"] path { transition: stroke-dashoffset 0.9s var(--p-ease-soft); stroke-dashoffset: 0; }
 
 /* ---- S3 sticky story ---- */
-.portal .p-story { background: var(--p-bg-3); height: 460vh; position: relative; }
-.portal .p-pin { position: sticky; top: 0; height: 100vh; display: flex; flex-direction: column; justify-content: center; }
-.portal .p-story-title { text-align: center; margin-bottom: 44px; }
+.portal .p-story { --fade: 220px; background: linear-gradient(var(--p-bg), var(--p-bg-3) var(--fade), var(--p-bg-3) calc(100% - var(--fade)), var(--p-bg)); height: 420vh; position: relative; }
+.portal .p-pin { position: sticky; top: 0; height: 100vh; padding: 64px 0 56px; display: flex; flex-direction: column; justify-content: center; }
+/* The desk keeps its proportions but shrinks on short screens so the whole stage fits under the nav. */
+.portal .p-deskcol { width: min(100%, calc((100vh - 370px) * 1.6)); justify-self: end; }
+.portal .p-story-title { text-align: center; margin-bottom: clamp(20px, 4vh, 44px); }
 .portal .p-story-title p { color: var(--p-ink-3); margin-top: 12px; }
 .portal .p-stage { display: grid; grid-template-columns: 90px 300px 1fr; gap: 40px; align-items: center; }
 .portal .p-railv { display: flex; flex-direction: column; gap: 9px; }
 .portal .p-tk { display: flex; align-items: center; gap: 10px; height: 1px; }
-.portal .p-tk i { display: block; width: 15px; height: 1px; background: var(--p-line-2); transition: background-color 0.25s; transition-delay: calc(var(--k) * 85ms); }
+.portal .p-tk i { position: relative; display: block; width: 15px; height: 1px; background: var(--p-line-2); }
+/* --sp is set from the scroll position (DeskStory), so the rail fills as the page moves. */
+.portal .p-tk i::after { content: ""; position: absolute; inset: 0; background: var(--p-ink); transform-origin: left; transform: scaleX(clamp(0, var(--sp, 0) - var(--k) + 1, 1)); transition: transform 0.12s linear; }
 .portal .p-tk[data-big="true"] i { width: 22px; }
-.portal .p-tk[data-on="true"] i { background: var(--p-ink); }
 .portal .p-tk em { font: 400 11px/1 var(--p-mono); letter-spacing: 0.05em; color: var(--p-ink-3); font-style: normal; transition: color 0.25s; white-space: nowrap; }
 .portal .p-tk[data-on="true"] em { color: var(--p-ink); }
 .portal .p-tk[data-cur="true"] em::before { content: ""; display: inline-block; width: 4px; height: 4px; border-radius: 50%; background: var(--p-ink); margin-right: 6px; vertical-align: 2px; }
@@ -188,35 +211,43 @@
 .portal .p-paperstack { position: relative; padding-top: 22px; }
 .portal .p-sheet { position: absolute; left: 32px; right: 32px; top: 0; height: 40px; border-radius: 10px 10px 0 0; transition: background-color 0.5s; }
 .portal .p-sheet-2 { left: 16px; right: 16px; top: 11px; }
-.portal .p-desk { position: relative; aspect-ratio: 16 / 10.4; border-radius: 16px; overflow: hidden; transition: background-color 0.6s var(--p-ease-soft); }
+.portal .p-desk { position: relative; padding: 4.5% 5% 5%; border-radius: 16px; overflow: hidden; transition: background-color 0.6s var(--p-ease-soft); }
 .portal .p-desk::before {
   content: ""; position: absolute; inset: 0; opacity: 0.55; pointer-events: none;
   background: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 600 390'><g fill='none' stroke='%23ffffff' stroke-width='1.6' stroke-linecap='round'><path d='M-20 80 C 90 20, 150 140, 260 90 S 430 10, 620 70'/><path d='M-20 300 C 120 240, 200 360, 330 300 S 520 220, 620 280'/><path d='M80 -20 C 140 90, 40 170, 120 260 S 90 380, 140 420'/></g></svg>") center / cover;
 }
-.portal .p-win { position: absolute; left: 7%; right: 7%; top: 8%; bottom: 8%; background: var(--p-paper); border-radius: 10px; box-shadow: 0 12px 32px rgba(0, 0, 0, 0.12); display: grid; grid-template-columns: 34% 1fr; overflow: hidden; }
-.portal .p-win-side { border-right: 1px solid var(--p-line); padding: 14px; display: flex; flex-direction: column; gap: 10px; font-size: 12.5px; min-width: 0; }
-.portal .p-bubble { align-self: flex-end; background: var(--p-bg-2); border: 1px solid var(--p-line); border-radius: 12px 12px 4px 12px; padding: 8px 10px; min-height: 36px; max-width: 100%; }
-.portal .p-caret { display: inline-block; width: 1px; height: 13px; background: var(--p-ink); margin-left: 1px; vertical-align: -2px; animation: p-blink 1s steps(1) infinite; }
-@keyframes p-blink { 50% { opacity: 0; } }
-.portal .p-steps { display: flex; flex-direction: column; gap: 6px; color: var(--p-ink-3); }
-.portal .p-step { display: flex; gap: 7px; align-items: center; opacity: 0; transform: translateY(4px); transition: opacity 0.35s var(--p-ease-soft), transform 0.35s var(--p-ease-soft); }
-.portal .p-step[data-show="true"] { opacity: 1; transform: none; }
-.portal .p-step::before { content: "✓"; font-size: 10px; color: var(--p-clay); }
-.portal .p-note { margin-top: auto; font: 400 12.5px/1.45 var(--p-serif); color: var(--p-clay); opacity: 0; transition: opacity 0.4s; }
-.portal .p-note[data-show="true"] { opacity: 1; }
-.portal .p-inp { border: 1px solid var(--p-line-2); border-radius: 10px; padding: 7px 9px; color: var(--p-ink-3); display: flex; justify-content: space-between; align-items: center; font-size: 12px; gap: 6px; }
-.portal .p-inp i { width: 20px; height: 20px; border-radius: 6px; background: var(--p-clay); color: #fff; display: grid; place-items: center; font-style: normal; font-size: 11px; flex: none; }
-.portal .p-win-main { position: relative; background: var(--p-bg); display: grid; place-items: center; overflow: hidden; }
-.portal .p-shotframe { position: absolute; pointer-events: none; }
-.portal .p-shot { max-width: 92%; max-height: 88%; object-fit: contain; border-radius: 4px; box-shadow: var(--p-shadow-1); opacity: 0; transform: translateY(8px); transition: opacity 0.45s var(--p-ease-soft), transform 0.45s var(--p-ease-soft); }
-.portal .p-shot[data-show="true"] { opacity: 1; transform: none; }
-.portal .p-patch { position: absolute; border-radius: 50%; background: radial-gradient(closest-side, rgba(217, 119, 87, 0.16), transparent); opacity: 0; transition: opacity 0.6s; pointer-events: none; }
-.portal .p-patch[data-show="true"] { opacity: 1; animation: p-pulse 1.6s var(--p-ease-soft) 1; }
-@keyframes p-pulse { 0% { transform: scale(0.9); } 60% { transform: scale(1.05); } 100% { transform: scale(1); } }
-.portal .p-exports { position: absolute; left: 12px; bottom: 12px; display: flex; gap: 6px; }
-.portal .p-exports .p-chip { opacity: 0; transform: translateY(6px); transition: opacity 0.4s var(--p-ease-soft), transform 0.4s var(--p-ease-soft); transition-delay: calc(var(--i) * 0.08s); }
-.portal .p-exports[data-show="true"] .p-chip { opacity: 1; transform: none; }
-.portal .p-under { display: flex; justify-content: space-between; align-items: center; margin-top: 18px; gap: 12px; }
+.portal .p-win {
+  position: relative; display: flex; flex-direction: column; background: var(--p-paper); border-radius: 10px; box-shadow: 0 12px 32px rgba(0, 0, 0, 0.14); overflow: hidden;
+  transition: opacity 0.32s ease, transform 0.32s var(--p-ease-soft);
+  animation: p-win-in 0.7s var(--p-ease-out) backwards;
+}
+/* Scene switch: the old window lifts away, the next one rises from the stack. */
+.portal .p-desk[data-swap="true"] .p-win { opacity: 0; transform: translateY(-22px) scale(0.98); }
+@keyframes p-win-in { from { opacity: 0; transform: translateY(48px) scale(0.95); } }
+.portal .p-win-bar { flex: none; height: 26px; display: flex; align-items: center; gap: 5px; padding: 0 10px; background: var(--p-bg-2); border-bottom: 1px solid var(--p-line); font-size: 11px; color: var(--p-ink-3); white-space: nowrap; }
+.portal .p-win-bar i { width: 7px; height: 7px; border-radius: 50%; background: var(--p-line-2); flex: none; }
+.portal .p-win-bar span { margin-left: 6px; }
+/* Real screenshots, stacked; the current one fades in over the last. */
+.portal .p-win-shots { position: relative; aspect-ratio: 16 / 9; background: var(--p-bg); }
+.portal .p-win-shots img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: top left; opacity: 0; transform: scale(1.015); transition: opacity 0.6s var(--p-ease-soft), transform 2.8s linear; }
+.portal .p-win-shots img[data-show="true"] { opacity: 1; transform: none; }
+.portal .p-paperstack .p-sheet { transition: background-color 0.5s, transform 0.5s var(--p-ease-soft); }
+.portal .p-paperstack:has(.p-desk[data-swap="true"]) .p-sheet { transform: translateY(-6px); }
+.portal .p-shotcap { display: flex; align-items: center; gap: 12px; min-height: 24px; margin-top: 14px; font-size: 14px; color: var(--p-ink-2); transition: opacity 0.3s; }
+.portal .p-shotcap[data-swap="true"] { opacity: 0; }
+.portal .p-shotcap span { animation: p-cap-in 0.45s var(--p-ease-soft); }
+@keyframes p-cap-in { from { opacity: 0; transform: translateY(4px); } }
+.portal .p-shotsteps { display: flex; gap: 4px; flex: none; }
+.portal .p-shotsteps i { width: 18px; height: 3px; border-radius: 2px; background: var(--p-line-2); transition: background-color 0.4s; }
+.portal .p-shotsteps i[data-on="true"] { background: var(--p-ink); }
+.portal .p-scrollhint {
+  position: absolute; left: 0; right: 0; bottom: 20px; display: flex; justify-content: center; align-items: center; gap: 8px;
+  font-size: 13px; color: var(--p-ink-3); transition: opacity 0.4s;
+}
+.portal .p-scrollhint[data-show="false"] { opacity: 0; }
+.portal .p-scrollhint i { font-style: normal; animation: p-nudge 1.8s var(--p-ease-soft) infinite; }
+@keyframes p-nudge { 0%, 100% { transform: none; } 50% { transform: translateY(4px); } }
+.portal .p-under { display: flex; justify-content: space-between; align-items: center; margin-top: 14px; gap: 12px; }
 .portal .p-under-acts { display: flex; gap: 8px; }
 .portal .p-dock { display: flex; gap: 4px; padding: 6px; background: var(--p-paper); border-radius: 14px; box-shadow: 0 0 0 1px var(--p-line); }
 .portal .p-dock button { position: relative; width: 38px; height: 38px; border-radius: 10px; display: grid; place-items: center; color: var(--p-ink-3); transition: background-color 0.15s, color 0.2s; }
@@ -238,30 +269,34 @@
 .portal .p-menu button { padding: 9px 14px; border-radius: 14px; text-align: left; white-space: nowrap; transition: background-color 0.15s, opacity 0.2s; }
 .portal .p-menu button:hover { background: var(--p-bg-2); }
 .portal .p-menu:has(button:hover) button:not(:hover) { opacity: 0.3; }
-.portal .p-lib { display: grid; grid-template-columns: 200px 1fr 220px; gap: 48px; align-items: start; }
-.portal .p-lib h4 { font: 500 22px/1.2 var(--p-serif); margin-bottom: 18px; }
+.portal .p-lib { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 64px; align-items: start; }
+.portal .p-lib-side { display: flex; flex-direction: column; gap: 44px; padding-top: 30px; }
+.portal .p-lib h4 { font: 500 22px/1.2 var(--p-serif); margin-bottom: 16px; }
 .portal .p-lib ul { list-style: none; display: flex; flex-direction: column; gap: 6px; margin: 0; padding: 0; }
 .portal .p-lib li button { position: relative; padding-left: 30px; font-size: 16px; line-height: 28px; text-align: left; transition: opacity 0.2s; }
-.portal .p-lib li button::before { content: ""; position: absolute; left: 0; top: 50%; width: 15px; height: 1px; background: var(--p-ink-3); }
+.portal .p-lib li button::before { content: ""; position: absolute; left: 0; top: 50%; width: 15px; height: 1px; background: var(--p-ink-3); transform-origin: left; transition: transform 0.3s var(--p-ease-soft); }
+.portal .p-lib li button[data-on="true"]::before { background: var(--p-ink); transform: scaleX(1.6); }
 .portal .p-lib li button[data-on="false"] { opacity: 0.4; }
 .portal .p-lib li button[data-on="false"]:hover { opacity: 0.7; }
 .portal .p-lib ul:has(button:hover) button:not(:hover):not([data-on="true"]) { opacity: 0.3; }
-.portal .p-lib-right li button { padding-left: 0; }
-.portal .p-lib-right li button::before { display: none; }
-.portal .p-lib-right small { display: block; font-size: 12.5px; color: var(--p-ink-3); line-height: 1.3; margin-top: -2px; margin-bottom: 4px; }
+.portal .p-lib-uses small { display: block; padding-left: 30px; font-size: 12.5px; color: var(--p-ink-3); line-height: 1.3; margin-top: -2px; margin-bottom: 4px; }
+.portal .p-show { margin: 0; min-width: 0; }
 .portal .p-stack { position: relative; padding-top: 26px; }
-.portal .p-stack .p-sheet { left: 36px; right: 36px; height: 40px; }
-.portal .p-stack .p-sheet-2 { left: 18px; right: 18px; top: 13px; }
-.portal .p-stack-base { position: relative; aspect-ratio: 4 / 3; border-radius: 12px; display: grid; place-items: center; transition: background-color 0.5s; overflow: hidden; }
-.portal .p-art { width: 80%; background: #fff; border-radius: 6px; overflow: hidden; box-shadow: 0 12px 32px rgba(0, 0, 0, 0.16); animation: p-art-in 0.45s var(--p-ease-soft); }
-@keyframes p-art-in { from { opacity: 0; transform: translateY(8px); } }
-.portal .p-art-bar { height: 22px; display: flex; align-items: center; gap: 5px; padding: 0 9px; background: var(--p-bg-2); border-bottom: 1px solid var(--p-line); font-size: 10.5px; color: var(--p-ink-3); white-space: nowrap; overflow: hidden; }
+.portal .p-stack .p-sheet { left: 40px; right: 40px; height: 40px; }
+.portal .p-stack .p-sheet-2 { left: 20px; right: 20px; top: 13px; }
+.portal .p-stack-base { position: relative; aspect-ratio: 16 / 10.5; max-height: calc(100vh - 220px); min-height: 360px; border-radius: 16px; padding: 4.5% 6%; display: flex; transition: background-color 0.5s; overflow: hidden; }
+.portal .p-art { flex: 1; min-width: 0; display: flex; flex-direction: column; background: #fff; border-radius: 8px; overflow: hidden; box-shadow: 0 14px 36px rgba(0, 0, 0, 0.14); animation: p-art-in 0.55s var(--p-ease-out); }
+@keyframes p-art-in { from { opacity: 0; transform: translateY(14px) scale(0.98); } }
+.portal .p-art-bar { flex: none; height: 26px; display: flex; align-items: center; gap: 5px; padding: 0 10px; background: var(--p-bg-2); border-bottom: 1px solid var(--p-line); font-size: 11px; color: var(--p-ink-3); white-space: nowrap; overflow: hidden; }
+.portal .p-art-bar span { margin-left: 6px; overflow: hidden; text-overflow: ellipsis; }
 .portal .p-art-bar i { width: 7px; height: 7px; border-radius: 50%; background: var(--p-line-2); flex: none; }
-.portal .p-art img { width: 100%; aspect-ratio: 16 / 10; object-fit: cover; object-position: top; }
-.portal .p-stack-go { position: absolute; right: 14px; bottom: 14px; }
+.portal .p-art-img { position: relative; flex: 1; min-height: 0; }
+.portal .p-art-img img { position: absolute; inset: 12px; width: calc(100% - 24px); height: calc(100% - 24px); object-fit: contain; }
+.portal .p-show-cap { display: flex; align-items: center; justify-content: space-between; gap: 20px; margin-top: 20px; }
+.portal .p-show-cap span { font-size: 14px; color: var(--p-ink-3); min-width: 0; }
 
 /* ---- S5 compare ---- */
-.portal .p-edit { padding: 128px 0; border-top: 1px solid var(--p-line); }
+.portal .p-edit { padding: 128px 0; }
 .portal .p-edit-grid { display: grid; grid-template-columns: 1fr 1.35fr; gap: 72px; align-items: center; }
 .portal .p-edit-text { color: var(--p-ink-2); margin-top: 20px; max-width: 440px; }
 .portal .p-bul { margin-top: 28px; display: flex; flex-direction: column; gap: 10px; font-size: 15px; color: var(--p-ink-3); }
@@ -274,7 +309,7 @@
 .portal .p-cmp-lab { position: absolute; top: 14px; font-size: 12px; padding: 3px 9px; border-radius: 6px; background: rgba(255, 255, 255, 0.92); color: var(--p-ink-2); box-shadow: 0 0 0 1px var(--p-line); }
 
 /* ---- S6 works shelf ---- */
-.portal .p-works { background: var(--p-bg-3); padding: 128px 0 150px; overflow: hidden; }
+.portal .p-works { background: linear-gradient(var(--p-bg), var(--p-bg-3) 180px, var(--p-bg-3) calc(100% - 180px), var(--p-bg)); padding: 128px 0 150px; overflow: hidden; }
 .portal .p-works-top { display: grid; grid-template-columns: 1fr 1fr; gap: 48px; align-items: end; margin-bottom: 72px; }
 .portal .p-works-top p { color: var(--p-ink-2); }
 .portal .p-shelf { display: flex; gap: 22px; padding: 10px 0 20px; }
@@ -301,7 +336,7 @@
 .portal .p-ans p { padding: 0 48px 24px 0; color: var(--p-ink-2); font-size: 15.5px; }
 
 /* ---- S8 ask ---- */
-.portal .p-ask { background: var(--p-bg-3); padding: 200px 0; text-align: center; }
+.portal .p-ask { background: linear-gradient(var(--p-bg), var(--p-bg-3) 220px); padding: 200px 0; text-align: center; }
 .portal .p-ask .p-lead { margin: 22px auto 0; max-width: 560px; }
 .portal .p-askbar { width: min(600px, 100%); margin: 44px auto 0; display: flex; align-items: center; gap: 10px; padding: 8px 8px 8px 22px; background: var(--p-paper); border-radius: 16px; box-shadow: 0 0 0 1px var(--p-line), var(--p-shadow-1); transition: box-shadow 0.2s; }
 .portal .p-askbar:focus-within { box-shadow: 0 0 0 2px var(--p-line-2), var(--p-shadow-1); }
@@ -368,6 +403,22 @@
 .portal .p-lightbox figcaption { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 0 4px 10px; font: 500 18px/1.3 var(--p-serif); }
 .portal .p-lightbox img { min-height: 0; max-height: calc(100vh - 140px); width: 100%; object-fit: contain; border-radius: 10px; background: var(--p-bg-2); }
 @keyframes p-fade-in { from { opacity: 0; } }
+.portal .p-book-th { position: relative; }
+.portal .p-book-count { position: absolute; right: 8px; bottom: 8px; min-width: 22px; height: 22px; padding: 0 6px; border-radius: 6px; background: rgba(20, 20, 19, 0.72); color: #fff; font: 500 11.5px/22px var(--p-sans); font-style: normal; text-align: center; }
+.portal .p-viewer { gap: 12px; }
+.portal .p-viewer figcaption small { display: flex; align-items: center; gap: 6px; margin-top: 4px; font: 400 13px/1.3 var(--p-sans); color: var(--p-ink-3); }
+.portal .p-viewer-stage { position: relative; min-height: 0; display: flex; justify-content: center; background: var(--p-bg-2); border-radius: 10px; }
+.portal .p-viewer-stage img { max-height: calc(100vh - 230px); background: transparent; animation: p-fade-in 0.3s ease; }
+.portal .p-viewer-arrow { position: absolute; top: 50%; width: 40px; height: 40px; margin-top: -20px; border-radius: 50%; background: rgba(255, 255, 255, 0.92); box-shadow: var(--p-shadow-1), 0 0 0 1px var(--p-line); font-size: 22px; line-height: 1; color: var(--p-ink); transition: transform 0.16s var(--p-ease-out); }
+.portal .p-viewer-arrow:hover { transform: scale(1.06); }
+.portal .p-viewer-arrow[data-side="l"] { left: 12px; }
+.portal .p-viewer-arrow[data-side="r"] { right: 12px; }
+.portal .p-viewer-foot { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.portal .p-viewer-thumbs { display: flex; gap: 8px; min-width: 0; overflow-x: auto; }
+.portal .p-viewer-thumbs button { flex: none; width: 72px; height: 48px; border-radius: 6px; overflow: hidden; background: var(--p-bg-2); box-shadow: 0 0 0 1px var(--p-line); opacity: 0.55; transition: opacity 0.2s, box-shadow 0.2s; }
+.portal .p-viewer-thumbs button:hover { opacity: 0.85; }
+.portal .p-viewer-thumbs button[data-on="true"] { opacity: 1; box-shadow: 0 0 0 2px var(--p-ink); }
+.portal .p-viewer-thumbs img { width: 100%; height: 100%; object-fit: cover; }
 
 @media (max-width: 960px) {
   .portal .p-wrap { width: calc(100% - 32px); }
@@ -380,11 +431,16 @@
   .portal .p-faq-grid,
   .portal .p-edit-grid { grid-template-columns: 1fr; gap: 32px; }
   .portal .p-story { height: auto; padding: 96px 0; }
-  .portal .p-pin { position: static; height: auto; }
+  .portal .p-pin { position: static; height: auto; padding: 0; }
+  .portal .p-deskcol { width: auto; }
   .portal .p-stage { grid-template-columns: 1fr; gap: 24px; }
   .portal .p-railv { display: none; }
   .portal .p-copy3 { min-height: 0; }
   .portal .p-lib { grid-template-columns: 1fr; gap: 28px; }
+  .portal .p-lib-side { padding-top: 0; gap: 24px; }
+  .portal .p-lib-uses small { display: none; }
+  .portal .p-stack-base { min-height: 0; max-height: none; aspect-ratio: 4 / 3; padding: 4%; }
+  .portal .p-show-cap { flex-direction: column; align-items: stretch; text-align: center; }
   .portal .p-lib ul { flex-direction: row; flex-wrap: wrap; gap: 6px 18px; }
   .portal .p-lib li button { padding-left: 0; }
   .portal .p-lib li button::before { display: none; }
@@ -393,8 +449,6 @@
   .portal .p-footer-cols { grid-template-columns: 1fr 1fr; }
   .portal .p-ask,
   .portal .p-fill { padding: 112px 0; }
-  .portal .p-win { grid-template-columns: 1fr; }
-  .portal .p-win-side { display: none; }
   .portal .p-under { flex-wrap: wrap; }
   .portal .p-vcap { margin-bottom: 72px; }
   .portal .p-dhead { padding: 48px 0 40px; }

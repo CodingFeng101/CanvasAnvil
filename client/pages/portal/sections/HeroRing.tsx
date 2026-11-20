@@ -77,7 +77,8 @@ export function HeroRing({ lang, onEnter }: { lang: UiLanguage; onEnter: (k: Por
   const heroRef = useRef<HTMLElement>(null);
   const headRef = useRef<HTMLDivElement>(null);
   const tileEls = useRef<Array<HTMLDivElement | null>>([]);
-  const [field, setField] = useState(() => ({ size: 100, tiles: [] as Tile[] }));
+  // Laid out in the first render, so the field never pops in a frame later.
+  const [field, setField] = useState(() => buildTiles(window.innerWidth, Math.max(window.innerHeight, 680)));
   const [ready, setReady] = useState(false);
   const [card, setCard] = useState<{ tile: Tile; left: number; top: number } | null>(null);
   const [cardOpen, setCardOpen] = useState(false);
@@ -90,14 +91,17 @@ export function HeroRing({ lang, onEnter }: { lang: UiLanguage; onEnter: (k: Por
       if (!hero) return;
       setField(buildTiles(window.innerWidth, hero.offsetHeight));
     };
-    build();
     let timer = 0;
     const onResize = () => {
       window.clearTimeout(timer);
       timer = window.setTimeout(build, 200);
     };
     window.addEventListener("resize", onResize);
-    const raf = requestAnimationFrame(() => setReady(true));
+    // Start the entrance after the page's first heavy frame has been painted,
+    // so the headline and tiles don't stutter through it.
+    let raf = requestAnimationFrame(() => {
+      raf = requestAnimationFrame(() => setReady(true));
+    });
     return () => {
       window.removeEventListener("resize", onResize);
       window.clearTimeout(timer);
@@ -106,9 +110,12 @@ export function HeroRing({ lang, onEnter }: { lang: UiLanguage; onEnter: (k: Por
   }, []);
 
   // Drift, gather-in and scroll push-out.
+  const introStart = useRef(0);
   useEffect(() => {
+    if (!ready) return;
     const reduce = prefersReducedMotion();
-    const t0 = performance.now();
+    if (!introStart.current) introStart.current = performance.now();
+    const t0 = introStart.current;
     let raf = 0;
     const frame = (now: number) => {
       raf = requestAnimationFrame(frame);
@@ -137,7 +144,7 @@ export function HeroRing({ lang, onEnter }: { lang: UiLanguage; onEnter: (k: Por
     };
     raf = requestAnimationFrame(frame);
     return () => cancelAnimationFrame(raf);
-  }, [field]);
+  }, [field, ready]);
 
   const showCard = (tile: Tile, el: HTMLElement) => {
     const hero = heroRef.current;
@@ -160,7 +167,8 @@ export function HeroRing({ lang, onEnter }: { lang: UiLanguage; onEnter: (k: Por
 
   return (
     <header ref={heroRef} className="p-hero" data-ready={ready}>
-      <div className="p-ring">
+      {/* Decoration with a mouse shortcut: the headline's buttons below are the real way in. */}
+      <div className="p-ring" aria-hidden="true">
         {field.tiles.map((tile, i) => (
           <div
             key={`${field.size}-${tile.id}`}

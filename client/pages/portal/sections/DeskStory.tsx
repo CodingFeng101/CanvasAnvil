@@ -2,71 +2,62 @@ import { type CSSProperties, Fragment, useCallback, useEffect, useRef, useState 
 import type { UiLanguage } from "@/shared/i18n";
 import { CANVAS, CANVAS_ORDER, STORY, STORY_SCENES, t } from "../content";
 import { CanvasIcon, Dot, Words } from "../components";
-import { clamp, scrollToId, useIsNarrow } from "../motion";
+import { clamp, prefersReducedMotion, scrollToId, useIsNarrow } from "../motion";
 import type { PortalWorkspace } from "../data";
 
 /*
- * S3: one desk, four canvases. The section is 460vh tall with a sticky
- * stage; scrolling moves through the four scenes, and each scene plays a
- * short timeline: the prompt types itself, steps tick off, the result
- * appears, a hand-drawn circle marks a change, and export chips land
+ * S3: one desk, four canvases. The section is tall with a sticky stage;
+ * scrolling moves through the four scenes. Each scene plays real screenshots
+ * of that canvas at work, one after another, each with a short caption
  * (plan §3 S3). Below 960px the stage stops pinning and the dock switches
  * scenes instead.
  */
 
-type Play = {
-  typed: string;
-  steps: number;
-  shot: string;
-  shotOn: boolean;
-  draw: boolean;
-  patch: boolean;
-  exports: boolean;
-  note: boolean;
-};
+const OUT_MS = 320;
+/** How long each screenshot stays before the next one. */
+const SHOT_MS = 2800;
+const TICKS_PER_GAP = 6;
+/** Rail ticks per scene: the scene's own long tick plus the short ones up to the next. */
+const TICK_STEP = TICKS_PER_GAP + 1;
 
-const EMPTY: Play = { typed: "", steps: 0, shot: "", shotOn: false, draw: false, patch: false, exports: false, note: false };
+/** Warm the browser cache so the next scene's first picture is ready when it is needed. */
+function preload(i: number) {
+  const scene = STORY_SCENES[i];
+  if (!scene) return;
+  scene.shots.forEach((s) => {
+    const im = new Image();
+    im.decoding = "async";
+    im.src = s.img;
+  });
+}
 
 export function DeskStory({ lang, onDetail }: { lang: UiLanguage; onDetail: (k: PortalWorkspace) => void }) {
   const sectionRef = useRef<HTMLElement>(null);
   const narrow = useIsNarrow();
   const [cur, setCur] = useState(-1);
-  const [shown, setShown] = useState(0); // the scene whose copy is on screen
+  const [shown, setShown] = useState(0); // the scene whose copy and desk are on screen
   const [swap, setSwap] = useState(false);
-  const [play, setPlay] = useState<Play>(EMPTY);
+  const [shot, setShot] = useState(0);
   const timers = useRef<number[]>([]);
 
-  const run = useCallback(
-    (i: number) => {
-      timers.current.forEach(window.clearTimeout);
-      timers.current = [];
-      const later = (fn: () => void, ms: number) => timers.current.push(window.setTimeout(fn, ms));
-      const s = STORY_SCENES[i];
-      const prompt = t(s.prompt, lang);
-      setSwap(true);
-      later(() => {
-        setShown(i);
-        setSwap(false);
-      }, 300);
-      setPlay(EMPTY);
-      let ms = 350;
-      [...prompt].forEach((_, j) => later(() => setPlay((p) => ({ ...p, typed: prompt.slice(0, j + 1) })), ms + j * 45));
-      ms += prompt.length * 45 + 300;
-      s.steps.forEach((_, j) => later(() => setPlay((p) => ({ ...p, steps: j + 1 })), ms + j * 450));
-      ms += s.steps.length * 450 + 200;
-      later(() => setPlay((p) => ({ ...p, shot: s.img, shotOn: true })), ms);
-      ms += 900;
-      later(() => setPlay((p) => ({ ...p, draw: true, note: true })), ms);
-      ms += 1200;
-      later(() => {
-        setPlay((p) => ({ ...p, patch: true, shotOn: s.after ? false : p.shotOn }));
-        if (s.after) later(() => setPlay((p) => ({ ...p, shot: s.after!, shotOn: true })), 300);
-      }, ms);
-      ms += 700;
-      later(() => setPlay((p) => ({ ...p, exports: true })), ms);
-    },
-    [lang],
-  );
+  const run = useCallback((i: number) => {
+    timers.current.forEach(window.clearTimeout);
+    timers.current = [];
+    const later = (fn: () => void, ms: number) => timers.current.push(window.setTimeout(fn, ms));
+    // The old scene slides out first; the new window comes up only then,
+    // so a switch reads as turning to the next sheet, not as a freeze.
+    setSwap(true);
+    later(() => {
+      setShown(i);
+      setShot(0);
+      setSwap(false);
+    }, OUT_MS);
+    const n = STORY_SCENES[i].shots.length;
+    if (!prefersReducedMotion()) {
+      for (let j = 1; j < n; j++) later(() => setShot(j), OUT_MS + j * SHOT_MS);
+    }
+    preload(i + 1);
+  }, []);
 
   const curRef = useRef(-1);
   const setScene = useCallback(
@@ -89,6 +80,8 @@ export function DeskStory({ lang, onDetail }: { lang: UiLanguage; onDetail: (k: 
       if (r.top > window.innerHeight * 0.4) return;
       const total = el.offsetHeight - window.innerHeight;
       const p = clamp(-r.top / total);
+      // The rail fills continuously with the scroll, so scrolling always shows movement.
+      el.style.setProperty("--sp", (p * STORY_SCENES.length * TICK_STEP).toFixed(2));
       setScene(Math.min(3, Math.floor(p * 4)));
     };
     window.addEventListener("scroll", onScroll, { passive: true });
@@ -96,43 +89,34 @@ export function DeskStory({ lang, onDetail }: { lang: UiLanguage; onDetail: (k: 
     return () => window.removeEventListener("scroll", onScroll);
   }, [narrow, setScene]);
 
-  // Start the first scene as soon as the section shows up.
+  // Start the first scene as soon as the section shows up, and fetch its pictures a little earlier.
   useEffect(() => {
     const el = sectionRef.current;
     if (!el) return;
+    const near = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((e) => e.isIntersecting)) {
+          preload(0);
+          near.disconnect();
+        }
+      },
+      { rootMargin: "600px 0px" },
+    );
     const io = new IntersectionObserver(
       (entries) => {
         if (entries.some((e) => e.isIntersecting) && curRef.current === -1) setScene(0);
       },
       { threshold: 0.3 },
     );
+    near.observe(el);
     io.observe(el);
-    return () => io.disconnect();
+    return () => {
+      near.disconnect();
+      io.disconnect();
+    };
   }, [setScene]);
 
   useEffect(() => () => timers.current.forEach(window.clearTimeout), []);
-
-  // A language switch replays the current scene in the new language.
-  useEffect(() => {
-    if (curRef.current >= 0) run(curRef.current);
-  }, [run]);
-
-  // The circle is placed in % of the picture, so track where the picture sits.
-  const mainRef = useRef<HTMLDivElement>(null);
-  const shotRef = useRef<HTMLImageElement>(null);
-  const [frame, setFrame] = useState<CSSProperties>({});
-  const measure = useCallback(() => {
-    const img = shotRef.current;
-    if (!img || !img.naturalWidth) return;
-    setFrame({ left: img.offsetLeft, top: img.offsetTop, width: img.offsetWidth, height: img.offsetHeight });
-  }, []);
-  useEffect(() => {
-    const main = mainRef.current;
-    if (!main || typeof ResizeObserver === "undefined") return;
-    const ro = new ResizeObserver(measure);
-    ro.observe(main);
-    return () => ro.disconnect();
-  }, [measure]);
 
   const goScene = (i: number) => {
     const el = sectionRef.current;
@@ -145,11 +129,10 @@ export function DeskStory({ lang, onDetail }: { lang: UiLanguage; onDetail: (k: 
   };
 
   const active = Math.max(cur, 0);
-  const scene = STORY_SCENES[active];
-  const copyScene = STORY_SCENES[shown];
+  const scene = STORY_SCENES[shown];
   const others = CANVAS_ORDER.filter((k) => k !== scene.k);
-  const [l, tp, w, h] = scene.circle;
-  const box = { left: `${l}%`, top: `${tp}%`, width: `${w}%`, height: `${h}%` };
+  const next = cur >= 0 && cur < STORY_SCENES.length - 1 ? STORY_SCENES[cur + 1] : null;
+  const cap = scene.shots[shot];
 
   let tick = 0;
   return (
@@ -170,8 +153,8 @@ export function DeskStory({ lang, onDetail }: { lang: UiLanguage; onDetail: (k: 
                     <em>{t(CANVAS[s.k].name, lang)}</em>
                   </div>
                   {i < STORY_SCENES.length - 1 &&
-                    Array.from({ length: 6 }, (_, j) => (
-                      <div key={j} className="p-tk" data-on={i < cur}>
+                    Array.from({ length: TICKS_PER_GAP }, (_, j) => (
+                      <div key={j} className="p-tk">
                         <i style={{ "--k": tick++ } as CSSProperties} />
                       </div>
                     ))}
@@ -181,62 +164,43 @@ export function DeskStory({ lang, onDetail }: { lang: UiLanguage; onDetail: (k: 
 
             <div className="p-copy3" data-swap={swap} aria-live="polite">
               <span className="p-chip">
-                <Dot color={CANVAS[copyScene.k].ink} />
-                {t(CANVAS[copyScene.k].name, lang)}
+                <Dot color={CANVAS[scene.k].ink} />
+                {t(CANVAS[scene.k].name, lang)}
               </span>
-              <h3>{t(copyScene.title, lang)}</h3>
-              <p>{t(copyScene.text, lang)}</p>
-              <button type="button" className="p-more" onClick={() => onDetail(copyScene.k)}>
-                {t(STORY.more, lang).replace("{name}", t(CANVAS[copyScene.k].name, lang))}
+              <h3>{t(scene.title, lang)}</h3>
+              <p>{t(scene.text, lang)}</p>
+              <button type="button" className="p-more" onClick={() => onDetail(scene.k)}>
+                {t(STORY.more, lang).replace("{name}", t(CANVAS[scene.k].name, lang))}
               </button>
             </div>
 
-            <div>
+            <div className="p-deskcol">
               <div className="p-paperstack">
                 <div className="p-sheet" style={{ background: CANVAS[others[0]].swatch }} />
                 <div className="p-sheet p-sheet-2" style={{ background: CANVAS[others[1]].swatch }} />
-                <div className="p-desk" style={{ background: CANVAS[scene.k].swatch }}>
-                  <div className="p-win">
-                    <div className="p-win-side">
-                      <div className="p-bubble">
-                        <span>{play.typed}</span>
-                        <span className="p-caret" />
-                      </div>
-                      <div className="p-steps">
-                        {scene.steps.map((step, i) => (
-                          <div key={i} className="p-step" data-show={i < play.steps}>
-                            {t(step, lang)}
-                          </div>
-                        ))}
-                      </div>
-                      <div className="p-note" data-show={play.note}>
-                        ✎ {t(scene.note, lang)}
-                      </div>
-                      <div className="p-inp">
-                        {t(STORY.inputHint, lang)}
-                        <i>↑</i>
-                      </div>
+                <div className="p-desk" data-swap={swap} style={{ background: CANVAS[scene.k].swatch }}>
+                  <div key={scene.k} className="p-win">
+                    <div className="p-win-bar" aria-hidden="true">
+                      <i />
+                      <i />
+                      <i />
+                      <span>CanvasAnvil · {t(CANVAS[scene.k].name, lang)}</span>
                     </div>
-                    <div ref={mainRef} className="p-win-main">
-                      {play.shot && (
-                        <img ref={shotRef} className="p-shot" data-show={play.shotOn} src={play.shot} alt={t(scene.title, lang)} onLoad={measure} />
-                      )}
-                      <div className="p-shotframe" style={frame}>
-                        <div className="p-patch" data-show={play.patch} style={box} />
-                        <svg className="p-hand" data-draw={play.draw} style={box} viewBox="0 0 100 60" preserveAspectRatio="none" aria-hidden="true">
-                          <path pathLength={1} d="M8 34 C 6 12, 44 4, 74 9 S 98 30, 86 46 S 30 60, 14 48 S 4 30, 22 18" />
-                        </svg>
-                      </div>
-                      <div className="p-exports" data-show={play.exports}>
-                        {scene.exports.map((x, j) => (
-                          <span key={j} className="p-chip" style={{ "--i": j } as CSSProperties}>
-                            {t(x, lang)}
-                          </span>
-                        ))}
-                      </div>
+                    <div className="p-win-shots">
+                      {scene.shots.map((s, j) => (
+                        <img key={s.img} src={s.img} alt={t(s.cap, lang)} data-show={j === shot} decoding="async" />
+                      ))}
                     </div>
                   </div>
                 </div>
+              </div>
+              <div className="p-shotcap" data-swap={swap}>
+                <div className="p-shotsteps" aria-hidden="true">
+                  {scene.shots.map((s, j) => (
+                    <i key={s.img} data-on={j <= shot} />
+                  ))}
+                </div>
+                <span key={`${scene.k}-${shot}`}>{t(cap.cap, lang)}</span>
               </div>
               <div className="p-under">
                 <div className="p-under-acts">
@@ -249,7 +213,7 @@ export function DeskStory({ lang, onDetail }: { lang: UiLanguage; onDetail: (k: 
                 </div>
                 <div className="p-dock">
                   {STORY_SCENES.map((s, i) => (
-                    <button key={s.k} type="button" data-on={i === cur} aria-label={t(CANVAS[s.k].name, lang)} onClick={() => goScene(i)}>
+                    <button key={s.k} type="button" data-on={i === cur} aria-pressed={i === cur} aria-label={t(CANVAS[s.k].name, lang)} onClick={() => goScene(i)}>
                       <CanvasIcon k={s.k} />
                     </button>
                   ))}
@@ -258,6 +222,12 @@ export function DeskStory({ lang, onDetail }: { lang: UiLanguage; onDetail: (k: 
             </div>
           </div>
         </div>
+        {!narrow && (
+          <div className="p-scrollhint" data-show={Boolean(next)} aria-hidden="true">
+            {next ? t(STORY.next, lang).replace("{name}", t(CANVAS[next.k].name, lang)) : " "}
+            <i>↓</i>
+          </div>
+        )}
       </div>
     </section>
   );

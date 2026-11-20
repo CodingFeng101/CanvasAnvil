@@ -1,5 +1,6 @@
 "use client"
 
+import { usePendingPrompt } from "@/shared/pending-prompt"
 import { useChat } from "@ai-sdk/react"
 import {
     Layers,
@@ -300,6 +301,11 @@ export default function ChatPanel({
     const [showHistory, setShowHistory] = useState(false)
     const [input, setInput] = useState("")
     const [inputFocusTick, setInputFocusTick] = useState(0)
+    // A sentence written on the portal lands here once, unsent.
+    usePendingPrompt("diagram", (text) => {
+        setInput(text)
+        setInputFocusTick((n) => n + 1)
+    })
     const uiLang = useUiLanguage()
     const [dailyRequestLimit, setDailyRequestLimit] = useState(0)
     const [dailyTokenLimit, setDailyTokenLimit] = useState(0)
