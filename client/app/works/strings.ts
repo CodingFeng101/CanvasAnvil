@@ -36,5 +36,15 @@ export const { t: tWorks, useT: useWorksT } = createTranslator({
   "leave.discard": { zh: "不保存", en: "Don't save" },
   "leave.cancel": { zh: "取消", en: "Cancel" },
 
+  "ref.title": { zh: "引用作品", en: "Reference a work" },
+  "ref.desc": { zh: "从其他画布的作品里挑要带过来的内容。带过来的是一份副本，原作品之后修改或删除都不影响。", en: "Take things from a work in another canvas. What you take is a copy: later changes to the work, or deleting it, leave it as it is." },
+  "ref.none": { zh: "这里还没有可以引用的作品。", en: "No works to reference here yet." },
+  "ref.pick": { zh: "选一个作品，看看它能带过来什么。", en: "Pick a work to see what it can bring." },
+  "ref.empty": { zh: "这个作品里没有这里能用的内容。", en: "This work has nothing this place can use." },
+  "ref.all": { zh: "全选", en: "Select all" },
+  "ref.none.tick": { zh: "全不选", en: "Select none" },
+  "ref.confirm": { zh: "引用", en: "Reference" },
+  "ref.card": { zh: "{{count}} 项", en: "{{count}} items" },
+
   "busy.switch": { zh: "正在生成，完成或停止后才能切换作品", en: "Generating. Switch works once it finishes or is stopped." },
 });

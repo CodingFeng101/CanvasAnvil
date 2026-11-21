@@ -1,4 +1,7 @@
 import { usePendingPrompt } from "@/shared/pending-prompt";
+import { peekPendingReference } from "@/shared/references/pending";
+import type { WorkReference } from "@/shared/references/types";
+import { reportSourceItems } from "@/workspaces/ppt/canvas/lib/report-images";
 import { useReportBusy, useReportLastPrompt } from '@/shared/works/work-context';
 import { useSendAfterRender } from '@/shared/chat/use-send-after-render';
 import { ChatTitle } from '@/shared/chat/chat-title';
@@ -135,6 +138,15 @@ export function ChatPanel({
     { type: "text", text: "" }
   ]);
   // A sentence written on the portal lands here once, unsent.
+  // A design sent here to become a report ("生成汇报 PPT"): its texts and quote ride along as one
+  // reference card; the canvas takes the pictures and puts them on slides once the outline exists.
+  const [incomingReference] = useState<WorkReference | null>(() => {
+    const waiting = peekPendingReference("ppt");
+    if (waiting?.intent.kind !== "deck-source") return null;
+    const items = reportSourceItems(waiting.reference.items);
+    return items.length ? { ...waiting.reference, items } : null;
+  });
+
   usePendingPrompt("ppt", (text) => {
     setInput(text);
     setPptInputSegments([{ type: "text", text }]);
@@ -794,6 +806,7 @@ const getPptTag = (slideId: string, title: string, kind: "outline" | "slide_imag
             historyDisabled={history.length === 0}
             onFilesChange={setFiles}
             files={files}
+            incomingReference={incomingReference}
             // Before the slides exist only the text model works (topic, outline);
             // pictures, and editing or redrawing them, come once the deck is made.
             statusChannels={stage === "slides" ? ["image", "text"] : ["text"]}
@@ -826,19 +839,11 @@ const getPptTag = (slideId: string, title: string, kind: "outline" | "slide_imag
               pumpPptInsertQueue();
             }}
             bottomChips={
-              // While starting: the style picked on the left, and how the draft is read,
-              // with the other reading one click away in case the guess is wrong.
-              starting
+              // While starting: how the draft is read, with the other reading one click away
+              // in case the guess is wrong.
+              starting && (draftText.trim() || files.length > 0)
                 ? (
                   <div className="flex flex-wrap items-center gap-1.5 text-xs">
-                    <span className="inline-flex h-6 max-w-full items-center gap-1.5 rounded-md bg-muted pl-1 pr-2 text-muted-foreground">
-                      {selectedTemplate ? (
-                        <img src={selectedTemplate.previewSrc} alt="" className="h-[17px] w-[30px] rounded-[3px] object-cover" />
-                      ) : null}
-                      <span className={cn("truncate", !selectedTemplate && "pl-1")}>
-                        {selectedTemplate ? selectedTemplate.name : trText("还没选风格", "No style picked")}
-                      </span>
-                    </span>
                     {draftText.trim() || files.length > 0 ? (
                       <span className="inline-flex h-6 items-center gap-1 rounded-md bg-muted px-2 text-muted-foreground">
                         {trText(`读作${KIND_LABEL[creationKind][0]}`, `Read as ${KIND_LABEL[creationKind][1]}`)}

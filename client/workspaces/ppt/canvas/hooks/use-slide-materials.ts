@@ -72,9 +72,9 @@ export function useSlideMaterials({
     pickerReplaceRangeRef.current = null;
   };
 
-  const addImages = async (slideId: string, files: File[]) => {
+  const addImages = async (slideId: string, files: File[]): Promise<SlideMaterialImage[]> => {
     const imageFiles = files.filter((f) => f.type.startsWith("image/"));
-    if (imageFiles.length === 0) return;
+    if (imageFiles.length === 0) return [];
 
     const startingCount = (slideMaterials[slideId] || []).length;
     const created: SlideMaterialImage[] = [];
@@ -94,9 +94,28 @@ export function useSlideMaterials({
         console.error("Failed to read slide material image", file.name, e);
       }
     }
-    if (created.length === 0) return;
+    if (created.length === 0) return [];
 
     setSlideMaterials((prev) => ({ ...prev, [slideId]: [...(prev[slideId] || []), ...created] }));
+    return created;
+  };
+
+  /**
+   * Pictures referenced from another work: attached like uploads, and also
+   * named in the description, since only a named material reaches the image
+   * model. `source` (the work's name) goes beside the token for the reader.
+   */
+  const addReferencedImages = async (slideId: string, files: File[], source: string) => {
+    const created = await addImages(slideId, files);
+    if (!created.length) return created;
+    const tokens = created.map((x) => materialToken(x.name)).join(" ");
+    const line = uiLang === "zh" ? `放入${tokens}（来自「${source}」）` : `Include ${tokens} (from "${source}")`;
+    setLocalSlides((prev) =>
+      prev.map((slide) =>
+        slide.id === slideId ? { ...slide, description: [slide.description?.trim(), line].filter(Boolean).join(" ") } : slide,
+      ),
+    );
+    return created;
   };
 
   /** Removing an image takes its token out of the description and the editor. */
@@ -295,6 +314,7 @@ export function useSlideMaterials({
     slideMaterials,
     setSlideMaterials,
     addImages,
+    addReferencedImages,
     removeImage,
     getImageUrls,
     getImageRefs,

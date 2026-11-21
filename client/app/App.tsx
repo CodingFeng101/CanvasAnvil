@@ -6,6 +6,7 @@ import { AppSidebar } from "@/app/AppSidebar";
 import { ErrorBoundary } from "@/app/ErrorBoundary";
 import { DEFAULT_WORKSPACE, WORKSPACES, isWorkspaceId, type WorkspaceId } from "@/app/workspaces";
 import { WorkHost, WorksProvider } from "@/app/works/works-provider";
+import { ReferencePickerHost } from "@/app/works/reference-picker";
 import { LandingPage } from "@/pages/LandingPage";
 import { MiniPlayer } from "@/app/MiniPlayer";
 import { readDocsHash } from "@/pages/docs/route";
@@ -155,6 +156,7 @@ export default function App() {
       <WorksProvider activeWorkspace={active.id} onActivateWorkspace={setActiveWorkspace}>
       <div className="paper-grain flex h-screen w-screen flex-col overflow-hidden bg-background font-sans md:flex-row">
         <Toaster position="top-center" richColors />
+        <ReferencePickerHost />
         <MiniPlayer />
 
         <AppSidebar active={activeWorkspace} onSelect={setActiveWorkspace} onHome={() => setShowLanding(true)} />

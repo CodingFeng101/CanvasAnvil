@@ -8,6 +8,7 @@ import {
   MessageSquarePlus,
   PanelLeftClose,
   PanelLeftOpen,
+  PenLine,
   Minimize2,
   Presentation,
   Sparkles,
@@ -97,6 +98,8 @@ interface DeckViewProps {
   slideshow: ReturnType<typeof useSlideshow>;
   actions: {
     addSlideToChat: (slide: SlideData) => void;
+    /** Take the slide's picture to the free canvas to mark up there (absent without the app shell). */
+    editOnBoard?: (slide: SlideData) => void;
     backToStart: () => void;
     backConfirmOpen: boolean;
     confirmBackToStart: () => void;
@@ -454,6 +457,18 @@ export function DeckView({
                 </SelectContent>
               </Select>
             )}
+            {actions.editOnBoard && deck.currentSlide && deck.currentSlideImage ? (
+              <button
+                type="button"
+                onClick={() => actions.editOnBoard!(deck.currentSlide!)}
+                disabled={status.isGeneratingImage || status.isApplyingEdits}
+                title={tr("把这一页放到自由画布上圈改，改好再送回来", "Mark up this slide on the free canvas, then send it back")}
+                className="flex h-7 items-center gap-1.5 rounded-md px-2 text-xs text-foreground/80 transition-colors hover:bg-accent hover:text-foreground disabled:opacity-50"
+              >
+                <PenLine className="size-3.5" />
+                {tr("到自由画布修改", "Edit on free canvas")}
+              </button>
+            ) : null}
           </div>
           {status.currentSlideFailure ? (
             <div className="absolute top-16 left-4 z-30 max-w-[520px] rounded-lg border border-destructive/25 bg-destructive/[0.08] px-3 py-2 text-xs text-destructive shadow-sm">

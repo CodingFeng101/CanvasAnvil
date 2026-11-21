@@ -53,6 +53,14 @@ import {
 } from '@/workspaces/ppt/lib/ppt-service';
 import { PPT_STATE_KEY, PPT_WORKSPACE_STORAGE_KEY, pptStore } from "@/workspaces/ppt/storage";
 import { useReportBusy, useWork, useWorkStore } from "@/shared/works/work-context";
+import { toast } from "sonner";
+import { setPendingReference, takePendingReference } from "@/shared/references/pending";
+import { canOpenCanvas, openCanvasFor } from "@/shared/references/bus";
+import { inboxForSlides, PPT_INBOX_KEY, type SlideInboxEntry } from "@/shared/references/inbox";
+import { referenceToFiles } from "@/shared/references/to-files";
+import type { WorkReference } from "@/shared/references/types";
+import { SlideReferenceChooser } from "./views/SlideReferenceChooser";
+import { REPORT_IMAGES_KEY, matchReportImages, type PendingReportImages } from "./lib/report-images";
 import { nameFromText } from "@/shared/works/works-index";
 import { makeThumbnail } from "@/shared/works/thumbnail";
 import { useUiLanguage } from "@/shared/i18n";
@@ -291,6 +299,8 @@ export function PptCanvas({
   const pptImagePersistenceRunningRef = useRef(false);
   const pptImagePersistenceRetryRef = useRef(false);
   const [isPersistenceHydrated, setIsPersistenceHydrated] = useState(false);
+  /** Pictures another canvas sent here ("放进 PPT"), waiting for the user to pick a slide. */
+  const [incomingReference, setIncomingReference] = useState<WorkReference | null>(null);
   const latestWorkspaceUpdatedAtRef = useRef(
     typeof initialPptState?.updatedAt === "number" ? initialPptState.updatedAt : 0
   );
@@ -1151,6 +1161,126 @@ export function PptCanvas({
   );
   const getTextlessBackgroundVersion = (slideId: string) => textlessBackgroundOf(slideId, versionState);
   const getSlideImageUrl = (slideId: string) => getSlideVersionMeta(slideId).imageUrl;
+
+  // A picture sent here from another canvas ("放进 PPT"): ask which slide once the deck is loaded.
+  useEffect(() => {
+    if (!isPersistenceHydrated) return;
+    const waiting = takePendingReference("ppt");
+    if (!waiting) return;
+    if (waiting.intent.kind === "deck-source") {
+      // A design to report on: its pictures wait (saved with this work) until the outline exists.
+      const items = waiting.reference.items.filter((item) => item.kind === "image" && item.dataUrl);
+      if (items.length) void deckStore.save<PendingReportImages>(REPORT_IMAGES_KEY, { workName: waiting.reference.workName, items });
+      return;
+    }
+    if (waiting.intent.kind !== "slide-material") return;
+    if (localSlides.length === 0) {
+      toast.error(tr("这份 PPT 还没有页面。先生成大纲，再把图放进来。", "This deck has no slides yet. Make the outline first, then bring the picture in."));
+      return;
+    }
+    setIncomingReference(waiting.reference);
+    // Only on arrival: the slides change later without a new reference.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isPersistenceHydrated]);
+
+  // Once the report's outline is there, the waiting design pictures go onto the slides that talk about them.
+  useEffect(() => {
+    if (!isPersistenceHydrated || creationStep !== "outline" || localSlides.length === 0) return;
+    let cancelled = false;
+    void (async () => {
+      const waiting = await deckStore.read<PendingReportImages>(REPORT_IMAGES_KEY).catch(() => null);
+      if (cancelled || !waiting?.items?.length) return;
+      await deckStore.clear(REPORT_IMAGES_KEY);
+      const { bySlide, unmatched } = matchReportImages(localSlides, waiting.items);
+      const placed: string[] = [];
+      for (const [slideId, items] of bySlide) {
+        const reference = { workspace: "cad" as const, workId: "", workName: waiting.workName, items };
+        const added = await materials.addReferencedImages(slideId, referenceToFiles(reference), waiting.workName);
+        const index = localSlides.findIndex((slide) => slide.id === slideId);
+        if (added.length) placed.push(tr(`第 ${index + 1} 页：${items.map((i) => i.label).join("、")}`, `slide ${index + 1}: ${items.map((i) => i.label).join(", ")}`));
+      }
+      if (placed.length) toast.success(tr(`户型图片已放到对应页面的素材里：${placed.join("；")}`, `Design pictures added as materials: ${placed.join("; ")}`), { duration: 8000 });
+      if (unmatched.length)
+        toast.message(
+          tr(`没找到合适页面的图片：${unmatched.map((i) => i.label).join("、")}。可以在那一页点「从作品引用」再加。`, `No slide fits: ${unmatched.map((i) => i.label).join(", ")}. Add them on a slide with "From a work".`),
+          { duration: 8000 },
+        );
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // Runs when the outline appears; the pictures are cleared once placed.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isPersistenceHydrated, creationStep, localSlides.length]);
+
+  // Pictures sent back from the free canvas ("送回 PPT"): each becomes a new version of its slide.
+  useEffect(() => {
+    if (!isPersistenceHydrated) return;
+    let cancelled = false;
+    void (async () => {
+      const entries = await deckStore.read<SlideInboxEntry[]>(PPT_INBOX_KEY).catch(() => null);
+      if (cancelled || !Array.isArray(entries) || entries.length === 0) return;
+      await deckStore.clear(PPT_INBOX_KEY);
+      const { apply, dropped } = inboxForSlides(entries, localSlides.map((slide) => slide.id));
+      let lastIndex = -1;
+      for (const entry of apply) {
+        const slide = localSlides.find((s) => s.id === entry.slideId);
+        if (!slide) continue;
+        await pushImageVersionAndProcess(slide, entry.dataUrl, "edited", entry.note || tr(`从自由画布「${entry.from}」送回`, `Sent back from the free canvas "${entry.from}"`));
+        lastIndex = localSlides.indexOf(slide);
+      }
+      if (lastIndex >= 0) {
+        setCurrentSlideIndex(lastIndex);
+        toast.success(tr(`已作为第 ${lastIndex + 1} 页的新版本，可以在版本里切回原来的。`, `Added as a new version of slide ${lastIndex + 1}; the earlier one is still in the versions.`), { duration: 6000 });
+      }
+      if (dropped) toast.message(tr(`有 ${dropped} 张送回的图对应的页面已删除，没有加进来。`, `${dropped} sent-back picture(s) were for deleted slides and were not added.`));
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // Once, when the deck has loaded; the inbox is cleared as it is read.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isPersistenceHydrated]);
+
+  /** The slide's current picture to the free canvas, to mark up and edit there; it can be sent back. */
+  const editSlideOnBoard = async (slide: SlideData) => {
+    const index = localSlides.findIndex((s) => s.id === slide.id);
+    const url = getSlideImageUrl(slide.id);
+    if (!url || index < 0 || !work) return;
+    const dataUrl = await persistImageUrlIfNeeded(url);
+    if (!dataUrl.startsWith("data:image")) {
+      toast.error(tr("没能读出这一页的图片", "Could not read this slide's picture"));
+      return;
+    }
+    const slideLabel = tr(`第 ${index + 1} 页`, `slide ${index + 1}`);
+    const deckName = work.name || tr("未命名 PPT", "Untitled deck");
+    setPendingReference({
+      to: "canvas",
+      reference: { workspace: "ppt", workId: work.workId, workName: deckName, items: [{ id: `ppt:${slide.id}`, kind: "image", label: slideLabel, dataUrl }] },
+      intent: { kind: "board-edit", returnTo: { workId: work.workId, slideId: slide.id, slideLabel, deckName } },
+    });
+    await openCanvasFor("canvas");
+  };
+
+  const placeIncomingReference = async (slideId: string) => {
+    const reference = incomingReference;
+    setIncomingReference(null);
+    if (!reference) return;
+    const index = localSlides.findIndex((slide) => slide.id === slideId);
+    const added = await materials.addReferencedImages(slideId, referenceToFiles(reference), reference.workName);
+    if (!added.length) {
+      toast.error(tr("没能加进这一页", "Could not add it to the slide"));
+      return;
+    }
+    if (index >= 0) setCurrentSlideIndex(index);
+    const names = added.map((x) => x.name).join(tr("、", ", "));
+    toast.success(
+      creationStep === "done"
+        ? tr(`已加为第 ${index + 1} 页的素材「${names}」。要放进现有画面，把这一页加入对话，说"把${names}放进来"。`, `Added to slide ${index + 1} as "${names}". To put it into the picture, add the slide to the chat and ask for ${names}.`)
+        : tr(`已加为第 ${index + 1} 页的素材「${names}」，生成时会放进这一页。`, `Added to slide ${index + 1} as "${names}"; it goes into the slide when it is made.`),
+      { duration: 8000 },
+    );
+  };
   const getSlideRenderLayer = useCallback((slideId: string) => {
     const { versionId } = getSlideVersionMeta(slideId);
     if (!versionId) return undefined;
@@ -2298,6 +2428,16 @@ export function PptCanvas({
   };
 
   // Before a deck: what it is about is said in the chat; the style comes at the outline.
+  const incomingChooser = (
+    <SlideReferenceChooser
+      reference={incomingReference}
+      slides={activeSlides}
+      imageOf={getSlideImageUrl}
+      tr={tr}
+      onChoose={(slideId) => void placeIncomingReference(slideId)}
+      onCancel={() => setIncomingReference(null)}
+    />
+  );
   if (activeSlides.length === 0 && (creationStep === 'idle' || creationStep === 'input' || creationStep === 'done')) {
     return (
       <PptStart progress={progress} tr={tr} templateLibrary={templateLibrary} outlineDraft={outlineDraft} />
@@ -2307,6 +2447,8 @@ export function PptCanvas({
   // Render Outline Review
   if (creationStep === 'outline') {
     return (
+      <>
+      {incomingChooser}
       <OutlineReview
         slides={localSlides}
         setSlides={setLocalSlides}
@@ -2319,6 +2461,7 @@ export function PptCanvas({
         onGenerate={handleGenerateFullPpt}
         templateLibrary={templateLibrary}
       />
+      </>
     );
   }
 
@@ -2329,6 +2472,8 @@ export function PptCanvas({
 
   // Regular View (creationStep === 'done' or manually provided data)
   return (
+    <>
+    {incomingChooser}
     <DeckView
       deck={{
         slides: activeSlides,
@@ -2359,6 +2504,7 @@ export function PptCanvas({
       slideshow={slideshow}
       actions={{
         addSlideToChat: handleAddSlideToChat,
+        editOnBoard: canOpenCanvas() && work ? (slide) => void editSlideOnBoard(slide) : undefined,
         backToStart: handleBackToStart,
         backConfirmOpen,
         setBackConfirmOpen,
@@ -2389,5 +2535,6 @@ export function PptCanvas({
       tr={tr}
       uiLang={uiLang}
     />
+    </>
   );
 }

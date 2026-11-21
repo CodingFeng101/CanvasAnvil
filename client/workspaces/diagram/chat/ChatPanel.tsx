@@ -5,9 +5,15 @@ import { useSendAfterRender } from "@/shared/chat/use-send-after-render"
 import { ChatTitle } from "@/shared/chat/chat-title"
 import { constraintsFor } from "@/shared/constraints"
 import { CanvasOpenButton, useCanvasPane } from "@/shared/canvas-pane";
+import { canOpenCanvas, openCanvasFor } from "@/shared/references/bus";
+import { setPendingReference } from "@/shared/references/pending";
+import { isEmptyDiagram } from "@/workspaces/diagram/references";
+import { renderDrawioPng } from "@/workspaces/diagram/lib/drawio-render";
 import { useChat } from "@ai-sdk/react"
 import {
     Layers,
+    Loader2,
+    Presentation,
 } from "lucide-react"
 import type React from "react"
 import { useCallback, useEffect, useRef, useState } from "react"
@@ -292,6 +298,47 @@ export default function ChatPanel({
                 ),
             ),
         ])
+    }
+
+    /**
+     * 「放进 PPT」: the diagram as it is on screen, rendered to a picture and
+     * carried to the PPT canvas, which asks which slide it goes on.
+     */
+    const [sendingToPpt, setSendingToPpt] = useState(false)
+    const sendToPpt = async () => {
+        if (sendingToPpt) return
+        const zh = uiLang === "zh"
+        setSendingToPpt(true)
+        try {
+            let xml = chartXMLRef.current
+            try {
+                xml = (await onFetchChart(false)) || xml
+            } catch {
+                // The editor did not answer; the last known drawing will do.
+            }
+            if (!xml || isEmptyDiagram(xml)) {
+                toast.error(zh ? "图表还是空的" : "The diagram is empty")
+                return
+            }
+            const picture = await renderDrawioPng(xml)
+            const label = zh ? "当前图表" : "Current diagram"
+            setPendingReference({
+                to: "ppt",
+                intent: { kind: "slide-material" },
+                reference: {
+                    workspace: "diagram",
+                    workId: work?.workId ?? "",
+                    workName: work?.name || (zh ? "图表" : "Diagram"),
+                    items: [{ id: "diagram:current", kind: "image", label, dataUrl: picture }],
+                },
+            })
+            await openCanvasFor("ppt")
+        } catch (error) {
+            console.error("[diagram] could not send to PPT", error)
+            toast.error(zh ? "没能把图表放进 PPT" : "Could not send the diagram to the PPT")
+        } finally {
+            setSendingToPpt(false)
+        }
     }
 
     // File processing using extracted hook
@@ -1534,6 +1581,18 @@ Please fix the XML issues. Ensure cell_id values exist in the current XML and th
                         <ChatTitle fallback={t("chat.panel.title")} />
                     </div>
                     <div className="flex items-center gap-1">
+                        {canOpenCanvas() && chartXML && !isEmptyDiagram(chartXML) && (
+                            <button
+                                type="button"
+                                onClick={() => void sendToPpt()}
+                                disabled={sendingToPpt}
+                                title={uiLang === "zh" ? "把当前图表放到 PPT 的某一页" : "Put this diagram on a PPT slide"}
+                                className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full px-3 text-[13px] text-foreground/75 transition-colors hover:bg-foreground/[0.05] hover:text-foreground disabled:opacity-60"
+                            >
+                                {sendingToPpt ? <Loader2 className="size-3.5 animate-spin" /> : <Presentation className="size-3.5" />}
+                                {uiLang === "zh" ? "放进 PPT" : "Send to PPT"}
+                            </button>
+                        )}
                         {!isMobile && <CanvasOpenButton />}
                     </div>
                 </div>

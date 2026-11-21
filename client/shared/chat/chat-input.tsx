@@ -7,6 +7,8 @@ import { openSettings } from '@/shared/settings-bus';
 import { FilePreviewList } from '@/shared/chat';
 import { type FileWorkspace, useFileProcessor } from '@/shared/files/use-file-processor';
 import { useUiLanguage } from "@/shared/i18n";
+import { useReferenceAttachments } from "@/shared/references/use-reference-attachments";
+import type { ReferenceItemKind, ReferenceWorkspace, WorkReference } from "@/shared/references/types";
 
 type RichInputSegment =
     | { type: "text"; text: string }
@@ -45,7 +47,24 @@ interface ChatInputProps {
     uploadMode?: "all" | "imagesOnly" | "filesOnly" | "none";
     /** Tags extraction telemetry with the workspace the upload came from. */
     workspaceId?: FileWorkspace;
+    /**
+     * "Reference a work" in the + menu. By default the chosen items join the
+     * attachments (shown as one card per work); a canvas that puts them
+     * somewhere else (the free canvas, onto the board) passes `onReference`.
+     */
+    onReference?: (reference: WorkReference) => void;
+    /** The kinds `onReference` takes; by default they follow `uploadMode`. */
+    referenceAccept?: ReferenceItemKind[];
+    /** A reference handed over by another canvas; attached once (as one card) when it arrives. */
+    incomingReference?: WorkReference | null;
 }
+
+const ACCEPT_BY_UPLOAD: Record<"all" | "imagesOnly" | "filesOnly" | "none", ReferenceItemKind[]> = {
+    all: ["image", "file", "text"],
+    imagesOnly: ["image"],
+    filesOnly: ["file", "text"],
+    none: [],
+};
 
 // Lucide's list and image glyphs, inlined: the chips are built as plain DOM inside the editable box.
 const SLIDE_ICON_OUTLINE = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 6h11M10 12h11M10 18h11M4 6h1v4M4 10h2M6 18H4c0-1 2-2 2-3s-1-1.5-2-1"/></svg>';
@@ -82,6 +101,9 @@ export function ChatInput({
     clearKey,
     uploadMode = "all",
     workspaceId = "unknown",
+    onReference,
+    referenceAccept,
+    incomingReference,
 }: ChatInputProps) {
     const uiLang = useUiLanguage();
     const trText = (zhText: string, enText: string) => (uiLang === "zh" ? zhText : enText);
@@ -430,6 +452,27 @@ export function ChatInput({
         setFiles(files.filter(f => f !== fileToRemove));
     };
 
+    const reference = useReferenceAttachments({
+        workspace: (constraintScope ?? "canvas") as ReferenceWorkspace,
+        accept: referenceAccept ?? (onReference || uploadMode !== "none" ? ACCEPT_BY_UPLOAD[uploadMode] : []),
+        files,
+        setFiles: handleFileChange,
+        onReference,
+    });
+    const attachedIncomingRef = useRef<WorkReference | null>(null);
+    useEffect(() => {
+        if (!incomingReference || attachedIncomingRef.current === incomingReference) return;
+        // After the mount settles: the controlled-files sync above runs again on a remount and
+        // would put the parent's (still empty) list back over files attached in the same pass.
+        const timer = setTimeout(() => {
+            attachedIncomingRef.current = incomingReference;
+            reference.attach(incomingReference);
+        }, 0);
+        return () => clearTimeout(timer);
+        // Only when a new reference arrives.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [incomingReference]);
+
     const hasText = isRich ? richPlainText.trim().length > 0 : input.trim().length > 0;
     const canUpload = uploadMode !== "none";
     const plusItems: PlusMenuItem[] = [
@@ -448,6 +491,7 @@ export function ChatInput({
         ...(onToggleHistory
             ? [{ icon: History, label: trText("历史版本", "History"), disabled: historyDisabled, onSelect: onToggleHistory }]
             : []),
+        ...(reference.menuItem ? [reference.menuItem] : []),
         ...menuItems,
         { icon: SlidersHorizontal, label: trText("记忆与偏好", "Memory"), onSelect: () => openSettings("constraints", constraintScope ? `constraint-${constraintScope}` : undefined) },
     ];
@@ -499,10 +543,12 @@ export function ChatInput({
                 />
             )}
 
-            {files.length > 0 && (
+            {reference.cards && <div className="px-3 pt-3">{reference.cards}</div>}
+
+            {reference.plainFiles.length > 0 && (
                 <div className="px-3 pt-3">
                     <FilePreviewList
-                        files={files}
+                        files={reference.plainFiles}
                         onRemoveFile={removeFile}
                         pdfData={pdfData}
                     />

@@ -1,5 +1,9 @@
 import { useState } from "react";
-import { Eye, MessageSquarePlus, Plus, Sparkles, Trash2, Upload } from "lucide-react";
+import { Eye, Library, MessageSquarePlus, Plus, Sparkles, Trash2, Upload } from "lucide-react";
+import { toast } from "sonner";
+import { canReference, openReferencePicker } from "@/shared/references/bus";
+import { referenceToFiles } from "@/shared/references/to-files";
+import { useWork } from "@/shared/works/work-context";
 import { Button } from "@/shared/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/shared/ui/dialog";
 import type { SlideData } from "@/workspaces/ppt/canvas/types";
@@ -40,6 +44,14 @@ export function OutlineReview({
   onGenerate,
   templateLibrary,
 }: OutlineReviewProps) {
+  const work = useWork();
+  /** Pictures from another work become this slide's materials, already named in its description. */
+  const referenceInto = async (slideId: string) => {
+    const reference = await openReferencePicker({ from: { workspace: "ppt", workId: work?.workId }, accept: ["image"] });
+    if (!reference) return;
+    const added = await materials.addReferencedImages(slideId, referenceToFiles(reference), reference.workName);
+    if (added.length) toast.success(tr(`已加为素材：${added.map((x) => x.name).join("、")}`, `Added as materials: ${added.map((x) => x.name).join(", ")}`));
+  };
   const [pickingStyle, setPickingStyle] = useState(false);
   const [deleting, setDeleting] = useState<{ id: string; index: number } | null>(null);
   return (
@@ -275,6 +287,7 @@ export function OutlineReview({
                               <div>
                                 <div className="mb-1 flex items-center justify-between text-xs font-medium text-foreground">
                                   <span>{tr("素材图片（用于该页生图）", "Material images (for this slide)")}</span>
+                                  <span className="flex items-center gap-1.5">
                                   <button
                                     type="button"
                                     onClick={() => materials.editor.inputRefs.current[slide.id]?.click()}
@@ -284,6 +297,18 @@ export function OutlineReview({
                                     <Upload className="h-3.5 w-3.5" />
                                     {tr("上传", "Upload")}
                                   </button>
+                                  {canReference() && (
+                                    <button
+                                      type="button"
+                                      onClick={() => void referenceInto(slide.id)}
+                                      title={tr("从其他画布的作品里引用图片", "Reference pictures from a work in another canvas")}
+                                      className="inline-flex items-center gap-1 rounded-md border border-input px-2 py-1 text-xs text-foreground/80 hover:bg-accent"
+                                    >
+                                      <Library className="h-3.5 w-3.5" />
+                                      {tr("从作品引用", "From a work")}
+                                    </button>
+                                  )}
+                                  </span>
                                   <input
                                     ref={(el) => {
                                       materials.editor.inputRefs.current[slide.id] = el;

@@ -5,6 +5,24 @@ import { applyDesignerTheme } from './designer-theme';
 import type { DesignerApi, DesignerBridge } from './designer-bridge';
 import type { CadDesignSession, DesignerPreset } from '../lib/design/design-session';
 import type { DesignIssue } from '../lib/design/types';
+import { toast } from 'sonner';
+import { loadChatHistory } from '@/shared/chat/chat-storage';
+import { setPendingPrompt } from '@/shared/pending-prompt';
+import { canOpenCanvas, openCanvasFor } from '@/shared/references/bus';
+import { setPendingReference } from '@/shared/references/pending';
+import { useWork, useWorkStore } from '@/shared/works/work-context';
+import { CAD_CHAT_STORAGE_KEY, cadStore } from '../storage';
+import { REFERENCE_BUNDLE_KEY, buildReferenceBundle, isBundleCurrent, readReferenceBundle, type ReferenceBundle } from '../lib/reference-bundle';
+
+/** The user's requests in the CAD chat, as the design brief (image payloads and long pastes trimmed). */
+function chatRequirements(): string[] {
+  return loadChatHistory(CAD_CHAT_STORAGE_KEY)
+    .filter(message => message.role === 'user')
+    .map(message => message.content.replace(/\[\[IMAGE\|[^\]]*\]\]/g, '').replace(/\s+/g, ' ').trim())
+    .filter(Boolean)
+    .slice(-10)
+    .map(line => (line.length > 300 ? `${line.slice(0, 300)}…` : line));
+}
 
 type DesignerWindow = Window & { __designer?: DesignerApi; __CA_HPD_ERRORS__?: string[]; __CA_HPD_PRESET__?: object };
 type LoadRequest = { id: number; preset: DesignerPreset; resolve(bridge: DesignerBridge): void; reject(reason: unknown): void };
@@ -22,6 +40,19 @@ export function HouseDesignerFrame({ session, onFocus, onFixIssue, canRecognize 
   const [loadError, setLoadError] = useState<{ incompatible: boolean; message: string }>();
   const [runtimeError, setRuntimeError] = useState('');
   const [showIssues, setShowIssues] = useState(false);
+  const work = useWork();
+  const workStore = useWorkStore(cadStore);
+  /** The deliverables being made: which export, of how many. */
+  const [exporting, setExporting] = useState<{ label: string; index: number; total: number } | null>(null);
+  // Exports change the plan for a moment (the colour plan sets a look and takes it off again); the
+  // periodic sync would keep those as hand edits and unconfirm the design, so it pauses meanwhile.
+  const exportingRef = useRef(false);
+  const [bundleRevision, setBundleRevision] = useState<number | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    void readReferenceBundle(workStore).then(bundle => { if (!cancelled) setBundleRevision(bundle?.revision ?? null); });
+    return () => { cancelled = true; };
+  }, [workStore]);
   const errors = snapshot.issues.filter(issue => issue.level === 'error').length;
   const warnings = snapshot.issues.filter(issue => issue.level === 'warn').length;
 
@@ -103,13 +134,59 @@ export function HouseDesignerFrame({ session, onFocus, onFixIssue, canRecognize 
 
   useEffect(() => {
     const interval = setInterval(() => {
-      if (document.visibilityState === 'visible') void session.sync().catch(reason => {
+      if (document.visibilityState === 'visible' && !exportingRef.current) void session.sync().catch(reason => {
         console.error('[CAD designer] Sync failed', reason);
         setRuntimeError(String(reason));
       });
     }, 1500);
     return () => clearInterval(interval);
   }, [session]);
+
+  /** The delivery bundle for the current confirmed revision: kept one, or made now by the designer's own exports. */
+  const ensureBundle = async (force = false): Promise<ReferenceBundle> => {
+    const design = await session.sync();
+    const bridge = bridgeRef.current;
+    if (!design || design.status !== 'confirmed') throw new Error(tr('请先确认户型', 'Confirm the design first'));
+    if (!bridge) throw new Error(tr('设计器还没加载好', 'The designer is not ready'));
+    const kept = await readReferenceBundle(workStore);
+    if (!force && isBundleCurrent(kept, design)) return kept;
+    setExporting({ label: tr('平面图与文字', 'Plan and texts'), index: 0, total: 1 });
+    exportingRef.current = true;
+    try {
+      const bundle = await buildReferenceBundle({
+        bridge,
+        design,
+        requirements: chatRequirements(),
+        lang: language === 'zh' ? 'zh' : 'en',
+        onStep: (label, index, total) => setExporting({ label, index: index + 1, total }),
+      });
+      await workStore.save(REFERENCE_BUNDLE_KEY, bundle);
+      setBundleRevision(bundle.revision);
+      if (bundle.failed?.length) toast.warning(tr(`这几项没能导出：${bundle.failed.join('、')}`, `These could not be exported: ${bundle.failed.join(', ')}`));
+      return bundle;
+    } finally {
+      exportingRef.current = false;
+      setExporting(null);
+    }
+  };
+  const updateDeliverables = () => run(async () => {
+    const bundle = await ensureBundle(true);
+    toast.success(tr(`交付物已更新（${bundle.items.length} 项），可以在其他画布引用这套户型了`, `Deliverables updated (${bundle.items.length} items); other canvases can reference this design now`));
+  });
+  const makeReport = () => run(async () => {
+    const bundle = await ensureBundle();
+    const zh = language === 'zh';
+    const prompt = zh
+      ? '根据引用的这套户型，做一份给业主看的装修汇报 PPT。建议结构：项目概况、原始户型与改造思路、平面布置方案、分区说明、彩平图与效果图、预算（数字只用报价单里的）、施工图与下一步。'
+      : 'Make a renovation report PPT for the homeowner from the referenced design. Suggested structure: project overview, original layout and the changes, furnished plan, room-by-room notes, colour plan and renders, budget (figures only from the quote), construction drawings and next steps.';
+    setPendingReference({
+      to: 'ppt',
+      intent: { kind: 'deck-source', prompt },
+      reference: { workspace: 'cad', workId: work?.workId ?? '', workName: work?.name || tr('室内设计', 'Interior design'), items: bundle.items, revision: bundle.revision },
+    });
+    setPendingPrompt('ppt', prompt);
+    await openCanvasFor('ppt', null);
+  });
 
   const run = (action: () => Promise<unknown>) => { void action().catch(reason => {
     console.error('[CAD designer] Action failed', reason);
@@ -130,10 +207,17 @@ export function HouseDesignerFrame({ session, onFocus, onFixIssue, canRecognize 
       <button className="rounded border px-2 py-1" disabled={!snapshot.ready || snapshot.busy} onClick={() => run(() => session.recheck())}>{tr('重新检查', 'Recheck')}</button>
       <button className="rounded bg-primary px-2 py-1 text-primary-foreground disabled:opacity-50" title={errors > 0 ? tr('请先解决全部错误', 'Resolve all errors first') : ''} disabled={!snapshot.ready || snapshot.busy || errors > 0} onClick={() => run(() => session.confirm())}>{snapshot.design?.status === 'confirmed' ? tr('户型已确认', 'Design confirmed') : tr('确认户型', 'Confirm design')}</button>
       {canQa && snapshot.design && <button className="rounded border px-2 py-1 disabled:opacity-50" title={tr('设计器逐项操作验收 + 导出文件检查（几分钟）', 'Operate every button, panel and export, then open the exported files (a few minutes)')} disabled={!snapshot.ready || snapshot.busy || qaRunning} onClick={onQa}>{qaRunning ? tr('交付检查中…', 'Checking delivery…') : tr('交付检查', 'Delivery check')}</button>}
+      {snapshot.design?.status === 'confirmed' && canOpenCanvas() && <>
+        <button className="rounded border px-2 py-1 disabled:opacity-50" title={tr('用设计器导出报价单、施工图、彩平图、效果图等，供其他画布引用', 'Export the quote, drawings, colour plan, render and more for other canvases to reference')} disabled={!snapshot.ready || snapshot.busy || !!exporting} onClick={updateDeliverables}>{bundleRevision === snapshot.design.revision ? tr('重新导出交付物', 'Re-export deliverables') : tr('更新交付物', 'Update deliverables')}</button>
+        <button className="rounded border px-2 py-1 disabled:opacity-50" title={tr('带上交付物，新建一份给业主的装修汇报 PPT', 'Start a renovation report PPT with the deliverables')} disabled={!snapshot.ready || snapshot.busy || !!exporting} onClick={makeReport}>{tr('生成汇报 PPT', 'Make report PPT')}</button>
+      </>}
       {runtimeError && <span role="status" className="flex items-center gap-2 text-destructive" title={runtimeError}>{tr('设计器运行出错', 'Designer runtime error')}<button aria-label={tr('关闭错误提示', 'Dismiss error')} onClick={() => setRuntimeError('')}>×</button></span>}
     </div>
     {showIssues && <div className="max-h-48 overflow-auto border-b p-3 text-xs">{snapshot.issues.map((issue, index) => <div key={`${issue.code}-${index}`} className="flex items-center justify-between gap-3 py-1"><span>{issue.level} · {issue.msg}</span><button className="shrink-0 rounded border px-2 py-1" onClick={() => onFixIssue(issue)}>{tr('发给 AI 修复', 'Ask AI to fix')}</button></div>)}</div>}
-    {request && <iframe key={request.id} ref={frameRef} title={tr('户型设计器', 'House designer')} className={`min-h-0 w-full flex-1 border-0 ${snapshot.busy ? 'pointer-events-none' : ''}`} />}
+    {request && <iframe key={request.id} ref={frameRef} title={tr('户型设计器', 'House designer')} className={`min-h-0 w-full flex-1 border-0 ${snapshot.busy || exporting ? 'pointer-events-none' : ''}`} />}
+    {exporting && <div role="status" className="pointer-events-none absolute inset-x-0 bottom-4 mx-auto w-fit rounded-full border bg-background/95 px-4 py-2 text-xs shadow">
+      {tr(`正在导出交付物：${exporting.label}（${exporting.index}/${exporting.total}）· 效果图较慢，请勿操作设计器`, `Exporting deliverables: ${exporting.label} (${exporting.index}/${exporting.total}) · the render is slow; leave the designer alone`)}
+    </div>}
     {loadError && <div role="alert" data-testid="cad-design-loading-error" className="absolute inset-0 flex flex-col items-center justify-center bg-background/95 p-6"><strong>{loadError.incompatible ? tr('设计器版本不兼容', 'Designer version incompatible') : tr('设计器加载失败', 'Designer failed to load')}</strong><p>{loadError.message}</p>{snapshot.ready && <button className="mt-3 rounded border px-3 py-2" onClick={() => setLoadError(undefined)}>{tr('查看恢复后的户型', 'View restored design')}</button>}</div>}
   </div>;
 }

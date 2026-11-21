@@ -5,6 +5,7 @@ import { CanvasOpenButton } from "@/shared/canvas-pane";
 import { useEffect, useRef, useState } from "react";
 import { Paintbrush } from "lucide-react";
 import { toast } from "sonner";
+import type { WorkReference } from "@/shared/references/types";
 import { StatusSelect } from "@/shared/chat/composer";
 import { constraintsFor } from "@/shared/constraints";
 import { IMAGE_QUALITIES, IMAGE_SIZES } from "@contracts/ai";
@@ -73,6 +74,8 @@ interface ChatPanelProps {
   imageVersions: ImageVersion[];
   activeImageElementId: string | null;
   onSelectVersion: (elementId: string) => void;
+  /** The selected picture came from a slide: send the selected version back to it. */
+  sendBack?: { label: string; busy: boolean; onSend: () => void } | null;
   /** Wipes the canvas; called together with clearing the chat log so "clear" means everything, in one action. */
   onClearAll: () => void;
 }
@@ -87,6 +90,7 @@ export function ChatPanel({
   imageVersions,
   activeImageElementId,
   onSelectVersion,
+  sendBack,
   onClearAll,
 }: ChatPanelProps) {
   const uiLang = useUiLanguage();
@@ -350,6 +354,17 @@ ${constraints}` : prompt,
           ? tr("中", "Medium")
           : tr("高", "High");
 
+  const placeReference = async (reference: WorkReference) => {
+    let placed = 0;
+    for (const item of reference.items) {
+      if (item.kind !== "image" || !item.dataUrl) continue;
+      const note = tr(`引用自「${reference.workName}」· ${item.label}`, `From "${reference.workName}" · ${item.label}`);
+      if (await onImageGenerated(item.dataUrl, note)) placed++;
+    }
+    if (placed) toast.success(tr(`已放到画布上：${placed} 张`, `Placed on the board: ${placed}`));
+    else toast.error(tr("没能放到画布上", "Could not place them on the board"));
+  };
+
   return (
     <div className={cn("h-full flex flex-col bg-transparent animate-fade-in relative", className)}>
       <div className="flex h-12 shrink-0 flex-col justify-center px-4">
@@ -384,6 +399,7 @@ ${constraints}` : prompt,
           versions={imageVersions}
           activeElementId={activeImageElementId}
           onSelectVersion={onSelectVersion}
+          sendBack={sendBack}
         />
         <ChatInput
           constraintScope="canvas"
@@ -392,6 +408,9 @@ ${constraints}` : prompt,
           onSubmit={handleSubmit}
           isLoading={isGenerating}
           uploadMode="none"
+          // A referenced picture goes onto the board, as a new picture with its source noted.
+          referenceAccept={["image"]}
+          onReference={(reference) => void placeReference(reference)}
           focusKey={focusTick || undefined}
           placeholder={t(uiLang, "workspace.canvas.placeholder")}
           suggestion={hasPicture && !isGenerating ? annotateSuggestion : undefined}

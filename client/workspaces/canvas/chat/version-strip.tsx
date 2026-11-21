@@ -1,4 +1,4 @@
-import { History } from "lucide-react";
+import { History, Loader2, Undo2 } from "lucide-react";
 import { cn } from "@/shared/lib/utils";
 import { useUiLanguage } from "@/shared/i18n";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/shared/ui/tooltip";
@@ -9,6 +9,8 @@ interface VersionStripProps {
   versions: ImageVersion[];
   activeElementId: string | null;
   onSelectVersion: (elementId: string) => void;
+  /** The picture came from a slide: a button that sends the selected version back to it. */
+  sendBack?: { label: string; busy: boolean; onSend: () => void } | null;
 }
 
 function formatTime(timestamp: number, uiLang: "zh" | "en"): string {
@@ -33,11 +35,23 @@ function formatTime(timestamp: number, uiLang: "zh" | "en"): string {
  * between them. This shows up exactly when there is history to show, and each
  * thumbnail says what made it and when.
  */
-export function VersionStrip({ versions, activeElementId, onSelectVersion }: VersionStripProps) {
+export function VersionStrip({ versions, activeElementId, onSelectVersion, sendBack }: VersionStripProps) {
   const uiLang = useUiLanguage();
   const tr = (zh: string, en: string) => (uiLang === "zh" ? zh : en);
 
-  if (versions.length < 2) return null;
+  const sendButton = sendBack ? (
+    <button
+      type="button"
+      onClick={sendBack.onSend}
+      disabled={sendBack.busy}
+      className="flex h-8 shrink-0 items-center gap-1.5 rounded-md border border-border bg-background px-2.5 text-xs text-foreground transition-colors hover:bg-foreground/[0.04] disabled:opacity-60"
+    >
+      {sendBack.busy ? <Loader2 className="size-3.5 animate-spin" /> : <Undo2 className="size-3.5" />}
+      {tr(`送回 PPT ${sendBack.label}`, `Send back to ${sendBack.label}`)}
+    </button>
+  ) : null;
+
+  if (versions.length < 2) return sendButton ? <div className="mb-2 flex justify-end animate-rise-in">{sendButton}</div> : null;
 
   return (
     <div className="mb-2 flex items-center gap-2 animate-rise-in">
@@ -82,6 +96,7 @@ export function VersionStrip({ versions, activeElementId, onSelectVersion }: Ver
           );
         })}
       </div>
+      {sendButton}
     </div>
   );
 }

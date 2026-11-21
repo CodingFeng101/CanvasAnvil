@@ -1,5 +1,6 @@
 import type { ExcalidrawImperativeAPI } from "@excalidraw/excalidraw/types";
 import type { ExcalidrawImageElement } from "@excalidraw/excalidraw/element/types";
+import type { BoardReturnTo } from "@/shared/references/pending";
 
 /**
  * Which "logical picture" an image element belongs to.
@@ -14,6 +15,8 @@ export interface ImageLineageData {
   createdAt: number;
   /** What made this version: the prompt, or the change an edit applied. Shown in the version strip. */
   note?: string;
+  /** A slide brought here to edit ("到自由画布修改"): where its versions can be sent back. */
+  returnTo?: BoardReturnTo;
 }
 
 export interface SelectedImageInfo {
@@ -39,8 +42,12 @@ export function getImageLineage(element: ExcalidrawImageElement): ImageLineageDa
     lineageId: data.lineageId,
     createdAt: typeof data.createdAt === "number" ? data.createdAt : 0,
     note: typeof data.note === "string" && data.note ? data.note : undefined,
+    returnTo: isReturnTo(data.returnTo) ? data.returnTo : undefined,
   };
 }
+
+const isReturnTo = (value: unknown): value is BoardReturnTo =>
+  !!value && typeof (value as BoardReturnTo).workId === "string" && typeof (value as BoardReturnTo).slideId === "string";
 
 /** Which picture an image element is a version of; an untagged image is a picture of its own. */
 export function lineageIdOf(element: ExcalidrawImageElement): string {
@@ -77,4 +84,16 @@ export function getLineageVersions(api: ExcalidrawImperativeAPI, lineageId: stri
     })
     .filter((version) => !!version.url)
     .sort((a, b) => a.createdAt - b.createdAt);
+}
+
+/** Where a picture's versions go back to: the first version that came from a slide says so. */
+export function getLineageReturnTo(api: ExcalidrawImperativeAPI, lineageId: string): BoardReturnTo | null {
+  for (const el of api.getSceneElements()) {
+    if (el.type !== "image" || el.isDeleted) continue;
+    const image = el as unknown as ExcalidrawImageElement;
+    if (lineageIdOf(image) !== lineageId) continue;
+    const returnTo = getImageLineage(image)?.returnTo;
+    if (returnTo) return returnTo;
+  }
+  return null;
 }

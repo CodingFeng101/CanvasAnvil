@@ -16,6 +16,7 @@ import { useDiagram } from "@/workspaces/diagram/state/diagram-context"
 import { translateDiagram, useDiagramT } from "@/workspaces/diagram/lib/translations"
 import { isPdfFile, isTextFile } from "@/shared/files"
 import { FilePreviewList } from "@/shared/chat"
+import { useReferenceAttachments } from "@/shared/references/use-reference-attachments"
 
 const MAX_IMAGE_SIZE = 2 * 1024 * 1024 // 2MB
 const MAX_FILES = 5
@@ -317,6 +318,7 @@ export function ChatInput({
 
     const hasContent = !!input.trim() && !isDisabled
     const zh = useUiLanguage() === "zh"
+    const reference = useReferenceAttachments({ workspace: "diagram", accept: ["image", "file", "text"], files, setFiles: onFileChange })
     const plusItems: PlusMenuItem[] = [
         {
             icon: Paperclip,
@@ -331,6 +333,7 @@ export function ChatInput({
             disabled: isDisabled || diagramHistory.length === 0,
             onSelect: () => onToggleHistory(true),
         },
+        ...(reference.menuItem && !isDisabled ? [reference.menuItem] : []),
         {
             icon: SlidersHorizontal,
             label: zh ? "记忆与偏好" : "Memory",
@@ -385,10 +388,11 @@ export function ChatInput({
                         </span>
                     </div>
                 )}
-                {files.length > 0 && (
+                {reference.cards && <div className="px-3 pt-3">{reference.cards}</div>}
+                {reference.plainFiles.length > 0 && (
                     <div className="px-3 pt-3">
                         <FilePreviewList
-                            files={files}
+                            files={reference.plainFiles}
                             onRemoveFile={handleRemoveFile}
                             pdfData={pdfData}
                         />

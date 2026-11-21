@@ -4,6 +4,7 @@ import type { FileId } from "@excalidraw/excalidraw/element/types";
 import type { ExcalidrawImageElement } from "@excalidraw/excalidraw/element/types";
 import { annotationMargin, boundsOverlap, elementBounds, type Bounds } from "@/workspaces/canvas/canvas/bounds";
 import { lineageIdOf, makeLineageId, withImageLineage } from "@/workspaces/canvas/canvas/lineage";
+import type { BoardReturnTo } from "@/shared/references/pending";
 
 /** Excalidraw's file store wants a real data URI; a generated image is usually one already, but a remote URL needs converting first. */
 async function toDataUrl(url: string): Promise<string> {
@@ -128,7 +129,7 @@ function slotBesideLineage(
 export async function insertGeneratedImage(
   api: ExcalidrawImperativeAPI,
   imageUrl: string,
-  options?: { lineageId?: string; note?: string },
+  options?: { lineageId?: string; note?: string; returnTo?: BoardReturnTo },
 ): Promise<InsertGeneratedImageResult> {
   const dataUrl = await toDataUrl(imageUrl);
   const naturalSize = await loadImageSize(dataUrl);
@@ -157,7 +158,12 @@ export async function insertGeneratedImage(
       y,
       width,
       height,
-      customData: withImageLineage(undefined, { lineageId, createdAt: Date.now(), ...(note ? { note } : {}) }),
+      customData: withImageLineage(undefined, {
+        lineageId,
+        createdAt: Date.now(),
+        ...(note ? { note } : {}),
+        ...(options?.returnTo ? { returnTo: options.returnTo } : {}),
+      }),
     },
   ]);
 
