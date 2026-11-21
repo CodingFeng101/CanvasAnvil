@@ -1092,6 +1092,9 @@ export const pptService = {
 
         for (const page of pages) {
             const slide = pptx.addSlide();
+            // The speaker note goes into the slide's notes, where PowerPoint's presenter view shows
+            // it; media addresses follow it there.
+            const notes: string[] = page.note?.trim() ? [page.note.trim()] : [];
             const pageElements = Array.isArray(page.elements) ? page.elements : [];
             const pageTextBlocks =
                 Array.isArray(page.textBlocks) && page.textBlocks.length > 0
@@ -1267,7 +1270,7 @@ export const pptService = {
                         w: element.w * slideW,
                         h: element.h * slideH,
                     });
-                    slide.addNotes(`[${element.type}] ${mediaTitle}: ${element.src}`);
+                    notes.push(`[${element.type}] ${mediaTitle}: ${element.src}`);
                     continue;
                 }
             }
@@ -1304,6 +1307,8 @@ export const pptService = {
                     color: "111827",
                 });
             }
+            // pptxgenjs writes the notes as one text run, so they are joined into one string.
+            if (notes.length) slide.addNotes(notes.join("\n"));
         }
 
         await pptx.writeFile({ fileName: `${filename}.pptx` });
