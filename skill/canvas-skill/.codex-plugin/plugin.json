@@ -3,6 +3,6 @@
   "version": "1.0.0",
   "description": "CanvasAnvil's Excalidraw, draw.io and house designer editors embedded in Codex.",
   "skills": "./skills/",
-  "mcpServers": "./.mcp.json",
+  "mcpServers": "./.codex-mcp.json",
   "interface": { "displayName": "CanvasAnvil 画布", "shortDescription": "Image, diagram and interior design canvases", "defaultPrompt": ["Open the CanvasAnvil canvas for this project."] }
 }

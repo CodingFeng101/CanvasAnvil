@@ -14,7 +14,21 @@ export function getUiLanguage(): UiLanguage {
   const raw = String(localStorage.getItem(UI_LANG_STORAGE_KEY) || "").trim().toLowerCase();
   if (raw === "en") return "en";
   if (raw === "zh") return "zh";
-  return "zh";
+  return browserLanguage();
+}
+
+/**
+ * Until a language is chosen in Settings, follow the browser: Chinese for any
+ * zh-* locale it lists first, English otherwise. Nothing is stored, so a
+ * visitor keeps following their browser until they pick one.
+ */
+function browserLanguage(): UiLanguage {
+  try {
+    const first = (navigator.languages?.[0] || navigator.language || "").toLowerCase();
+    return first.startsWith("zh") ? "zh" : "en";
+  } catch {
+    return "zh";
+  }
 }
 
 export function setUiLanguage(lang: UiLanguage) {

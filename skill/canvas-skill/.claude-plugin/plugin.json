@@ -1,0 +1,11 @@
+{
+  "name": "canvasanvil-canvas",
+  "version": "1.0.0",
+  "description": "CanvasAnvil's Excalidraw, draw.io and house designer canvases, opened from the conversation.",
+  "author": { "name": "CodingFeng101" },
+  "homepage": "https://github.com/CodingFeng101/CanvasAnvil",
+  "license": "MIT",
+  "mcpServers": {
+    "canvasanvil_canvas": { "command": "node", "args": ["${CLAUDE_PLUGIN_ROOT}/scripts/start-mcp.mjs"] }
+  }
+}

@@ -336,7 +336,8 @@
 .portal .p-ans p { padding: 0 48px 24px 0; color: var(--p-ink-2); font-size: 15.5px; }
 
 /* ---- S8 ask ---- */
-.portal .p-ask { background: linear-gradient(var(--p-bg), var(--p-bg-3) 220px); padding: 200px 0; text-align: center; }
+/* At least a screen tall, content centred: "Start creating" scrolls here and the dark footer stays below the fold. */
+.portal .p-ask { background: linear-gradient(var(--p-bg), var(--p-bg-3) 220px); padding: 120px 0; text-align: center; min-height: 100svh; display: flex; flex-direction: column; justify-content: center; }
 .portal .p-ask .p-lead { margin: 22px auto 0; max-width: 560px; }
 .portal .p-askbar { width: min(600px, 100%); margin: 44px auto 0; display: flex; align-items: center; gap: 10px; padding: 8px 8px 8px 22px; background: var(--p-paper); border-radius: 16px; box-shadow: 0 0 0 1px var(--p-line), var(--p-shadow-1); transition: box-shadow 0.2s; }
 .portal .p-askbar:focus-within { box-shadow: 0 0 0 2px var(--p-line-2), var(--p-shadow-1); }
@@ -359,8 +360,6 @@
 .portal .p-footer li :is(a, button) { color: #e8e6dc; transition: color 0.2s; text-align: left; }
 .portal .p-footer li :is(a, button):hover { color: #fff; }
 .portal .p-footer-base { margin-top: 64px; padding-top: 22px; border-top: 1px solid #30302e; display: flex; justify-content: space-between; gap: 16px; font-size: 13px; color: #73726c; }
-.portal .p-footer-base button { color: #9c9a92; }
-.portal .p-footer-base button:hover { color: #e8e6dc; }
 
 /* ---- canvas detail pages (§4) ---- */
 .portal .p-dhead { padding: 72px 0 56px; text-align: center; }

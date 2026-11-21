@@ -8,6 +8,8 @@ import { Button } from '@/shared/ui/button';
 import { Clock, RotateCcw, FileCode, Trash2 } from 'lucide-react';
 import { ScrollArea } from '@/shared/ui/scroll-area';
 import { t, useUiLanguage } from "@/shared/i18n";
+import { ConfirmDialog } from "@/shared/ui/confirm-dialog";
+import { useState } from "react";
 
 export interface HistoryItem {
     id: string;
@@ -49,6 +51,8 @@ export function HistoryDialog({
     onClear,
 }: HistoryDialogProps) {
     const uiLang = useUiLanguage();
+    const zh = uiLang === "zh";
+    const [confirmClear, setConfirmClear] = useState(false);
     const formatDate = (ts: number) => new Date(ts).toLocaleString();
 
     return (
@@ -61,7 +65,7 @@ export function HistoryDialog({
                             {t(uiLang, "history.title")}
                         </DialogTitle>
                         {history.length > 0 && onClear && (
-                            <Button size="sm" variant="ghost" onClick={onClear} className="gap-1 text-xs">
+                            <Button size="sm" variant="ghost" onClick={() => setConfirmClear(true)} className="gap-1 text-xs">
                                 <Trash2 className="h-3.5 w-3.5" />
                                 {t(uiLang, "history.clear")}
                             </Button>
@@ -117,6 +121,15 @@ export function HistoryDialog({
                     )}
                 </div>
             </DialogContent>
+            <ConfirmDialog
+                open={confirmClear}
+                onOpenChange={setConfirmClear}
+                title={zh ? "清空历史版本？" : "Clear version history?"}
+                description={zh ? `${history.length} 个历史版本会被删除，无法找回。当前画布不受影响。` : `${history.length} saved versions will be deleted for good. The canvas itself stays as it is.`}
+                confirmLabel={zh ? "清空" : "Clear"}
+                cancelLabel={zh ? "取消" : "Cancel"}
+                onConfirm={() => onClear?.()}
+            />
         </Dialog>
     )
 }

@@ -32,7 +32,6 @@ export const NAV = {
   faq: { zh: "常见问题", en: "FAQ" },
   tutorials: { zh: "教程", en: "Tutorials" },
   start: { zh: "开始创作", en: "Start creating" },
-  langSwitch: { zh: "EN", en: "中文" },
   menu: { zh: "菜单", en: "Menu" },
 } satisfies Record<string, L>;
 
@@ -358,8 +357,8 @@ export const FAQ = {
     {
       q: { zh: "和 Codex、Claude Code 怎么一起用？", en: "How does it work with Codex or Claude Code?" },
       a: {
-        zh: "CanvasAnvil 也是一个插件。在 Codex 里一行命令添加插件市场，就能在对话里直接调用各个画布。",
-        en: "CanvasAnvil is also a plugin. Add its marketplace in Codex with one command and call the canvases right from your chat.",
+        zh: "CanvasAnvil 也是一个插件。在 Claude Code 或 Codex 里用两行命令添加插件市场并安装，就能在对话里直接打开各个画布。",
+        en: "CanvasAnvil is also a plugin. Two commands in Claude Code or Codex add its marketplace and install it, and the canvases open right from your chat.",
       },
     },
     {
@@ -372,8 +371,8 @@ export const FAQ = {
     {
       q: { zh: "作品会自动保存吗？", en: "Are works saved automatically?" },
       a: {
-        zh: "画布里的内容随时存在浏览器里，刷新不会丢；但「我的作品」里的版本只有点保存才更新。离开有改动的作品时，会问你保存还是放弃。",
-        en: "What is on a canvas is kept in your browser all the time, so a reload loses nothing, but the version in My works changes only when you press Save. Leaving with changes asks whether to save them.",
+        zh: "会。屏幕上的就是保存下来的：每次改动都写进浏览器，刷新不会丢；一份作品有了内容就会出现在「我的作品」里，不用按保存。",
+        en: "Yes. What is on screen is what is kept: every change is written to your browser, so a reload loses nothing, and a work appears in My works once it has content. There is no Save to press.",
       },
     },
   ],

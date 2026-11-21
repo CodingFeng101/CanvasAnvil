@@ -2,10 +2,13 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import {
   BarChart3,
+  Clapperboard,
+  FileText,
   Puzzle,
   Bell,
   Cpu,
   Database,
+  ArrowRight,
   ExternalLink,
   Eye,
   EyeOff,
@@ -27,25 +30,33 @@ import { getAIConfig, saveAIConfig } from "@/ai/storage";
 import { addModel, modelsChanged, removeModel, selectModel, useModels } from "@/ai/model-lists";
 import { WORKSPACES } from "@/app/workspaces";
 import { useWorksControl } from "@/app/works/works-provider";
-import { exportAllWorks, storageByCanvas } from "@/app/works/works-registry";
+import { exportAllWorks, importAllWorks, parseWorksBackup, storageByCanvas, type WorksBackup } from "@/app/works/works-registry";
 import {
   BarList,
   CANVAS_COLOR,
   CanvasBar,
-  DailyColumns,
+  CanvasDonut,
   HourColumns,
-  MonthLine,
-  TokenLine,
+  TokenTrend,
   UsageHeatmap,
   UsageSummary,
+  UsageTrend,
+  WEEKDAY_NAMES,
   WeekdayColumns,
+  peakHour,
+  peakWeekday,
+  type TrendRange,
   canvasName,
   formatCount,
   formatDuration,
 } from "@/app/UsageStats";
+import { DocsShelf, FaqList, VideoShelf } from "@/app/LearnSettings";
+import { docsHref } from "@/pages/docs/route";
+import { AnvilColophon } from "@/shared/ui/ornaments";
+import { VIDEO_KINDS, type VideoKind } from "@/app/videos";
 import { clearStats, usesByCanvas, useUsageStats } from "@/shared/usage-stats";
 import {
-  CODEX_PLUGIN_COMMANDS,
+  PLUGIN_COMMANDS,
   CommandBlock,
   SKILLS,
   TARGET_DIR,
@@ -56,6 +67,7 @@ import {
   useSkillsInfo,
   type SkillName,
   type SkillTarget,
+  type SkillVia,
 } from "@/app/SkillsSettings";
 import type { WorkspaceId } from "@/app/workspaces";
 import { setUiLanguage, useUiLanguage, type UiLanguage } from "@/shared/i18n";
@@ -64,11 +76,10 @@ import { resetPreferences, setPreference, usePreferences, type ChimeKind, type P
 import { CHIME_KINDS, notificationsSupported, playChime, requestNotificationPermission } from "@/shared/task-done";
 import { useTheme, type Theme } from "@/shared/theme";
 import { listedWorks } from "@/shared/works/works-index";
-import { OPEN_SETTINGS_EVENT, type OpenSettingsDetail, type SettingsSection } from "@/shared/settings-bus";
+import { OPEN_SETTINGS_EVENT, takePendingSettings, type OpenSettingsDetail, type SettingsSection } from "@/shared/settings-bus";
 import { getConstraint, setConstraintEnabled, setConstraintText, useConstraintsVersion, type ConstraintScope } from "@/shared/constraints";
-import { Button } from "@/shared/ui/button";
+import { ConfirmDialog } from "@/shared/ui/confirm-dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/shared/ui/select";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/shared/ui/dialog";
 
 /*
  * Settings, after Claude's own settings page: a search field and the
@@ -304,6 +315,8 @@ interface RowSpec {
   control: ReactNode;
   /** A full-width part under the row (a text box). */
   below?: ReactNode;
+  /** Takes half the width: two half rows in a row share one line. */
+  half?: boolean;
   /** Extra words the search should match. */
   keywords?: string;
   /** Rows of one block (a model channel), shown together under one heading. */
@@ -322,6 +335,19 @@ function RowList({ rows }: { rows: RowSpec[] }) {
   const out: ReactNode[] = [];
   for (let i = 0; i < rows.length; ) {
     const group = rows[i].group;
+    if (rows[i].half) {
+      // A half row with no partner takes the whole line.
+      const pair = [rows[i++]];
+      if (i < rows.length && rows[i].half) pair.push(rows[i++]);
+      out.push(
+        <div key={`half-${pair[0].id}`} className={cn("grid gap-x-8 border-t border-border/70 py-1 first:border-t-0", pair.length === 2 && "sm:grid-cols-2")}>
+          {pair.map((row) => (
+            <Row key={row.id} row={row} plain half />
+          ))}
+        </div>,
+      );
+      continue;
+    }
     if (!group) {
       out.push(<Row key={rows[i].id} row={rows[i]} />);
       i += 1;
@@ -347,7 +373,7 @@ function RowList({ rows }: { rows: RowSpec[] }) {
   return <>{out}</>;
 }
 
-function Row({ row, plain }: { row: RowSpec; plain?: boolean }) {
+function Row({ row, plain, half }: { row: RowSpec; plain?: boolean; half?: boolean }) {
   return (
     <div id={`settings-row-${row.id}`} className={plain ? "py-2.5" : "border-t border-border/70 py-3.5 first:border-t-0"}>
     <div className="flex items-center gap-6">
@@ -356,11 +382,12 @@ function Row({ row, plain }: { row: RowSpec; plain?: boolean }) {
           <span className="text-[14px] font-medium text-foreground">{row.title}</span>
           {row.badge && <span className="rounded-md bg-foreground/[0.06] px-1.5 py-px text-[11px] text-muted-foreground">{row.badge}</span>}
         </div>
-        {row.desc && <p className="mt-0.5 text-[13px] leading-relaxed text-muted-foreground">{row.desc}</p>}
+        {/* Side by side, the heading stays one line each so both charts start level. */}
+        {row.desc && <p className={cn("mt-0.5 text-[13px] leading-relaxed text-muted-foreground", half && "truncate")} title={half ? row.desc : undefined}>{row.desc}</p>}
       </div>
       {row.control}
     </div>
-    {row.below && <div className="mt-2.5">{row.below}</div>}
+    {row.below && <div className={half ? "mt-4" : "mt-2.5"}>{row.below}</div>}
     </div>
   );
 }
@@ -374,17 +401,40 @@ function formatBytes(bytes: number) {
 
 // ---- The dialog -------------------------------------------------------------
 
+/** One quiet line under each section's title, in the serif: what the section is for. */
+const SECTION_LINES: Record<SettingsSection, Record<"zh" | "en", string>> = {
+  general: { zh: "让它顺着你的习惯来。", en: "Let it follow your habits." },
+  appearance: { zh: "字的大小，纸的质感，光的明暗。", en: "The size of the type, the feel of the paper, the light." },
+  canvas: { zh: "画布占多大，由你决定。", en: "How much room the canvas takes is yours to decide." },
+  notifications: { zh: "去忙别的吧，好了会叫你。", en: "Go and do something else; you will hear when it is done." },
+  models: { zh: "它只说一种语言，所以接哪一家都行。", en: "It speaks one protocol, so any provider will do." },
+  constraints: { zh: "写在这里的，它每一次都会记得。", en: "What you write here, it remembers every time." },
+  shortcuts: { zh: "手不离开键盘，也能走完一整程。", en: "The whole way, without leaving the keyboard." },
+  stats: { zh: "一点一滴，只记在这台电脑上。", en: "Every bit of it, counted on this computer alone." },
+  skills: { zh: "把画布带进你常用的编程助手。", en: "Take the canvases into the coding agent you already use." },
+  data: { zh: "你的作品，只在你这里。", en: "Your work stays with you." },
+  tutorials: { zh: "看别人怎么用，往往比读说明更快。", en: "Watching is often quicker than reading." },
+  docs: { zh: "它做了什么，又为什么这样做。", en: "What it does, and why it does it that way." },
+  about: { zh: "一张安静的工作台。", en: "A quiet workbench." },
+};
+
 export function SettingsDialog({ renderTrigger }: { renderTrigger: (open: () => void) => ReactNode }) {
   const [open, setOpen] = useState(false);
   const [initial, setInitial] = useState<SectionId>("general");
   const [focus, setFocus] = useState<string | undefined>();
   useEffect(() => {
-    const onOpen = (e: Event) => {
-      const detail = (e as CustomEvent<OpenSettingsDetail>).detail ?? {};
+    const show = (detail: OpenSettingsDetail) => {
       setInitial(detail.section ?? "general");
       setFocus(detail.focus);
       setOpen(true);
     };
+    const onOpen = (e: Event) => {
+      takePendingSettings();
+      show((e as CustomEvent<OpenSettingsDetail>).detail ?? {});
+    };
+    // Asked for before this mounted (the landing page's "Videos" link).
+    const waiting = takePendingSettings();
+    if (waiting) show(waiting);
     window.addEventListener(OPEN_SETTINGS_EVENT, onOpen);
     return () => window.removeEventListener(OPEN_SETTINGS_EVENT, onOpen);
   }, []);
@@ -437,24 +487,30 @@ function SettingsPanel({ initial, focus, onClose }: { initial: SectionId; focus?
   const [workCount, setWorkCount] = useState<number | null>(null);
   const [worksByCanvas, setWorksByCanvas] = useState<Partial<Record<WorkspaceId, number>>>({});
   const [storage, setStorage] = useState<Record<WorkspaceId, number> | null>(null);
-  const [confirmClearStats, setConfirmClearStats] = useState(false);
+  // Every clear, delete or replace asks first in one dialog.
+  const [confirm, setConfirm] = useState<{ title: string; description: string; label: string; run: () => void } | null>(null);
+  const importInput = useRef<HTMLInputElement>(null);
+  const [usesRange, setUsesRange] = useState<TrendRange>("month");
+  const [tokenRange, setTokenRange] = useState<TrendRange>("month");
   const stats = useUsageStats();
   const [skillTarget, setSkillTarget] = useState<SkillTarget>("claude");
-  const [skillVia, setSkillVia] = useState<"npx" | "git">("npx");
+  const [videoKind, setVideoKind] = useState<VideoKind>("tutorial");
+  const [skillVia, setSkillVia] = useState<SkillVia>("auto");
   const [installing, setInstalling] = useState<SkillName | null>(null);
   const skills = useSkillsInfo(section === "skills");
-  const [confirmWipe, setConfirmWipe] = useState(false);
+  // One click only works when the page runs on this computer; otherwise fall back to the command.
+  const via: SkillVia = skillVia === "auto" && !skills.info?.local ? "npx" : skillVia;
   const [permission, setPermission] = useState(() => (notificationsSupported() ? Notification.permission : "denied"));
   const searchRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       // An open dropdown takes Esc for itself.
-      if (e.key === "Escape" && !confirmWipe && !document.querySelector('[data-slot="select-content"]')) onClose();
+      if (e.key === "Escape" && !confirm && !document.querySelector('[data-slot="select-content"]')) onClose();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [onClose, confirmWipe]);
+  }, [onClose, confirm]);
 
   useEffect(() => {
     void navigator.storage?.estimate?.().then((e) => setUsage({ used: e.usage ?? 0, quota: e.quota ?? 0 }));
@@ -477,12 +533,6 @@ function SettingsPanel({ initial, focus, onClose }: { initial: SectionId; focus?
       cancelled = true;
     };
   }, [section, control.revision]);
-
-  useEffect(() => {
-    if (!confirmClearStats) return;
-    const timer = window.setTimeout(() => setConfirmClearStats(false), 4000);
-    return () => window.clearTimeout(timer);
-  }, [confirmClearStats]);
 
   const pref = <K extends keyof Preferences>(key: K) => (value: Preferences[K]) => setPreference(key, value);
   // Model settings are saved as they are typed, like everything else here.
@@ -543,8 +593,36 @@ function SettingsPanel({ initial, focus, onClose }: { initial: SectionId; focus?
     }
   };
 
+  const pickImport = async (file: File | undefined) => {
+    if (!file) return;
+    let backup: WorksBackup;
+    try {
+      backup = parseWorksBackup(await file.text());
+    } catch {
+      toast.error(zh ? "这不是 CanvasAnvil 导出的作品备份。" : "That isn't a CanvasAnvil works backup.");
+      return;
+    }
+    setConfirm({
+      title: zh ? "用备份替换全部作品？" : "Replace all works with this backup?",
+      description: zh
+        ? `当前四个画布的所有作品会被「${file.name}」里的内容替换，替换前的作品无法找回。不确定的话先导出一份。`
+        : `Every work on all four canvases will be replaced by “${file.name}”. The current works cannot be recovered; export first if unsure.`,
+      label: zh ? "替换并恢复" : "Replace",
+      run: () => void runImport(backup),
+    });
+  };
+
+  const runImport = async (backup: WorksBackup) => {
+    try {
+      await importAllWorks(backup);
+      toast.success(zh ? "作品已恢复，正在重新载入…" : "Works restored; reloading…");
+      window.setTimeout(() => window.location.reload(), 600);
+    } catch (error) {
+      toast.error(String(error));
+    }
+  };
+
   const wipeWorks = async () => {
-    setConfirmWipe(false);
     const all = await control.loadAll();
     for (const { id } of WORKSPACES) for (const work of listedWorks(all[id]?.index ?? [])) await control.removeWork(id, work.id);
     toast.success(zh ? "作品已全部清空" : "All works cleared");
@@ -574,8 +652,10 @@ function SettingsPanel({ initial, focus, onClose }: { initial: SectionId; focus?
     { id: "constraints", label: zh ? "记忆" : "Memory", icon: ScrollText },
     { id: "shortcuts", label: zh ? "快捷键" : "Shortcuts", icon: Keyboard },
     { id: "stats", label: zh ? "使用统计" : "Usage", icon: BarChart3 },
-    { id: "skills", label: zh ? "Skill 与插件" : "Skills & plugins", icon: Puzzle },
+    { id: "skills", label: zh ? "技能与插件" : "Skills & plugins", icon: Puzzle },
     { id: "data", label: zh ? "数据" : "Data", icon: Database },
+    { id: "tutorials", label: zh ? "视频" : "Videos", icon: Clapperboard },
+    { id: "docs", label: zh ? "文档" : "Docs", icon: FileText },
     { id: "about", label: zh ? "关于" : "About", icon: Info },
   ];
 
@@ -696,13 +776,6 @@ function SettingsPanel({ initial, focus, onClose }: { initial: SectionId; focus?
         />
       ),
       keywords: "language reply 语言 回复",
-    },
-    {
-      section: "general",
-      id: "confirmClear",
-      title: zh ? "清空对话前确认" : "Confirm before clearing",
-      desc: zh ? "点清空时先问一句。作品本身一直留在「最近」里。" : "Ask first when clearing a conversation. The work itself always stays in Recents.",
-      control: <Toggle label={zh ? "清空对话前确认" : "Confirm before clearing"} checked={prefs.confirmClear} onChange={pref("confirmClear")} />,
     },
     // Appearance
     {
@@ -1037,27 +1110,22 @@ function SettingsPanel({ initial, focus, onClose }: { initial: SectionId; focus?
     },
     {
       section: "stats",
-      id: "stats-daily",
-      title: zh ? "最近 30 天" : "Last 30 days",
-      desc: zh ? "每天的使用次数，按画布分色。" : "Uses per day, coloured by canvas.",
-      control: null,
-      below: <DailyColumns stats={stats} lang={lang} />,
-      keywords: "daily 每天 趋势 30",
-    },
-    {
-      section: "stats",
-      id: "stats-months",
-      title: zh ? "月度趋势" : "By month",
-      desc: zh ? "过去 12 个月每月的使用次数。" : "Uses per month over the past year.",
-      control: null,
-      below: <MonthLine stats={stats} lang={lang} />,
-      keywords: "month 月 趋势 折线",
+      id: "stats-trend",
+      title: zh ? "使用趋势" : "Trend",
+      desc: zh ? "每天（按年看时每月）的使用次数，悬停看各画布。" : "Uses per day (per month over a year); hover for each canvas.",
+      control: <Segmented value={usesRange} options={[{ value: "week", label: zh ? "近 7 天" : "7 days" }, { value: "month", label: zh ? "近 30 天" : "30 days" }, { value: "year", label: zh ? "近一年" : "1 year" }]} onChange={setUsesRange} />,
+      below: <UsageTrend stats={stats} lang={lang} range={usesRange} />,
+      keywords: "trend 趋势 折线 周 月 年 daily month",
     },
     {
       section: "stats",
       id: "stats-hours",
+      half: true,
       title: zh ? "一天中的时段" : "Time of day",
-      desc: zh ? "按小时统计，看看你什么时候最常创作。" : "Uses by hour of the day.",
+      desc: (() => {
+        const peak = peakHour(stats);
+        return peak ? (zh ? `最常在 ${peak}` : `Busiest ${peak}`) : zh ? "按小时统计" : "Uses by hour";
+      })(),
       control: null,
       below: <HourColumns stats={stats} lang={lang} />,
       keywords: "hour 时段 小时",
@@ -1065,7 +1133,12 @@ function SettingsPanel({ initial, focus, onClose }: { initial: SectionId; focus?
     {
       section: "stats",
       id: "stats-weekdays",
+      half: true,
       title: zh ? "一周中的哪天" : "Day of week",
+      desc: (() => {
+        const peak = peakWeekday(stats);
+        return peak === null ? (zh ? "按星期统计" : "Uses by weekday") : zh ? `最常在${WEEKDAY_NAMES.zh[peak]}` : `Busiest on ${WEEKDAY_NAMES.en[peak]}`;
+      })(),
       control: null,
       below: <WeekdayColumns stats={stats} lang={lang} />,
       keywords: "weekday 星期 周",
@@ -1073,24 +1146,77 @@ function SettingsPanel({ initial, focus, onClose }: { initial: SectionId; focus?
     {
       section: "stats",
       id: "stats-canvases",
+      half: true,
       title: zh ? "画布占比" : "By canvas",
-      desc: zh ? "哪个画布用得最多。" : "Which canvas you use most.",
+      desc: zh ? "各画布的使用次数" : "Uses per canvas",
       control: null,
       below: (
-        <CanvasBar
+        <CanvasDonut
           values={usesByCanvas(stats) as Partial<Record<WorkspaceId, number>>}
           lang={lang}
-          format={(n) => (zh ? `${formatCount(n)} 次` : `${formatCount(n)}`)}
-          empty={zh ? "还没有使用记录。" : "No use yet."}
+          format={(n) => (zh ? `${formatCount(n)} 次` : formatCount(n))}
+          empty={zh ? "还没有使用记录" : "No use yet"}
         />
       ),
-      keywords: "canvas share 占比",
+      keywords: "canvas share 占比 扇形 饼图",
+    },
+    {
+      section: "stats",
+      id: "stats-works",
+      half: true,
+      title: zh ? "作品数量" : "Works",
+      desc: zh ? "「我的作品」里各画布的作品" : "Saved works per canvas",
+      control: null,
+      below: (
+        <CanvasDonut
+          values={worksByCanvas}
+          lang={lang}
+          format={(n) => (zh ? `${n} 件` : String(n))}
+          empty={zh ? "还没有保存作品" : "No saved works yet"}
+        />
+      ),
+      keywords: "works 作品 数量",
+    },
+    {
+      section: "stats",
+      id: "stats-images",
+      half: true,
+      title: zh ? "生成图片" : "Images",
+      desc: zh ? "图片模型返回的图片" : "Pictures from the image model",
+      control: null,
+      below: (
+        <CanvasDonut
+          values={stats.images as Partial<Record<WorkspaceId, number>>}
+          lang={lang}
+          format={(n) => (zh ? `${formatCount(n)} 张` : formatCount(n))}
+          empty={zh ? "还没有生成过图片" : "No images yet"}
+        />
+      ),
+      keywords: "image 图片 生图",
+    },
+    {
+      section: "stats",
+      id: "stats-token-share",
+      half: true,
+      title: zh ? "Token 分布" : "Tokens by canvas",
+      desc: zh ? "各画布消耗的 Token" : "Reported tokens per canvas",
+      control: null,
+      below: (
+        <CanvasDonut
+          values={Object.fromEntries(Object.entries(stats.tokens).map(([id, x]) => [id, x.input + x.output])) as Partial<Record<WorkspaceId, number>>}
+          lang={lang}
+          format={formatCount}
+          empty={zh ? "还没有接口返回的用量" : "No reported usage yet"}
+        />
+      ),
+      keywords: "token 分布 画布",
     },
     {
       section: "stats",
       id: "stats-durations",
+      half: true,
       title: zh ? "平均生成耗时" : "Average generation time",
-      desc: zh ? "从开始生成到完成，按画布平均。悬停看次数和最长一次。" : "From start to done, averaged per canvas. Hover for counts and the longest.",
+      desc: zh ? "开始到完成，按画布平均" : "Start to done, per canvas",
       control: null,
       below: (
         <BarList
@@ -1105,7 +1231,7 @@ function SettingsPanel({ initial, focus, onClose }: { initial: SectionId; focus?
             };
           })}
           format={(ms) => formatDuration(ms, zh)}
-          empty={zh ? "还没有完成的生成。" : "No finished generations yet."}
+          empty={zh ? "还没有完成的生成" : "No finished generations yet"}
         />
       ),
       keywords: "duration 耗时 时间 速度",
@@ -1113,78 +1239,34 @@ function SettingsPanel({ initial, focus, onClose }: { initial: SectionId; focus?
     {
       section: "stats",
       id: "stats-models",
+      half: true,
       title: zh ? "常用模型" : "Models",
-      desc: zh ? "每个模型被调用的次数（文本和图片）。" : "Calls answered per model (text and image).",
+      desc: zh ? "调用次数最多的 4 个模型" : "The four most-called models",
       control: null,
       below: (
         <BarList
           rows={Object.entries(stats.models)
             .sort((a, b) => b[1] - a[1])
-            .slice(0, 8)
+            .slice(0, 4)
             .map(([model, n]) => ({ key: model, label: model, value: n, color: "hsl(var(--brand))", detail: model }))}
           format={(n) => (zh ? `${formatCount(n)} 次` : formatCount(n))}
-          empty={zh ? "还没有模型调用记录。" : "No model calls yet."}
+          empty={zh ? "还没有模型调用记录" : "No model calls yet"}
         />
       ),
       keywords: "model 模型 调用",
     },
     {
       section: "stats",
-      id: "stats-images",
-      title: zh ? "生成图片" : "Images",
-      desc: zh ? "图片模型返回的图片，按画布分。" : "Pictures from the image model, per canvas.",
-      control: null,
-      below: (
-        <CanvasBar
-          values={stats.images as Partial<Record<WorkspaceId, number>>}
-          lang={lang}
-          format={(n) => (zh ? `${formatCount(n)} 张` : formatCount(n))}
-          empty={zh ? "还没有生成过图片。" : "No images yet."}
-        />
-      ),
-      keywords: "image 图片 生图",
-    },
-    {
-      section: "stats",
-      id: "stats-works",
-      title: zh ? "作品数量" : "Works",
-      desc: zh ? "「我的作品」里各画布保存的作品。" : "Saved works in My works, per canvas.",
-      control: null,
-      below: (
-        <CanvasBar
-          values={worksByCanvas}
-          lang={lang}
-          format={(n) => (zh ? `${n} 件` : String(n))}
-          empty={zh ? "还没有保存作品。" : "No saved works yet."}
-        />
-      ),
-      keywords: "works 作品 数量",
-    },
-    {
-      section: "stats",
       id: "stats-tokens",
       title: zh ? "Token 用量" : "Tokens",
-      desc: zh ? "只算模型接口返回的真实用量，接口不返回的不计。" : "Only what the provider reported; nothing is estimated.",
-      control: (() => {
-        const sum = Object.values(stats.tokens).reduce((a, x) => ({ input: a.input + x.input, output: a.output + x.output }), { input: 0, output: 0 });
-        return sum.input + sum.output > 0 ? (
-          <span className="shrink-0 text-[13px] tabular-nums text-muted-foreground">
-            {zh ? "输入" : "In"} {formatCount(sum.input)} · {zh ? "输出" : "Out"} {formatCount(sum.output)}
-          </span>
-        ) : null;
+      desc: (() => {
+        const t = Object.values(stats.tokens).reduce((a, x) => ({ input: a.input + x.input, output: a.output + x.output }), { input: 0, output: 0 });
+        const total = zh ? `累计输入 ${formatCount(t.input)}，输出 ${formatCount(t.output)}。` : `In ${formatCount(t.input)}, out ${formatCount(t.output)} so far. `;
+        return total + (zh ? "只算接口返回的真实用量。" : "Only what the provider reported.");
       })(),
-      below: (
-        <div className="space-y-5">
-          <TokenLine stats={stats} lang={lang} />
-          <CanvasBar
-            values={Object.fromEntries(Object.entries(stats.tokens).map(([id, x]) => [id, x.input + x.output])) as Partial<Record<WorkspaceId, number>>}
-            lang={lang}
-            format={formatCount}
-            empty={zh ? "还没有接口返回的用量。" : "No reported usage yet."}
-          />
-        </div>
-      ),
-      keywords: "token 用量 消耗",
+      control: <Segmented value={tokenRange} options={[{ value: "week", label: zh ? "近 7 天" : "7 days" }, { value: "month", label: zh ? "近 30 天" : "30 days" }, { value: "year", label: zh ? "近一年" : "1 year" }]} onChange={setTokenRange} />,
+      below: <TokenTrend stats={stats} lang={lang} range={tokenRange} />,
+      keywords: "token 用量 消耗 趋势",
     },
     {
       section: "stats",
@@ -1194,14 +1276,19 @@ function SettingsPanel({ initial, focus, onClose }: { initial: SectionId; focus?
       control: (
         <SmallButton
           danger
-          onClick={() => {
-            if (!confirmClearStats) return setConfirmClearStats(true);
-            clearStats();
-            setConfirmClearStats(false);
-            toast.success(zh ? "统计已清空" : "Usage cleared");
-          }}
+          onClick={() =>
+            setConfirm({
+              title: zh ? "清空使用统计？" : "Clear usage stats?",
+              description: zh ? "这里的所有统计数字和图表会归零，无法找回。作品不受影响。" : "Every count and chart here goes back to zero, for good. Works are untouched.",
+              label: zh ? "清空" : "Clear",
+              run: () => {
+                clearStats();
+                toast.success(zh ? "统计已清空" : "Usage cleared");
+              },
+            })
+          }
         >
-          {confirmClearStats ? (zh ? "再点一次确认" : "Click again") : zh ? "清空" : "Clear"}
+          {zh ? "清空" : "Clear"}
         </SmallButton>
       ),
       keywords: "clear 清空 统计",
@@ -1210,10 +1297,8 @@ function SettingsPanel({ initial, focus, onClose }: { initial: SectionId; focus?
     {
       section: "skills",
       id: "skills-target",
-      title: zh ? "装到哪里" : "Install for",
-      desc: zh
-        ? `Skill 会放进 ~/${TARGET_DIR[skillTarget]}/<名称>，装好后重启 ${TARGET_NAME[skillTarget]} 即可使用。也可以放进项目里的 ${TARGET_DIR[skillTarget].replace("/skills", "")}/skills/ 只给这个项目用。`
-        : `Skills go to ~/${TARGET_DIR[skillTarget]}/<name>; restart ${TARGET_NAME[skillTarget]} afterwards. Or put them in a project's ${TARGET_DIR[skillTarget].replace("/skills", "")}/skills/ for that project only.`,
+      title: zh ? "用在哪个工具" : "For which tool",
+      desc: zh ? "下面的插件和 Skill 都会按这里选的工具给出装法。" : "The plugin and skills below follow the tool picked here.",
       control: (
         <Segmented<SkillTarget>
           value={skillTarget}
@@ -1228,26 +1313,57 @@ function SettingsPanel({ initial, focus, onClose }: { initial: SectionId; focus?
     },
     {
       section: "skills",
+      id: "skills-plugin",
+      group: {
+        id: "plugin",
+        title: zh ? "插件（推荐）" : "Plugin (recommended)",
+        desc: zh
+          ? "一次装好白板、图表、室内设计三个 Skill 和画布服务，不用克隆仓库，以后更新插件即可。"
+          : "Installs the canvas, diagram and interior skills plus the canvas server in one go; no clone, update the plugin later.",
+      },
+      title: `canvasanvil-canvas · ${TARGET_NAME[skillTarget]}`,
+      desc:
+        skillTarget === "claude"
+          ? zh
+            ? "在终端里运行下面两行（或在 Claude Code 里输入 /plugin marketplace add … 和 /plugin install …），重启后说「打开 CanvasAnvil 画布」。画布会在浏览器里打开，改完回到对话继续。"
+            : "Run these two lines in a terminal (or /plugin marketplace add … and /plugin install … inside Claude Code), restart, then ask to open the CanvasAnvil canvas. It opens in your browser; come back to the chat when done."
+          : zh
+            ? "在终端里运行下面两行，重启 Codex 后用 $canvas-skill、$diagram-skill 或 $cad-skill 调用。画布直接在对话里打开。"
+            : "Run these two lines, restart Codex, then call $canvas-skill, $diagram-skill or $cad-skill. The canvases open right in the conversation.",
+      control: null,
+      below: <CommandBlock zh={zh} lines={PLUGIN_COMMANDS[skillTarget]} />,
+      keywords: "plugin 插件 marketplace claude codex",
+    },
+    {
+      section: "skills",
       id: "skills-via",
-      title: zh ? "命令方式" : "Command",
-      desc: skills.info?.local
-        ? zh
-          ? "三种装法任选：点「一键安装」直接装到这台电脑；或复制命令在终端里运行；或下载压缩包手动解压。"
-          : "Pick any: One-click installs on this computer; or run the command in a terminal; or download the zip and unpack it."
-        : zh
-          ? "复制命令在终端里运行，或下载压缩包解压到上面的目录。一键安装只在本机打开 CanvasAnvil（localhost）时可用。"
-          : "Run the command in a terminal, or unpack the zip into the folder above. One-click install works only when CanvasAnvil runs on this computer (localhost).",
+      group: {
+        id: "single",
+        title: zh ? "单独安装 Skill" : "Install skills one by one",
+        desc: zh
+          ? `只要某一个 Skill，或者要 PPT（插件里没有）时用。会放进 ~/${TARGET_DIR[skillTarget]}/<名称>，装好后重启 ${TARGET_NAME[skillTarget]}。`
+          : `For a single skill, or for PPT (not in the plugin). Goes to ~/${TARGET_DIR[skillTarget]}/<name>; restart ${TARGET_NAME[skillTarget]} afterwards.`,
+      },
+      title: zh ? "装法" : "How",
+      desc:
+        via === "auto"
+          ? zh ? "直接复制到这台电脑，会替换旧版本，保留你填过的图片和解析配置。" : "Copies straight onto this computer, replacing an older copy and keeping your provider config."
+          : via === "zip"
+            ? zh ? `下载后解压，把里面的文件夹整个放进 ~/${TARGET_DIR[skillTarget]}/。需要 Node 20 以上。` : `Unzip and move the folder inside into ~/${TARGET_DIR[skillTarget]}/. Needs Node 20+.`
+            : zh ? "复制命令到终端运行。" : "Copy the command into a terminal.",
       control: (
-        <Segmented<"npx" | "git">
-          value={skillVia}
+        <Segmented<SkillVia>
+          value={via}
           onChange={setSkillVia}
           options={[
+            ...(skills.info?.local ? [{ value: "auto" as const, label: zh ? "一键安装" : "One click" }] : []),
             { value: "npx", label: "npx" },
             { value: "git", label: "git" },
+            { value: "zip", label: zh ? "压缩包" : "Zip" },
           ]}
         />
       ),
-      keywords: "command 命令 npx degit git 终端",
+      keywords: "command 命令 npx degit git 终端 zip 压缩包 一键",
     },
     ...SKILLS.map(({ name, zh: descZh, en: descEn }): RowSpec => {
       const server = skills.info?.skills.find((s) => s.name === name);
@@ -1255,29 +1371,28 @@ function SettingsPanel({ initial, focus, onClose }: { initial: SectionId; focus?
       return {
         section: "skills",
         id: `skill-${name}`,
+        group: { id: "single", title: "" },
         title: name,
         badge: installed ? (zh ? "已安装" : "Installed") : undefined,
         desc: `${zh ? descZh : descEn}${server ? ` · ${formatBytes(server.bytes)}` : ""}`,
-        control: (
-          <div className="flex shrink-0 items-center gap-1.5">
-            {skills.info?.local && (
-              <SmallButton
-                disabled={installing !== null}
-                title={zh ? `复制到 ~/${TARGET_DIR[skillTarget]}/${name}（会替换旧版本，保留你填过的图片 / 解析配置）` : `Copies to ~/${TARGET_DIR[skillTarget]}/${name} (replaces an older copy, keeps your provider config)`}
-                onClick={() => {
-                  setInstalling(name);
-                  installSkill(name, skillTarget)
-                    .then((where) => {
-                      toast.success(zh ? `已安装 ${name}，重启 ${TARGET_NAME[skillTarget]} 后可用` : `${name} installed; restart ${TARGET_NAME[skillTarget]}`, { description: where });
-                      skills.reload();
-                    })
-                    .catch((error: unknown) => toast.error(zh ? "安装失败" : "Install failed", { description: error instanceof Error ? error.message : String(error) }))
-                    .finally(() => setInstalling(null));
-                }}
-              >
-                {installing === name ? (zh ? "安装中…" : "Installing…") : installed ? (zh ? "重新安装" : "Reinstall") : zh ? "一键安装" : "Install"}
-              </SmallButton>
-            )}
+        control:
+          via === "auto" ? (
+            <SmallButton
+              disabled={installing !== null}
+              onClick={() => {
+                setInstalling(name);
+                installSkill(name, skillTarget)
+                  .then((where) => {
+                    toast.success(zh ? `已安装 ${name}，重启 ${TARGET_NAME[skillTarget]} 后可用` : `${name} installed; restart ${TARGET_NAME[skillTarget]}`, { description: where });
+                    skills.reload();
+                  })
+                  .catch((error: unknown) => toast.error(zh ? "安装失败" : "Install failed", { description: error instanceof Error ? error.message : String(error) }))
+                  .finally(() => setInstalling(null));
+              }}
+            >
+              {installing === name ? (zh ? "安装中…" : "Installing…") : installed ? (zh ? "重新安装" : "Reinstall") : zh ? "安装" : "Install"}
+            </SmallButton>
+          ) : via === "zip" ? (
             <a
               href={`/api/skills/zip?name=${name}`}
               download={`${name}.zip`}
@@ -1285,34 +1400,11 @@ function SettingsPanel({ initial, focus, onClose }: { initial: SectionId; focus?
             >
               {zh ? "下载 .zip" : "Download .zip"}
             </a>
-          </div>
-        ),
-        below: <CommandBlock zh={zh} lines={skillVia === "npx" ? [installCommand(name, skillTarget)] : gitCommands(name, skillTarget)} />,
+          ) : null,
+        below: via === "npx" || via === "git" ? <CommandBlock zh={zh} lines={via === "npx" ? [installCommand(name, skillTarget)] : gitCommands(name, skillTarget)} /> : undefined,
         keywords: `skill ${name} 安装 下载 zip`,
       };
     }),
-    {
-      section: "skills",
-      id: "skills-codex-plugin",
-      title: zh ? "Codex 插件" : "Codex plugin",
-      badge: "canvasanvil-canvas",
-      desc: zh
-        ? "在 Codex 里装成插件：白板、图表、室内设计三个画布都在对话里直接打开，不用克隆仓库。装好后重启 Codex，用 $canvas-skill、$diagram-skill 或 $cad-skill 调用。"
-        : "Install as a Codex plugin: the canvas, diagram and interior canvases open right in the conversation, no clone needed. Restart Codex, then call $canvas-skill, $diagram-skill or $cad-skill.",
-      control: null,
-      below: <CommandBlock zh={zh} lines={CODEX_PLUGIN_COMMANDS} />,
-      keywords: "codex plugin 插件 marketplace",
-    },
-    {
-      section: "skills",
-      id: "skills-manual",
-      title: zh ? "手动安装" : "By hand",
-      desc: zh
-        ? `下载 .zip 后解压，把里面的文件夹（例如 diagram-skill）整个放进 ~/${TARGET_DIR[skillTarget]}/。运行需要 Node 20 以上；室内设计从户型图开始时还需要 Python。生图要在 skill 的 config/ 里配置图片供应商。`
-        : `Unzip and move the folder inside (e.g. diagram-skill) into ~/${TARGET_DIR[skillTarget]}/. Needs Node 20+; the interior skill also needs Python when starting from a floor plan. Image generation needs an image provider in the skill's config/.`,
-      control: null,
-      keywords: "manual 手动 解压 unzip node python",
-    },
     // Data
     {
       section: "data",
@@ -1342,15 +1434,35 @@ function SettingsPanel({ initial, focus, onClose }: { initial: SectionId; focus?
     },
     {
       section: "data",
+      id: "import",
+      title: zh ? "从备份恢复" : "Restore from a backup",
+      desc: zh ? "选一个导出的 JSON 文件，用它替换当前所有作品。" : "Pick an exported JSON file to replace all current works with it.",
+      control: (
+        <div className="flex shrink-0 items-center gap-2">
+          <input ref={importInput} type="file" accept="application/json,.json" className="hidden" onChange={(e) => (void pickImport(e.target.files?.[0]), (e.target.value = ""))} />
+          <SmallButton onClick={() => importInput.current?.click()}>{zh ? "选择文件" : "Choose file"}</SmallButton>
+        </div>
+      ),
+      keywords: "import restore 导入 恢复 备份",
+    },
+    {
+      section: "data",
       id: "resetPrefs",
       title: zh ? "恢复默认设置" : "Restore default settings",
       desc: zh ? "这一页的选项回到初始状态。模型配置和作品不受影响。" : "Puts this page's choices back. Model settings and works are untouched.",
       control: (
         <SmallButton
-          onClick={() => {
-            resetPreferences();
-            toast.success(zh ? "已恢复默认设置" : "Defaults restored");
-          }}
+          onClick={() =>
+            setConfirm({
+              title: zh ? "恢复默认设置？" : "Restore default settings?",
+              description: zh ? "通用、外观、画布、通知里的选项都会回到初始状态。模型配置、记忆和作品不受影响。" : "General, Appearance, Canvas and Notifications go back to their defaults. Models, memory and works are untouched.",
+              label: zh ? "恢复默认" : "Restore",
+              run: () => {
+                resetPreferences();
+                toast.success(zh ? "已恢复默认设置" : "Defaults restored");
+              },
+            })
+          }
         >
           {zh ? "恢复" : "Restore"}
         </SmallButton>
@@ -1362,11 +1474,63 @@ function SettingsPanel({ initial, focus, onClose }: { initial: SectionId; focus?
       title: zh ? "清空全部作品" : "Delete all works",
       desc: zh ? "删除四个画布里的所有作品，无法找回。建议先导出。" : "Deletes every work on all four canvases, for good. Export first.",
       control: (
-        <SmallButton danger onClick={() => setConfirmWipe(true)}>
+        <SmallButton
+          danger
+          onClick={() =>
+            setConfirm({
+              title: zh ? "清空全部作品？" : "Delete all works?",
+              description: zh ? `${workCount ?? ""} 件作品会被永久删除，无法找回。建议先导出。` : `${workCount ?? ""} works will be deleted for good. Export first.`,
+              label: zh ? "全部删除" : "Delete all",
+              run: () => void wipeWorks(),
+            })
+          }
+        >
           {zh ? "清空" : "Delete all"}
         </SmallButton>
       ),
       keywords: "delete 删除",
+    },
+    // Videos: one kind at a time, so the list stays short as videos are added.
+    (() => {
+      const k = VIDEO_KINDS.find((x) => x.kind === videoKind)!;
+      return {
+        section: "tutorials",
+        id: "videos",
+        title: zh ? k.zh : k.en,
+        desc: zh ? k.zhDesc : k.enDesc,
+        control: (
+          <Segmented<VideoKind>
+            value={videoKind}
+            onChange={setVideoKind}
+            options={VIDEO_KINDS.map(({ kind, zh: name, en }) => ({ value: kind, label: zh ? name : en }))}
+          />
+        ),
+        below: <VideoShelf kind={videoKind} lang={lang} />,
+        keywords: "video 视频 教程 tutorial 宣传 更新 实践 bilibili",
+      } satisfies RowSpec;
+    })(),
+    // Docs
+    {
+      section: "docs",
+      id: "doc-home",
+      title: zh ? "CanvasAnvil 文档" : "CanvasAnvil docs",
+      desc: zh ? "从上手、画布指南，到底层的算法与它们为什么这样做。" : "From getting started and the canvas guides to the algorithms underneath, and why they work that way.",
+      control: (
+        <a href={docsHref()} className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-lg bg-foreground px-3 text-[13px] text-background transition-opacity hover:opacity-90">
+          {zh ? "打开文档" : "Open the docs"}
+          <ArrowRight className="size-3.5" />
+        </a>
+      ),
+      below: <DocsShelf lang={lang} />,
+      keywords: "docs 文档 readme 原理 算法 架构 architecture skill 插件",
+    },
+    {
+      section: "docs",
+      id: "doc-faq",
+      title: zh ? "常见问题" : "FAQ",
+      control: null,
+      below: <FaqList lang={lang} />,
+      keywords: "faq 常见问题 问答 help 帮助",
     },
     // About
     {
@@ -1378,7 +1542,7 @@ function SettingsPanel({ initial, focus, onClose }: { initial: SectionId; focus?
     ...(
       [
         ["github", "GitHub", zh ? "源代码、问题反馈和讨论。" : "Source code, issues and discussions.", REPO_URL],
-        ["changelog", zh ? "更新日志" : "Changelog", zh ? "每一次改动都记在这里。" : "Every change, as it landed.", `${REPO_URL}/commits/main`],
+        ["changelog", zh ? "更新日志" : "Changelog", zh ? "每一次改动都记在这里。" : "Every change, as it landed.", docsHref("changelog")],
         ["issue", zh ? "反馈问题" : "Report a problem", zh ? "遇到问题或有想法，欢迎提一个 Issue。" : "Found a problem or have an idea? Open an issue.", `${REPO_URL}/issues/new`],
       ] as const
     ).map(
@@ -1388,9 +1552,10 @@ function SettingsPanel({ initial, focus, onClose }: { initial: SectionId; focus?
         title,
         desc,
         control: (
-          <a href={href} target="_blank" rel="noreferrer" className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-lg bg-foreground/[0.06] px-3 text-[13px] text-foreground hover:bg-foreground/[0.1]">
+          // The changelog lives in the docs here; the rest are on GitHub.
+          <a href={href} {...(href.startsWith("#") ? {} : { target: "_blank", rel: "noreferrer" })} className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-lg bg-foreground/[0.06] px-3 text-[13px] text-foreground hover:bg-foreground/[0.1]">
             {zh ? "打开" : "Open"}
-            <ExternalLink className="size-3.5" />
+            {href.startsWith("#") ? <ArrowRight className="size-3.5" /> : <ExternalLink className="size-3.5" />}
           </a>
         ),
       }),
@@ -1402,7 +1567,7 @@ function SettingsPanel({ initial, focus, onClose }: { initial: SectionId; focus?
     () => (q ? rows.filter((r) => `${r.title} ${r.desc ?? ""} ${r.keywords ?? ""}`.toLowerCase().includes(q)) : []),
     // rows are rebuilt every render; the query is what decides
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [q, rows.length, lang, prefs, config, theme, usage, permission, stats, storage, confirmClearStats, worksByCanvas, skillTarget, skillVia, installing, skills.info],
+    [q, rows.length, lang, prefs, config, theme, usage, permission, stats, storage, worksByCanvas, usesRange, tokenRange, videoKind, skillTarget, skillVia, installing, skills.info],
   );
   const current = sections.find((s) => s.id === section)!;
 
@@ -1415,7 +1580,7 @@ function SettingsPanel({ initial, focus, onClose }: { initial: SectionId; focus?
         className="flex h-[min(680px,90vh)] w-full max-w-[960px] flex-col overflow-hidden rounded-[14px] border border-border/80 bg-background shadow-[0_12px_40px_hsl(var(--shadow-hue)/0.16),0_2px_6px_hsl(var(--shadow-hue)/0.06)] animate-in zoom-in-[0.98] duration-base"
       >
         <div className="flex h-12 shrink-0 items-center justify-between border-b border-border/70 pl-5 pr-2">
-          <h2 className="text-[15px] font-medium text-foreground">{zh ? "设置" : "Settings"}</h2>
+          <h2 className="font-display text-[17px] tracking-[-0.01em] text-foreground">{zh ? "设置" : "Settings"}</h2>
           <button type="button" title={zh ? "关闭 (Esc)" : "Close (Esc)"} aria-label={zh ? "关闭" : "Close"} onClick={onClose} className="flex size-8 items-center justify-center rounded-lg text-muted-foreground hover:bg-foreground/[0.06] hover:text-foreground">
             <X className="size-4" />
           </button>
@@ -1435,7 +1600,7 @@ function SettingsPanel({ initial, focus, onClose }: { initial: SectionId; focus?
             </div>
             {sections.map(({ id, label, icon: Icon }, i) => (
               <div key={id}>
-                {(i === 4 || i === 7) && <div className="mx-2 my-2 h-px bg-border/70" />}
+                {(i === 4 || i === 7 || i === 10) && <div className="mx-2 my-2 h-px bg-border/70" />}
                 <button
                   type="button"
                   title={label}
@@ -1459,38 +1624,37 @@ function SettingsPanel({ initial, focus, onClose }: { initial: SectionId; focus?
               <>
                 <h3 className="mb-2 text-[15px] font-medium text-foreground">{zh ? `“${query.trim()}” 的结果` : `Results for “${query.trim()}”`}</h3>
                 {matches.length === 0 ? (
-                  <p className="py-10 text-center font-voice text-[14px] italic text-muted-foreground">{zh ? "没有找到相关的设置。" : "No setting matches."}</p>
+                  <p className="aside-voice py-10 text-center text-[14px] text-muted-foreground">{zh ? "没有找到相关的设置。" : "No setting matches."}</p>
                 ) : (
                   <RowList rows={matches} />
                 )}
               </>
             ) : (
               <>
-                <h3 className="mb-2 text-[15px] font-medium text-foreground">{current.label}</h3>
+                <h3 className="font-display text-[22px] leading-tight tracking-[-0.01em] text-foreground">{current.label}</h3>
+                <p className="aside-voice mb-3 mt-1 text-[14px] text-muted-foreground">{SECTION_LINES[section][lang]}</p>
                 <RowList rows={rows.filter((r) => r.section === section)} />
+                {/* The About page ends the way a book does, with the maker's mark. */}
+                {section === "about" && (
+                  <div className="mt-12 flex flex-col items-center gap-2 text-center">
+                    <AnvilColophon className="text-[#c96442]/70" />
+                    <p className="aside-voice text-[13.5px] text-muted-foreground">{zh ? "在铁砧上，一稿一稿地锻打成形。" : "Hammered into shape on the anvil, one draft at a time."}</p>
+                  </div>
+                )}
               </>
             )}
           </div>
         </div>
       </div>
-      <Dialog open={confirmWipe} onOpenChange={setConfirmWipe}>
-        <DialogContent className="sm:max-w-[420px]">
-          <DialogHeader>
-            <DialogTitle>{zh ? "清空全部作品？" : "Delete all works?"}</DialogTitle>
-            <DialogDescription>
-              {zh ? `${workCount ?? ""} 件作品会被永久删除，无法找回。` : `${workCount ?? ""} works will be deleted for good. This cannot be undone.`}
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button variant="ghost" onClick={() => setConfirmWipe(false)}>
-              {zh ? "取消" : "Cancel"}
-            </Button>
-            <Button variant="destructive" onClick={() => void wipeWorks()}>
-              {zh ? "全部删除" : "Delete all"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <ConfirmDialog
+        open={!!confirm}
+        onOpenChange={(open) => !open && setConfirm(null)}
+        title={confirm?.title ?? ""}
+        description={confirm?.description}
+        confirmLabel={confirm?.label ?? ""}
+        cancelLabel={zh ? "取消" : "Cancel"}
+        onConfirm={() => confirm?.run()}
+      />
     </div>,
     document.body,
   );

@@ -21,6 +21,7 @@ import { HistoryDialog, HistoryItem } from '@/shared/chat';
 import { ResetWarningModal } from '@/shared/chat';
 import { t, useUiLanguage } from "@/shared/i18n";
 import {
+  alternativeKind,
   detectCreationKind,
   isPdfName,
   type CreationKind,
@@ -77,6 +78,17 @@ interface ChatPanelProps {
   onDraftChange?: (text: string) => void;
   /** The outline streaming in on the canvas, for the working line's token count. */
 }
+
+const KIND_LABEL: Record<CreationKind, [zh: string, en: string]> = {
+  idea: ["一句主题", "a topic"],
+  outline: ["一份提纲", "an outline"],
+  beautify: ["旧文件换风格", "a file to restyle"],
+};
+const KIND_SWITCH: Record<CreationKind, [zh: string, en: string]> = {
+  idea: ["当作主题", "Treat as topic"],
+  outline: ["当作提纲", "Treat as outline"],
+  beautify: ["换风格", "Restyle it"],
+};
 
 // Convert internal ChatMessage to UIMessage
 
@@ -162,7 +174,13 @@ export function ChatPanel({
   const starting = stage === "start" && Boolean(onStartCreation);
   const draftText = pptInputSegments.map((s) => (s.type === "text" ? s.text : "")).join("");
   const draftFileNames = files.map((f) => f.name);
-  const creationKind = detectCreationKind(draftText, draftFileNames);
+  const draftKey = `${draftText}
+${draftFileNames.join("|")}`;
+  /** The user's correction of the reading, good only for the draft it was made on. */
+  const [kindOverride, setKindOverride] = useState<{ key: string; kind: CreationKind } | null>(null);
+  const detectedKind = detectCreationKind(draftText, draftFileNames);
+  const creationKind = kindOverride?.key === draftKey ? kindOverride.kind : detectedKind;
+  const otherKind = alternativeKind(creationKind, draftText);
   useEffect(() => {
     onDraftChange?.(starting ? draftText : "");
   }, [draftText, starting, onDraftChange]);
@@ -808,9 +826,38 @@ const getPptTag = (slideId: string, title: string, kind: "outline" | "slide_imag
               pumpPptInsertQueue();
             }}
             bottomChips={
-              // Topic or outline is worked out behind the scenes; nothing to show while starting.
+              // While starting: the style picked on the left, and how the draft is read,
+              // with the other reading one click away in case the guess is wrong.
               starting
-                ? null
+                ? (
+                  <div className="flex flex-wrap items-center gap-1.5 text-xs">
+                    <span className="inline-flex h-6 max-w-full items-center gap-1.5 rounded-md bg-muted pl-1 pr-2 text-muted-foreground">
+                      {selectedTemplate ? (
+                        <img src={selectedTemplate.previewSrc} alt="" className="h-[17px] w-[30px] rounded-[3px] object-cover" />
+                      ) : null}
+                      <span className={cn("truncate", !selectedTemplate && "pl-1")}>
+                        {selectedTemplate ? selectedTemplate.name : trText("还没选风格", "No style picked")}
+                      </span>
+                    </span>
+                    {draftText.trim() || files.length > 0 ? (
+                      <span className="inline-flex h-6 items-center gap-1 rounded-md bg-muted px-2 text-muted-foreground">
+                        {trText(`读作${KIND_LABEL[creationKind][0]}`, `Read as ${KIND_LABEL[creationKind][1]}`)}
+                        {otherKind ? (
+                          <>
+                            <span aria-hidden>·</span>
+                            <button
+                              type="button"
+                              onClick={() => setKindOverride({ key: draftKey, kind: otherKind })}
+                              className="text-foreground/80 underline decoration-border underline-offset-2 hover:text-foreground"
+                            >
+                              {trText(KIND_SWITCH[otherKind][0], KIND_SWITCH[otherKind][1])}
+                            </button>
+                          </>
+                        ) : null}
+                      </span>
+                    ) : null}
+                  </div>
+                )
                 : attachments.length > 0
                 ? (
                   <div className="space-y-2">

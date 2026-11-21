@@ -10,6 +10,7 @@ import { ScrollArea } from "@/shared/ui/scroll-area";
 import { listedWorks, type WorkMeta } from "@/shared/works/works-index";
 import type { WorksState } from "@/shared/works/works-store";
 import { WORKSPACES, type WorkspaceId } from "@/app/workspaces";
+import { BlankPage } from "@/shared/ui/ornaments";
 import { useWorksT } from "./strings";
 import { useWorksControl } from "./works-provider";
 import { PptTemplateLibrary } from "@/workspaces/ppt/canvas/views/StylePicker";
@@ -161,7 +162,11 @@ export function WorksButton({ renderTrigger }: { renderTrigger?: (open: () => vo
             ) : !all ? (
               <p className="py-12 text-center text-sm text-muted-foreground">{t("works.loading")}</p>
             ) : rows.length === 0 ? (
-              <p className="mx-auto max-w-sm py-16 text-center text-[14px] leading-relaxed text-muted-foreground">{t("works.empty")}</p>
+              <div className="mx-auto flex max-w-sm flex-col items-center py-16 text-center">
+                <BlankPage className="h-14 w-[66px] text-brand opacity-70" />
+                <p className="aside-voice mt-5 text-[18px] leading-snug text-foreground/85">{t("works.emptyTitle")}</p>
+                <p className="mt-2 text-[13px] leading-relaxed text-muted-foreground">{t("works.empty")}</p>
+              </div>
             ) : (
               <ul className="grid grid-cols-2 gap-2.5 pb-2 sm:grid-cols-4 lg:grid-cols-6">
                 {rows.map(({ workspace, work, isOpen }) => {

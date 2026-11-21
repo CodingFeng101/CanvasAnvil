@@ -113,7 +113,7 @@ export function SearchWorksDialog({ open, onOpenChange }: { open: boolean; onOpe
             <div className="px-2.5 pb-1.5 pt-1 text-[12px] text-muted-foreground">{lang === "zh" ? "最近" : "Recent"}</div>
           )}
           {matches.length === 0 ? (
-            <p className="px-3 py-10 text-center font-voice text-[14px] italic text-muted-foreground">
+            <p className="aside-voice px-3 py-10 text-center text-[14px] text-muted-foreground">
               {query.trim() ? (lang === "zh" ? "没有找到名字相符的作品。" : "No work by that name.") : t(lang, "sidebar.noRecent")}
             </p>
           ) : (

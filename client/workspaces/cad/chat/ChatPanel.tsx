@@ -915,7 +915,7 @@ export function ChatPanel(props: ChatPanelProps) {
           }
         />
       </div>
-      {!messages.length && <ChatLandingExtras icon={Home} images={["/examples/portal/cad-plan-sm.webp", "/examples/portal/cad-1-sm.webp", "/examples/portal/cad-3d-sm.webp"]} examples={[t(language, "empty.cad.ex1"), t(language, "empty.cad.ex2"), t(language, "empty.cad.ex3")]} onPickExample={(text) => void run(text)} />}
+      {!messages.length && <ChatLandingExtras icon={Home} images={["/examples/portal/cad-plan-sm.webp", "/examples/portal/cad-ex2-sm.webp", "/examples/portal/cad-ex3-sm.webp"]} examples={[t(language, "empty.cad.ex1"), t(language, "empty.cad.ex2"), t(language, "empty.cad.ex3")]} onPickExample={(text) => void run(text)} />}
       <DesignHistoryDialog
         open={showHistory}
         onOpenChange={setShowHistory}

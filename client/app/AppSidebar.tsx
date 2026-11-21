@@ -29,6 +29,7 @@ import { listedWorks, type WorkMeta } from "@/shared/works/works-index";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/shared/ui/tooltip";
 import { Button } from "@/shared/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/shared/ui/dialog";
+import { OPEN_SETTINGS_EVENT } from "@/shared/settings-bus";
 
 /*
  * The app's left sidebar, after claude.ai: brand and a collapse toggle, a
@@ -595,7 +596,7 @@ function SidebarBody({
               recents.pinned.length === 0 && (
                 <>
                   <div className="px-2 pb-1 pt-5 text-[12px] text-muted-foreground">{t(uiLang, "sidebar.recent")}</div>
-                  <p className="px-2 py-1 font-voice text-[13.5px] italic leading-relaxed text-muted-foreground/80">{t(uiLang, "sidebar.noRecent")}</p>
+                  <p className="aside-voice px-2 py-1 text-[13.5px] leading-relaxed text-muted-foreground/80">{t(uiLang, "sidebar.noRecent")}</p>
                 </>
               )
             )}
@@ -641,6 +642,16 @@ export function AppSidebar({ active, onSelect, onHome }: { active: WorkspaceId; 
 
   useEffect(() => {
     if (!phone) setDrawer(false);
+  }, [phone]);
+
+  // On a phone the Settings dialog lives in the drawer, so a request to open
+  // it ("未配置模型" under the input) opens the drawer; the dialog, once
+  // mounted, takes the waiting request.
+  useEffect(() => {
+    if (!phone) return;
+    const onOpen = () => setDrawer(true);
+    window.addEventListener(OPEN_SETTINGS_EVENT, onOpen);
+    return () => window.removeEventListener(OPEN_SETTINGS_EVENT, onOpen);
   }, [phone]);
 
   if (phone) {

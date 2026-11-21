@@ -1,0 +1,242 @@
+/*
+ * The docs' reading type: serif headings and an unhurried measure, after the
+ * editorial feel of Claude's pages. Body copy stays in the UI sans so long
+ * Chinese passages read evenly; the serif carries titles, the opening line
+ * and the quiet asides.
+ */
+
+.doc-prose {
+  font-size: 16px;
+  line-height: 1.85;
+  color: hsl(var(--foreground) / 0.88);
+}
+
+.doc-prose > * + * {
+  margin-top: 1.1em;
+}
+
+.doc-prose h1 {
+  font-family: theme("fontFamily.display");
+  font-weight: 500;
+  font-size: clamp(32px, 4.2vw, 42px);
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+  color: hsl(var(--foreground));
+  margin: 0;
+}
+
+/* Between the title and the opening line, a small flourish in the brand's clay. */
+.doc-prose .doc-flourish {
+  display: block;
+  margin-top: 0.9em;
+  color: color-mix(in srgb, #c96442 55%, transparent);
+}
+
+/* The first paragraph is the page's opening line: larger, serif, a little quieter. */
+.doc-prose .doc-flourish + p {
+  margin-top: 0.9em;
+  font-family: theme("fontFamily.display");
+  font-size: 19px;
+  line-height: 1.7;
+  color: hsl(var(--muted-foreground));
+}
+
+.doc-prose h2 {
+  font-family: theme("fontFamily.display");
+  font-weight: 500;
+  font-size: 25px;
+  line-height: 1.3;
+  letter-spacing: -0.01em;
+  color: hsl(var(--foreground));
+  margin-top: 2.4em;
+}
+
+.doc-prose h3 {
+  font-family: theme("fontFamily.display");
+  font-weight: 500;
+  font-size: 19px;
+  line-height: 1.4;
+  color: hsl(var(--foreground));
+  margin-top: 1.9em;
+}
+
+.doc-prose h2 + *,
+.doc-prose h3 + * {
+  margin-top: 0.6em;
+}
+
+.doc-prose a {
+  color: hsl(var(--foreground));
+  text-decoration: underline;
+  text-decoration-color: hsl(var(--foreground) / 0.3);
+  text-underline-offset: 3px;
+  transition: text-decoration-color 150ms;
+}
+
+.doc-prose a:hover {
+  text-decoration-color: hsl(var(--foreground));
+}
+
+/* The # beside a heading: only there when the heading is hovered. */
+.doc-prose a.doc-anchor {
+  margin-left: 0.4em;
+  color: transparent;
+  text-decoration: none;
+}
+
+.doc-prose h2:hover a.doc-anchor,
+.doc-prose h3:hover a.doc-anchor {
+  color: hsl(var(--muted-foreground) / 0.6);
+}
+
+.doc-prose strong {
+  font-weight: 600;
+  color: hsl(var(--foreground));
+}
+
+.doc-prose ul,
+.doc-prose ol {
+  padding-left: 1.4em;
+}
+
+.doc-prose ul {
+  list-style: disc;
+}
+
+.doc-prose ol {
+  list-style: decimal;
+}
+
+.doc-prose li + li {
+  margin-top: 0.35em;
+}
+
+.doc-prose li::marker {
+  color: hsl(var(--muted-foreground) / 0.7);
+}
+
+.doc-prose hr {
+  border: 0;
+  height: 1px;
+  background: hsl(var(--border));
+  margin: 2.6em 0;
+}
+
+.doc-prose :not(pre) > code {
+  font-family: theme("fontFamily.mono");
+  font-size: 0.86em;
+  padding: 0.12em 0.4em;
+  border-radius: 6px;
+  background: hsl(var(--foreground) / 0.06);
+  color: hsl(var(--foreground));
+  word-break: break-word;
+}
+
+.doc-code pre {
+  font-family: theme("fontFamily.mono");
+  font-size: 13.5px;
+  line-height: 1.65;
+  padding: 14px 16px;
+  border-radius: 12px;
+  border: 1px solid hsl(var(--border) / 0.8);
+  background: hsl(var(--foreground) / 0.03);
+  overflow-x: auto;
+  color: hsl(var(--foreground));
+}
+
+/* A plain quote reads as an aside, in the serif. */
+.doc-prose blockquote {
+  border-left: 2px solid hsl(var(--border));
+  padding: 0.1em 0 0.1em 1.1em;
+  font-family: theme("fontFamily.display");
+  color: hsl(var(--muted-foreground));
+}
+
+/* Italic only where the text is Latin; Chinese would just be slanted. */
+.doc-prose:lang(en) blockquote:not(.doc-callout) {
+  font-style: italic;
+}
+
+.doc-prose blockquote.doc-callout {
+  font-family: inherit;
+  font-style: normal;
+  font-size: 15px;
+  line-height: 1.75;
+  border: 1px solid var(--callout-edge);
+  background: var(--callout-bg);
+  border-radius: 14px;
+  padding: 14px 18px;
+  color: hsl(var(--foreground) / 0.85);
+}
+
+.doc-prose blockquote.doc-callout > * + * {
+  margin-top: 0.6em;
+}
+
+.doc-callout-note {
+  --callout-edge: hsl(var(--border));
+  --callout-bg: hsl(var(--foreground) / 0.025);
+}
+
+.doc-callout-tip {
+  --callout-edge: color-mix(in srgb, var(--viz-ppt) 35%, transparent);
+  --callout-bg: color-mix(in srgb, var(--viz-ppt) 6%, transparent);
+}
+
+/* "Why it is done this way": the docs' recurring voice, in the brand's clay. */
+.doc-callout-why {
+  --callout-edge: color-mix(in srgb, #c96442 38%, transparent);
+  --callout-bg: color-mix(in srgb, #c96442 6%, transparent);
+}
+
+/* The label sits on its own line above the callout's text. */
+.doc-callout-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 4px;
+  font-family: theme("fontFamily.display");
+  font-size: 14px;
+  font-weight: 500;
+  color: hsl(var(--foreground));
+  vertical-align: baseline;
+}
+
+.doc-callout-why .doc-callout-label {
+  color: #b4522f;
+}
+
+.dark .doc-callout-why .doc-callout-label {
+  color: #e08a68;
+}
+
+.doc-table {
+  overflow-x: auto;
+  border: 1px solid hsl(var(--border) / 0.8);
+  border-radius: 12px;
+}
+
+.doc-table table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.doc-table th {
+  text-align: left;
+  font-weight: 500;
+  color: hsl(var(--foreground));
+  background: hsl(var(--foreground) / 0.03);
+}
+
+.doc-table th,
+.doc-table td {
+  padding: 9px 14px;
+  border-bottom: 1px solid hsl(var(--border) / 0.7);
+  vertical-align: top;
+}
+
+.doc-table tr:last-child td {
+  border-bottom: 0;
+}

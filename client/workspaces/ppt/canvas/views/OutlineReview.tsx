@@ -6,6 +6,7 @@ import type { SlideData } from "@/workspaces/ppt/canvas/types";
 import type { useSlideMaterials } from "@/workspaces/ppt/canvas/hooks/use-slide-materials";
 import type { useTemplateLibrary } from "@/workspaces/ppt/canvas/hooks/use-template-library";
 import { StyleChip, StylePickerDialog } from "./StylePicker";
+import { ConfirmDialog } from "@/shared/ui/confirm-dialog";
 
 interface OutlineReviewProps {
   slides: SlideData[];
@@ -40,8 +41,18 @@ export function OutlineReview({
   templateLibrary,
 }: OutlineReviewProps) {
   const [pickingStyle, setPickingStyle] = useState(false);
+  const [deleting, setDeleting] = useState<{ id: string; index: number } | null>(null);
   return (
     <div className="w-full h-full bg-sunken flex flex-col overflow-hidden">
+        <ConfirmDialog
+          open={!!deleting}
+          onOpenChange={(open) => !open && setDeleting(null)}
+          title={tr(`删除第 ${(deleting?.index ?? 0) + 1} 页大纲？`, `Delete outline slide ${(deleting?.index ?? 0) + 1}?`)}
+          description={tr("这一页的标题和要点会被删除。", "This slide's title and points will be removed.")}
+          confirmLabel={tr("删除", "Delete")}
+          cancelLabel={tr("取消", "Cancel")}
+          onConfirm={() => deleting && onDeleteSlide(deleting.id)}
+        />
         <div className="flex-1 overflow-auto p-6">
           <div className="w-full min-h-full bg-card rounded-2xl shadow-soft flex flex-col overflow-hidden">
             <div className="p-6 border-b border-border flex justify-between items-center">
@@ -83,7 +94,7 @@ export function OutlineReview({
                                 <Button
                                   variant="outline"
                                   size="sm"
-                                  onClick={() => onDeleteSlide(slide.id)}
+                                  onClick={() => setDeleting({ id: slide.id, index: i })}
                                   title={tr("删除当前大纲", "Delete current outline")}
                                 >
                                   <Trash2 className="w-4 h-4 mr-1" />

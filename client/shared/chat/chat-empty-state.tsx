@@ -87,8 +87,8 @@ export function ChatLandingExtras({
             className="group overflow-hidden rounded-xl border border-border/80 bg-card/60 text-left transition-[background-color,border-color,box-shadow,transform] duration-fast ease-out-soft hover:-translate-y-0.5 hover:border-foreground/20 hover:bg-card hover:shadow-soft focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/30"
           >
             {images?.[index] && (
-              <span className="block aspect-[16/10] overflow-hidden border-b border-border/60 bg-white">
-                <img src={images[index]} alt="" loading="lazy" className="h-full w-full object-cover object-top transition-transform duration-slow ease-out-soft group-hover:scale-[1.04]" />
+              <span className="block aspect-[16/10] overflow-hidden border-b border-border/60 bg-white p-1">
+                <img src={images[index]} alt="" loading="lazy" className="h-full w-full object-contain transition-transform duration-slow ease-out-soft group-hover:scale-[1.03]" />
               </span>
             )}
             {/* Padding on the outer span: inside the clamped one it would show a sliver of the third line. */}

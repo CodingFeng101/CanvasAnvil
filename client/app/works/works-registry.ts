@@ -133,5 +133,34 @@ export async function exportAllWorks() {
     for (const key of (await store.listKeys?.("")) ?? []) data[key] = await store.read(key);
     stores[id] = data;
   }
-  return { app: "CanvasAnvil", format: 1, exportedAt: new Date().toISOString(), stores };
+  // The open work's small state lives in localStorage; without it a restored work would lose its chat.
+  const local = Object.fromEntries(Object.keys(raw).map((id) => [id, worksStoreFor(id as WorkspaceId).localSnapshot()]));
+  return { app: "CanvasAnvil", format: 1, exportedAt: new Date().toISOString(), stores, local };
+}
+
+export type WorksBackup = Awaited<ReturnType<typeof exportAllWorks>>;
+
+/** Reads a file made by exportAllWorks; throws a readable error for anything else. */
+export function parseWorksBackup(text: string): WorksBackup {
+  let data: unknown;
+  try {
+    data = JSON.parse(text);
+  } catch {
+    throw new Error("not-json");
+  }
+  const d = data as Partial<WorksBackup> | null;
+  if (!d || d.app !== "CanvasAnvil" || d.format !== 1 || !d.stores || typeof d.stores !== "object") throw new Error("not-backup");
+  return d as WorksBackup;
+}
+
+/** Replaces every canvas's works with a backup's. The page must reload afterwards. */
+export async function importAllWorks(backup: WorksBackup): Promise<number> {
+  let canvases = 0;
+  for (const id of ["diagram", "cad", "ppt", "canvas"] as WorkspaceId[]) {
+    const entries = backup.stores[id];
+    if (!entries || typeof entries !== "object") continue;
+    await worksStoreFor(id).replaceAll(entries, backup.local?.[id]);
+    canvases += 1;
+  }
+  return canvases;
 }

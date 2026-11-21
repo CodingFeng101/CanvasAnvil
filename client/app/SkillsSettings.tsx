@@ -35,6 +35,13 @@ export const gitCommands = (name: SkillName, target: SkillTarget) => [
 
 export const CODEX_PLUGIN_COMMANDS = [`codex plugin marketplace add ${SKILL_REPO} --ref main`, "codex plugin add canvasanvil-canvas@canvasanvil"];
 
+/** The same plugin for Claude Code (repo root .claude-plugin/marketplace.json); run in a terminal, or as /plugin … inside Claude Code. */
+export const CLAUDE_PLUGIN_COMMANDS = [`claude plugin marketplace add ${SKILL_REPO}`, "claude plugin install canvasanvil-canvas@canvasanvil"];
+
+export const PLUGIN_COMMANDS: Record<SkillTarget, string[]> = { claude: CLAUDE_PLUGIN_COMMANDS, codex: CODEX_PLUGIN_COMMANDS };
+
+export type SkillVia = "auto" | "npx" | "git" | "zip";
+
 export type SkillsInfo = {
   local: boolean;
   skills: { name: SkillName; files: number; bytes: number; installed: Partial<Record<SkillTarget, boolean>> }[];

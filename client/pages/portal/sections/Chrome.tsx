@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import type { UiLanguage } from "@/shared/i18n";
 import { CANVAS, CANVAS_ORDER, FOOTER, NAV, REPO_URL, t } from "../content";
+import { docsHref } from "@/pages/docs/route";
 import { BrandMark, GithubIcon } from "../components";
 import type { PortalWorkspace } from "../data";
 
@@ -11,13 +12,11 @@ export function PortalNav({
   onHome,
   onSection,
   onTutorials,
-  onToggleLang,
 }: {
   lang: UiLanguage;
   onHome: () => void;
   onSection: (id: string) => void;
   onTutorials: () => void;
-  onToggleLang: () => void;
 }) {
   const [scrolled, setScrolled] = useState(false);
   useEffect(() => {
@@ -52,9 +51,6 @@ export function PortalNav({
           <button type="button" className="p-navtool p-hide-m" onClick={onTutorials}>
             {t(NAV.tutorials, lang)}
           </button>
-          <button type="button" className="p-navtool" onClick={onToggleLang} lang={lang === "zh" ? "en" : "zh"}>
-            {t(NAV.langSwitch, lang)}
-          </button>
           <a className="p-navtool p-hide-m" href={REPO_URL} target="_blank" rel="noreferrer" aria-label="GitHub">
             <GithubIcon />
           </a>
@@ -71,12 +67,10 @@ export function PortalFooter({
   lang,
   onDetail,
   onTutorials,
-  onToggleLang,
 }: {
   lang: UiLanguage;
   onDetail: (k: PortalWorkspace) => void;
   onTutorials: () => void;
-  onToggleLang: () => void;
 }) {
   return (
     <footer className="p-footer">
@@ -110,12 +104,12 @@ export function PortalFooter({
                 </button>
               </li>
               <li>
-                <a href={`${REPO_URL}/commits/main`} target="_blank" rel="noreferrer">
+                <a href={docsHref("changelog")}>
                   {t(FOOTER.changelog, lang)}
                 </a>
               </li>
               <li>
-                <a href={`${REPO_URL}#readme`} target="_blank" rel="noreferrer">
+                <a href={docsHref()}>
                   {t(FOOTER.docs, lang)}
                 </a>
               </li>
@@ -144,9 +138,6 @@ export function PortalFooter({
         </div>
         <div className="p-footer-base">
           <span>© 2026 CanvasAnvil</span>
-          <button type="button" onClick={onToggleLang}>
-            中文 · English
-          </button>
         </div>
       </div>
     </footer>

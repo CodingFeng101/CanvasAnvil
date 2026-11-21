@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { setUiLanguage, useUiLanguage } from "@/shared/i18n";
+import { useUiLanguage } from "@/shared/i18n";
 import "./portal.css";
 import type { PortalWorkspace } from "./data";
 import { scrollToId } from "./motion";
@@ -31,7 +31,6 @@ export function PortalPage({ onEnterWorkspace, onOpenTutorials }: PortalPageProp
   const [view, setView] = useState<PortalView>("home");
   const pendingScroll = useRef<string | null>(null);
 
-  const toggleLang = useCallback(() => setUiLanguage(lang === "zh" ? "en" : "zh"), [lang]);
 
   const openDetail = useCallback((k: PortalWorkspace) => {
     setView(k);
@@ -75,7 +74,7 @@ export function PortalPage({ onEnterWorkspace, onOpenTutorials }: PortalPageProp
 
   return (
     <div className="portal" data-lang={lang} lang={lang === "zh" ? "zh-CN" : "en"}>
-      <PortalNav lang={lang} onHome={goHome} onSection={goSection} onTutorials={onOpenTutorials} onToggleLang={toggleLang} />
+      <PortalNav lang={lang} onHome={goHome} onSection={goSection} onTutorials={onOpenTutorials} />
 
       {view === "home" ? (
         <main>
@@ -94,7 +93,7 @@ export function PortalPage({ onEnterWorkspace, onOpenTutorials }: PortalPageProp
         </main>
       )}
 
-      <PortalFooter lang={lang} onDetail={openDetail} onTutorials={onOpenTutorials} onToggleLang={toggleLang} />
+      <PortalFooter lang={lang} onDetail={openDetail} onTutorials={onOpenTutorials} />
     </div>
   );
 }

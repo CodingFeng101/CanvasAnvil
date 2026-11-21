@@ -237,6 +237,37 @@ npm run build
 
 ## 🗓️ Recent updates
 
+### 2026-11-20
+
+**✨ New**
+
+- **A new home page and a detail page for each canvas**: a long, quiet page in a warm, literary style, with real screenshots of each canvas and the prompts that made them. "Start creating" carries a prompt typed on the home page into the canvas.
+- **Workspaces laid out like Claude**: a sidebar with New work, Search (`Ctrl K`), My works, the four canvases and recent works (pin, rename, delete). A new work opens on a greeting with three example cards, each a request this canvas really ran, shown with what it made; click one to send it.
+- **Saved automatically**: every work is kept as you go, with no Save button. "New work" starts a fresh one and the old one stays in My works, so the clear-chat button and its setting are gone.
+- **Built-in docs** (`#/docs`): 22 pages in Chinese and English covering getting started, each canvas, My works, Settings, skills, development, the FAQ and the changelog, plus a "How it works" group that explains the algorithms and why each was chosen (diagram layout correction, the generate-check-revise loop, the interior layout engine, the PPT pipeline, canvas edits, how works are stored). Search, an outline of the page, and copy buttons on code blocks.
+- **More in Settings**:
+  - **Usage stats**: a year heatmap; daily, monthly, hourly and weekday charts; generation time, models, images, works and tokens. Token counts are the provider's real usage, shown per turn and counted per canvas.
+  - **Skills & plugins**: one-click install on localhost, `npx` and `git` commands, and zip downloads.
+  - **Also new**: more completion chimes, storage used per canvas, and Memory (the global rules), Videos, Docs and About pages.
+- **Claude Code plugin**: `.claude-plugin` manifests alongside the Codex ones, so the canvas skill installs in Claude Code too.
+
+**⚡ Improvements**
+
+- The interface language follows the browser on the first visit; the only switch is in Settings.
+- Empty states, the sidebar and the About page read in a calmer voice, with small hand-drawn ornaments where they fit. Chinese is never set in slanted fake italics.
+- Deep thinking shows file reading, reference images and the sketch as steps; the Interior Design 2D plan follows dark mode; the PPT canvas gets a slide rail and a slideshow.
+
+**🐛 Fixes**
+
+- PPT: the start screen shows again how it reads your input ("a topic" / "an outline" / "a file to restyle") and the chosen style, and the reading can be switched with one click.
+- Clicking "No model set" under the input now opens Settings → Models on narrow windows too.
+- "Start creating" on the home page no longer overshoots to the footer while images below are still loading.
+- Docs headings with the same name (the changelog's "New" under each date) get their own anchors.
+
+**📌 Notes**
+
+- Removed: the old tutorials page (videos now live in Settings → Videos), the Save button and save dialogs, the clear-chat button and "Confirm before clearing".
+
 ### 2026-11-18
 
 **✨ New**
@@ -275,48 +306,6 @@ npm run build
 - The Interior Design canvas fills its area like the other canvases, with no margin or frame around it.
 - The duplicate export buttons above the designer are gone; the quote, drawings, DXF, colour plan and renders come from the designer's own Quote and Export drawings at the top right.
 - The README has its promo video back, and the links in its top navigation jump to their sections again.
-
-### 2026-11-08
-
-**✨ New**
-
-- **The Interior Design canvas is rebuilt around an editable house designer**
-  - The canvas now holds a full interactive house designer: 2D plan, 3D bird's-eye view and walk-through, furniture, MEP, ceilings, floor finishes, demolition layers, quote and drawing set, in the site's own theme. Every floorplan the AI makes opens there, and you can drag, edit and keep designing by hand.
-  - **Plan first**: describe what you need and the AI writes a design plan (rooms, areas, orientation, zoning, entry). It streams readably in the chat as a chain of steps, and the floorplan is drawn only after you confirm the plan.
-  - **Decisions as clickable options**: the plan lists everything there is to decide, grouped as layout / finishes / equipment / appliances / smart home / wiring: kitchen type and counter shape, floors per room, wall colours, skirting, ceilings, doors and windows, air conditioning, fresh air, heating, hot water, smart toilet, smart lighting and curtains, socket count, network points, where the panel and network box go, bedside USB, floor sockets. Each comes with a recommendation already picked; click to change any of them and confirm at the bottom of the plan, with nothing to type again.
-  - **The model describes, the program draws**: the AI only writes the layout (a grid, rooms, doors, windows, furniture by intent, finishes) and a program computes walls, openings and furniture positions. Furniture that does not fit is shrunk or swapped for a smaller model, and every adjustment is listed.
-  - **Finished for you**: furniture pushed slightly into walls or curtains is moved clear, MEP points are laid out in one go, then your wiring choices are applied (more sockets, network points, boxes by the entry door, floor sockets under the dining or coffee table, bedside USB).
-  - **Room-by-room MEP audit**: lights, switches, sockets, which switch controls which light, mounting heights, switches on the handle side of doors, double control in bedrooms, the hood socket and gas alarm in the kitchen, splash-proof sockets in bathrooms, both boxes present. Problems are listed in the chat and in a collapsible list under it.
-  - **Start from your own floorplan**: upload a photo, screenshot, PDF or DXF; walls and openings are recognized, the original is kept as an underlay, and the AI names the rooms and furnishes them.
-  - **Change it by chat**: "make the master bedroom bigger", "add a window to the balcony". The AI reads the recent conversation and says what it changed, or why it changed nothing.
-  - **Version history**: the history button under the chat shows every floorplan version as a thumbnail (AI, manual edit, recognized); restore any of them, and the restore can be undone the same way.
-  - **Delivery from the designer itself**: quote, A3 drawing-set PDF, DXF (layout, MEP, demolition), colour plan and 3D renders.
-
-- **`cad-skill` follows the same flow and runs on its own**
-  - Copy the folder into any project. From an existing floor plan it builds the designer page; from a brief it settles the plan and decisions with you first (with the host's option picker when it has one), then lays out and draws the floorplan.
-  - It then finishes the design without help: furniture nudged clear, MEP laid out, wiring choices applied, checks and the MEP audit run, and the quote CSV, drawing-set PDF, DXF, colour plan and 3D render exported.
-  - It hands over `<name>-装修设计器.html`: the whole designer as one offline file with your design inside, opened in your browser. Double-click it to open again; edits made there are kept in that browser.
-  - Before delivery it runs a full-feature acceptance pass over the page.
-  - It uses the Chrome or Edge already on your machine, so no browser is downloaded: run `npm run setup` once in the skill folder. No API key or image model is needed.
-
-**⚡ Improved**
-
-- The floorplan is generated as a stream; output the model cut off midway is continued instead of failing, slipped JSON brackets are repaired, a failed step retries from where it stopped, and failures are shown in that step.
-- Streamed AI calls log the time to the first token and the total time.
-
-**🐛 Fixed**
-
-- Switching away from the designer no longer crashes the workspace.
-- A design survives a runtime error in the designer.
-- Renaming a room replaces its label instead of stacking a second one on top.
-
-**📌 Notes**
-
-- Removed: the analysis boards, the AI material list, AI-drawn renders and the old SVG drawing flow. Every drawing now comes from the designer.
-- Floorplan upload runs the designer's recognition scripts on the server (`server/recognizer/recognize.py`, using `skill/cad-skill/designer/scripts`); it needs Python with `pip install -r server/recognizer/requirements.txt` (or `PYTHON` pointing at one). Without it the upload button stays hidden. The Docker image includes it.
-- The CAD "Delivery check" button runs the designer's acceptance (`skill/cad-skill/designer/scripts/qa.mjs --lite --quick`, then `qa_files.py`) on the server; it needs Chrome / Edge / Chromium there (or `CHROME_PATH`) and Python with the recognizer's requirements, and stays hidden without a browser. The Docker image includes Chromium.
-- The MEP audit reports problems but does not move points; adjust them under MEP in the designer.
-- In `cad-skill`, starting from an existing floor plan needs Python with `numpy pillow opencv-python pymupdf ezdxf pypdf`; designing from a brief needs only Node 18+.
 
 ## ⚖️ License
 

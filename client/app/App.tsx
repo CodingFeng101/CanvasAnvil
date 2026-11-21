@@ -1,4 +1,4 @@
-import { Suspense, useEffect, useRef, useState } from "react";
+import { Suspense, lazy, useEffect, useState } from "react";
 import { getPreferences, usePreferences } from "@/shared/preferences";
 import { MotionConfig, motion } from "motion/react";
 import { Toaster } from "sonner";
@@ -7,18 +7,23 @@ import { ErrorBoundary } from "@/app/ErrorBoundary";
 import { DEFAULT_WORKSPACE, WORKSPACES, isWorkspaceId, type WorkspaceId } from "@/app/workspaces";
 import { WorkHost, WorksProvider } from "@/app/works/works-provider";
 import { LandingPage } from "@/pages/LandingPage";
-import { TutorialsPage } from "@/pages/tutorials/TutorialsPage";
+import { MiniPlayer } from "@/app/MiniPlayer";
+import { readDocsHash } from "@/pages/docs/route";
+import { openSettings } from "@/shared/settings-bus";
 import { cn } from "@/shared/lib/utils";
 import { TWEEN } from "@/shared/motion";
 import { applyTheme } from "@/shared/theme";
 import { setStatsCanvas, startUsageStats } from "@/shared/usage-stats";
+
+// Its own chunk: markdown rendering and every page's text load only when the docs open.
+const DocsPage = lazy(() => import("@/pages/docs/DocsPage"));
 
 // Settings → Usage counts tokens and images from here on.
 startUsageStats();
 
 const APP_VIEW_STORAGE_KEY = "CanvasAnvil-app-view-v1";
 const APP_WORKSPACE_STORAGE_KEY = "CanvasAnvil-active-workspace-v1";
-/** The tutorials page lives at a hash so it can be linked to and left with the back button. */
+/** Older links to the tutorials page; they now open Settings → Videos. */
 const TUTORIALS_HASH = "#tutorials";
 
 const isTutorialsHash = () => typeof window !== "undefined" && window.location.hash === TUTORIALS_HASH;
@@ -79,31 +84,26 @@ export default function App() {
     return localStorage.getItem(APP_VIEW_STORAGE_KEY) !== "workspace";
   });
   const [activeWorkspace, setActiveWorkspace] = useState<WorkspaceId>(readStoredWorkspace);
-  const [showTutorials, setShowTutorials] = useState(isTutorialsHash);
-  // Whether this session pushed the tutorials entry, so leaving can go back
-  // to it instead of stacking another entry on top.
-  const openedTutorialsRef = useRef(false);
+  // The docs sit over whichever view was open, at #/docs/<page>.
+  const [docsSlug, setDocsSlug] = useState(readDocsHash);
+  useEffect(() => {
+    const onHash = () => setDocsSlug(readDocsHash());
+    window.addEventListener("hashchange", onHash);
+    return () => window.removeEventListener("hashchange", onHash);
+  }, []);
+  // The videos live in Settings → Videos: the landing page's link (and an old
+  // #tutorials link) opens the workspace with that section showing.
+  const openTutorials = () => {
+    setShowLanding(false);
+    openSettings("tutorials");
+  };
 
   useEffect(() => {
-    const onHashChange = () => setShowTutorials(isTutorialsHash());
-    window.addEventListener("hashchange", onHashChange);
-    return () => window.removeEventListener("hashchange", onHashChange);
-  }, []);
-
-  const openTutorials = () => {
-    openedTutorialsRef.current = true;
-    window.location.hash = TUTORIALS_HASH;
-  };
-
-  const closeTutorials = () => {
-    if (openedTutorialsRef.current) {
-      openedTutorialsRef.current = false;
-      window.history.back();
-      return;
-    }
+    if (!isTutorialsHash()) return;
     clearHash();
-    setShowTutorials(false);
-  };
+    openTutorials();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // The inline script in index.html sets the class before first paint; this
   // keeps it correct across a hot reload that drops the class.
@@ -120,19 +120,13 @@ export default function App() {
     setStatsCanvas(activeWorkspace);
   }, [activeWorkspace]);
 
-  if (showTutorials) {
+  if (docsSlug !== null) {
     return (
       <MotionConfig reducedMotion={prefs.reduceMotion ? "always" : "user"}>
-        <TutorialsPage
-          onBack={closeTutorials}
-          onEnterWorkspace={(workspace) => {
-            openedTutorialsRef.current = false;
-            clearHash();
-            setShowTutorials(false);
-            setActiveWorkspace(workspace);
-            setShowLanding(false);
-          }}
-        />
+        <Suspense fallback={<div className="min-h-screen bg-background" />}>
+          <DocsPage slug={docsSlug} />
+        </Suspense>
+        <MiniPlayer />
       </MotionConfig>
     );
   }
@@ -161,6 +155,7 @@ export default function App() {
       <WorksProvider activeWorkspace={active.id} onActivateWorkspace={setActiveWorkspace}>
       <div className="paper-grain flex h-screen w-screen flex-col overflow-hidden bg-background font-sans md:flex-row">
         <Toaster position="top-center" richColors />
+        <MiniPlayer />
 
         <AppSidebar active={activeWorkspace} onSelect={setActiveWorkspace} onHome={() => setShowLanding(true)} />
 

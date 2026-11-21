@@ -377,3 +377,16 @@ html[data-reduce-motion] .anvil-mark.is-active .anvil-hammer,
 html[data-reduce-motion] .anvil-mark.is-active .anvil-sparks {
   animation: none;
 }
+
+/*
+ * A quiet aside in the serif: empty states, the line under a settings title,
+ * captions. Italic only for Latin text: Chinese has no italic, and a browser
+ * asked for one just slants the glyphs, which reads as a mistake, not a voice.
+ */
+.aside-voice {
+  font-family: "Source Serif 4 Variable", "Noto Serif SC", "Songti SC", Georgia, serif;
+  font-style: normal;
+}
+html:lang(en) .aside-voice {
+  font-style: italic;
+}

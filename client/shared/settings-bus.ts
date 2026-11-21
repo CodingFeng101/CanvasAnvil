@@ -6,7 +6,7 @@
 
 export const OPEN_SETTINGS_EVENT = "canvasanvil:open-settings";
 
-export type SettingsSection = "general" | "appearance" | "canvas" | "notifications" | "models" | "constraints" | "shortcuts" | "stats" | "skills" | "data" | "about";
+export type SettingsSection = "general" | "appearance" | "canvas" | "notifications" | "models" | "constraints" | "shortcuts" | "stats" | "skills" | "data" | "tutorials" | "docs" | "about";
 
 export interface OpenSettingsDetail {
   section?: SettingsSection;
@@ -14,6 +14,18 @@ export interface OpenSettingsDetail {
   focus?: string;
 }
 
+// A request made before the dialog is mounted (e.g. from the landing page,
+// just before the workspace shows) waits here until it mounts.
+let pending: OpenSettingsDetail | null = null;
+
 export function openSettings(section?: SettingsSection, focus?: string) {
-  window.dispatchEvent(new CustomEvent<OpenSettingsDetail>(OPEN_SETTINGS_EVENT, { detail: { section, focus } }));
+  pending = { section, focus };
+  window.dispatchEvent(new CustomEvent<OpenSettingsDetail>(OPEN_SETTINGS_EVENT, { detail: pending }));
+}
+
+/** The request no listener took yet, cleared once read. */
+export function takePendingSettings(): OpenSettingsDetail | null {
+  const request = pending;
+  pending = null;
+  return request;
 }

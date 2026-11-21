@@ -74,8 +74,8 @@ const messages = {
     en: "Tell me the rooms, the size, the style and the budget. I'll write a design plan first; once you agree, an editable floorplan, drawings and a quote follow.",
   },
   "empty.cad.ex1": { zh: "110㎡ 三室两厅，现代原木风：玄关、开放式厨房、客餐厅一体，主卧带衣帽间", en: "110㎡, three bedrooms, warm modern wood: an entry hall, open kitchen, living and dining in one, a walk-in closet off the main bedroom" },
-  "empty.cad.ex2": { zh: "约 200㎡ 大平层，四室两厅：主卧带衣帽间和独立卫生间，一间书房、一间多功能室，客餐厅连着景观阳台", en: "A 200㎡ flat, four bedrooms: main bedroom with walk-in closet and en-suite, a study, a multi-purpose room, living and dining opening onto a balcony" },
-  "empty.cad.ex3": { zh: "三室两厅约 100㎡，客餐厅一体，出完平面布置再生成一张 3D 鸟瞰", en: "About 100㎡, three bedrooms, living and dining in one; after the furnished plan, make a 3D bird's-eye view" },
+  "empty.cad.ex2": { zh: "75㎡ 两室一厅，小两口居家办公，书房放两张书桌", en: "75㎡, two bedrooms, a couple working from home, two desks in the study" },
+  "empty.cad.ex3": { zh: "130㎡ 四室两厅，三代同堂，带老人房和儿童房", en: "130㎡, four bedrooms for three generations, with a grandparents' room and a child's room" },
   "empty.ppt.title": {
     zh: "哪一页还想再改改？",
     en: "Which slide needs another pass?",
@@ -96,7 +96,8 @@ const messages = {
     en: "Write the picture in a sentence. Once it's on the board, circle it, jot a few words, and press the wand for a new version drawn from your marks.",
   },
   "empty.canvas.ex1": { zh: "一张温暖治愈的水彩插画：午后的阳光洒进窗边，木质书桌上放着一杯冒着热气的咖啡、一本摊开的书和一盆绿植，色调柔和明亮。", en: "A warm, soothing watercolour: afternoon sun through the window onto a wooden desk with a steaming coffee, an open book and a potted plant; soft, bright colours." },
-  "empty.canvas.ex2": { zh: "一张温暖治愈的水彩插画：午后的阳光洒进窗边，木质书桌上放着一杯冒着热气的咖啡、一本摊开的书，窗台上一盆向日葵，色调柔和明亮。", en: "A warm, soothing watercolour: afternoon sun through the window onto a wooden desk with a steaming coffee and an open book, sunflowers on the sill; soft, bright colours." },
+  "empty.canvas.ex2": { zh: "一只橘猫趴在窗台上晒太阳，日系插画", en: "A ginger cat sunning itself on a windowsill, Japanese illustration style" },
+  "empty.canvas.ex3": { zh: "雨后的江南小巷，青石板路，油画质感", en: "A Jiangnan lane after rain, flagstone paving, in oil paint" },
 
   "chat.stop": { zh: "暂停", en: "Pause" },
   "chat.send": { zh: "发送", en: "Send" },

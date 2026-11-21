@@ -5,8 +5,8 @@ import { cn } from "@/shared/lib/utils";
 import { dayKey, dayRecords, lastDays, streaks, usesByCanvas, usesByMonth, usesByWeekday, type UsageStats } from "@/shared/usage-stats";
 
 /*
- * Settings → Usage: a year heatmap of use, as on a GitHub profile, and bar and
- * line charts of how, when and where the app is used. Everything is counted in
+ * Settings → Usage: a year heatmap of use, as on a GitHub profile, lines for
+ * trends, columns for distributions and rings for shares. Everything is counted in
  * this browser.
  */
 
@@ -99,7 +99,16 @@ function Legend({ items }: { items: { color: string; label: string }[] }) {
   );
 }
 
-const Empty = ({ children }: { children: ReactNode }) => <p className="text-[13px] text-muted-foreground">{children}</p>;
+/** "No data yet", centred over a chart drawn empty (axes and all). */
+const EmptyNote = ({ children }: { children?: ReactNode }) =>
+  children ? (
+    <div className="pointer-events-none absolute inset-0 grid place-items-center">
+      <span className="aside-voice rounded-md bg-background/85 px-2 py-0.5 text-[13px] text-muted-foreground">{children}</span>
+    </div>
+  ) : null;
+
+/** A top value whose half is a whole number, so the middle gridline reads cleanly. */
+const niceMax = (values: number[]) => Math.max(2, Math.ceil(Math.max(0, ...values) / 2) * 2);
 
 /* ------------------------------------------------------------------ */
 /* Overview tiles                                                      */
@@ -250,16 +259,20 @@ function Columns({
   height = 120,
   labelEvery = 1,
   tip,
+  empty,
 }: {
   data: { label: string; segments: { value: number; color: string }[] }[];
   height?: number;
   /** Show every n-th axis label (the rest stay blank). */
   labelEvery?: number;
   tip: (index: number) => ReactNode;
+  /** Shown over the plot when every value is 0. */
+  empty?: string;
 }) {
   const { boxRef, show, hide, node } = useTip();
   const totals = data.map((d) => d.segments.reduce((a, s) => a + s.value, 0));
-  const max = Math.max(1, ...totals);
+  const max = niceMax(totals);
+  const blank = !totals.some((v) => v > 0);
   const [hover, setHover] = useState<number | null>(null);
   return (
     <div
@@ -273,6 +286,7 @@ function Columns({
       <div className="relative" style={{ height }}>
         {/* Recessive grid: the top value and the baseline. */}
         <div className="absolute inset-x-0 top-0 border-t border-dashed border-foreground/10" />
+        <div className="absolute inset-x-0 top-1/2 border-t border-dashed border-foreground/[0.06]" />
         <span className="absolute right-0 top-0 -translate-y-full pb-0.5 text-[10.5px] tabular-nums text-muted-foreground">{formatCount(max)}</span>
         <div className="absolute inset-x-0 bottom-0 border-t border-foreground/20" />
         <div className="absolute inset-0 flex items-end gap-[2px]">
@@ -299,6 +313,7 @@ function Columns({
             </div>
           ))}
         </div>
+        {blank && <EmptyNote>{empty}</EmptyNote>}
       </div>
       <div className="mt-1.5 flex gap-[2px] text-[10.5px] text-muted-foreground">
         {data.map((d, i) => (
@@ -312,67 +327,44 @@ function Columns({
   );
 }
 
-/** The last 30 days, a column per day split by canvas. */
-export function DailyColumns({ stats, lang }: { stats: UsageStats; lang: UiLanguage }) {
-  const zh = lang === "zh";
-  const days = lastDays(stats, 30);
-  if (!days.some((d) => sum(d.byCanvas) > 0)) return <Empty>{zh ? "最近 30 天还没有使用。" : "No use in the last 30 days."}</Empty>;
-  return (
-    <div className="space-y-2.5">
-      <Legend items={WORKSPACES.map(({ id }) => ({ color: CANVAS_COLOR[id], label: canvasName(id, lang) }))} />
-      <Columns
-        labelEvery={7}
-        data={days.map((d) => ({
-          label: `${d.date.getMonth() + 1}/${d.date.getDate()}`,
-          segments: WORKSPACES.map(({ id }) => ({ value: d.byCanvas[id] ?? 0, color: CANVAS_COLOR[id] })),
-        }))}
-        tip={(i) => {
-          const d = days[i];
-          const total = sum(d.byCanvas);
-          return (
-            <>
-              <div className="mb-0.5 font-medium">
-                {shortDate(d.date, zh)} · {zh ? `${total} 次` : `${total} uses`}
-              </div>
-              {WORKSPACES.filter(({ id }) => d.byCanvas[id]).map(({ id }) => (
-                <TipRow key={id} color={CANVAS_COLOR[id]} label={canvasName(id, lang)} value={String(d.byCanvas[id])} />
-              ))}
-            </>
-          );
-        }}
-      />
-    </div>
-  );
-}
-
 /** Uses by hour of the day. */
 export function HourColumns({ stats, lang }: { stats: UsageStats; lang: UiLanguage }) {
   const zh = lang === "zh";
-  if (!sum(stats.hours)) return <Empty>{zh ? "还没有使用记录。" : "No use yet."}</Empty>;
-  const peak = stats.hours.indexOf(Math.max(...stats.hours));
   return (
-    <div className="space-y-2">
-      <p className="text-[12.5px] text-muted-foreground">
-        {zh ? `最常在 ${peak}:00–${peak + 1}:00 使用。` : `Most often between ${peak}:00 and ${peak + 1}:00.`}
-      </p>
-      <Columns
-        labelEvery={3}
-        data={stats.hours.map((n, h) => ({ label: `${h}`, segments: [{ value: n, color: ONE }] }))}
-        tip={(h) => <TipRow label={`${h}:00–${h + 1}:00`} value={zh ? `${stats.hours[h]} 次` : `${stats.hours[h]}`} />}
-      />
-    </div>
+    <Columns
+      height={112}
+      labelEvery={6}
+      empty={zh ? "还是一张白纸" : "Still a blank page"}
+      data={stats.hours.map((n, h) => ({ label: `${h}:00`, segments: [{ value: n, color: ONE }] }))}
+      tip={(h) => <TipRow label={`${h}:00–${h + 1}:00`} value={zh ? `${stats.hours[h]} 次` : `${stats.hours[h]}`} />}
+    />
   );
 }
+
+/** The busiest hour ("15:00–16:00"), or null before any use. */
+export function peakHour(stats: UsageStats): string | null {
+  if (!sum(stats.hours)) return null;
+  const h = stats.hours.indexOf(Math.max(...stats.hours));
+  return `${h}:00–${h + 1}:00`;
+}
+
+/** The busiest weekday (0 = Monday), or null before any use. */
+export function peakWeekday(stats: UsageStats): number | null {
+  const counts = usesByWeekday(stats);
+  return sum(counts) ? counts.indexOf(Math.max(...counts)) : null;
+}
+
+export const WEEKDAY_NAMES = { zh: ["周一", "周二", "周三", "周四", "周五", "周六", "周日"], en: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"] };
 
 /** Uses by weekday, Monday first. */
 export function WeekdayColumns({ stats, lang }: { stats: UsageStats; lang: UiLanguage }) {
   const zh = lang === "zh";
   const counts = usesByWeekday(stats);
-  if (!sum(counts)) return <Empty>{zh ? "还没有使用记录。" : "No use yet."}</Empty>;
-  const names = zh ? ["周一", "周二", "周三", "周四", "周五", "周六", "周日"] : ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+  const names = WEEKDAY_NAMES[zh ? "zh" : "en"];
   return (
     <Columns
-      height={96}
+      height={112}
+      empty={zh ? "还是一张白纸" : "Still a blank page"}
       data={counts.map((n, i) => ({ label: names[i], segments: [{ value: n, color: ONE }] }))}
       tip={(i) => <TipRow label={names[i]} value={zh ? `${counts[i]} 次` : `${counts[i]}`} />}
     />
@@ -390,7 +382,24 @@ export function BarList({
   empty: string;
 }) {
   const shown = rows.filter((r) => r.value > 0).sort((a, b) => b.value - a.value);
-  if (!shown.length) return <Empty>{empty}</Empty>;
+  if (!shown.length) {
+    // Drawn empty: the rows that could fill in (or four blank ones, as many as a canvas list), with empty tracks.
+    const blank = rows.length ? rows.slice(0, 4) : [0, 1, 2, 3].map((i) => ({ key: String(i), label: "—" }));
+    return (
+      <div className="relative">
+        <ul className="space-y-2">
+          {blank.map((r) => (
+            <li key={r.key} className="grid grid-cols-[minmax(0,7.5rem)_1fr_auto] items-center gap-3 text-[13px]">
+              <span className="truncate text-muted-foreground">{r.label}</span>
+              <span className="h-2.5 rounded-r-[4px] bg-foreground/[0.06]" />
+              <span className="tabular-nums text-muted-foreground">—</span>
+            </li>
+          ))}
+        </ul>
+        <EmptyNote>{empty.replace(/[。.]$/, "")}</EmptyNote>
+      </div>
+    );
+  }
   const max = shown[0].value;
   return (
     <ul className="space-y-2">
@@ -422,26 +431,26 @@ export function CanvasBar({
   // Fixed canvas order, so a colour never moves with the ranking.
   const rows = WORKSPACES.map(({ id }) => ({ id, value: values[id] ?? 0 }));
   const total = rows.reduce((a, r) => a + r.value, 0);
-  if (!total) return <Empty>{empty}</Empty>;
   return (
     <div>
-      <div className="flex h-2.5 gap-[2px] overflow-hidden rounded-full">
+      <div className="flex h-2.5 gap-[2px] overflow-hidden rounded-full bg-foreground/[0.06]">
         {rows
           .filter((r) => r.value > 0)
           .map((r) => (
             <span key={r.id} style={{ width: `${(r.value / total) * 100}%`, background: CANVAS_COLOR[r.id] }} className="h-full" />
           ))}
       </div>
-      <ul className="mt-2.5 grid grid-cols-2 gap-x-6 gap-y-1.5">
+      <ul className="mt-2.5 grid grid-cols-[repeat(auto-fill,minmax(10.5rem,1fr))] gap-x-6 gap-y-1.5">
         {rows.map((r) => (
           <li key={r.id} className="flex items-center gap-2 text-[13px]">
             <span className="size-2.5 shrink-0 rounded-full" style={{ background: CANVAS_COLOR[r.id] }} />
             <span className="min-w-0 flex-1 truncate text-foreground/85">{canvasName(r.id, lang)}</span>
             <span className="tabular-nums text-muted-foreground">{format(r.value)}</span>
-            <span className="w-10 text-right tabular-nums text-foreground/85">{Math.round((r.value / total) * 100)}%</span>
+            <span className="w-10 text-right tabular-nums text-foreground/85">{total ? `${Math.round((r.value / total) * 100)}%` : "—"}</span>
           </li>
         ))}
       </ul>
+      {!total && <p className="mt-2 text-[12px] text-muted-foreground">{empty}</p>}
     </div>
   );
 }
@@ -471,12 +480,15 @@ function Lines({
   height = 140,
   labelEvery = 1,
   tip,
+  empty,
 }: {
   labels: string[];
   series: { name: string; color: string; values: number[]; area?: boolean }[];
   height?: number;
   labelEvery?: number;
   tip: (index: number) => ReactNode;
+  /** Shown over the plot when every value is 0. */
+  empty?: string;
 }) {
   const [wrapRef, width] = useWidth<HTMLDivElement>();
   const { boxRef, show, hide, node } = useTip();
@@ -486,7 +498,9 @@ function Lines({
   const top = 8;
   const bottom = 20;
   const n = labels.length;
-  const max = Math.max(1, ...series.flatMap((s) => s.values));
+  const all = series.flatMap((s) => s.values);
+  const max = niceMax(all);
+  const blank = !all.some((v) => v > 0);
   const plotW = Math.max(1, width - left - right);
   const plotH = height - top - bottom;
   const x = (i: number) => left + (n <= 1 ? plotW / 2 : (i / (n - 1)) * plotW);
@@ -534,6 +548,7 @@ function Lines({
                 <g key={s.name}>
                   {s.area && <polygon points={`${x(0)},${y(0)} ${points} ${x(n - 1)},${y(0)}`} fill={s.color} opacity={0.12} />}
                   <polyline points={points} fill="none" stroke={s.color} strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" />
+                  {n <= 12 && !blank && s.values.map((v, i) => <circle key={i} cx={x(i)} cy={y(v)} r={3} fill={s.color} stroke="hsl(var(--background))" strokeWidth={1.5} />)}
                 </g>
               );
             })}
@@ -547,56 +562,200 @@ function Lines({
             )}
           </svg>
         )}
+        {blank && <EmptyNote>{empty}</EmptyNote>}
       </div>
       {node}
     </div>
   );
 }
 
-/** Uses per month over the last year. */
-export function MonthLine({ stats, lang }: { stats: UsageStats; lang: UiLanguage }) {
+/* ------------------------------------------------------------------ */
+/* Trends: one chart, over the last week, month or year                */
+/* ------------------------------------------------------------------ */
+
+export type TrendRange = "week" | "month" | "year";
+
+type Bucket = { label: string; tipLabel: string; byCanvas: Record<string, number>; tokens: { input: number; output: number } };
+
+/** Days for a week or month, months for a year; each with its uses per canvas and reported tokens. */
+function trendBuckets(stats: UsageStats, range: TrendRange, zh: boolean): Bucket[] {
+  if (range === "year") {
+    return usesByMonth(stats).map((m) => {
+      const byCanvas: Record<string, number> = {};
+      for (const [k, d] of Object.entries(stats.days)) {
+        if (!k.startsWith(m.key)) continue;
+        for (const [id, n] of Object.entries(d)) byCanvas[id] = (byCanvas[id] ?? 0) + n;
+      }
+      const tokens = { input: 0, output: 0 };
+      for (const [k, x] of Object.entries(stats.tokenDays)) {
+        if (!k.startsWith(m.key)) continue;
+        tokens.input += x.input;
+        tokens.output += x.output;
+      }
+      return {
+        label: monthName(m.date, zh),
+        tipLabel: zh ? `${m.date.getFullYear()}年${m.date.getMonth() + 1}月` : m.date.toLocaleString("en", { month: "long", year: "numeric" }),
+        byCanvas,
+        tokens,
+      };
+    });
+  }
+  const weekdays = zh ? ["周日", "周一", "周二", "周三", "周四", "周五", "周六"] : ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+  return lastDays(stats, range === "week" ? 7 : 30).map((d) => ({
+    label: range === "week" ? weekdays[d.date.getDay()] : `${d.date.getMonth() + 1}/${d.date.getDate()}`,
+    tipLabel: shortDate(d.date, zh),
+    byCanvas: d.byCanvas,
+    tokens: stats.tokenDays[d.key] ?? { input: 0, output: 0 },
+  }));
+}
+
+const LABEL_EVERY: Record<TrendRange, number> = { week: 1, month: 7, year: 2 };
+
+/** Uses over time (all canvases together; the tooltip splits them). */
+export function UsageTrend({ stats, lang, range }: { stats: UsageStats; lang: UiLanguage; range: TrendRange }) {
   const zh = lang === "zh";
-  const months = usesByMonth(stats);
-  if (!months.some((m) => m.uses)) return <Empty>{zh ? "还没有使用记录。" : "No use yet."}</Empty>;
+  const buckets = trendBuckets(stats, range, zh);
   return (
     <Lines
-      labels={months.map((m) => monthName(m.date, zh))}
-      labelEvery={2}
-      series={[{ name: "uses", color: ONE, values: months.map((m) => m.uses), area: true }]}
-      tip={(i) => (
-        <TipRow
-          label={zh ? `${months[i].date.getFullYear()}年${months[i].date.getMonth() + 1}月` : months[i].date.toLocaleString("en", { month: "long", year: "numeric" })}
-          value={zh ? `${months[i].uses} 次` : `${months[i].uses}`}
-        />
-      )}
+      empty={zh ? "这段日子，画布都还空着" : "The canvases sat quiet in this stretch"}
+      labels={buckets.map((b) => b.label)}
+      labelEvery={LABEL_EVERY[range]}
+      series={[{ name: "uses", color: ONE, values: buckets.map((b) => sum(b.byCanvas)), area: true }]}
+      tip={(i) => {
+        const b = buckets[i];
+        const total = sum(b.byCanvas);
+        return (
+          <>
+            <div className="mb-0.5 font-medium">
+              {b.tipLabel} · {zh ? `${total} 次` : `${total} uses`}
+            </div>
+            {WORKSPACES.filter(({ id }) => b.byCanvas[id]).map(({ id }) => (
+              <TipRow key={id} color={CANVAS_COLOR[id]} label={canvasName(id, lang)} value={String(b.byCanvas[id])} />
+            ))}
+          </>
+        );
+      }}
     />
   );
 }
 
-/** Reported tokens per day over the last 30 days: sent and received. */
-export function TokenLine({ stats, lang }: { stats: UsageStats; lang: UiLanguage }) {
+/** Reported tokens over time: sent and received. */
+export function TokenTrend({ stats, lang, range }: { stats: UsageStats; lang: UiLanguage; range: TrendRange }) {
   const zh = lang === "zh";
-  const days = lastDays(stats, 30).map((d) => ({ ...d, tokens: stats.tokenDays[d.key] ?? { input: 0, output: 0 } }));
-  if (!days.some((d) => d.tokens.input + d.tokens.output)) return <Empty>{zh ? "最近 30 天没有接口返回的用量。" : "No reported usage in the last 30 days."}</Empty>;
+  const buckets = trendBuckets(stats, range, zh);
   const names = { input: zh ? "输入" : "Input", output: zh ? "输出" : "Output" };
   return (
     <div className="space-y-2.5">
       <Legend items={[{ color: TOKEN_COLOR.input, label: names.input }, { color: TOKEN_COLOR.output, label: names.output }]} />
       <Lines
-        labels={days.map((d) => `${d.date.getMonth() + 1}/${d.date.getDate()}`)}
-        labelEvery={7}
+        empty={zh ? "这段时间没有接口返回的用量" : "No reported usage in this period"}
+        labels={buckets.map((b) => b.label)}
+        labelEvery={LABEL_EVERY[range]}
         series={[
-          { name: "input", color: TOKEN_COLOR.input, values: days.map((d) => d.tokens.input) },
-          { name: "output", color: TOKEN_COLOR.output, values: days.map((d) => d.tokens.output) },
+          { name: "input", color: TOKEN_COLOR.input, values: buckets.map((b) => b.tokens.input) },
+          { name: "output", color: TOKEN_COLOR.output, values: buckets.map((b) => b.tokens.output) },
         ]}
         tip={(i) => (
           <>
-            <div className="mb-0.5 font-medium">{shortDate(days[i].date, zh)}</div>
-            <TipRow color={TOKEN_COLOR.input} label={names.input} value={formatCount(days[i].tokens.input)} />
-            <TipRow color={TOKEN_COLOR.output} label={names.output} value={formatCount(days[i].tokens.output)} />
+            <div className="mb-0.5 font-medium">{buckets[i].tipLabel}</div>
+            <TipRow color={TOKEN_COLOR.input} label={names.input} value={formatCount(buckets[i].tokens.input)} />
+            <TipRow color={TOKEN_COLOR.output} label={names.output} value={formatCount(buckets[i].tokens.output)} />
           </>
         )}
       />
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Donut: shares of a whole, per canvas                                */
+/* ------------------------------------------------------------------ */
+
+/** A ring split by canvas (fixed order, 2px gaps), the total in the middle, the shares beside it. */
+export function CanvasDonut({
+  values,
+  lang,
+  format,
+  empty,
+}: {
+  values: Partial<Record<WorkspaceId, number>>;
+  lang: UiLanguage;
+  format: (n: number) => string;
+  empty: string;
+}) {
+  const zh = lang === "zh";
+  const { boxRef, show, hide, node } = useTip();
+  const [hover, setHover] = useState<WorkspaceId | null>(null);
+  const rows = WORKSPACES.map(({ id }) => ({ id, value: values[id] ?? 0 }));
+  const total = rows.reduce((a, r) => a + r.value, 0);
+  const size = 120;
+  const stroke = 16;
+  const r = (size - stroke) / 2 - 3;
+  const c = 2 * Math.PI * r;
+  const shown = rows.filter((x) => x.value > 0);
+  const gap = shown.length > 1 ? 2 : 0;
+  let offset = 0;
+  return (
+    <div ref={boxRef} className="relative flex items-center gap-5" onMouseLeave={() => (hide(), setHover(null))}>
+      <div className="relative shrink-0" style={{ width: size, height: size }}>
+        <svg width={size} height={size} className="-rotate-90">
+          <circle cx={size / 2} cy={size / 2} r={r} fill="none" strokeWidth={stroke} stroke="currentColor" className="text-foreground/[0.06]" />
+          {shown.map((x) => {
+            const length = (x.value / total) * c;
+            const dash = Math.max(0.5, length - gap);
+            const el = (
+              <circle
+                key={x.id}
+                cx={size / 2}
+                cy={size / 2}
+                r={r}
+                fill="none"
+                stroke={CANVAS_COLOR[x.id]}
+                strokeWidth={hover === x.id ? stroke + 4 : stroke}
+                strokeDasharray={`${dash} ${c - dash}`}
+                strokeDashoffset={-offset}
+                className={cn("cursor-default transition-[opacity,stroke-width]", hover && hover !== x.id && "opacity-50")}
+                onMouseMove={(e) => {
+                  setHover(x.id);
+                  show(
+                    e,
+                    <TipRow color={CANVAS_COLOR[x.id]} label={canvasName(x.id, lang)} value={`${format(x.value)} · ${Math.round((x.value / total) * 100)}%`} />,
+                  );
+                }}
+              />
+            );
+            offset += length;
+            return el;
+          })}
+        </svg>
+        <div className="pointer-events-none absolute inset-0 grid place-items-center text-center">
+          {total ? (
+            <div>
+              <div className="text-[16px] font-semibold tabular-nums leading-tight text-foreground">{format(total)}</div>
+              <div className="text-[11px] text-muted-foreground">{zh ? "合计" : "Total"}</div>
+            </div>
+          ) : (
+            <div className="text-[11.5px] text-muted-foreground">{zh ? "还是一张白纸" : "Still a blank page"}</div>
+          )}
+        </div>
+      </div>
+      <ul className="min-w-0 flex-1 space-y-1.5">
+        {rows.map((x) => (
+          <li
+            key={x.id}
+            className={cn("flex items-center gap-2 text-[13px] transition-opacity", hover && hover !== x.id && "opacity-50")}
+            onMouseEnter={() => x.value > 0 && setHover(x.id)}
+            onMouseLeave={() => setHover(null)}
+          >
+            <span className="size-2.5 shrink-0 rounded-full" style={{ background: CANVAS_COLOR[x.id] }} />
+            <span className="min-w-0 flex-1 truncate text-foreground/85">{canvasName(x.id, lang)}</span>
+            <span className="tabular-nums text-muted-foreground">{x.value ? format(x.value) : "—"}</span>
+            <span className="w-9 text-right tabular-nums text-foreground/85">{total ? `${Math.round((x.value / total) * 100)}%` : ""}</span>
+          </li>
+        ))}
+        {!total && <li className="pt-0.5 text-[12px] text-muted-foreground">{empty}</li>}
+      </ul>
+      {node}
     </div>
   );
 }

@@ -24,6 +24,7 @@ import { AnvilMark, MessageImage, Shimmer } from "@/shared/chat";
 import { extractImageTags } from "@/shared/chat/ppt-message-tags";
 import { useUiLanguage } from "@/shared/i18n";
 import { cn } from "@/shared/lib/utils";
+import { isSendKey } from "@/shared/preferences";
 import { CAD_CONFIRM, CHECK_CONFIRM_EN, CHECK_CONFIRM_ZH, PICKS, chosen, parseCadSteps } from "./cad-steps-text";
 type StepState = "running" | "done" | "pending" | "error";
 
@@ -166,7 +167,7 @@ export function CadSteps({ text, followUp, canAct, onAction }: {
       )}
       <textarea value={feedback} disabled={!canAct} rows={2}
         onChange={event => setFeedback(event.target.value)}
-        onKeyDown={event => { if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); submitFeedback(); } }}
+        onKeyDown={event => { if (isSendKey(event)) { event.preventDefault(); submitFeedback(); } }}
         placeholder={checking ? tr("例如：层高 2750，次卧那个圆圈是地漏，三口之家要书房", "e.g. ceiling 2750, the circle in the second bedroom is a floor drain, we need a study") : tr("例如：主卧再大一点，厨房改成开放式", "e.g. a bigger main bedroom, an open kitchen")}
         className="w-full resize-none rounded-lg border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring/30 disabled:opacity-60" />
       <div className="flex flex-wrap gap-2">

@@ -58,7 +58,38 @@ export function useIsNarrow() {
   return narrow;
 }
 
-/** Smooth-scroll the window to a section of the portal by its id. */
+/**
+ * Smooth-scroll the window to a section of the portal by its id.
+ *
+ * The sections on the way can settle to their real height while the page
+ * scrolls (media loading, reveal placeholders): on a fresh load the page
+ * shrinks by about 2000px. A smooth scroll aimed at the old position then
+ * overshoots to the bottom and shows the footer, so for a moment the target
+ * is followed and the scroll re-aimed whenever it moves. Any wheel, touch or
+ * key from the reader hands the page back to them.
+ */
 export function scrollToId(id: string) {
-  document.getElementById(id)?.scrollIntoView({ behavior: prefersReducedMotion() ? "auto" : "smooth", block: "start" });
+  const el = document.getElementById(id);
+  if (!el) return;
+  const behavior: ScrollBehavior = prefersReducedMotion() ? "auto" : "smooth";
+  const at = () => Math.round(el.getBoundingClientRect().top + window.scrollY);
+  el.scrollIntoView({ behavior, block: "start" });
+  let last = at();
+  let frame = 0;
+  const started = performance.now();
+  const stop = () => {
+    cancelAnimationFrame(frame);
+    for (const type of ["wheel", "touchstart", "keydown"]) window.removeEventListener(type, stop);
+  };
+  const follow = () => {
+    if (performance.now() - started > 2500) return stop();
+    const now = at();
+    if (now !== last) {
+      last = now;
+      el.scrollIntoView({ behavior, block: "start" });
+    }
+    frame = requestAnimationFrame(follow);
+  };
+  for (const type of ["wheel", "touchstart", "keydown"]) window.addEventListener(type, stop, { passive: true });
+  frame = requestAnimationFrame(follow);
 }

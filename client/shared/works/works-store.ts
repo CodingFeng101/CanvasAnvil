@@ -456,5 +456,23 @@ export function createWorksStore(config: WorksConfig, local: LocalArea = browser
         return index;
       });
     },
+
+    /** The open work's localStorage values, which the database alone does not hold (Settings → Data → Export). */
+    localSnapshot: snapshotLocal,
+
+    /**
+     * Settings → Data → Import: replace everything this canvas keeps with a
+     * backup, then put the open work's localStorage values back (from the
+     * backup, else from that work's last snapshot). Reload the page afterwards.
+     */
+    replaceAll(entries: Record<string, unknown>, localValues?: Record<string, string | null>): Promise<void> {
+      return serial(async () => {
+        for (const key of (await store.listKeys?.("")) ?? []) await store.clear(key);
+        for (const [key, value] of Object.entries(entries)) await store.save(key, value);
+        scoped.clear();
+        const currentId = (await store.read<string>(CURRENT_KEY)) ?? "";
+        restoreLocal(localValues ?? (currentId ? await storeFor(currentId).read<Record<string, string | null>>(LOCAL_SNAPSHOT_KEY) : null));
+      });
+    },
   };
 }

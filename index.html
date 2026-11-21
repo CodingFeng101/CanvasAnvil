@@ -22,8 +22,12 @@
             stored === 'dark' ||
             (stored === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
           document.documentElement.classList.toggle('dark', dark);
-          document.documentElement.lang =
-            localStorage.getItem('CanvasAnvil-ui-lang-v1') === 'en' ? 'en' : 'zh-CN';
+          // Settings' choice, else the browser's language (as getUiLanguage).
+          var lang = localStorage.getItem('CanvasAnvil-ui-lang-v1');
+          if (lang !== 'en' && lang !== 'zh') {
+            lang = /^zh/i.test((navigator.languages && navigator.languages[0]) || navigator.language || '') ? 'zh' : 'en';
+          }
+          document.documentElement.lang = lang === 'en' ? 'en' : 'zh-CN';
         } catch (e) {
           /* Blocked storage just means we fall through to the light default. */
         }

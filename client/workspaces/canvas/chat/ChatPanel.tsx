@@ -417,7 +417,7 @@ ${constraints}` : prompt,
           }
         />
       </div>
-      {(messages.length === 0 && !isGenerating) && <ChatLandingExtras icon={Paintbrush} images={["/examples/portal/canvas-pic-v1-sm.webp", "/examples/portal/canvas-pic-v2-sm.webp"]} examples={[t(uiLang, "empty.canvas.ex1"), t(uiLang, "empty.canvas.ex2")]} onPickExample={pickExample} />}
+      {(messages.length === 0 && !isGenerating) && <ChatLandingExtras icon={Paintbrush} images={["/examples/portal/canvas-pic-v1-sm.webp", "/examples/portal/canvas-ex2-sm.webp", "/examples/portal/canvas-ex3-sm.webp"]} examples={[t(uiLang, "empty.canvas.ex1"), t(uiLang, "empty.canvas.ex2"), t(uiLang, "empty.canvas.ex3")]} onPickExample={pickExample} />}
 
 
       <ResetWarningModal
