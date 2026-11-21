@@ -26,8 +26,8 @@ lerna-debug.log*
 .env.*
 !.env.example
 *.local
-skill/*/config/image-provider.json
-skill/*/config/file-parser.json
+skill/**/config/image-provider.json
+skill/**/config/file-parser.json
 
 # Cache / temp
 .cache/
@@ -78,3 +78,7 @@ scripts/slide-agent/.env.local
 runs/
 __pycache__/
 *.pyc
+
+# draw.io editor downloaded by npm install (scripts/fetch-drawio.mjs)
+public/drawio/
+public/drawio.partial/

@@ -12,14 +12,39 @@ import { CanvasSheet, sheetHandleClass } from "@/shared/ui/canvas-sheet"
 import { DiagramProvider, useDiagram } from "@/workspaces/diagram/state/diagram-context"
 import { useTheme } from "@/shared/theme"
 import { Button } from "@/shared/ui/button"
-import { DRAWIO_LOAD_TIMEOUT_MS, drawioSettleDelay, drawioSources, nextDrawioSource } from "@/workspaces/diagram/lib/drawio-source"
+import { DRAWIO_LOAD_TIMEOUT_MS, drawioSettleDelay, drawioSources, findLocalDrawio, nextDrawioSource } from "@/workspaces/diagram/lib/drawio-source"
 import { useDiagramT } from "@/workspaces/diagram/lib/translations"
 
-const DRAWIO_SOURCES = drawioSources(
+const CONFIGURED_DRAWIO =
     typeof import.meta !== "undefined" && import.meta.env && import.meta.env.VITE_DRAWIO_BASE_URL
-        ? String(import.meta.env.VITE_DRAWIO_BASE_URL)
-        : "",
-)
+        ? String(import.meta.env.VITE_DRAWIO_BASE_URL).trim()
+        : ""
+
+/**
+ * The addresses to try, once known: a configured address is known at once;
+ * otherwise the local copy is looked for first (a quick same-origin request).
+ * Looked up once per page, so remounts do not ask again.
+ */
+let sourcesLookup: Promise<string[]> | null = null
+function useDrawioSources(): string[] | null {
+    const [sources, setSources] = useState<string[] | null>(() =>
+        CONFIGURED_DRAWIO ? drawioSources(CONFIGURED_DRAWIO) : null,
+    )
+    useEffect(() => {
+        if (sources) return
+        let alive = true
+        sourcesLookup ??= findLocalDrawio(new URL(import.meta.env.BASE_URL || "/", window.location.href).href).then(
+            (local) => drawioSources("", local),
+        )
+        void sourcesLookup.then((found) => {
+            if (alive) setSources(found)
+        })
+        return () => {
+            alive = false
+        }
+    }, [sources])
+    return sources
+}
 
 /**
  * draw.io's chrome in Claude's colours, sent through its `configure` message
@@ -62,14 +87,15 @@ function DiagramCanvas() {
     // Each address gets a few seconds to load before the next is tried; when
     // none loads, the canvas says so instead of staying blank. The address that
     // worked is kept for later remounts (theme changes).
+    const sources = useDrawioSources()
     const [sourceIndex, setSourceIndex] = useState(0)
     const [loadAttempt, setLoadAttempt] = useState(0)
     const [loadFailed, setLoadFailed] = useState(false)
     useEffect(() => {
-        if (isDrawioReady || loadFailed) return
+        if (!sources || isDrawioReady || loadFailed) return
         const timer = window.setTimeout(() => {
-            const next = nextDrawioSource(DRAWIO_SOURCES, sourceIndex)
-            console.warn(`[DiagramCanvas] draw.io did not load from ${DRAWIO_SOURCES[sourceIndex]}`)
+            const next = nextDrawioSource(sources, sourceIndex)
+            console.warn(`[DiagramCanvas] draw.io did not load from ${sources[sourceIndex]}`)
             if (next.kind === "next") {
                 resetDrawioReady()
                 setSourceIndex(next.index)
@@ -79,7 +105,7 @@ function DiagramCanvas() {
         }, DRAWIO_LOAD_TIMEOUT_MS)
         return () => window.clearTimeout(timer)
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [isDrawioReady, loadFailed, sourceIndex, loadAttempt, resolved])
+    }, [sources, isDrawioReady, loadFailed, sourceIndex, loadAttempt, resolved])
     useEffect(() => {
         if (isDrawioReady) setLoadFailed(false)
     }, [isDrawioReady])
@@ -87,7 +113,7 @@ function DiagramCanvas() {
     // editor's first load lands at 1% zoom; that copy is reported ready only
     // after it has settled. The public embed is reported ready at once.
     const onEditorLoad = () => {
-        const delay = drawioSettleDelay(DRAWIO_SOURCES[sourceIndex])
+        const delay = sources ? drawioSettleDelay(sources[sourceIndex]) : 0
         if (delay) window.setTimeout(onDrawioLoad, delay)
         else onDrawioLoad()
     }
@@ -135,12 +161,12 @@ function DiagramCanvas() {
                 phone it stays flush, stacked above the chat. */}
             <DiagramSheet flush={isMobile}>
                 <div className="h-full overflow-hidden">
-                    <DrawIoEmbed
+                    {sources && <DrawIoEmbed
                         key={`drawio-${darkMode}-${sourceIndex}-${loadAttempt}`}
                         ref={drawioRef}
                         onExport={handleDiagramExport}
                         onLoad={onEditorLoad}
-                        baseUrl={DRAWIO_SOURCES[sourceIndex]}
+                        baseUrl={sources[sourceIndex]}
                         urlParameters={{
                             ui: "min",
                             spin: true,
@@ -152,7 +178,7 @@ function DiagramCanvas() {
                             dark: darkMode,
                         }}
                         configuration={{ css: drawioChromeCss(darkMode) }}
-                    />
+                    />}
                 </div>
                 {loadFailed && (
                     <div

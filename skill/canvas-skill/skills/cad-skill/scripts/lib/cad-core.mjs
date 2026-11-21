@@ -2686,7 +2686,7 @@ function layoutToSpec(layout) {
       for (let copy = 0; copy < count; copy++) placeItem(raw, copy);
     }
     function placeItem(raw, copy) {
-      let key = String(raw.key ?? "").trim();
+      const key = String(raw.key ?? "").trim();
       if (key === "curtain" || key === "sheer") return;
       if (!CATALOG[key]) {
         notes.push(`${room.name}\uFF1A\u5BB6\u5177\u5E93\u6CA1\u6709 ${key}\uFF0C\u5DF2\u8DF3\u8FC7`);

@@ -1,12 +1,12 @@
 {
   "name": "canvasanvil",
   "owner": { "name": "CodingFeng101" },
-  "metadata": { "description": "CanvasAnvil canvases for Claude Code: diagrams, interior design and an image board." },
+  "metadata": { "description": "CanvasAnvil canvases for Claude Code: diagrams, interior design, an image board and PPT decks." },
   "plugins": [
     {
       "name": "canvasanvil-canvas",
       "source": "./skill/canvas-skill",
-      "description": "Open CanvasAnvil's Excalidraw, draw.io and house designer canvases from the conversation."
+      "description": "Open CanvasAnvil's Excalidraw, draw.io and house designer canvases from the conversation, and make PPT decks."
     }
   ]
 }

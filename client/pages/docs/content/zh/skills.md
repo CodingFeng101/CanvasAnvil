@@ -20,20 +20,20 @@
 ### Claude Code
 
 ```bash
-claude plugin marketplace add CodingFeng101/CanvasAnvil
+claude plugin marketplace add CodingFeng101/CanvasAnvil --sparse .claude-plugin skill/canvas-skill
 claude plugin install canvasanvil-canvas@canvasanvil
 ```
 
-也可以在 Claude Code 里用 `/plugin` 命令完成同样的操作。
+命令里的 `--sparse` 让助手只下载插件市场文件和插件文件夹，不必拉取整个仓库（网站代码、示例图片和历史记录）。
 
 ### Codex
 
 ```bash
-codex plugin marketplace add CodingFeng101/CanvasAnvil --ref main
+codex plugin marketplace add CodingFeng101/CanvasAnvil --ref main --sparse .agents/plugins --sparse skill/canvas-skill
 codex plugin add canvasanvil-canvas@canvasanvil
 ```
 
-装好后重启助手，调用 `$canvas-skill`、`$diagram-skill` 或 `$cad-skill` 打开对应画布。运行环境为 Node 20 以上；发布包已经包含 MCP 服务和界面，不需要再装 npm 依赖。
+装好后重启助手，调用 `$canvas-skill`、`$diagram-skill` 或 `$cad-skill` 打开对应画布。`$ppt-skill` 也在插件里，它不弹编辑器，由助手自己走完大纲、出图、导出；生图配置填在已安装插件的 `skills/ppt-skill/config/image-provider.json`。运行环境为 Node 20 以上；发布包已经包含 MCP 服务和界面，不需要再装 npm 依赖。
 
 > [!NOTE]
 > 以前从 `canvasanvil-local` 市场装过的，市场名已经改成 `canvasanvil`，请用第一条命令重新添加一次。

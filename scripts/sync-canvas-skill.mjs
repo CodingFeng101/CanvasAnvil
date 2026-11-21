@@ -12,46 +12,50 @@ const entry = path.join(root, 'client/workspaces/canvas/skill');
 const output = path.join(plugin, 'assets/.native-build');
 const excalidraw = path.join(root, 'node_modules/@excalidraw/excalidraw/dist/prod');
 process.chdir(root);
-await build({
-  configFile: false, root: entry, publicDir: false,
-  plugins: [react(), {
-    name: 'embed-excalidraw-fonts', enforce: 'pre',
-    async transform(code, id) {
-      if (!id.includes('@excalidraw/excalidraw') || !id.endsWith('.js')) return;
-      const matches = [...code.matchAll(/"(\.\/fonts\/[^"\s]+\.woff2)"/g)];
-      for (const match of matches) {
-        const bytes = await readFile(path.join(excalidraw, match[1]));
-        code = code.replaceAll(match[0], JSON.stringify(`data:font/woff2;base64,${bytes.toString('base64')}`));
-      }
-      return code;
-    },
-  }, viteSingleFile()],
-  resolve: { alias: [
-    { find: '@/workspaces/canvas/storage', replacement: path.join(entry, 'storage.ts') },
-    { find: '@contracts', replacement: path.join(root, 'contracts') },
-    { find: '@prompts', replacement: path.join(root, 'resources/prompts') },
-    { find: '@', replacement: path.join(root, 'client') },
-  ] },
-  build: { outDir: output, emptyOutDir: true, assetsInlineLimit: 100000000 },
-});
-await writeFile(path.join(plugin, 'assets/canvas-widget.bin'), gzipSync(await readFile(path.join(output, 'index.html'))));
-for (const editor of ['diagram', 'cad']) {
-  await build({ configFile: false, root: path.join(root, 'client/workspaces/native'), publicDir: false,
-    plugins: [react(), viteSingleFile()],
-    resolve: { alias: { '@': path.join(root, 'client'), '@contracts': path.join(root, 'contracts'), '@prompts': path.join(root, 'resources/prompts') } },
-    build: { outDir: output, emptyOutDir: true, assetsInlineLimit: 100000000,
-      rollupOptions: { input: path.join(root, `client/workspaces/native/${editor}.html`) } },
+// --copy-only: refresh the copied skill folders without rebuilding the editors and the MCP server.
+const copyOnly = process.argv.includes('--copy-only');
+if (!copyOnly) {
+  await build({
+    configFile: false, root: entry, publicDir: false,
+    plugins: [react(), {
+      name: 'embed-excalidraw-fonts', enforce: 'pre',
+      async transform(code, id) {
+        if (!id.includes('@excalidraw/excalidraw') || !id.endsWith('.js')) return;
+        const matches = [...code.matchAll(/"(\.\/fonts\/[^"\s]+\.woff2)"/g)];
+        for (const match of matches) {
+          const bytes = await readFile(path.join(excalidraw, match[1]));
+          code = code.replaceAll(match[0], JSON.stringify(`data:font/woff2;base64,${bytes.toString('base64')}`));
+        }
+        return code;
+      },
+    }, viteSingleFile()],
+    resolve: { alias: [
+      { find: '@/workspaces/canvas/storage', replacement: path.join(entry, 'storage.ts') },
+      { find: '@contracts', replacement: path.join(root, 'contracts') },
+      { find: '@prompts', replacement: path.join(root, 'resources/prompts') },
+      { find: '@', replacement: path.join(root, 'client') },
+    ] },
+    build: { outDir: output, emptyOutDir: true, assetsInlineLimit: 100000000 },
   });
-  await writeFile(path.join(plugin, `assets/${editor}-widget.bin`), gzipSync(await readFile(path.join(output, `${editor}.html`))));
+  await writeFile(path.join(plugin, 'assets/canvas-widget.bin'), gzipSync(await readFile(path.join(output, 'index.html'))));
+  for (const editor of ['diagram', 'cad']) {
+    await build({ configFile: false, root: path.join(root, 'client/workspaces/native'), publicDir: false,
+      plugins: [react(), viteSingleFile()],
+      resolve: { alias: { '@': path.join(root, 'client'), '@contracts': path.join(root, 'contracts'), '@prompts': path.join(root, 'resources/prompts') } },
+      build: { outDir: output, emptyOutDir: true, assetsInlineLimit: 100000000,
+        rollupOptions: { input: path.join(root, `client/workspaces/native/${editor}.html`) } },
+    });
+    await writeFile(path.join(plugin, `assets/${editor}-widget.bin`), gzipSync(await readFile(path.join(output, `${editor}.html`))));
+  }
+  const bootstrap = await bundle({ entryPoints: [path.join(entry, 'bootstrap.ts')], bundle: true, platform: 'browser',
+    format: 'esm', target: 'es2022', minify: true, write: false });
+  await writeFile(path.join(plugin, 'assets/canvas-widget.html'), `<!doctype html><html><head><meta charset="utf-8"></head><body><p id="loading">正在连接 CanvasAnvil 画布…</p><script type="module">${bootstrap.outputFiles[0].text.replaceAll('</script', '<\\/script')}</script></body></html>`);
+  if (!output.startsWith(path.resolve(plugin, 'assets') + path.sep)) throw new Error('Invalid build output path');
+  await rm(output, { recursive: true, force: true });
+  await bundle({ entryPoints: [path.join(plugin, 'mcp/server.mjs')], outfile: path.join(plugin, 'assets/canvas-mcp.mjs'),
+    bundle: true, platform: 'node', format: 'esm', target: 'node20', minify: true, legalComments: 'eof',
+    banner: { js: 'import {createRequire as __createRequire} from "node:module";const require=__createRequire(import.meta.url);' } });
 }
-const bootstrap = await bundle({ entryPoints: [path.join(entry, 'bootstrap.ts')], bundle: true, platform: 'browser',
-  format: 'esm', target: 'es2022', minify: true, write: false });
-await writeFile(path.join(plugin, 'assets/canvas-widget.html'), `<!doctype html><html><head><meta charset="utf-8"></head><body><p id="loading">正在连接 CanvasAnvil 画布…</p><script type="module">${bootstrap.outputFiles[0].text.replaceAll('</script', '<\\/script')}</script></body></html>`);
-if (!output.startsWith(path.resolve(plugin, 'assets') + path.sep)) throw new Error('Invalid build output path');
-await rm(output, { recursive: true, force: true });
-await bundle({ entryPoints: [path.join(plugin, 'mcp/server.mjs')], outfile: path.join(plugin, 'assets/canvas-mcp.mjs'),
-  bundle: true, platform: 'node', format: 'esm', target: 'node20', minify: true, legalComments: 'eof',
-  banner: { js: 'import {createRequire as __createRequire} from "node:module";const require=__createRequire(import.meta.url);' } });
 // The standalone skill folders carry their own runtime (page server, CLI and their editor), so a copied
 // skill opens its editor in a browser and syncs edits without the plugin.
 for (const [name, editor] of [['diagram-skill', 'diagram'], ['cad-skill', 'cad']]) {
@@ -77,14 +81,27 @@ await cp(path.join(plugin, 'scripts/canvas.mjs'), path.join(canvasRuntime, 'scri
 for (const file of ['canvas-mcp.mjs', 'canvas-widget.bin', 'canvas-widget.html', 'LICENSE']) await cp(path.join(plugin, 'assets', file), path.join(canvasRuntime, 'assets', file));
 await mkdir(path.join(skill, 'config'), { recursive: true });
 await cp(path.join(plugin, 'config/image-provider.example.json'), path.join(skill, 'config/image-provider.example.json'));
-for (const name of ['diagram-skill', 'cad-skill']) {
+// The skill folders the plugin carries, copied whole from skill/<name>. ppt-skill opens no editor: the
+// assistant runs its scripts (outline, slides, export); it needs no npm install, only Python for the
+// editable export. Nobody's filled-in config (an API key) is copied, only the examples.
+const SKILL_FOLDERS = {
+  'diagram-skill': ['references', 'prompts', 'scripts', 'vendor', 'agents', 'runtime'],
+  'cad-skill': ['references', 'prompts', 'scripts', 'designer', 'agents', 'runtime'],
+  'ppt-skill': ['references', 'prompts', 'scripts', 'templates', 'editable', 'config', 'agents'],
+};
+const copied = source => {
+  const parts = source.split(path.sep);
+  if (parts.includes('node_modules') || parts.includes('__pycache__')) return false;
+  return !(parts.at(-2) === 'config' && source.endsWith('.json') && !source.endsWith('.example.json'));
+};
+for (const [name, folders] of Object.entries(SKILL_FOLDERS)) {
   const destination = path.join(plugin, 'skills', name);
   await mkdir(destination, { recursive: true });
   await cp(path.join(root, 'skill', name, 'SKILL.md'), path.join(destination, 'SKILL.md'));
   // Its npm scripts (cad: `npm run setup` for the designer's QA) work in the plugin's copy too.
   await cp(path.join(root, 'skill', name, 'package.json'), path.join(destination, 'package.json'));
-  for (const folder of name === 'diagram-skill' ? ['references', 'prompts', 'scripts', 'vendor', 'agents', 'runtime'] : ['references', 'prompts', 'scripts', 'designer', 'agents', 'runtime']) {
-    await cp(path.join(root, 'skill', name, folder), path.join(destination, folder), { recursive: true, filter: source => !source.split(path.sep).includes('node_modules') });
+  for (const folder of folders) {
+    await cp(path.join(root, 'skill', name, folder), path.join(destination, folder), { recursive: true, filter: copied });
   }
 }
-console.log('Built native Excalidraw widget and self-contained MCP server');
+console.log(copyOnly ? 'Copied the skill folders into the plugin' : 'Built native Excalidraw widget and self-contained MCP server');

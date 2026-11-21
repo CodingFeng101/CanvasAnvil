@@ -13,8 +13,8 @@ const messages = {
   // draw.io editor loading
   "drawio.load_failed": { zh: "编辑器加载失败", en: "The editor failed to load" },
   "drawio.load_failed_hint": {
-    zh: "draw.io 编辑器从网络加载，默认地址和备用地址都没有响应。请检查网络后重试；如果所在网络打不开这两个地址，可以部署自己的 draw.io，并把 VITE_DRAWIO_BASE_URL 指向它。",
-    en: "The draw.io editor loads over the network, and neither the default nor the backup address answered. Check your connection and retry. If your network blocks both, host draw.io yourself and point VITE_DRAWIO_BASE_URL at it.",
+    zh: "draw.io 编辑器没有加载出来：本地没有 draw.io 副本，默认地址和备用地址也都没有响应。请检查网络后重试；也可以运行 npm run drawio 下载一份本地副本，或把 VITE_DRAWIO_BASE_URL 指向自己部署的 draw.io。",
+    en: "The draw.io editor did not load: there is no local copy, and neither the default nor the backup address answered. Check your connection and retry, run npm run drawio to download a local copy, or point VITE_DRAWIO_BASE_URL at your own draw.io.",
   },
   "drawio.retry": { zh: "重试", en: "Retry" },
 

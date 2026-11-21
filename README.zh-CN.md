@@ -172,11 +172,20 @@ CanvasAnvil 为每个画布都提供了专用本地 skill，用来保证工作�
   直接从 GitHub 安装，不需要先克隆仓库：
 
   ```bash
-  codex plugin marketplace add CodingFeng101/CanvasAnvil --ref main
+  codex plugin marketplace add CodingFeng101/CanvasAnvil --ref main --sparse .agents/plugins --sparse skill/canvas-skill
   codex plugin add canvasanvil-canvas@canvasanvil
   ```
 
-  安装后重启 Codex，调用 `$canvas-skill`、`$diagram-skill` 或 `$cad-skill` 打开对应画布。运行环境为 Node 20+，发布包包含 MCP 和 widget，无需安装 npm 依赖。以前从 `canvasanvil-local` 市场装过的，市场名已经改了，请用第一条命令重新添加一次市场。也可以把 `skill/<名称>` 文件夹直接拷到项目里单独使用。
+  Claude Code（在终端里运行）：
+
+  ```bash
+  claude plugin marketplace add CodingFeng101/CanvasAnvil --sparse .claude-plugin skill/canvas-skill
+  claude plugin install canvasanvil-canvas@canvasanvil
+  ```
+
+  `--sparse` 让助手只下载插件市场文件和插件文件夹，不拉取整个仓库。
+
+  安装后重启宿主，调用 `$canvas-skill`、`$diagram-skill` 或 `$cad-skill` 打开对应画布。`$ppt-skill` 不弹编辑器，由助手自己走完做 PPT 的流程（先出大纲给你看，再出图、导出）；生图配置填在已安装插件的 `skills/ppt-skill/config/image-provider.json`，或者用 `--config-file` 给脚本指定配置文件。运行环境为 Node 20+，发布包包含 MCP 和 widget，无需安装 npm 依赖。以前从 `canvasanvil-local` 市场装过的，市场名已经改了，请用第一条命令重新添加一次市场。也可以把 `skill/<名称>` 文件夹直接拷到项目里单独使用。
 
 所有 skill 默认使用宿主文本模型。只有生图能力需要单独配置图片生成供应商。
 可编辑 PPTX 导出同样用宿主模型：助手按 `skill/ppt-skill/references/editable-pptx-workflow.md` 逐步重建幻灯片，所需脚本都在 skill 的 `editable/` 目录里；预览在 Windows 上用 PowerPoint，其他系统用 LibreOffice，另外需要 Python 依赖（`editable/requirements.txt`）。
@@ -190,6 +199,8 @@ CanvasAnvil 为每个画布都提供了专用本地 skill，用来保证工作�
 ```bash
 npm install
 ```
+
+安装时会顺带下载一份 draw.io（约 50MB）到 `public/drawio/`，图表画布优先用它，断网也能打开。下载失败不影响安装，画布会改用在线的 draw.io；之后可以运行 `npm run drawio` 重试。
 
 2. 启动本地开发
 

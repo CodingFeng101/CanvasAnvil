@@ -1,7 +1,7 @@
 {
   "name": "canvasanvil-canvas",
-  "version": "1.0.0",
-  "description": "CanvasAnvil's Excalidraw, draw.io and house designer canvases, opened from the conversation.",
+  "version": "1.1.0",
+  "description": "CanvasAnvil's Excalidraw, draw.io and house designer canvases, opened from the conversation, plus the PPT skill: outline, slides and export.",
   "author": { "name": "CodingFeng101" },
   "homepage": "https://github.com/CodingFeng101/CanvasAnvil",
   "license": "MIT",

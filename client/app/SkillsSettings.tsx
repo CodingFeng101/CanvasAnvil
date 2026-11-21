@@ -33,10 +33,14 @@ export const gitCommands = (name: SkillName, target: SkillTarget) => [
   `cp -r canvasanvil-skills/skill/${name} "$HOME/${TARGET_DIR[target]}/"`,
 ];
 
-export const CODEX_PLUGIN_COMMANDS = [`codex plugin marketplace add ${SKILL_REPO} --ref main`, "codex plugin add canvasanvil-canvas@canvasanvil"];
+/**
+ * `--sparse` makes the host fetch only the marketplace file and the plugin folder, not the whole
+ * repository (the website, examples and their history); both CLIs support it for Git sources.
+ */
+export const CODEX_PLUGIN_COMMANDS = [`codex plugin marketplace add ${SKILL_REPO} --ref main --sparse .agents/plugins --sparse skill/canvas-skill`, "codex plugin add canvasanvil-canvas@canvasanvil"];
 
-/** The same plugin for Claude Code (repo root .claude-plugin/marketplace.json); run in a terminal, or as /plugin … inside Claude Code. */
-export const CLAUDE_PLUGIN_COMMANDS = [`claude plugin marketplace add ${SKILL_REPO}`, "claude plugin install canvasanvil-canvas@canvasanvil"];
+/** The same plugin for Claude Code (repo root .claude-plugin/marketplace.json); run in a terminal, where `--sparse` is supported. */
+export const CLAUDE_PLUGIN_COMMANDS = [`claude plugin marketplace add ${SKILL_REPO} --sparse .claude-plugin skill/canvas-skill`, "claude plugin install canvasanvil-canvas@canvasanvil"];
 
 export const PLUGIN_COMMANDS: Record<SkillTarget, string[]> = { claude: CLAUDE_PLUGIN_COMMANDS, codex: CODEX_PLUGIN_COMMANDS };
 

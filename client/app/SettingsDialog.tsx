@@ -1318,18 +1318,18 @@ function SettingsPanel({ initial, focus, onClose }: { initial: SectionId; focus?
         id: "plugin",
         title: zh ? "插件（推荐）" : "Plugin (recommended)",
         desc: zh
-          ? "一次装好白板、图表、室内设计三个 Skill 和画布服务，不用克隆仓库，以后更新插件即可。"
-          : "Installs the canvas, diagram and interior skills plus the canvas server in one go; no clone, update the plugin later.",
+          ? "一次装好白板、图表、室内设计、PPT 四个 Skill 和画布服务，不用克隆仓库，以后更新插件即可。"
+          : "Installs the canvas, diagram, interior and PPT skills plus the canvas server in one go; no clone, update the plugin later.",
       },
       title: `canvasanvil-canvas · ${TARGET_NAME[skillTarget]}`,
       desc:
         skillTarget === "claude"
           ? zh
-            ? "在终端里运行下面两行（或在 Claude Code 里输入 /plugin marketplace add … 和 /plugin install …），重启后说「打开 CanvasAnvil 画布」。画布会在浏览器里打开，改完回到对话继续。"
-            : "Run these two lines in a terminal (or /plugin marketplace add … and /plugin install … inside Claude Code), restart, then ask to open the CanvasAnvil canvas. It opens in your browser; come back to the chat when done."
+            ? "在终端里运行下面两行，重启 Claude Code 后说「打开 CanvasAnvil 画布」。只下载插件用到的文件，不会拉取整个仓库。画布会在浏览器里打开，改完回到对话继续。"
+            : "Run these two lines in a terminal, restart Claude Code, then ask to open the CanvasAnvil canvas. Only the plugin's files are downloaded, not the whole repository. It opens in your browser; come back to the chat when done."
           : zh
-            ? "在终端里运行下面两行，重启 Codex 后用 $canvas-skill、$diagram-skill 或 $cad-skill 调用。画布直接在对话里打开。"
-            : "Run these two lines, restart Codex, then call $canvas-skill, $diagram-skill or $cad-skill. The canvases open right in the conversation.",
+            ? "在终端里运行下面两行（只下载插件用到的文件），重启 Codex 后用 $canvas-skill、$diagram-skill 或 $cad-skill 调用。画布直接在对话里打开。"
+            : "Run these two lines (they download only the plugin's files), restart Codex, then call $canvas-skill, $diagram-skill or $cad-skill. The canvases open right in the conversation.",
       control: null,
       below: <CommandBlock zh={zh} lines={PLUGIN_COMMANDS[skillTarget]} />,
       keywords: "plugin 插件 marketplace claude codex",

@@ -103,3 +103,11 @@ docker run --rm -p 8001:8080 canvasanvil/app:latest
 | `WEB_DIST_DIR` | `./dist` | 前端静态资源目录 |
 | `PYTHON` | `python3`（Windows 为 `python`） | 户型识别和 CAD 交付检查用的 Python（需装 `server/recognizer/requirements.txt`） |
 | `CHROME_PATH` | 自动查找 | CAD 交付检查用的 Chrome / Edge / Chromium |
+
+安装依赖（`npm install` / `npm ci`）时会下载一份 draw.io 到 `public/drawio/`，构建时随 `dist` 一起发布，图表画布优先用它，不依赖外网。下面两个变量在安装或构建时生效：
+
+| 变量 | 默认值 | 说明 |
+| --- | --- | --- |
+| `DRAWIO_WAR_URL` | GitHub 上 draw.io 的发布包 | 从别的地址下载 `draw.war`（网络慢时换镜像，也可以是 `file://` 本地文件）；Docker 用 `--build-arg DRAWIO_WAR_URL=...` |
+| `CANVASANVIL_SKIP_DRAWIO` | 未设置 | 设为任意值则不下载，画布直接用在线的 draw.io |
+| `VITE_DRAWIO_BASE_URL` | 未设置 | 构建时指定 draw.io 地址（例如内网自建的），设置后只用它 |

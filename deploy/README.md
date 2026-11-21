@@ -103,3 +103,11 @@ The image includes the reconstruction scripts, Python dependencies, LibreOffice 
 | `WEB_DIST_DIR` | `./dist` | Static web assets directory |
 | `PYTHON` | `python3` (`python` on Windows) | Python for floorplan recognition and the CAD delivery check (needs `server/recognizer/requirements.txt`) |
 | `CHROME_PATH` | auto-detected | Chrome / Edge / Chromium for the CAD delivery check |
+
+Installing dependencies (`npm install` / `npm ci`) downloads draw.io into `public/drawio/`; the build ships it in `dist`, and the diagram canvas uses it first, without reaching the internet. These variables apply at install or build time:
+
+| Variable | Default | Description |
+| --- | --- | --- |
+| `DRAWIO_WAR_URL` | draw.io's release on GitHub | Download `draw.war` from elsewhere (a mirror on a slow network, or a `file://` path); in Docker, `--build-arg DRAWIO_WAR_URL=...` |
+| `CANVASANVIL_SKIP_DRAWIO` | unset | Any value skips the download; the canvas uses the online draw.io |
+| `VITE_DRAWIO_BASE_URL` | unset | A draw.io address fixed at build time (for example one hosted on an intranet); when set, only it is used |

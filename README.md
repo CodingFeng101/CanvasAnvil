@@ -170,11 +170,20 @@ CanvasAnvil includes dedicated local skills for each canvas so workflows stay op
   Install straight from GitHub, no clone needed:
 
   ```bash
-  codex plugin marketplace add CodingFeng101/CanvasAnvil --ref main
+  codex plugin marketplace add CodingFeng101/CanvasAnvil --ref main --sparse .agents/plugins --sparse skill/canvas-skill
   codex plugin add canvasanvil-canvas@canvasanvil
   ```
 
-  Then restart Codex and invoke `$canvas-skill`, `$diagram-skill` or `$cad-skill`. Node 20+ is required. The release includes the MCP and widget bundles with no runtime npm installation. If you installed earlier from the `canvasanvil-local` marketplace, add the marketplace again with the first command, since its name changed. You can also copy any `skill/<name>` folder into a project and use it on its own.
+  For Claude Code (in a terminal):
+
+  ```bash
+  claude plugin marketplace add CodingFeng101/CanvasAnvil --sparse .claude-plugin skill/canvas-skill
+  claude plugin install canvasanvil-canvas@canvasanvil
+  ```
+
+  `--sparse` makes the host download only the marketplace file and the plugin folder, not the whole repository.
+
+  Then restart the host and invoke `$canvas-skill`, `$diagram-skill` or `$cad-skill` to open that canvas. `$ppt-skill` opens no editor: the assistant runs the deck flow itself (outline for your review, slides, export); fill `skills/ppt-skill/config/image-provider.json` in the installed plugin, or give its scripts a config path with `--config-file`. Node 20+ is required. The release includes the MCP and widget bundles with no runtime npm installation. If you installed earlier from the `canvasanvil-local` marketplace, add the marketplace again with the first command, since its name changed. You can also copy any `skill/<name>` folder into a project and use it on its own.
 
 All skills use the host text model by default. Only image generation requires explicit provider configuration.
 Editable PPTX export uses the host model too: the agent rebuilds the slides step by step following `skill/ppt-skill/references/editable-pptx-workflow.md`, with the scripts in the skill's `editable/` folder; its previews use PowerPoint on Windows and LibreOffice elsewhere, plus the Python packages in `editable/requirements.txt`.
@@ -188,6 +197,8 @@ Editable PPTX export uses the host model too: the agent rebuilds the slides step
 ```bash
 npm install
 ```
+
+The install also downloads draw.io (about 50 MB) into `public/drawio/`; the diagram canvas uses it first, so it opens offline. If the download fails the install still succeeds and the canvas uses the online draw.io; run `npm run drawio` to try again.
 
 2. Start local development
 

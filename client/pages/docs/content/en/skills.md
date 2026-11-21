@@ -20,20 +20,20 @@ The plugin packages the canvases as an MCP server: once installed, the agent can
 ### Claude Code
 
 ```bash
-claude plugin marketplace add CodingFeng101/CanvasAnvil
+claude plugin marketplace add CodingFeng101/CanvasAnvil --sparse .claude-plugin skill/canvas-skill
 claude plugin install canvasanvil-canvas@canvasanvil
 ```
 
-The same can be done with the `/plugin` command inside Claude Code.
+The `--sparse` in these commands makes the host download only the marketplace file and the plugin folder, not the whole repository (website code, example images and history).
 
 ### Codex
 
 ```bash
-codex plugin marketplace add CodingFeng101/CanvasAnvil --ref main
+codex plugin marketplace add CodingFeng101/CanvasAnvil --ref main --sparse .agents/plugins --sparse skill/canvas-skill
 codex plugin add canvasanvil-canvas@canvasanvil
 ```
 
-Restart the agent afterwards, and call `$canvas-skill`, `$diagram-skill` or `$cad-skill` to open a canvas. It needs Node 20 or later; the package already includes the MCP server and the interface, so there are no npm dependencies to install.
+Restart the agent afterwards, and call `$canvas-skill`, `$diagram-skill` or `$cad-skill` to open a canvas. `$ppt-skill` is in the plugin too; it opens no editor, the agent runs the outline, slides and export itself, with the image settings in `skills/ppt-skill/config/image-provider.json` of the installed plugin. It needs Node 20 or later; the package already includes the MCP server and the interface, so there are no npm dependencies to install.
 
 > [!NOTE]
 > If you installed from the `canvasanvil-local` marketplace before, it has been renamed to `canvasanvil`; run the first command again to add it.

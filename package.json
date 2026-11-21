@@ -13,7 +13,9 @@
     "test": "tsx --import ./tests/support/register.mjs --test tests/*.test.ts",
     "test:cad-roundtrip": "node tools/cad-spec-roundtrip/run.mjs",
     "preview": "vite preview --host 0.0.0.0 --port 8001",
-    "check": "tsc -b --noEmit"
+    "check": "tsc -b --noEmit",
+    "drawio": "node scripts/fetch-drawio.mjs",
+    "postinstall": "node -e \"require('fs').existsSync('scripts/fetch-drawio.mjs')&&import('./scripts/fetch-drawio.mjs')\""
   },
   "dependencies": {
     "@ai-sdk/openai": "^2.0.19",

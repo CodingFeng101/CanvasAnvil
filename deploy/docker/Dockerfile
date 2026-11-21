@@ -5,6 +5,11 @@ COPY package.json package-lock.json ./
 RUN npm ci
 
 COPY . .
+# The diagram canvas prefers a local draw.io (public/drawio, copied into dist by the build), so the
+# image works without reaching diagrams.net. Pass --build-arg DRAWIO_WAR_URL=<mirror> on a slow network;
+# if the download fails the canvas falls back to the online editor.
+ARG DRAWIO_WAR_URL
+RUN npm run drawio
 # tsc -b plus the vite build need more than Node's default heap; Docker Desktop's default 8 GB VM ran out of it.
 RUN NODE_OPTIONS=--max-old-space-size=6144 npm run build
 
