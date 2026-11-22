@@ -89,9 +89,18 @@ export function describeSpecStream(text: string, zh: boolean): string {
 
 export { parsePartialJson } from "@/shared/lib/partial-json";
 
+/**
+ * Which design a turn ended on, kept at the end of its answer (never shown): editing or retrying an
+ * earlier message takes the design back to what it was at that point in the conversation.
+ */
+const DESIGN_MARK = /\n?\[\[CAD_DESIGN\|([^\]]*)\]\]/g;
+export const designMark = (key: string) => `\n[[CAD_DESIGN|${key}]]`;
+export const designMarkOf = (text: string): string | undefined => [...text.matchAll(DESIGN_MARK)].at(-1)?.[1];
+export const stripDesignMark = (text: string) => text.replace(DESIGN_MARK, "");
+
 /** The text a model should see: markers removed. */
 export const stripCadMarkers = (text: string) =>
-  text.replace(HEADER, "").replace(IMAGES, "").replace(CAD_CONFIRM, "").replace(/\[\[CAD_(?:CHOICES|PICKS)\]\][^\n]*/g, "");
+  stripDesignMark(text).replace(HEADER, "").replace(IMAGES, "").replace(CAD_CONFIRM, "").replace(/\[\[CAD_(?:CHOICES|PICKS)\]\][^\n]*/g, "");
 
 export function parseCadSteps(text: string) {
   const match = text.match(HEADER);

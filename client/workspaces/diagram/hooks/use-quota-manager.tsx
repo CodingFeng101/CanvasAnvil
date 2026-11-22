@@ -1,8 +1,9 @@
 "use client"
 
 import { useCallback, useMemo } from "react"
-import { toast } from "sonner"
-import { QuotaLimitToast } from "@/workspaces/diagram/chat/quota-limit-toast"
+import { notify } from "@/shared/ui/notify"
+import { openSettings } from "@/shared/settings-bus"
+import { translateDiagram } from "@/workspaces/diagram/lib/translations"
 import { STORAGE_KEYS } from "@/workspaces/diagram/storage"
 
 export interface QuotaConfig {
@@ -152,18 +153,15 @@ export function useQuotaManager(config: QuotaConfig): {
         [createQuotaIncrementer],
     )
 
-    // Show quota limit toast (request-based)
-    const showQuotaLimitToast = useCallback(() => {
-        toast.custom(
-            (_t) => (
-                <QuotaLimitToast
-                    used={dailyRequestLimit}
-                    limit={dailyRequestLimit}
-                />
-            ),
-            { duration: 15000 },
-        )
-    }, [dailyRequestLimit])
+    // The daily allowance is used up: say so, when it comes back, and the way around it.
+    const showLimitNotice = useCallback((limit: number) => {
+        notify.warning(translateDiagram("quota.limit.reached"), {
+            description: `${translateDiagram("quota.limit.desc").replace("{limit}", limit.toString())} ${translateDiagram("quota.limit.reset.short")}`,
+            action: { label: translateDiagram("quota.limit.own_key"), onClick: () => openSettings("models") },
+            duration: 15000,
+        })
+    }, [])
+    const showQuotaLimitToast = useCallback(() => showLimitNotice(dailyRequestLimit), [showLimitNotice, dailyRequestLimit])
 
     // Check daily token limit
     const checkTokenLimit = useMemo(
@@ -191,18 +189,9 @@ export function useQuotaManager(config: QuotaConfig): {
 
     // Show token limit toast
     const showTokenLimitToast = useCallback(
-        (used: number) => {
-            toast.custom(
-                (_t) => (
-                <QuotaLimitToast
-                    used={used}
-                    limit={dailyTokenLimit}
-                />
-            ),
-                { duration: 15000 },
-            )
-        },
-        [dailyTokenLimit],
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        (_used: number) => showLimitNotice(dailyTokenLimit),
+        [showLimitNotice, dailyTokenLimit],
     )
 
     // Check TPM (tokens per minute) limit
@@ -233,10 +222,10 @@ export function useQuotaManager(config: QuotaConfig): {
     const showTPMLimitToast = useCallback(() => {
         const limitDisplay =
             tpmLimit >= 1000 ? `${tpmLimit / 1000}k` : String(tpmLimit)
-        toast.error(
-            `Rate limit reached (${limitDisplay} tokens/min). Please wait 60 seconds before sending another request.`,
-            { duration: 8000 },
-        )
+        notify.warning(translateDiagram("quota.tpm.title"), {
+            description: translateDiagram("quota.tpm.detail", { limit: limitDisplay }),
+            duration: 8000,
+        })
     }, [tpmLimit])
 
     return {

@@ -14,6 +14,26 @@ export interface PendingReportImages {
   items: ReferenceItem[];
 }
 
+/** Attached pictures ("两室一厅 · 彩平图.png") as waiting report pictures, with the work they came from. */
+export async function picturesAsReportItems(files: File[]): Promise<Array<{ workName: string; item: ReferenceItem }>> {
+  return Promise.all(
+    files.map(async (file, index) => {
+      const base = file.name.replace(/\.[^.]+$/, "");
+      const cut = base.lastIndexOf(" · ");
+      const dataUrl = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result));
+        reader.onerror = () => reject(reader.error);
+        reader.readAsDataURL(file);
+      });
+      return {
+        workName: cut > 0 ? base.slice(0, cut) : "",
+        item: { id: `picture:${index}:${base}`, kind: "image" as const, label: cut > 0 ? base.slice(cut + 3) : base, dataUrl },
+      };
+    }),
+  );
+}
+
 const RULES: Array<{ picture: RegExp; slide: RegExp }> = [
   { picture: /效果图|render/i, slide: /效果|渲染|render|visual/i },
   { picture: /彩平|colou?r plan/i, slide: /彩平|平面|布置|layout|plan/i },

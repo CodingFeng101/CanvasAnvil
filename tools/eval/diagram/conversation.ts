@@ -113,7 +113,6 @@ async function ask(target: ChatTarget, messages: unknown[], signal: AbortSignal)
             xml: "",
             previousXml: "",
             sessionId: `eval-${Date.now()}`,
-            deepThinkingEnabled: false,
             aiConfig: target.aiConfig,
         }),
     })

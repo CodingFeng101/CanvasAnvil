@@ -1,7 +1,8 @@
 "use client"
 
 import { useState } from "react"
-import { toast } from "sonner"
+import { errorText, notify } from "@/shared/ui/notify"
+import { getUiLanguage } from "@/shared/i18n/language"
 import { getAIConfig } from "@/ai/storage";
 import {
     MAX_EXTRACTED_CHARS,
@@ -157,9 +158,12 @@ export function useFileProcessor(workspace: FileWorkspace = "unknown") {
                 // Oversized files are rejected outright: a truncated document
                 // silently produces a wrong answer, which is worse than none.
                 if (text.length > MAX_EXTRACTED_CHARS) {
-                    toast.error(
-                        `${file.name}: Content exceeds ${MAX_EXTRACTED_CHARS / 1000}k character limit (${(text.length / 1000).toFixed(1)}k chars)`,
-                    )
+                    const zh = getUiLanguage() === "zh"
+                    notify.error(zh ? `「${file.name}」太长，没有加入` : `"${file.name}" is too long and was not added`, {
+                        description: zh
+                            ? `内容约 ${(text.length / 1000).toFixed(1)}k 字，上限是 ${MAX_EXTRACTED_CHARS / 1000}k。可以拆成几份再上传。`
+                            : `It has about ${(text.length / 1000).toFixed(1)}k characters; the limit is ${MAX_EXTRACTED_CHARS / 1000}k. Split it and upload the parts.`,
+                    })
                     dropFileData(file)
                     setFiles((prev) => prev.filter((f) => f !== file))
                     continue
@@ -173,7 +177,8 @@ export function useFileProcessor(workspace: FileWorkspace = "unknown") {
                 })
             } catch (error) {
                 console.error("Failed to extract text:", error)
-                toast.error(`Failed to read file: ${file.name}`)
+                const zh = getUiLanguage() === "zh"
+                notify.error(zh ? `没能读取「${file.name}」` : `Could not read "${file.name}"`, { description: errorText(error) })
                 dropFileData(file)
             }
         }

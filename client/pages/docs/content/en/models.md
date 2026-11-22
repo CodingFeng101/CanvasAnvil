@@ -9,7 +9,7 @@ Settings → Models holds two independent sets of fields:
 | Channel | Used for | Fields |
 | --- | --- | --- |
 | Text | Conversation, diagram XML, floor plan layout, deck outlines and pages | Base URL, API key, model |
-| Image | Free canvas generation and edits, picture slides, Deep Think in diagrams | Base URL, API key, model |
+| Image | Free canvas generation and edits, picture slides | Base URL, API key, model |
 
 For diagrams and floor plans alone, the text channel is enough.
 

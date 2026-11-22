@@ -22,6 +22,7 @@ import { WORKSPACES, type WorkspaceId } from "@/app/workspaces";
 import { useWorksControl } from "@/app/works/works-provider";
 import { WorksButton } from "@/app/works/works-dialog";
 import { SearchWorksDialog, timeAgo } from "@/app/works/search-dialog";
+import { placeRecent, recentKey, sortValue, useRecentOrder } from "@/app/works/recent-order";
 import { cn } from "@/shared/lib/utils";
 import { t, useUiLanguage } from "@/shared/i18n";
 import { TWEEN } from "@/shared/motion";
@@ -36,6 +37,9 @@ import { OPEN_SETTINGS_EVENT } from "@/shared/settings-bus";
  * clay "new" row, the four canvases, pinned and recent works (each with a
  * pin / rename / delete menu), and the quiet controls at the foot. Selection is an ink wash, never colour. Collapsed it becomes an
  * icon rail; on a phone it is a drawer behind a slim top bar.
+ *
+ * A recent or pinned row can be moved: press and hold it, then drag (or
+ * Alt+Up / Alt+Down on a focused row). It keeps that place until the work changes.
  *
  */
 
@@ -86,9 +90,10 @@ interface Recent {
   isOpen: boolean;
 }
 
-/** Pinned works (all of them) and the latest of the rest, newest first. */
+/** Pinned works (all of them) and the latest of the rest, newest first (or where the user moved them). */
 function useRecents(): { pinned: Recent[]; recent: Recent[] } | null {
   const control = useWorksControl();
+  const order = useRecentOrder();
   const [recents, setRecents] = useState<{ pinned: Recent[]; recent: Recent[] } | null>(null);
   useEffect(() => {
     let cancelled = false;
@@ -102,7 +107,8 @@ function useRecents(): { pinned: Recent[]; recent: Recent[] } | null {
           if (!state) continue;
           for (const work of listedWorks(state.index)) rows.push({ workspace: id, work, isOpen: id === control.active?.workspace && state.currentId === work.id });
         }
-        rows.sort((a, b) => b.work.updatedAt - a.work.updatedAt);
+        const value = (r: Recent) => sortValue(order, recentKey(r.workspace, r.work.id), r.work.updatedAt);
+        rows.sort((a, b) => value(b) - value(a));
         setRecents({
           pinned: rows.filter((r) => r.work.pinned),
           recent: rows.filter((r) => !r.work.pinned).slice(0, RECENT_LIMIT),
@@ -114,7 +120,7 @@ function useRecents(): { pinned: Recent[]; recent: Recent[] } | null {
     };
     // `control` is rebuilt on every provider render; the revision is what says the lists changed.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [control.revision, control.active?.workspace, control.active?.currentId]);
+  }, [control.revision, control.active?.workspace, control.active?.currentId, order]);
   return recents;
 }
 
@@ -251,11 +257,17 @@ function RecentRow({
   icon: Icon,
   onOpen,
   onAskDelete,
+  dragging,
+  liProps,
 }: {
   item: Recent;
   icon: LucideIcon;
   onOpen: () => void;
   onAskDelete: () => void;
+  /** A row of this list is being dragged: no previews meanwhile. */
+  dragging: boolean;
+  /** The list's press-and-drag handlers and the row's place while dragging. */
+  liProps: React.LiHTMLAttributes<HTMLLIElement> & { ref: (el: HTMLLIElement | null) => void; "data-recent": string };
 }) {
   const uiLang = useUiLanguage();
   const control = useWorksControl();
@@ -283,6 +295,11 @@ function RecentRow({
     setPeek(null);
   };
   useEffect(() => () => window.clearTimeout(peekTimer.current), []);
+  useEffect(() => {
+    if (!dragging) return;
+    window.clearTimeout(peekTimer.current);
+    setPeek(null);
+  }, [dragging]);
 
   const commitRename = () => {
     setEditing(false);
@@ -316,10 +333,14 @@ function RecentRow({
   const open = !!menuAt;
   return (
     <li
-      className="group/row relative"
-      onMouseEnter={(e) => startPeek(e.currentTarget)}
+      {...liProps}
+      className={cn("group/row relative", liProps.className)}
+      onMouseEnter={(e) => !dragging && startPeek(e.currentTarget)}
       onMouseLeave={stopPeek}
-      onPointerDown={stopPeek}
+      onPointerDown={(e) => {
+        stopPeek();
+        liProps.onPointerDown?.(e);
+      }}
     >
       {peek && !open && <RecentPeek item={item} icon={Icon} at={peek} />}
       <button
@@ -408,6 +429,29 @@ function DeleteWorkDialog({ target, onClose }: { target: Recent | null; onClose:
   );
 }
 
+/** How long a row is held before it lifts and follows the pointer. */
+const HOLD_MS = 350;
+/** Moving further than this before then is a scroll or a click, not a drag. */
+const HOLD_SLOP = 6;
+
+interface Drag {
+  from: number;
+  to: number;
+  dy: number;
+  /** Each row's top and height when the drag began. */
+  tops: number[];
+  heights: number[];
+}
+
+/** Moves `items[from]` to `to` (its index once moved) and remembers it, between the rows that end up above and below it. */
+function moveRecent(items: Recent[], from: number, to: number) {
+  if (from === to) return;
+  const rest = items.filter((_, i) => i !== from);
+  const row = (r: Recent | undefined) => (r ? { key: recentKey(r.workspace, r.work.id), updatedAt: r.work.updatedAt } : null);
+  const moved = items[from];
+  placeRecent(recentKey(moved.workspace, moved.work.id), moved.work.updatedAt, row(rest[to - 1]), row(rest[to]));
+}
+
 function RecentSection({
   label,
   items,
@@ -421,19 +465,168 @@ function RecentSection({
   onOpen: (item: Recent) => void;
   onAskDelete: (item: Recent) => void;
 }) {
+  const rows = useRef<(HTMLLIElement | null)[]>([]);
+  const [drag, setDragState] = useState<Drag | null>(null);
+  const dragRef = useRef<Drag | null>(null);
+  const setDrag = (next: Drag | null) => {
+    dragRef.current = next;
+    setDragState(next);
+  };
+  const press = useRef<{ index: number; x: number; y: number; timer: number; touch: boolean } | null>(null);
+  /** The click that ends a drag must not open the row. */
+  const swallowClick = useRef(false);
+  const itemsRef = useRef(items);
+  useEffect(() => {
+    itemsRef.current = items;
+  }, [items]);
+
+  useEffect(() => {
+    const endPress = () => {
+      if (press.current) window.clearTimeout(press.current.timer);
+      press.current = null;
+    };
+    const onMove = (e: PointerEvent) => {
+      const p = press.current;
+      if (!p) return;
+      const d = dragRef.current;
+      if (!d) {
+        if (Math.hypot(e.clientX - p.x, e.clientY - p.y) > HOLD_SLOP) endPress();
+        return;
+      }
+      e.preventDefault();
+      const dy = e.clientY - p.y;
+      const centre = d.tops[d.from] + d.heights[d.from] / 2 + dy;
+      let to = 0;
+      d.tops.forEach((top, i) => {
+        if (i !== d.from && top + d.heights[i] / 2 < centre) to += 1;
+      });
+      const next = { ...d, dy, to };
+      dragRef.current = next;
+      setDragState(next);
+    };
+    const onUp = () => {
+      const d = dragRef.current;
+      endPress();
+      if (!d) return;
+      swallowClick.current = true;
+      window.setTimeout(() => (swallowClick.current = false), 0);
+      dragRef.current = null;
+      setDragState(null);
+      moveRecent(itemsRef.current, d.from, d.to);
+    };
+    const onCancel = () => {
+      endPress();
+      dragRef.current = null;
+      setDragState(null);
+    };
+    window.addEventListener("pointermove", onMove, { passive: false });
+    window.addEventListener("pointerup", onUp);
+    window.addEventListener("pointercancel", onCancel);
+    return () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("pointercancel", onCancel);
+      endPress();
+    };
+  }, []);
+
+  // While a row is lifted the page doesn't select text under the pointer.
+  const lifting = drag !== null;
+  useEffect(() => {
+    if (!lifting) return;
+    const stop = (e: Event) => e.preventDefault();
+    document.addEventListener("selectstart", stop);
+    document.body.style.cursor = "grabbing";
+    return () => {
+      document.removeEventListener("selectstart", stop);
+      document.body.style.cursor = "";
+    };
+  }, [lifting]);
+
+  const begin = (index: number, e: React.PointerEvent) => {
+    if (e.button !== 0) return;
+    if (press.current) window.clearTimeout(press.current.timer);
+    const start = { index, x: e.clientX, y: e.clientY, touch: e.pointerType === "touch", timer: 0 };
+    start.timer = window.setTimeout(() => {
+      const rects = itemsRef.current.map((_, i) => rows.current[i]?.getBoundingClientRect());
+      if (rects.some((r) => !r)) {
+        press.current = null;
+        return;
+      }
+      setDrag({ from: index, to: index, dy: 0, tops: rects.map((r) => r!.top), heights: rects.map((r) => r!.height) });
+      if (start.touch) navigator.vibrate?.(10);
+    }, HOLD_MS);
+    press.current = start;
+  };
+
+  /** How far row `i` steps aside to make room for the lifted one. */
+  const shift = (i: number) => {
+    if (!drag || i === drag.from) return 0;
+    const room = drag.heights[drag.from] + 1;
+    if (drag.from < i && i <= drag.to) return -room;
+    if (drag.to <= i && i < drag.from) return room;
+    return 0;
+  };
+
   return (
     <>
       <div className="px-2 pb-1 pt-5 text-[12px] text-muted-foreground">{label}</div>
-      <ul className="flex flex-col gap-px">
-        {items.map((item) => (
-          <RecentRow
-            key={`${item.workspace}:${item.work.id}`}
-            item={item}
-            icon={iconOf[item.workspace]}
-            onOpen={() => onOpen(item)}
-            onAskDelete={() => onAskDelete(item)}
-          />
-        ))}
+      <ul
+        className="flex flex-col gap-px"
+        onClickCapture={(e) => {
+          if (!swallowClick.current) return;
+          e.preventDefault();
+          e.stopPropagation();
+          swallowClick.current = false;
+        }}
+        onContextMenuCapture={(e) => {
+          // A long touch is a drag here, not the row's menu.
+          if (dragRef.current || press.current?.touch) {
+            e.preventDefault();
+            e.stopPropagation();
+          }
+        }}
+      >
+        {items.map((item, i) => {
+          const key = recentKey(item.workspace, item.work.id);
+          const lifted = drag?.from === i;
+          return (
+            <RecentRow
+              key={key}
+              item={item}
+              icon={iconOf[item.workspace]}
+              onOpen={() => onOpen(item)}
+              onAskDelete={() => onAskDelete(item)}
+              dragging={!!drag}
+              liProps={{
+                ref: (el) => {
+                  rows.current[i] = el;
+                },
+                "data-recent": key,
+                onPointerDown: (e) => begin(i, e),
+                onKeyDown: (e) => {
+                  if (!e.altKey || (e.key !== "ArrowUp" && e.key !== "ArrowDown")) return;
+                  e.preventDefault();
+                  const to = e.key === "ArrowUp" ? i - 1 : i + 1;
+                  if (to < 0 || to >= items.length) return;
+                  moveRecent(items, i, to);
+                  // Focus follows the row to its new place once the list re-sorts.
+                  window.setTimeout(() => {
+                    const el = rows.current.find((r) => r?.dataset.recent === key);
+                    el?.querySelector<HTMLButtonElement>("button")?.focus();
+                  }, 50);
+                },
+                className: cn(
+                  drag && "touch-none",
+                  lifted
+                    ? "z-10 rounded-lg bg-background shadow-[0_6px_16px_-6px_hsl(var(--shadow-hue)/0.25),0_1px_3px_hsl(var(--shadow-hue)/0.10)]"
+                    : drag && "transition-transform duration-fast ease-out-soft",
+                ),
+                style: drag ? { transform: `translateY(${lifted ? drag.dy : shift(i)}px)` } : undefined,
+              }}
+            />
+          );
+        })}
       </ul>
     </>
   );

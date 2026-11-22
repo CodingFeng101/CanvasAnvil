@@ -1,3 +1,4 @@
+import { errorText, notify } from "@/shared/ui/notify";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { generateImage } from "@/ai/client";
 import { getTemplateGenerationPrompt } from "@/workspaces/ppt/lib/ppt-prompts";
@@ -247,7 +248,7 @@ export function useTemplateLibrary({ initialSelectedTemplateId, uiLang, tr }: Te
   const generateTemplate = async () => {
     const requirement = generatorRequirement.trim();
     if (!requirement) {
-      alert(tr("请输入模板需求。", "Please enter template requirements."));
+      notify.info(tr("先写下想要的模板", "Describe the template first"), { description: tr("比如配色、风格、用在什么场合。", "For example its colours, style and occasion.") });
       return;
     }
 
@@ -256,7 +257,7 @@ export function useTemplateLibrary({ initialSelectedTemplateId, uiLang, tr }: Te
       const prompt = getTemplateGenerationPrompt({ requirements: requirement, language: uiLang });
       const imageUrl = await generateImage({ prompt });
       if (!imageUrl) {
-        alert(tr("模板生成失败，请重试", "Template generation failed. Please retry."));
+        notify.error(tr("模板没能生成", "The template was not generated"), { description: tr("模型没有返回图片，可以再试一次。", "The model returned no picture; try again."), action: { label: tr("重试", "Try again"), onClick: () => void generateTemplate() } });
         return;
       }
       await addGeneratedTemplate(imageUrl, generatorCategoryId);
@@ -264,7 +265,7 @@ export function useTemplateLibrary({ initialSelectedTemplateId, uiLang, tr }: Te
       setGeneratorOpen(false);
     } catch (e) {
       console.error("Template generation failed", e);
-      alert(tr("模板生成失败，请重试", "Template generation failed. Please retry."));
+      notify.error(tr("模板没能生成", "The template was not generated"), { description: errorText(e), action: { label: tr("重试", "Try again"), onClick: () => void generateTemplate() } });
     } finally {
       setGeneratorIsGenerating(false);
     }

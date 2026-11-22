@@ -236,6 +236,8 @@ export function ChatInput({
         el.setAttribute("data-label", segment.label);
         el.setAttribute("data-tag", segment.tag);
         el.setAttribute("data-token-kind", segment.tokenKind);
+        // Hovering shows the slide (the PPT canvas describes it).
+        el.setAttribute("data-peek", "ppt-slide");
         el.setAttribute("contenteditable", "false");
         // A quiet reference chip, like an attachment: a small icon (outline list or slide picture) and the page.
         el.className = "mx-0.5 inline-flex max-w-[260px] items-center gap-1.5 rounded-md bg-foreground/[0.07] px-1.5 py-px align-middle text-[13px] leading-6 text-foreground/85";
@@ -686,7 +688,8 @@ export function ChatInput({
                 )}
                 </div>
             </div>
-            <div className="flex items-center justify-between gap-2 px-2.5 pb-2.5 pt-1">
+            {/* The + and send/stop sit low, near the box's bottom edge, under the text. */}
+            <div className="flex items-center justify-between gap-2 px-2 pb-1.5 pt-2">
                 <PlusMenu items={plusItems} />
                 <SendButton
                     hasContent={hasText || files.length > 0}

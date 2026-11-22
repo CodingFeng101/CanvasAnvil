@@ -1,7 +1,10 @@
 import { cadStore } from '../../storage';
 import type { WorkspaceStore } from '@/shared/storage/indexed-db-store';
+import { makeThumbnail } from '@/shared/works/thumbnail';
+import { createPenStore } from '@/shared/pen-store';
+import type { StreamPreview } from '../stream-plan';
 import type { DesignerBridge } from '../../designer/designer-bridge';
-import type { CadDesign, DesignIssue, HouseSpec, InternalPlan, SinglePlan, SymbolRow } from './types';
+import type { CadDesign, DesignIssue, HouseSpec, InternalPlan, Point, SinglePlan, SymbolRow } from './types';
 import { applyElecPrefs, type ElecPrefs } from './elec-prefs';
 import type { ElecAudit } from './elec-audit';
 import { isBuilding } from './types';
@@ -26,7 +29,19 @@ export type MepRepair = { rounds: number; fixed: number; problems: string[] };
 type Elec = { kind: string; auto?: unknown };
 // The designer keeps its cove strips in step with the ceilings itself; those are not hand edits.
 const handElec = (plan: InternalPlan) => JSON.stringify(((plan as { elec?: Elec[] }).elec ?? []).filter(item => !item.auto));
-type Snapshot = { design: CadDesign | null; issues: DesignIssue[]; audit: ElecAudit | null; busy: boolean; ready: boolean; canUndo: boolean; lastResult: DesignResult | null };
+/** The pen over the designer while a floor plan streams in: it draws each wall before the wall is in. */
+export const designerPen = createPenStore();
+
+const planKey = (plan: SinglePlan) => `${plan.walls.length}:${plan.rooms.length}:${plan.nodes.length}`;
+const boundsOf = (points: Point[]) => {
+  const xs = points.map(([x]) => x);
+  const ys = points.map(([, y]) => y);
+  const x = Math.min(...xs);
+  const y = Math.min(...ys);
+  return { x, y, w: Math.max(...xs) - x, h: Math.max(...ys) - y };
+};
+
+type Snapshot = { design: CadDesign | null; issues: DesignIssue[]; audit: ElecAudit | null; busy: boolean; ready: boolean; canUndo: boolean; lastResult: DesignResult | null; previewing?: boolean };
 type StoredDesign = { design: CadDesign | null; history: CadDesign[]; undoAI: CadDesign | null };
 type Retry = (feedback: string, summary: string) => Promise<unknown>;
 type Loader = (preset: DesignerPreset, recovering?: boolean) => Promise<DesignerBridge>;
@@ -48,6 +63,14 @@ export class CadDesignSession {
   private snapshot: Snapshot = { design: null, issues: [], audit: null, busy: false, ready: false, canUndo: false, lastResult: null };
   private history: CadDesign[] = [];
   private undo: CadDesign | null = null;
+  /**
+   * While a chat turn runs: the design it started from. A turn saves one
+   * version, its final result; the drafts and self-check rounds on the way
+   * are not versions of their own.
+   */
+  private turn: { base: CadDesign | null } | null = null;
+  /** A floor plan streaming in: the latest walls waiting for the designer, and whether it is loading for them. */
+  private preview: { latest: StreamPreview; loading: boolean; queued: number; shown: number; key: string } | null = null;
   private bridge?: DesignerBridge;
   private loader?: Loader;
   private hydration?: Promise<void>;
@@ -91,6 +114,24 @@ export class CadDesignSession {
     const write = this.writes.then(() => this.store.save(RECORD_KEY, record));
     this.writes = write.catch(() => {});
     await write;
+    if (design) this.keepShotSoon(design);
+  }
+  /**
+   * Every saved version gets the designer's picture of it, taken once the
+   * designer has drawn it. Taken here rather than by the canvas, so a version
+   * the next AI step replaces at once still has its picture in the history.
+   */
+  private keepShotSoon(design: CadDesign) {
+    const plan = JSON.stringify(design.plan);
+    setTimeout(() => {
+      const bridge = this.bridge;
+      if (!bridge) return;
+      let shot: string | null = null;
+      // Only while the designer still shows this version.
+      try { if (JSON.stringify(bridge.readPlan()) === plan) shot = bridge.shot2d(); } catch { return; }
+      if (!shot) return;
+      void makeThumbnail(shot, 480).then((thumb) => (thumb ? this.saveShot(design, thumb) : undefined)).catch(() => {});
+    }, 600);
   }
   setLoader(loader: Loader | undefined) { this.loader = loader; }
   /** The designer's 2D plan as an image, when the designer is open; for the work's preview in My works. */
@@ -161,11 +202,104 @@ export class CadDesignSession {
     const before = this.snapshot.design;
     if (!before || JSON.stringify(before.plan) === JSON.stringify(plan)) return;
     const mepManual = before.mepManual || handElec(before.plan) !== handElec(plan);
-    const design: CadDesign = { ...before, plan, mepManual, revision: before.revision + 1, lastSource: 'user', status: 'draft', updatedAt: Date.now() };
-    const history = [...this.history, before].slice(-20);
+    // Within a chat turn the designer's own changes belong to the turn's result, not to the user.
+    const design: CadDesign = { ...before, plan, mepManual, revision: before.revision + 1, lastSource: this.turn ? before.lastSource : 'user', status: 'draft', updatedAt: Date.now() };
+    const history = this.historyWith(before);
     await this.persist(design, history, this.undo);
     this.history = history;
     this.update({ design });
+  }
+  /**
+   * The first floor plan of a work, drawn into the designer while the model is
+   * still writing it: the walls that have arrived so far, then more. Nothing is
+   * saved; the finished plan replaces it as usual. Only while there is no design
+   * yet, so nothing the user drew can be overwritten or taken for theirs.
+   */
+  async previewPlan(next: StreamPreview) {
+    if (this.snapshot.design || this.snapshot.busy || !next.steps.length) return;
+    if (this.preview) {
+      this.preview.latest = next;
+      if (this.preview.loading) return;
+    } else {
+      this.preview = { latest: next, loading: false, queued: 0, shown: 0, key: '' };
+      this.update({ previewing: true });
+    }
+    const preview = this.preview;
+    try {
+      if (!this.bridge) {
+        // The designer opens on the first step; the pen draws the rest.
+        preview.loading = true;
+        const first = preview.latest.steps[0].plan;
+        await this.load({ plan: first });
+        preview.loading = false;
+        if (this.preview !== preview || this.snapshot.design) return;
+        preview.queued = preview.shown = 1;
+        preview.key = planKey(first);
+      }
+      // Each new step: the pen draws it, then it is in the plan.
+      for (let index = preview.queued; index < preview.latest.steps.length; index++) {
+        designerPen.trace({
+          prepare: () => this.stepIntoView(index),
+          points: () => this.stepOnScreen(index),
+          done: () => this.showStep(index + 1),
+        });
+      }
+      preview.queued = Math.max(preview.queued, preview.latest.steps.length);
+      // Caught up: what came after the last step (the rooms' names) shows at once.
+      if (preview.shown >= preview.latest.steps.length) this.showStep(preview.shown);
+    } catch (reason) {
+      preview.loading = false;
+      console.warn('[CAD] Streaming preview failed', reason);
+    }
+  }
+  /** The preview and its designer, while the preview still stands (no design yet, nothing applying). */
+  private livePreview() {
+    if (!this.preview || this.snapshot.design || this.snapshot.busy || !this.bridge) return null;
+    return { preview: this.preview, bridge: this.bridge };
+  }
+  /** The plan with the first `count` steps in (all of them: the full plan). */
+  private showStep(count: number) {
+    const live = this.livePreview();
+    if (!live) return designerPen.clear();
+    const { preview, bridge } = live;
+    preview.shown = Math.max(preview.shown, count);
+    const { steps, full } = preview.latest;
+    const plan = preview.shown >= steps.length ? full : steps[preview.shown - 1].plan;
+    const key = planKey(plan);
+    if (key === preview.key) return;
+    preview.key = key;
+    try { bridge.replacePlan(plan); } catch (reason) { console.warn('[CAD] Streaming preview failed', reason); }
+    // Every step in and the rooms named: the whole plan, centred.
+    if (preview.shown >= steps.length && plan.rooms.length && plan.nodes.length) void bridge.viewTo(boundsOf(plan.nodes.map(node => [node.x, node.y])), 420);
+  }
+  private stepOf(index: number) {
+    const live = this.livePreview();
+    const step = live?.preview.latest.steps[index];
+    return live && step ? { bridge: live.bridge, step } : null;
+  }
+  /** Before the pen draws off the edge of the view, the view widens to take in the plan so far and the step. */
+  private async stepIntoView(index: number) {
+    const found = this.stepOf(index);
+    if (!found) return;
+    const { bridge, step } = found;
+    if (step.outline.every(([x, y]) => bridge.inView(x, y))) return;
+    await bridge.viewTo(boundsOf([...step.plan.nodes.map(node => [node.x, node.y] as Point), ...step.outline]));
+  }
+  private stepOnScreen(index: number) {
+    const found = this.stepOf(index);
+    if (!found) return null;
+    const points = found.step.outline.map(([x, y]) => found.bridge.toScreen(x, y));
+    return points.every(Boolean) ? points as Array<{ x: number; y: number }> : null;
+  }
+  /** The turn is over: a preview that never became a design is taken down again. */
+  endPreview() {
+    if (!this.preview) return;
+    this.preview = null;
+    designerPen.clear();
+    if (!this.snapshot.design && this.bridge) {
+      this.bridge = undefined;
+      this.update({ ready: false, previewing: false, issues: [] });
+    } else this.update({ previewing: false });
   }
   sync(): Promise<CadDesign | null> {
     return this.syncing ??= (async () => {
@@ -222,10 +356,62 @@ export class CadDesignSession {
       this.update({ design });
     } finally { this.update({ busy: false }); }
   }
+  /** A chat turn starts: whatever it changes becomes one version on top of the design as it is now. */
+  async beginTurn() {
+    await this.sync().catch(() => null);
+    this.turn = { base: this.snapshot.design };
+  }
+  endTurn() {
+    this.turn = null;
+  }
+  /**
+   * The history once `before` is replaced. Within a turn only the design the
+   * turn started from goes in, once; outside one, `before` itself.
+   */
+  private historyWith(before: CadDesign | null): CadDesign[] {
+    if (!this.turn) return before ? [...this.history, before].slice(-20) : this.history;
+    const base = this.turn.base;
+    if (!base || this.history.at(-1) === base) return this.history;
+    return [...this.history, base].slice(-20);
+  }
+  /** What undoing the AI goes back to: the design the turn started from, within a turn. */
+  private undoTo(before: CadDesign | null): CadDesign | null {
+    return this.turn ? this.turn.base : before;
+  }
   /** Saved versions, oldest first; the last one is the current design. */
   versions(): CadDesign[] {
     const current = this.snapshot.design;
     return current ? [...this.history, current] : [...this.history];
+  }
+  /**
+   * The design as it was at an earlier point of the conversation (a message was edited or retried):
+   * the version with that key, or (null) no design at all, before the first floorplan. What is
+   * replaced goes into the history, so the version list can still bring it back.
+   */
+  async rewindTo(key: string | null) {
+    await this.hydrate();
+    await this.sync().catch(() => null);
+    if (this.snapshot.busy) return;
+    const current = this.snapshot.design;
+    if (key === null) {
+      if (!current) return;
+      const history = [...this.history, current].slice(-20);
+      await this.persist(null, history, null);
+      this.history = history;
+      this.undo = null;
+      // The designer frame takes itself down once there is no design.
+      this.bridge = undefined;
+      this.update({ design: null, issues: [], audit: null, canUndo: false, lastResult: null, ready: false });
+      return;
+    }
+    if (current && CadDesignSession.shotKey(current) === key) return;
+    const index = this.history.findIndex(design => CadDesignSession.shotKey(design) === key);
+    if (index < 0) return;
+    if (current) return await this.restoreVersion(index);
+    const restored: CadDesign = { ...clone(this.history[index]), status: 'draft', updatedAt: Date.now() };
+    await this.persist(restored, this.history, null);
+    this.update({ design: restored, canUndo: false, lastResult: null });
+    await this.ensureReady();
   }
   /** Bring back an earlier version; the current one goes into the history, so this can be reversed too. */
   async restoreVersion(index: number) {
@@ -340,11 +526,12 @@ export class CadDesignSession {
         plan: bridge.readPlan(), underlay, ...(extra.underlays ? { underlays: extra.underlays } : {}), ...(extra.recognition ? { recognition: extra.recognition } : {}),
         revision: (before?.revision ?? 0) + 1, status: 'draft', lastSource: 'recognize', updatedAt: Date.now(),
       };
-      const history = before ? [...this.history, before].slice(-20) : this.history;
-      await this.persist(design, history, before);
+      const history = this.historyWith(before);
+      const undo = this.undoTo(before);
+      await this.persist(design, history, undo);
       this.history = history;
-      this.undo = before;
-      this.update({ design, issues: bridge.runChecks(), canUndo: !!before });
+      this.undo = undo;
+      this.update({ design, issues: bridge.runChecks(), canUndo: !!undo });
       return design;
     } finally { this.update({ busy: false }); }
   }
@@ -524,12 +711,13 @@ export class CadDesignSession {
       } else if ((symbols || confirm) && revised.design.recognition) {
         revised.design = { ...revised.design, recognition: { ...revised.design.recognition, ...(symbols ? { symbols } : {}), ...(confirm ? { confirm } : {}) } };
       }
-      const history = before ? [...this.history, before].slice(-20) : this.history;
-      await this.persist(revised.design, history, before);
+      const history = this.historyWith(before);
+      const undo = this.undoTo(before);
+      await this.persist(revised.design, history, undo);
       this.history = history;
-      this.undo = before;
+      this.undo = undo;
       const result = { applied, errors: revised.issues.filter(issue => issue.level === 'error').length, warnings: revised.issues.filter(issue => issue.level === 'warn').length, rounds: validationRounds + revised.rounds, touched };
-      this.update({ design: revised.design, issues: revised.issues, lastResult: result, canUndo: !!before });
+      this.update({ design: revised.design, issues: revised.issues, lastResult: result, canUndo: !!undo });
       return result;
     } catch (reason) {
       if (before) {

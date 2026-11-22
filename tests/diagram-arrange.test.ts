@@ -89,6 +89,34 @@ test("a declared direction is the only one ELK tries", async () => {
   assert.ok(["tidy", "original", "layered-right"].includes(r.chosen), r.chosen);
 });
 
+test("every layout tried comes back for the user to pick: the drawing first, the chosen one among them", async () => {
+  const r = await arrangeDiagramXml(crooked, "flow-down");
+  assert.equal(r.candidates[0].method, "original");
+  assert.equal(r.candidates[0].xml, crooked);
+  assert.ok(r.candidates.some((c) => c.method === r.chosen), r.chosen);
+  assert.ok(r.candidates.some((c) => c.method.startsWith("layered")), "an ELK layout is offered");
+  for (const c of r.candidates) assert.equal(c.score, lintDiagramXml(c.xml).score, c.method);
+});
+
+test("ELK is offered even where it is never chosen, and a pass that cannot run says why", async () => {
+  // A swimlane is tidy-only: ELK still comes back for the user to pick.
+  const lanes = await arrangeDiagramXml(crooked, "swimlane");
+  assert.ok(lanes.chosen === "tidy" || lanes.chosen === "original", lanes.chosen);
+  assert.ok(lanes.candidates.some((c) => c.method.startsWith("layered")), "an ELK layout is offered");
+  // And it says why it was set aside, so a higher score next to "kept" is explained.
+  const elk = lanes.candidates.find((c) => c.method.startsWith("layered"))!;
+  assert.equal(elk.note?.why, "layout");
+  // A layout that is chosen carries no note.
+  const chosen = lanes.candidates.find((c) => c.method === lanes.chosen);
+  assert.equal(chosen?.note, undefined);
+  // Two shapes, no edge: neither pass can lay it out, and each gives its reason.
+  const tiny = wrap(shape("a", 0, 0) + shape("b", 300, 200));
+  const r = await arrangeDiagramXml(tiny, "flow-down");
+  assert.deepEqual(r.candidates.map((c) => c.method), ["original"]);
+  assert.deepEqual(r.skipped?.map((s) => s.method).sort(), ["elk", "tidy"]);
+  for (const s of r.skipped ?? []) assert.ok(s.reason.length > 0, s.method);
+});
+
 test("ELK lays out a flow without overlaps, keeping every cell", async () => {
   const r = await elkLayoutXml(crooked, "layered-down");
   assert.equal(r.report.applied, true, r.report.reason);

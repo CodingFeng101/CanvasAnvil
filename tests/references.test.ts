@@ -60,7 +60,7 @@ test("free canvas: pictures grouped by lineage, the latest version ticked", () =
   ]);
 });
 
-test("PPT: outline and notes as text, each slide's current picture ticked, earlier versions offered", () => {
+test("PPT: outline and notes as text, each slide's current picture ticked, no earlier versions", () => {
   const slides = [
     { id: "s1", title: "封面", content: ["标题", " "], note: "开场白" },
     { id: "s2", title: "", content: ["要点"] },
@@ -87,21 +87,16 @@ test("PPT: outline and notes as text, each slide's current picture ticked, earli
     ["大纲", "text", true],
     ["讲稿", "text", false],
     ["第 1 页 · 封面", "image", true],
-    ["第 1 页 · 封面 · 历史版本 1", "image", false],
     ["第 2 页", "image", true],
     ["第 2 页 · logo", "image", false],
   ]);
 });
 
-test("diagram: current diagram and distinct earlier versions, empty ones skipped, rendered on demand", () => {
+test("diagram: only the current diagram, rendered on demand; an empty one offers nothing", () => {
   const cell = (id: string) => `<mxGraphModel><root><mxCell id="${id}" vertex="1"/></root></mxGraphModel>`;
   const empty = "<mxGraphModel><root><mxCell id=\"0\"/></root></mxGraphModel>";
-  const items = diagramReferenceItems(cell("c"), [[0, empty], [1, cell("a")], [2, cell("b")], [3, cell("c")]], "zh", "thumb");
-  assert.deepEqual(items.map((i) => [i.label, !!i.defaultOn, !!i.resolve, i.dataUrl]), [
-    ["当前图表", true, true, undefined],
-    ["历史版本 2", false, true, undefined],
-    ["历史版本 1", false, true, undefined],
-  ]);
+  const items = diagramReferenceItems(cell("c"), "zh", "thumb");
+  assert.deepEqual(items.map((i) => [i.label, !!i.defaultOn, !!i.resolve, i.dataUrl]), [["当前图表", true, true, undefined]]);
   assert.equal(items[0].thumb, "thumb");
-  assert.deepEqual(diagramReferenceItems(empty, [], "zh"), []);
+  assert.deepEqual(diagramReferenceItems(empty, "zh"), []);
 });

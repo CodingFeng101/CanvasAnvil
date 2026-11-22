@@ -1,3 +1,4 @@
+import { Shimmer } from "@/shared/chat/shimmer";
 import { useMemo, useState, type ReactNode } from "react";
 import { Check, ChevronDown, ChevronUp, Copy, Play, X } from "lucide-react";
 import { Highlight } from "prism-react-renderer";
@@ -115,7 +116,7 @@ export function ApplyCodeButton({
             title={applied ? tr("已应用", "Applied") : failed ? tr("应用失败", "Apply failed") : tr("应用到画布", "Apply to canvas")}
         >
             {applying ? (
-                <div className="h-3 w-3 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+                <Play className="h-3 w-3 icon-busy text-brand" />
             ) : applied ? (
                 <Check className="h-3 w-3 text-success" />
             ) : failed ? (
@@ -258,7 +259,9 @@ export function CodeCard({
                 </div>
                 <div className="flex items-center gap-2">
                     {isStreaming ? (
-                        <div className="h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+                        <span className="inline-flex items-center gap-2 text-xs text-muted-foreground">
+                            <Shimmer as="span" duration={1.6}>{tr("生成中", "Writing")}</Shimmer>
+                        </span>
                     ) : (
                         <span className="rounded-full bg-success/[0.08] px-2 py-0.5 text-xs font-medium text-success">
                             {tr("完成", "Complete")}

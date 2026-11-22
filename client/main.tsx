@@ -9,11 +9,15 @@ import '@fontsource-variable/inter'
 import '@fontsource/noto-serif-sc/500.css'
 import App from '@/app/App'
 import { HoverHints } from '@/shared/ui/hover-hints'
+import { NoticeHost } from '@/shared/ui/notify'
+import { PeekHost } from '@/shared/ui/peek'
 import './index.css'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <App />
     <HoverHints />
+    <NoticeHost />
+    <PeekHost />
   </StrictMode>,
 )

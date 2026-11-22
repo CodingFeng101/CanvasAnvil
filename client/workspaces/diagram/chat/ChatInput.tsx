@@ -4,11 +4,10 @@ import { isSendKey } from "@/shared/preferences"
 import { History, Paperclip, SlidersHorizontal, Upload } from "lucide-react"
 import type React from "react"
 import { useCallback, useEffect, useRef, useState } from "react"
-import { toast } from "sonner"
+import { notify } from "@/shared/ui/notify"
 import { PlusMenu, SendButton, StatusRow, type PlusMenuItem } from "@/shared/chat/composer"
 import { openSettings } from "@/shared/settings-bus"
 import { useUiLanguage } from "@/shared/i18n"
-import { ErrorToast } from "@/workspaces/diagram/chat/error-toast"
 import { HistoryDialog } from "@/workspaces/diagram/chat/history-dialog"
 import { Textarea } from "@/shared/ui/textarea"
 import { cn } from "@/shared/lib/utils"
@@ -43,15 +42,6 @@ function formatFileSize(bytes: number): string {
     const mb = bytes / 1024 / 1024
     if (mb < 0.01) return `${(bytes / 1024).toFixed(0)}KB`
     return `${mb.toFixed(2)}MB`
-}
-
-function showErrorToast(message: React.ReactNode) {
-    toast.custom(
-        (t) => (
-            <ErrorToast message={message} onDismiss={() => toast.dismiss(t)} />
-        ),
-        { duration: 5000 },
-    )
 }
 
 interface ValidationResult {
@@ -99,28 +89,20 @@ function validateFiles(
 
 function showValidationErrors(errors: string[]) {
     if (errors.length === 0) return
-
-    if (errors.length === 1) {
-        showErrorToast(
-            <span className="text-muted-foreground">{errors[0]}</span>,
-        )
-    } else {
-        showErrorToast(
-            <div className="flex flex-col gap-1">
-                <span className="font-medium">
-                    {translateDiagram("files.failed_count", { n: errors.length })}
-                </span>
-                <ul className="text-muted-foreground text-xs list-disc list-inside">
+    const title = translateDiagram("files.failed_count", { n: errors.length }).replace(/[:：]\s*$/, "")
+    notify.error(title, {
+        description:
+            errors.length === 1 ? (
+                errors[0]
+            ) : (
+                <ul className="list-disc space-y-0.5 pl-4">
                     {errors.slice(0, 3).map((err) => (
                         <li key={err}>{err}</li>
                     ))}
-                    {errors.length > 3 && (
-                        <li>{translateDiagram("files.and_more", { n: errors.length - 3 })}</li>
-                    )}
+                    {errors.length > 3 && <li>{translateDiagram("files.and_more", { n: errors.length - 3 })}</li>}
                 </ul>
-            </div>,
-        )
-    }
+            ),
+    })
 }
 
 interface ChatInputProps {
@@ -139,8 +121,6 @@ interface ChatInputProps {
     showHistory?: boolean
     onToggleHistory?: (show: boolean) => void
     error?: Error | null
-    deepThinkingEnabled?: boolean
-    onToggleDeepThinking?: () => void
     /** Bumped by the parent to move focus here, e.g. after an example prompt was picked. */
     focusKey?: number
 }
@@ -158,8 +138,6 @@ export function ChatInput({
     showHistory = false,
     onToggleHistory = () => {},
     error = null,
-    deepThinkingEnabled = false,
-    onToggleDeepThinking = () => {},
     focusKey,
 }: ChatInputProps) {
     const t = useDiagramT()
@@ -412,7 +390,7 @@ export function ChatInput({
                         className="min-h-[48px] max-h-[200px] w-full resize-none rounded-none border-0 bg-transparent p-0 text-[15px] leading-6 shadow-none focus-visible:ring-0 focus-visible:ring-offset-0 placeholder:text-muted-foreground/60"
                     />
                 </div>
-                <div className="flex items-center justify-between gap-2 px-2.5 pb-2.5 pt-1">
+                <div className="flex items-center justify-between gap-2 px-2 pb-1.5 pt-2">
                     <PlusMenu items={plusItems} />
                     <SendButton
                         submit
@@ -422,8 +400,7 @@ export function ChatInput({
                     />
                 </div>
             </div>
-            {/* Deep thinking sketches the diagram with the image model first, so it is named only then. */}
-            <StatusRow channels={deepThinkingEnabled ? ["image", "text"] : ["text"]} thinking={{ on: deepThinkingEnabled, onChange: () => onToggleDeepThinking() }} />
+            <StatusRow channels={["text"]} />
         </form>
     )
 }

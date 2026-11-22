@@ -72,11 +72,11 @@ test("referencing a design: blocked until it is confirmed and its bundle is curr
     const result = await extractCadReference(storeWith(values), "zh", open);
     assert.ok("blocked" in result);
     result.blocked.action?.run();
-    return result.blocked.message;
+    return result.blocked.title;
   };
   assert.match(await blocked({}), /还没有户型/);
   assert.match(await blocked({ "cad-design-record": { design: design("draft", 3) } }), /还没确认/);
-  assert.match(await blocked({ "cad-design-record": { design: design("confirmed", 4) }, "reference-bundle": bundle }), /交付物需要更新/);
+  assert.match(await blocked({ "cad-design-record": { design: design("confirmed", 4) }, "reference-bundle": bundle }), /交付物还没准备好/);
   assert.equal(opened, 3);
   const ok = await extractCadReference(storeWith({ "cad-design-record": { design: design("confirmed", 3) }, "reference-bundle": bundle }), "zh", open);
   assert.deepEqual(ok, { items: bundle.items, revision: 3 });
@@ -108,4 +108,11 @@ test("a report takes the default texts and the quote table, not the drawings or 
     { id: "e", kind: "image", label: "彩平图", dataUrl: "data:image/png;base64,", defaultOn: true },
   ] as const;
   assert.deepEqual(reportSourceItems([...items]).map((i) => i.id), ["a", "c"]);
+});
+test("a canvas references only the canvases it has a use for, never itself", async () => {
+  const { referenceSourcesFor } = await import("../client/shared/references/sources");
+  for (const ws of ["ppt", "canvas", "diagram", "cad"] as const) assert.ok(!referenceSourcesFor(ws).includes(ws));
+  assert.ok(!referenceSourcesFor("diagram").includes("cad"));
+  assert.deepEqual([...referenceSourcesFor("cad")], []);
+  assert.ok(referenceSourcesFor("ppt").includes("cad"));
 });

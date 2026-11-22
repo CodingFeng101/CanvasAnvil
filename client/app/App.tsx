@@ -1,7 +1,6 @@
 import { Suspense, lazy, useEffect, useState } from "react";
 import { getPreferences, usePreferences } from "@/shared/preferences";
 import { MotionConfig, motion } from "motion/react";
-import { Toaster } from "sonner";
 import { AppSidebar } from "@/app/AppSidebar";
 import { ErrorBoundary } from "@/app/ErrorBoundary";
 import { DEFAULT_WORKSPACE, WORKSPACES, isWorkspaceId, type WorkspaceId } from "@/app/workspaces";
@@ -155,7 +154,6 @@ export default function App() {
     <MotionConfig reducedMotion={prefs.reduceMotion ? "always" : "user"}>
       <WorksProvider activeWorkspace={active.id} onActivateWorkspace={setActiveWorkspace}>
       <div className="paper-grain flex h-screen w-screen flex-col overflow-hidden bg-background font-sans md:flex-row">
-        <Toaster position="top-center" richColors />
         <ReferencePickerHost />
         <MiniPlayer />
 

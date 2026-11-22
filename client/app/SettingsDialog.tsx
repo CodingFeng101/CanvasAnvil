@@ -23,7 +23,7 @@ import {
   X,
   type LucideIcon,
 } from "lucide-react";
-import { toast } from "sonner";
+import { errorText, notify } from "@/shared/ui/notify";
 import { normalizeAIConfig } from "@contracts/ai";
 import type { AIConfig } from "@contracts/ai";
 import { getAIConfig, saveAIConfig } from "@/ai/storage";
@@ -31,6 +31,7 @@ import { addModel, modelsChanged, removeModel, selectModel, useModels } from "@/
 import { WORKSPACES } from "@/app/workspaces";
 import { useWorksControl } from "@/app/works/works-provider";
 import { exportAllWorks, importAllWorks, parseWorksBackup, storageByCanvas, type WorksBackup } from "@/app/works/works-registry";
+import { resetRecentOrder, useRecentOrder } from "@/app/works/recent-order";
 import {
   BarList,
   CANVAS_COLOR,
@@ -465,6 +466,9 @@ function SettingsPanel({ initial, focus, onClose }: { initial: SectionId; focus?
   const lang = useUiLanguage();
   const zh = lang === "zh";
   const prefs = usePreferences();
+  const hasRecentOrder = Object.keys(useRecentOrder()).length > 0;
+  /** Whether the backup file carries the model keys (off unless asked: the file may be passed around). */
+  const [exportKeys, setExportKeys] = useState(false);
   const { theme, setTheme } = useTheme();
   const control = useWorksControl();
   const [section, setSection] = useState<SectionId>(initial);
@@ -554,7 +558,7 @@ function SettingsPanel({ initial, focus, onClose }: { initial: SectionId; focus?
     const normalized = normalizeAIConfig({ ...config, ...pickModels() });
     const fields = CHANNEL_FIELDS[channel];
     if (!normalized[fields.apiKey] || !normalized[fields.baseUrl] || !normalized[fields.model]) {
-      toast.error(zh ? "请先填写模型、Base URL 和 API Key" : "Fill in the model, base URL and API key first");
+      notify.warning(zh ? "还不能测试" : "Not ready to test", { description: zh ? "先填好模型、Base URL 和 API Key。" : "Fill in the model, base URL and API key first." });
       return;
     }
     setTesting(channel);
@@ -570,9 +574,9 @@ function SettingsPanel({ initial, focus, onClose }: { initial: SectionId; focus?
       });
       const payload = await response.json().catch(() => ({}));
       if (!response.ok || (channel === "image" && !payload?.url)) throw new Error(String(payload?.error || "Model test failed"));
-      toast.success(zh ? "连接正常，模型可用" : "Connected; the model works");
+      notify.success(zh ? "连接正常" : "Connected", { description: zh ? "这个模型可以用了。" : "The model works." });
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : zh ? "模型测试失败" : "Model test failed");
+      notify.error(zh ? "模型测试没通过" : "Model test failed", { description: errorText(error) });
     } finally {
       setTesting(null);
     }
@@ -580,16 +584,20 @@ function SettingsPanel({ initial, focus, onClose }: { initial: SectionId; focus?
 
   const exportWorks = async () => {
     try {
-      const data = await exportAllWorks();
+      const data = await exportAllWorks(exportKeys);
       const blob = new Blob([JSON.stringify(data)], { type: "application/json" });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `canvasanvil-works-${new Date().toISOString().slice(0, 10)}.json`;
+      a.download = `canvasanvil-backup-${new Date().toISOString().slice(0, 10)}.json`;
       a.click();
       window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+      if (exportKeys)
+        notify.warning(zh ? "备份里有你的 API Key" : "The backup holds your API keys", {
+          description: zh ? "请像密码一样保管这个文件，不要发给别人。" : "Keep the file like a password; don't share it.",
+        });
     } catch (error) {
-      toast.error(String(error));
+      notify.error(zh ? "作品没能导出" : "Could not export the works", { description: errorText(error) });
     }
   };
 
@@ -599,14 +607,19 @@ function SettingsPanel({ initial, focus, onClose }: { initial: SectionId; focus?
     try {
       backup = parseWorksBackup(await file.text());
     } catch {
-      toast.error(zh ? "这不是 CanvasAnvil 导出的作品备份。" : "That isn't a CanvasAnvil works backup.");
+      notify.error(zh ? "无法恢复这个文件" : "Cannot restore this file", { description: zh ? "它不是 CanvasAnvil 导出的作品备份。" : "It isn't a CanvasAnvil works backup." });
       return;
     }
+    const withSettings = !!backup.settings;
     setConfirm({
-      title: zh ? "用备份替换全部作品？" : "Replace all works with this backup?",
+      title: zh ? "用备份替换当前内容？" : "Replace everything with this backup?",
       description: zh
-        ? `当前四个画布的所有作品会被「${file.name}」里的内容替换，替换前的作品无法找回。不确定的话先导出一份。`
-        : `Every work on all four canvases will be replaced by “${file.name}”. The current works cannot be recovered; export first if unsure.`,
+        ? withSettings
+          ? `四个画布的所有作品，以及设置、记忆和模型配置，都会换成「${file.name}」里的内容，替换前的无法找回。${backup.settings!.secrets ? "" : "备份里没有 API Key，会保留这台电脑上已填的。"}不确定的话先导出一份。`
+          : `当前四个画布的所有作品会被「${file.name}」里的内容替换，替换前的作品无法找回。这个备份是旧版导出的，不含设置。不确定的话先导出一份。`
+        : withSettings
+          ? `Every work on all four canvases, and the settings, memory and model settings, will be replaced by “${file.name}”. What is here now cannot be recovered.${backup.settings!.secrets ? "" : " The backup has no API keys; the ones on this computer are kept."} Export first if unsure.`
+          : `Every work on all four canvases will be replaced by “${file.name}”. The current works cannot be recovered. This older backup has no settings. Export first if unsure.`,
       label: zh ? "替换并恢复" : "Replace",
       run: () => void runImport(backup),
     });
@@ -615,17 +628,17 @@ function SettingsPanel({ initial, focus, onClose }: { initial: SectionId; focus?
   const runImport = async (backup: WorksBackup) => {
     try {
       await importAllWorks(backup);
-      toast.success(zh ? "作品已恢复，正在重新载入…" : "Works restored; reloading…");
+      notify.success(zh ? "已恢复" : "Restored", { description: zh ? "正在重新载入…" : "Reloading…" });
       window.setTimeout(() => window.location.reload(), 600);
     } catch (error) {
-      toast.error(String(error));
+      notify.error(zh ? "没能恢复" : "Could not restore", { description: errorText(error) });
     }
   };
 
   const wipeWorks = async () => {
     const all = await control.loadAll();
     for (const { id } of WORKSPACES) for (const work of listedWorks(all[id]?.index ?? [])) await control.removeWork(id, work.id);
-    toast.success(zh ? "作品已全部清空" : "All works cleared");
+    notify.success(zh ? "作品已全部清空" : "All works cleared");
   };
 
   const askNotify = async (next: boolean) => {
@@ -633,7 +646,7 @@ function SettingsPanel({ initial, focus, onClose }: { initial: SectionId; focus?
       const granted = await requestNotificationPermission();
       setPermission(notificationsSupported() ? Notification.permission : "denied");
       if (!granted) {
-        toast.error(zh ? "浏览器没有允许通知，可以在地址栏左侧的网站设置里打开。" : "The browser blocked notifications; allow them in the site settings by the address bar.");
+        notify.warning(zh ? "浏览器没有允许通知" : "The browser blocked notifications", { description: zh ? "可以在地址栏左侧的网站设置里打开。" : "Allow them in the site settings by the address bar." });
         return;
       }
     }
@@ -777,6 +790,32 @@ function SettingsPanel({ initial, focus, onClose }: { initial: SectionId; focus?
       ),
       keywords: "language reply 语言 回复",
     },
+    {
+      section: "general",
+      id: "confirmClear",
+      title: zh ? "清空对话前确认" : "Confirm before clearing a chat",
+      desc: zh ? "关掉后，点清空会直接清掉当前对话。" : "Off, clearing a chat happens at once, without asking.",
+      control: <Toggle label={zh ? "清空对话前确认" : "Confirm before clearing a chat"} checked={prefs.confirmClear} onChange={pref("confirmClear")} />,
+      keywords: "clear confirm 清空 确认 删除",
+    },
+    {
+      section: "general",
+      id: "recentOrder",
+      title: zh ? "侧栏最近的顺序" : "Order of recents in the sidebar",
+      desc: hasRecentOrder
+        ? zh
+          ? "你拖动调整过顺序。恢复后，按最后修改的时间排列。"
+          : "You have moved some by hand. Restoring sorts them by when they last changed."
+        : zh
+          ? "按最后修改的时间排列。长按一条可以拖动换位置。"
+          : "Sorted by when each last changed. Press and hold one to drag it elsewhere.",
+      control: (
+        <SmallButton onClick={resetRecentOrder} disabled={!hasRecentOrder}>
+          {zh ? "恢复自动排序" : "Sort automatically"}
+        </SmallButton>
+      ),
+      keywords: "recent order sort drag 最近 排序 拖动 顺序",
+    },
     // Appearance
     {
       section: "appearance",
@@ -884,9 +923,11 @@ function SettingsPanel({ initial, focus, onClose }: { initial: SectionId; focus?
     {
       section: "canvas",
       id: "autoOpen",
-      title: zh ? "画完自动打开画布" : "Open the canvas when the AI draws",
-      desc: zh ? "关掉后画布保持收起，点回复下面的卡片再打开。" : "Off, the canvas stays closed until you click the card under the reply.",
-      control: <Toggle label={zh ? "画完自动打开画布" : "Open the canvas when the AI draws"} checked={prefs.autoOpenCanvas} onChange={pref("autoOpenCanvas")} />,
+      title: zh ? "自动打开画布" : "Open the canvas by itself",
+      desc: zh
+        ? "发出第一个请求就打开画布，看着它边生成边画出来。关掉后画布保持收起，点回复下面的卡片再打开。"
+        : "The first request opens the canvas, so you watch it being drawn. Off, it stays closed until you click the card under the reply.",
+      control: <Toggle label={zh ? "自动打开画布" : "Open the canvas by itself"} checked={prefs.autoOpenCanvas} onChange={pref("autoOpenCanvas")} />,
     },
     {
       section: "canvas",
@@ -1069,6 +1110,8 @@ function SettingsPanel({ initial, focus, onClose }: { initial: SectionId; focus?
         ["newline", zh ? "换行" : "New line", prefs.sendKey === "enter" ? ["Shift", "Enter"] : ["Enter"]],
         ["upload", zh ? "添加图片或文件（输入框里）" : "Add files or photos (in the input)", [mod, "U"]],
         ["accept", zh ? "填入输入框里的灰色建议" : "Take the grey suggestion in the input", ["Tab"]],
+        ["search", zh ? "搜索作品" : "Search works", [mod, "K"]],
+        ["move", zh ? "上下移动侧栏里选中的作品" : "Move the focused work in the sidebar", ["Alt", "↑ / ↓"]],
         ["close", zh ? "关闭弹窗" : "Close a dialog", ["Esc"]],
       ] as const
     ).map(
@@ -1283,7 +1326,7 @@ function SettingsPanel({ initial, focus, onClose }: { initial: SectionId; focus?
               label: zh ? "清空" : "Clear",
               run: () => {
                 clearStats();
-                toast.success(zh ? "统计已清空" : "Usage cleared");
+                notify.success(zh ? "统计已清空" : "Usage cleared");
               },
             })
           }
@@ -1383,10 +1426,10 @@ function SettingsPanel({ initial, focus, onClose }: { initial: SectionId; focus?
                 setInstalling(name);
                 installSkill(name, skillTarget)
                   .then((where) => {
-                    toast.success(zh ? `已安装 ${name}，重启 ${TARGET_NAME[skillTarget]} 后可用` : `${name} installed; restart ${TARGET_NAME[skillTarget]}`, { description: where });
+                    notify.success(zh ? `已安装 ${name}` : `${name} installed`, { description: zh ? `重启 ${TARGET_NAME[skillTarget]} 后可用。${where ?? ""}` : `Restart ${TARGET_NAME[skillTarget]} to use it. ${where ?? ""}` });
                     skills.reload();
                   })
-                  .catch((error: unknown) => toast.error(zh ? "安装失败" : "Install failed", { description: error instanceof Error ? error.message : String(error) }))
+                  .catch((error: unknown) => notify.error(zh ? "没能安装" : "Install failed", { description: errorText(error) }))
                   .finally(() => setInstalling(null));
               }}
             >
@@ -1427,16 +1470,26 @@ function SettingsPanel({ initial, focus, onClose }: { initial: SectionId; focus?
     {
       section: "data",
       id: "export",
-      title: zh ? "导出全部作品" : "Export all works",
-      desc: zh ? "把所有画布的作品打包成一个 JSON 文件，留作备份。" : "Every canvas's works in one JSON file, as a backup.",
-      control: <SmallButton onClick={() => void exportWorks()}>{zh ? "导出" : "Export"}</SmallButton>,
-      keywords: "backup 备份 export",
+      title: zh ? "导出备份" : "Export a backup",
+      desc: zh
+        ? "所有作品（含对话和历史版本）、设置、记忆、模型配置和使用统计打包成一个 JSON 文件。换台电脑导入后，和这里基本一样。"
+        : "Every work (with its chats and versions), the settings, memory, model settings and usage, in one JSON file. Imported on another computer, it comes back much as it is here.",
+      control: (
+        <div className="flex shrink-0 items-center gap-3">
+          <label className="flex cursor-pointer items-center gap-1.5 text-[13px] text-muted-foreground">
+            <input type="checkbox" checked={exportKeys} onChange={(e) => setExportKeys(e.target.checked)} className="size-3.5 accent-foreground" />
+            {zh ? "包含 API Key" : "Include API keys"}
+          </label>
+          <SmallButton onClick={() => void exportWorks()}>{zh ? "导出" : "Export"}</SmallButton>
+        </div>
+      ),
+      keywords: "backup 备份 export 导出 迁移 换电脑 api key 密钥",
     },
     {
       section: "data",
       id: "import",
       title: zh ? "从备份恢复" : "Restore from a backup",
-      desc: zh ? "选一个导出的 JSON 文件，用它替换当前所有作品。" : "Pick an exported JSON file to replace all current works with it.",
+      desc: zh ? "选一个导出的 JSON 文件，用它替换当前所有作品和设置。" : "Pick an exported JSON file to replace all current works and settings with it.",
       control: (
         <div className="flex shrink-0 items-center gap-2">
           <input ref={importInput} type="file" accept="application/json,.json" className="hidden" onChange={(e) => (void pickImport(e.target.files?.[0]), (e.target.value = ""))} />
@@ -1459,7 +1512,7 @@ function SettingsPanel({ initial, focus, onClose }: { initial: SectionId; focus?
               label: zh ? "恢复默认" : "Restore",
               run: () => {
                 resetPreferences();
-                toast.success(zh ? "已恢复默认设置" : "Defaults restored");
+                notify.success(zh ? "已恢复默认设置" : "Defaults restored");
               },
             })
           }

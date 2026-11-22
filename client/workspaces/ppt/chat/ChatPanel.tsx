@@ -1,12 +1,24 @@
 import { usePendingPrompt } from "@/shared/pending-prompt";
 import { peekPendingReference } from "@/shared/references/pending";
+import { PptFlowSteps } from "@/workspaces/ppt/chat/PptFlowSteps";
+import {
+  IDLE_ACTIVITY,
+  applyActivity,
+  closeInterrupted,
+  flowText,
+  latestFlowIndex,
+  newFlow,
+  readFlow,
+  type DeckActivity,
+  type DeckFlowSnapshot,
+} from "@/workspaces/ppt/lib/deck-flow";
 import type { WorkReference } from "@/shared/references/types";
 import { reportSourceItems } from "@/workspaces/ppt/canvas/lib/report-images";
 import { useReportBusy, useReportLastPrompt } from '@/shared/works/work-context';
 import { useSendAfterRender } from '@/shared/chat/use-send-after-render';
 import { ChatTitle } from '@/shared/chat/chat-title';
 import { constraintsFor } from '@/shared/constraints';
-import { CanvasOpenButton } from "@/shared/canvas-pane";
+import { CanvasOpenButton, useCanvasPane } from "@/shared/canvas-pane";
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { Presentation } from 'lucide-react';
 import { cn } from '@/shared/lib/utils';
@@ -24,7 +36,6 @@ import { HistoryDialog, HistoryItem } from '@/shared/chat';
 import { ResetWarningModal } from '@/shared/chat';
 import { t, useUiLanguage } from "@/shared/i18n";
 import {
-  alternativeKind,
   detectCreationKind,
   isPdfName,
   type CreationKind,
@@ -44,6 +55,12 @@ type MaybePromise<T> = T | Promise<T>;
 
 interface ChatPanelProps {
   className?: string;
+  /** What the canvas is doing while a deck is made, folded into the chat's steps. */
+  activity?: DeckActivity;
+  /** The outline is confirmed in the chat: make the slides with the chosen style. */
+  onConfirmOutline?: () => void;
+  /** The style is picked from the chat; the canvas opens its picker. */
+  onPickStyle?: () => void;
   attachments?: Attachment[];
   onRemoveAttachment?: (id: string) => void;
   pptDraftSlides?: Array<{ id: string; slideId: string; title: string; json: string; kind: "outline" | "slide_image"; imageUrl?: string }>;
@@ -82,17 +99,6 @@ interface ChatPanelProps {
   /** The outline streaming in on the canvas, for the working line's token count. */
 }
 
-const KIND_LABEL: Record<CreationKind, [zh: string, en: string]> = {
-  idea: ["一句主题", "a topic"],
-  outline: ["一份提纲", "an outline"],
-  beautify: ["旧文件换风格", "a file to restyle"],
-};
-const KIND_SWITCH: Record<CreationKind, [zh: string, en: string]> = {
-  idea: ["当作主题", "Treat as topic"],
-  outline: ["当作提纲", "Treat as outline"],
-  beautify: ["换风格", "Restyle it"],
-};
-
 // Convert internal ChatMessage to UIMessage
 
 export function ChatPanel({ 
@@ -120,20 +126,38 @@ export function ChatPanel({
     onStartCreation,
     selectedTemplate,
     onDraftChange,
+    activity = IDLE_ACTIVITY,
+    onConfirmOutline,
+    onPickStyle,
 }: ChatPanelProps) {
   const uiLang = useUiLanguage();
   const trText = (zhText: string, enText: string) => (uiLang === "zh" ? zhText : enText);
   const resolvedTitle = title || t(uiLang, "workspace.default.title");
   const storageKey = chatStorageKey(workspaceId);
 
-  const [messages, setMessages] = useState<ChatMessage[]>(() =>
-    loadChatHistory(storageKey, initialMessages),
-  );
+  const [messages, setMessages] = useState<ChatMessage[]>(() => {
+    // A deck's steps saved mid-way (the page was refreshed) did not finish.
+    const loaded = loadChatHistory(storageKey, initialMessages).map((m) => {
+      const flow = m.role === "assistant" ? readFlow(m.content) : null;
+      return flow ? { ...m, content: flowText(closeInterrupted(flow)) } : m;
+    });
+    // Brought here to make a report from a design: the chat says so, so the panel opens on the
+    // conversation (the request waits in the box) rather than on the empty start screen.
+    const waiting = peekPendingReference("ppt");
+    if (waiting?.intent.kind !== "deck-source") return loaded;
+    const name = waiting.reference.workName;
+    const note = trText(
+      `已带来「${name}」的设计内容，放在下面的输入框里。要求可以改一改，发送后就开始写大纲。`,
+      `The design "${name}" came along; it is in the box below. Adjust the request if you like, then send it to start the outline.`,
+    );
+    return [...loaded, { role: "assistant", content: note }];
+  });
   useReportLastPrompt(
     [...messages].reverse().find((m) => m.role === "user" && typeof m.content === "string")?.content as string | undefined,
   );
 
   const [input, setInput] = useState('');
+  const canvasPane = useCanvasPane();
   const [pptInputSegments, setPptInputSegments] = useState<Array<{ type: "text"; text: string } | { type: "ppt"; slideId: string; label: string; tag: string; tokenKind: "outline" | "slide_image" }>>([
     { type: "text", text: "" }
   ]);
@@ -186,13 +210,7 @@ export function ChatPanel({
   const starting = stage === "start" && Boolean(onStartCreation);
   const draftText = pptInputSegments.map((s) => (s.type === "text" ? s.text : "")).join("");
   const draftFileNames = files.map((f) => f.name);
-  const draftKey = `${draftText}
-${draftFileNames.join("|")}`;
-  /** The user's correction of the reading, good only for the draft it was made on. */
-  const [kindOverride, setKindOverride] = useState<{ key: string; kind: CreationKind } | null>(null);
-  const detectedKind = detectCreationKind(draftText, draftFileNames);
-  const creationKind = kindOverride?.key === draftKey ? kindOverride.kind : detectedKind;
-  const otherKind = alternativeKind(creationKind, draftText);
+  const creationKind = detectCreationKind(draftText, draftFileNames);
   useEffect(() => {
     onDraftChange?.(starting ? draftText : "");
   }, [draftText, starting, onDraftChange]);
@@ -327,6 +345,8 @@ const getPptTag = (slideId: string, title: string, kind: "outline" | "slide_imag
     const pdf = files.find((f) => isPdfName(f.name));
     const kind: CreationKind = creationKind === "beautify" && !pdf ? "idea" : creationKind;
     const requestFiles = kind === "beautify" ? [pdf as File] : files.filter((f) => !f.type.startsWith("image/"));
+    // A referenced design's pictures: placed on the slides that talk about them once the outline exists.
+    const pictures = files.filter((f) => f.type.startsWith("image/"));
     if ((!text && requestFiles.length === 0) || isLoading || !onStartCreation) return;
 
     const working = {
@@ -334,9 +354,23 @@ const getPptTag = (slideId: string, title: string, kind: "outline" | "slide_imag
       outline: trText("正在把提纲整理成逐页内容…", "Turning your outline into slides..."),
       beautify: trText("正在逐页换风格，文字和数据保持不变…", "Restyling each page; text and numbers stay as they are..."),
     }[kind];
-    const fileLines = requestFiles.map((f) => `[${isPdfName(f.name) ? "PDF" : "File"}: ${f.name}]`).join("\n");
+    // Text files go in whole (a referenced work's text carries the marker the transcript shows as
+    // a canvas card); a PDF only by name.
+    const fileLines = (
+      await Promise.all(
+        requestFiles.map(async (f) =>
+          isPdfName(f.name)
+            ? `[PDF: ${f.name}]`
+            : f.type === "text/markdown" || f.type === "text/plain"
+              ? `[File: ${f.name}]\n${await f.text()}`
+              : `[File: ${f.name}]`,
+        ),
+      )
+    ).join("\n\n");
     const userContent = [text, fileLines].filter(Boolean).join("\n\n");
-    setMessages((prev) => [...prev, { role: "user", content: userContent }, { role: "assistant", content: working }]);
+    // A topic or an outline becomes a deck step by step: one message of steps that follows the canvas.
+    const flowStart = kind === "beautify" ? null : flowText(newFlow(kind === "idea" ? requestFiles.length : 0));
+    setMessages((prev) => [...prev, { role: "user", content: userContent }, { role: "assistant", content: flowStart ?? working }]);
     setPptInputSegments([{ type: "text", text: "" }]);
     setPptClearTick((x) => x + 1);
     setFiles([]);
@@ -344,9 +378,24 @@ const getPptTag = (slideId: string, title: string, kind: "outline" | "slide_imag
 
     let result: CreationResult;
     try {
-      result = await onStartCreation({ kind, text, files: requestFiles });
+      // Only reference files sent (a design brought here, say): the deck is about them.
+      const topic = text || (kind === "beautify" ? "" : trText("根据参考资料做一份汇报 PPT", "A presentation of the reference files"));
+      result = await onStartCreation({ kind, text: topic, files: requestFiles, pictures: kind === "beautify" ? [] : pictures });
     } catch (error) {
       result = { ok: false, error: error instanceof Error ? error.message : String(error) };
+    }
+    if (flowStart) {
+      updateLatestFlow((flow) => {
+        const reading = flow.reading
+          ? { ...flow.reading, state: result.ok ? ("done" as const) : flow.reading.state === "running" ? ("error" as const) : flow.reading.state }
+          : undefined;
+        if (!result.ok) {
+          return { ...flow, ...(reading ? { reading } : {}), outline: { ...flow.outline, state: "error", error: result.error || trText("已停止。", "Stopped.") } };
+        }
+        return { ...flow, ...(reading ? { reading } : {}), outline: { ...flow.outline, state: "done" }, confirm: { state: "waiting" } };
+      });
+      setIsLoading(false);
+      return;
     }
     const style = selectedTemplate?.name
       ? trText(`，用的是「${selectedTemplate.name}」这套风格`, `, in the "${selectedTemplate.name}" style`)
@@ -371,6 +420,64 @@ const getPptTag = (slideId: string, title: string, kind: "outline" | "slide_imag
     setIsLoading(false);
   };
 
+  /** Rewrites the latest deck-steps message. */
+  const updateLatestFlow = useCallback((update: (flow: DeckFlowSnapshot) => DeckFlowSnapshot) => {
+    setMessages((prev) => {
+      const index = latestFlowIndex(prev);
+      const flow = index >= 0 ? readFlow(prev[index].content) : null;
+      if (!flow) return prev;
+      const nextText = flowText(update(flow));
+      if (nextText === prev[index].content) return prev;
+      const next = prev.slice();
+      next[index] = { ...prev[index], content: nextText };
+      return next;
+    });
+  }, []);
+
+  // The canvas's live work goes into the steps under way: titles as they stream, pages as they are drawn.
+  useEffect(() => {
+    updateLatestFlow((flow) => applyActivity(flow, activity));
+  }, [activity, updateLatestFlow]);
+
+  // Drawing the slides holds the chat (no switching away mid-way); it lets go once they are done.
+  const latestFlow = latestFlowIndex(messages);
+  const drawing = latestFlow >= 0 && readFlow(messages[latestFlow].content)?.slides.state === "running";
+  const wasDrawingRef = useRef(false);
+  useEffect(() => {
+    if (wasDrawingRef.current && !drawing) setIsLoading(false);
+    wasDrawingRef.current = drawing;
+  }, [drawing]);
+
+  const confirmOutline = () => {
+    if (!onConfirmOutline || isLoading) return;
+    updateLatestFlow((flow) => {
+      const titles = activity.titles.length ? activity.titles : flow.outline.titles;
+      return {
+        ...flow,
+        outline: { ...flow.outline, titles },
+        confirm: { state: "done", ...(selectedTemplate?.name ? { style: selectedTemplate.name } : {}) },
+        slides: { state: "running", done: 0, total: titles.length },
+      };
+    });
+    setIsLoading(true);
+    onConfirmOutline();
+  };
+
+  const renderSpecial = (text: string, index: number) => {
+    const flow = readFlow(text);
+    if (!flow) return null;
+    return (
+      <PptFlowSteps
+        flow={flow}
+        canAct={index === latestFlow && stage === "outline" && !isLoading}
+        style={selectedTemplate ?? null}
+        onPickStyle={() => onPickStyle?.()}
+        onGenerate={confirmOutline}
+        tr={trText}
+      />
+    );
+  };
+
   const sendExample = useSendAfterRender(() => void handleSend());
   const handleSend = async () => {
     if (starting) return startCreation();
@@ -379,6 +486,7 @@ const getPptTag = (slideId: string, title: string, kind: "outline" | "slide_imag
           .join("");
     if ((!rawInput.trim() && files.length === 0 && attachments.length === 0 && pptDraftSlides.length === 0) || isLoading) return;
     autoRetryCountRef.current = 0;
+    canvasPane?.requested();
 
     const normalizedInput = rawInput.trim();
     const referencedPptSlideIds = new Set(
@@ -787,6 +895,7 @@ const getPptTag = (slideId: string, title: string, kind: "outline" | "slide_imag
             onDisplayChart={(xml) => onCodeAction?.(xml, 'diagram')}
             onRegenerate={handleRegenerate}
             onEditMessage={handleEditAndResend}
+            renderSpecial={renderSpecial}
           />
         )}
       </div>
@@ -807,9 +916,9 @@ const getPptTag = (slideId: string, title: string, kind: "outline" | "slide_imag
             onFilesChange={setFiles}
             files={files}
             incomingReference={incomingReference}
-            // Before the slides exist only the text model works (topic, outline);
-            // pictures, and editing or redrawing them, come once the deck is made.
-            statusChannels={stage === "slides" ? ["image", "text"] : ["text"]}
+            // Before the outline only the text model works; once it exists the slides are drawn next,
+            // so the image model shows too. Editing or redrawing a picture comes once the deck is made.
+            statusChannels={stage === "start" ? ["text"] : ["image", "text"]}
             statusExtras={stage !== "slides" ? undefined : (
               <StatusSelect<"edit" | "regenerate">
                 label={trText("改图：保留构图修改当前画面；重画：整页重新生成", "Edit keeps the composition; Redraw starts the slide over")}
@@ -823,6 +932,8 @@ const getPptTag = (slideId: string, title: string, kind: "outline" | "slide_imag
               />
             )}
             uploadMode={starting ? "filesOnly" : "imagesOnly"}
+            // A referenced design brings its pictures too (they go onto the slides about them).
+            referenceAccept={starting ? ["text", "file", "image"] : undefined}
             placeholder={
               starting
                 ? trText("写一句主题，贴一份提纲，或者把旧 PDF 拖进来", "A topic, an outline, or a PDF to restyle")
@@ -839,31 +950,7 @@ const getPptTag = (slideId: string, title: string, kind: "outline" | "slide_imag
               pumpPptInsertQueue();
             }}
             bottomChips={
-              // While starting: how the draft is read, with the other reading one click away
-              // in case the guess is wrong.
-              starting && (draftText.trim() || files.length > 0)
-                ? (
-                  <div className="flex flex-wrap items-center gap-1.5 text-xs">
-                    {draftText.trim() || files.length > 0 ? (
-                      <span className="inline-flex h-6 items-center gap-1 rounded-md bg-muted px-2 text-muted-foreground">
-                        {trText(`读作${KIND_LABEL[creationKind][0]}`, `Read as ${KIND_LABEL[creationKind][1]}`)}
-                        {otherKind ? (
-                          <>
-                            <span aria-hidden>·</span>
-                            <button
-                              type="button"
-                              onClick={() => setKindOverride({ key: draftKey, kind: otherKind })}
-                              className="text-foreground/80 underline decoration-border underline-offset-2 hover:text-foreground"
-                            >
-                              {trText(KIND_SWITCH[otherKind][0], KIND_SWITCH[otherKind][1])}
-                            </button>
-                          </>
-                        ) : null}
-                      </span>
-                    ) : null}
-                  </div>
-                )
-                : attachments.length > 0
+              attachments.length > 0
                 ? (
                   <div className="space-y-2">
                     {attachments.length > 0 && (

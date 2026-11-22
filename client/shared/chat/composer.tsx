@@ -139,25 +139,19 @@ export function SendButton({ hasContent, loading, onSend, onStop, submit }: { ha
   );
 }
 
-/** Deep thinking, offered inside the model menu (where Claude puts its effort level). */
-export interface ThinkingOption {
-  on: boolean;
-  onChange: (on: boolean) => void;
-}
-
-/** The line under the box: the model (and its thinking) first, then the canvas's own options. */
+/** The line under the box: the model first, then the canvas's own options. */
 export type ModelChannel = "text" | "image";
 
 /**
  * The line under the box. `channels` lists the models this canvas calls right
- * now, so only those are shown: a diagram names the image model only while
- * deep thinking draws a sketch, a deck only once its slides are pictures.
+ * now, so only those are shown: a deck names the image model only once its
+ * slides are pictures.
  */
-export function StatusRow({ channels = ["text"], thinking, children }: { channels?: ModelChannel[]; thinking?: ThinkingOption; children?: ReactNode }) {
+export function StatusRow({ channels = ["text"], children }: { channels?: ModelChannel[]; children?: ReactNode }) {
   return (
     <div className="flex flex-wrap items-center justify-end gap-x-1 gap-y-0.5 px-1 pt-1.5">
       {channels.map((channel) => (
-        <ModelPicker key={channel} channel={channel} thinking={channel === "text" ? thinking : undefined} labelled={channels.length > 1} />
+        <ModelPicker key={channel} channel={channel} labelled={channels.length > 1} />
       ))}
       {children}
     </div>
@@ -167,7 +161,7 @@ export function StatusRow({ channels = ["text"], thinking, children }: { channel
 const quietButton =
   "inline-flex h-7 items-center gap-1 rounded-md px-1.5 text-[12.5px] text-muted-foreground transition-colors duration-fast hover:bg-foreground/[0.05] hover:text-foreground";
 
-function ModelPicker({ channel, thinking, labelled }: { channel: ModelChannel; thinking?: ThinkingOption; labelled?: boolean }) {
+function ModelPicker({ channel, labelled }: { channel: ModelChannel; labelled?: boolean }) {
   const lang = useUiLanguage();
   const zh = lang === "zh";
   const { models, current } = useModels(channel);
@@ -189,7 +183,6 @@ function ModelPicker({ channel, thinking, labelled }: { channel: ModelChannel; t
       <button type="button" title={channel === "image" ? (zh ? "图像模型" : "Image model") : zh ? "文本模型" : "Text model"} aria-expanded={open} onClick={() => setOpen((v) => !v)} className={cn(quietButton, open && "text-foreground")}>
         {labelled && <span>{channel === "image" ? (zh ? "图像" : "Image") : zh ? "文本" : "Text"}</span>}
         <span className="text-foreground/80">{current}</span>
-        {thinking?.on && <span>{zh ? "深度思考" : "Thinking"}</span>}
         <ChevronDown className={cn("size-3 transition-transform duration-fast", open && "rotate-180")} />
       </button>
       {open && (
@@ -211,25 +204,6 @@ function ModelPicker({ channel, thinking, labelled }: { channel: ModelChannel; t
               {model === current && <Check className="size-3.5 shrink-0 text-muted-foreground" />}
             </button>
           ))}
-          {thinking && (
-            <>
-              <div className="mx-2 my-1 h-px bg-border/70" />
-              <button
-                type="button"
-                role="menuitemcheckbox"
-                aria-checked={thinking.on}
-                onClick={() => thinking.onChange(!thinking.on)}
-                className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left hover:bg-foreground/[0.06]"
-              >
-                <span className="min-w-0 flex-1">
-                  <span className="block text-[13px] text-foreground">{zh ? "深度思考" : "Deep thinking"}</span>
-                </span>
-                <span className={cn("relative h-[18px] w-[30px] shrink-0 rounded-full transition-colors", thinking.on ? "bg-[hsl(211_78%_52%)]" : "bg-foreground/[0.16]")}>
-                  <span className={cn("absolute left-[2px] top-[2px] size-[14px] rounded-full bg-white shadow transition-transform", thinking.on && "translate-x-3")} />
-                </span>
-              </button>
-            </>
-          )}
           <div className="mx-2 my-1 h-px bg-border/70" />
           <button
             type="button"

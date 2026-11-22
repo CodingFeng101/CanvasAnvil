@@ -1,10 +1,10 @@
 import { usePendingPrompt } from "@/shared/pending-prompt";
 import { useSendAfterRender } from "@/shared/chat/use-send-after-render";
 import { ChatTitle } from "@/shared/chat/chat-title";
-import { CanvasOpenButton } from "@/shared/canvas-pane";
+import { CanvasOpenButton, useCanvasPane } from "@/shared/canvas-pane";
 import { useEffect, useRef, useState } from "react";
 import { Paintbrush } from "lucide-react";
-import { toast } from "sonner";
+import { notify } from "@/shared/ui/notify";
 import type { WorkReference } from "@/shared/references/types";
 import { StatusSelect } from "@/shared/chat/composer";
 import { constraintsFor } from "@/shared/constraints";
@@ -25,7 +25,8 @@ import {
   shrinkForChat,
   type ChatImageMap,
 } from "@/workspaces/canvas/chat/chat-images";
-import { ChatMessageDisplay, type CanvasChatMessage } from "@/workspaces/canvas/chat/ChatMessageDisplay";
+import { peekPendingReference } from "@/shared/references/pending";
+import { ChatMessageDisplay, type CanvasChatMessage, type EditStage } from "@/workspaces/canvas/chat/ChatMessageDisplay";
 import { VersionStrip } from "@/workspaces/canvas/chat/version-strip";
 import { canvasStore } from "@/workspaces/canvas/storage";
 import { useReportBusy, useReportLastPrompt, useWork, useWorkStore } from "@/shared/works/work-context";
@@ -98,13 +99,33 @@ export function ChatPanel({
 
   const work = useWork();
   const imageStore = useWorkStore(canvasStore);
-  const [messages, setMessages] = useState<CanvasChatMessage[]>(() =>
-    loadChatHistory(STORAGE_KEY, []).map((m) => ({ ...m, id: makeId() })),
-  );
+  // Brought here from another canvas (a slide to edit on the board): the chat says so, so the
+  // panel opens on the conversation rather than on the empty start screen.
+  const arrivedRef = useRef(false);
+  const [messages, setMessages] = useState<CanvasChatMessage[]>(() => {
+    const loaded = loadChatHistory(STORAGE_KEY, []).map((m) => ({ ...m, id: makeId() }));
+    const waiting = peekPendingReference("canvas");
+    if (waiting?.intent.kind !== "board-edit") return loaded;
+    const { deckName, slideLabel } = waiting.intent.returnTo;
+    arrivedRef.current = true;
+    const note = tr(
+      `PPT「${deckName}」${slideLabel}已放到白板上。圈出要改的地方，告诉我怎么改；选中满意的版本后点「送回 PPT ${slideLabel}」。`,
+      `${slideLabel} of the deck "${deckName}" is on the board. Mark what to change and tell me how; then select the version you like and press "Send back to ${slideLabel}".`,
+    );
+    return [...loaded, { id: makeId(), role: "assistant", content: note }];
+  });
+  useEffect(() => {
+    if (arrivedRef.current) saveChatHistory(STORAGE_KEY, messages);
+    // Once, for the note added on arrival.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const [input, setInput] = useState("");
+  const canvasPane = useCanvasPane();
   // A sentence written on the portal lands here once, unsent.
   usePendingPrompt("canvas", setInput);
   const [isGenerating, setIsGenerating] = useState(false);
+  /** An annotated edit under way: reading the markup, then drawing from what it was read as. */
+  const [editStage, setEditStage] = useState<EditStage | null>(null);
   const [showResetWarning, setShowResetWarning] = useState(false);
   const [imageOptions, setImageOptions] = useState(loadImageOptions);
   const [focusTick] = useState(0);
@@ -184,7 +205,9 @@ export function ChatPanel({
 
   // Once a picture is on the canvas, the empty box suggests editing it by its
   // annotation (Tab puts the words in); sending those words runs that edit.
-  const hasPicture = messages.some((m) => m.role === "assistant" && m.content.includes("[[IMAGE|"));
+  // A picture that came from elsewhere (a referenced work, a slide sent to the board) counts too:
+  // it is selected as it lands.
+  const hasPicture = canAnnotateEdit || messages.some((m) => m.role === "assistant" && m.content.includes("[[IMAGE|"));
   const annotateSuggestion = tr("按标注修改选中的图片", "Edit the selected picture by its annotation");
 
   const handleSubmit = () => {
@@ -192,13 +215,14 @@ export function ChatPanel({
     if (!prompt || isGenerating) return;
     if (prompt.startsWith(annotateSuggestion)) {
       if (!canAnnotateEdit) {
-        toast.info(t(uiLang, "workspace.canvas.annotateEditHint"));
+        notify.info(tr("先选中要改的图片", "Select the picture to edit first"), { description: t(uiLang, "workspace.canvas.annotateEditHint") });
         return;
       }
       void handleAnnotatedEdit(prompt.slice(annotateSuggestion.length).replace(/^[\s:：,，。.]+/, ""));
       return;
     }
     setInput("");
+    canvasPane?.requested();
     void generateFrom(prompt, messages);
   };
 
@@ -288,6 +312,9 @@ ${constraints}` : prompt,
         size: imageOptions.size,
         quality: imageOptions.quality,
         isCancelled: () => epoch !== clearEpochRef.current,
+        onStage: (stage) => {
+          if (epoch === clearEpochRef.current) setEditStage(stage);
+        },
       });
       if (epoch !== clearEpochRef.current) return;
       const assistantMessage: CanvasChatMessage = result.ok
@@ -326,6 +353,7 @@ ${constraints}` : prompt,
         },
       ]);
     } finally {
+      setEditStage(null);
       setIsGenerating(false);
     }
   };
@@ -355,14 +383,22 @@ ${constraints}` : prompt,
           : tr("高", "High");
 
   const placeReference = async (reference: WorkReference) => {
-    let placed = 0;
+    const tags: string[] = [];
     for (const item of reference.items) {
       if (item.kind !== "image" || !item.dataUrl) continue;
       const note = tr(`引用自「${reference.workName}」· ${item.label}`, `From "${reference.workName}" · ${item.label}`);
-      if (await onImageGenerated(item.dataUrl, note)) placed++;
+      const elementId = await onImageGenerated(item.dataUrl, note);
+      // The chat shows the picture from the board (its bytes stay out of the history).
+      if (elementId) tags.push(`[[IMAGE|${withCanvasImageRef(item.label, elementId)}|[image-data]]]`);
     }
-    if (placed) toast.success(tr(`已放到画布上：${placed} 张`, `Placed on the board: ${placed}`));
-    else toast.error(tr("没能放到画布上", "Could not place them on the board"));
+    if (tags.length) {
+      // Said in the chat, so the conversation knows the picture is there (and offers to edit it by its marks).
+      const note = tr(
+        `已把「${reference.workName}」的 ${tags.length} 张图放到白板上。圈出要改的地方，告诉我怎么改。`,
+        `${tags.length} picture(s) from "${reference.workName}" are on the board. Mark what to change and tell me how.`,
+      );
+      persist([...messages, { id: makeId(), role: "assistant", content: [note, ...tags].join("\n") }]);
+    } else notify.error(tr("没能放到白板上", "Could not place them on the board"), { description: tr("引用里没有可放的图片，或白板还没准备好，稍后再试。", "The reference has no picture to place, or the board is not ready; try again shortly.") });
   };
 
   return (
@@ -387,6 +423,7 @@ ${constraints}` : prompt,
           <ChatMessageDisplay
             messages={messages}
             isGenerating={isGenerating}
+            editStage={editStage}
             onEditMessage={handleEditMessage}
             resolveCanvasImage={resolveCanvasImage}
             chatImages={chatImages}

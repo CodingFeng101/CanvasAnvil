@@ -1,8 +1,8 @@
 import type { ReferenceWorkspace, WorkReference } from "./types";
 
 /**
- * A reference carried to another canvas by a shortcut button ("放进 PPT",
- * "生成汇报 PPT", "到自由画布修改"), waiting for that canvas to take it.
+ * A reference carried to another canvas by a shortcut button ("生成汇报 PPT",
+ * "到自由画布修改"), waiting for that canvas to take it.
  *
  * Like pending-prompt.ts it lives only in memory: the button sets it right
  * before switching canvas, the target takes it once when it is ready. `intent`
@@ -10,8 +10,6 @@ import type { ReferenceWorkspace, WorkReference } from "./types";
  */
 
 export type PendingReferenceIntent =
-  /** Ask which slide, then add the pictures to it (diagram → PPT). */
-  | { kind: "slide-material" }
   /** Start a new deck from it (interior design → PPT report). */
   | { kind: "deck-source"; prompt?: string }
   /** Put the picture on the board, remembering where to send it back (PPT slide → free canvas). */

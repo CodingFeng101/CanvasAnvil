@@ -72,7 +72,7 @@ const center = (r: Rect): Point => [(r.x0 + r.x1) / 2, (r.y0 + r.y1) / 2];
 const area = (r: Rect) => (r.x1 - r.x0) * (r.y1 - r.y0);
 const round = (value: number) => Math.round(value);
 
-function parseCells(text: string, cols: number, rows: number): Array<[number, number, number, number]> {
+export function parseCells(text: string, cols: number, rows: number): Array<[number, number, number, number]> {
   const ranges: Array<[number, number, number, number]> = [];
   for (const part of String(text ?? '').toUpperCase().split(/[,，;；\s]+/).filter(Boolean)) {
     const match = /^([A-Z])(\d+)(?::([A-Z])(\d+))?$/.exec(part);

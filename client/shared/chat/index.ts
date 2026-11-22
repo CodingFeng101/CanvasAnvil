@@ -13,3 +13,5 @@ export * from "@/shared/chat/chat-empty-state";
 export * from "@/shared/chat/working-indicator";
 export * from "@/shared/chat/attachment-preview";
 export * from "@/shared/chat/anvil-mark";
+export * from "@/shared/chat/steps";
+export * from "@/shared/chat/smooth-text";

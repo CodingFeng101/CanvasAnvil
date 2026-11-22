@@ -1,6 +1,8 @@
 import { type ReactNode, useEffect, useRef, useState } from "react"
 import { Layers } from "lucide-react"
 import { CanvasPaneProvider, useCanvasPaneState } from "@/shared/canvas-pane"
+import { CanvasPen } from "@/shared/canvas-pen"
+import { diagramPen } from "@/workspaces/diagram/lib/diagram-pen"
 import { DrawIoEmbed } from "react-drawio"
 import ChatPanel from "@/workspaces/diagram/chat/ChatPanel"
 import {
@@ -180,6 +182,7 @@ function DiagramCanvas() {
                         configuration={{ css: drawioChromeCss(darkMode) }}
                     />}
                 </div>
+                <CanvasPen store={diagramPen} />
                 {loadFailed && (
                     <div
                         role="alert"

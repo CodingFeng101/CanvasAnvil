@@ -35,6 +35,12 @@ export interface AnnotatedEditOptions {
   quality?: ImageQuality;
   /** Checked once the model answers; true means the canvas was cleared meanwhile and the result must not be placed. */
   isCancelled?: () => boolean;
+  /**
+   * Where the edit is: reading the markup, then drawing (with what the markup
+   * was read as, or null when it went to the image model as drawn). Lets the
+   * chat show the AI's reading before the picture arrives.
+   */
+  onStage?: (stage: { step: "reading" } | { step: "drawing"; understood: string | null }) => void;
 }
 
 export interface AnnotatedEditPreview {
@@ -384,9 +390,11 @@ export async function runAnnotatedEdit(
   const { imageElement, originalDataUrl, annotationElements, annotatedDataUrl, hasAnnotation } = resolved.resolved;
 
   const annotationTexts = annotationTextsOf(annotationElements);
+  if (hasAnnotation) options?.onStage?.({ step: "reading" });
   const describedChange = hasAnnotation
     ? await describeAnnotationInWords(originalDataUrl, annotatedDataUrl, annotationTexts, instruction, uiLang)
     : null;
+  if (hasAnnotation) options?.onStage?.({ step: "drawing", understood: describedChange });
   const prompt = describedChange
     ? buildDescribedEditPrompt(uiLang, describedChange)
     : buildPrompt(uiLang, instruction, hasAnnotation, annotationTexts);

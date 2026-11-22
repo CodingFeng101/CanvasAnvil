@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { toast } from "sonner";
+import { errorText, notify } from "@/shared/ui/notify";
 import { Paintbrush } from "lucide-react";
 import { CanvasPaneProvider, useCanvasPaneState } from "@/shared/canvas-pane";
 import { CaptureUpdateAction, newElementWith } from "@excalidraw/excalidraw";
@@ -74,17 +74,11 @@ export function CanvasWorkspace() {
           // Brought here to be edited: the board opens whatever the auto-open setting says.
           pane.value.reveal();
           pane.value.show();
-          toast.success(
-            tr(
-              `已放到白板上。圈出要改的地方让 AI 改，选中满意的版本后点「送回 PPT ${target.slideLabel}」。`,
-              `On the board. Mark what to change and ask for it, then select the version you like and press "Send back to ${target.slideLabel}".`,
-            ),
-            { duration: 8000 },
-          );
+          // What to do next is said in the chat (its note was added as the panel opened).
         })
         .catch((error) => {
           console.error("Failed to place the slide on the board", error);
-          toast.error(tr("没能把这一页放到白板上", "Could not put the slide on the board"));
+          notify.error(tr("没能把这一页放到白板上", "Could not put the slide on the board"), { description: tr("回到 PPT 再点一次「到自由画布修改」。", "Go back to the deck and press \"Edit on free canvas\" again.") });
         });
     }, 400);
     return () => clearTimeout(timer);
@@ -112,10 +106,13 @@ export function CanvasWorkspace() {
       };
       const ok = await updateWorkValue<SlideInboxEntry[]>("ppt", target.workId, PPT_INBOX_KEY, (previous) => appendInbox(previous, entry));
       if (!ok) {
-        toast.error(tr(`找不到 PPT「${target.deckName}」了，可能已被删除。`, `The deck "${target.deckName}" is gone; it may have been deleted.`));
+        notify.error(tr(`找不到 PPT「${target.deckName}」`, `The deck "${target.deckName}" is gone`), { description: tr("它可能已被删除，这张图仍留在白板上。", "It may have been deleted; the picture stays on the board.") });
         return;
       }
       await openCanvasFor("ppt", target.workId);
+    } catch (error) {
+      console.error("Failed to send the picture back", error);
+      notify.error(tr(`没能送回 PPT ${target.slideLabel}`, `Could not send it back to ${target.slideLabel}`), { description: errorText(error), action: { label: tr("重试", "Try again"), onClick: () => void sendBack() } });
     } finally {
       setSendingBack(false);
     }

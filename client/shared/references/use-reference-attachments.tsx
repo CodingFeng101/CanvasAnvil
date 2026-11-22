@@ -3,8 +3,10 @@ import { Library, X } from "lucide-react";
 import type { PlusMenuItem } from "@/shared/chat/composer";
 import { useUiLanguage } from "@/shared/i18n";
 import { useWork } from "@/shared/works/work-context";
+import { usePeek } from "@/shared/ui/peek";
 import { canReference, openReferencePicker } from "./bus";
-import { referenceToFiles } from "./to-files";
+import { referenceSourcesFor } from "./sources";
+import { referenceToChatFiles } from "./to-files";
 import type { ReferenceItemKind, ReferenceWorkspace, WorkReference } from "./types";
 
 /**
@@ -20,6 +22,9 @@ interface AttachedReference {
   workName: string;
   workspace: ReferenceWorkspace;
   files: File[];
+  /** For the hover preview: what was taken, and the pictures among it. */
+  labels: string[];
+  images: string[];
 }
 
 export interface ReferenceAttachmentsOptions {
@@ -61,11 +66,18 @@ export function useReferenceAttachments({ workspace, accept, files, setFiles, on
   }, [files, live]);
 
   const attach = (reference: WorkReference) => {
-    const added = referenceToFiles(reference);
+    const added = referenceToChatFiles(reference);
     if (!added.length) return;
     setReferences((prev) => [
       ...prev.filter((r) => r.files.some((f) => files.includes(f))),
-      { key: `${reference.workspace}:${reference.workId}:${Date.now()}`, workName: reference.workName, workspace: reference.workspace, files: added },
+      {
+        key: `${reference.workspace}:${reference.workId}:${Date.now()}`,
+        workName: reference.workName,
+        workspace: reference.workspace,
+        files: added,
+        labels: reference.items.map((item) => item.label),
+        images: reference.items.filter((item) => item.kind === "image" && item.dataUrl).map((item) => item.dataUrl!),
+      },
     ]);
     setFiles([...files, ...added]);
   };
@@ -87,31 +99,48 @@ export function useReferenceAttachments({ workspace, accept, files, setFiles, on
     ({ canvas: tr("自由画布", "Free canvas"), ppt: "PPT", diagram: tr("图表", "Diagram"), cad: tr("室内设计", "Interior") })[id];
 
   const menuItem: PlusMenuItem | null =
-    canReference() && accept.length > 0 ? { icon: Library, label: tr("引用作品", "Reference a work"), trailing: "›", onSelect: () => void pick() } : null;
+    canReference() && accept.length > 0 && referenceSourcesFor(workspace).length > 0 ? { icon: Library, label: tr("引用作品", "Reference a work"), trailing: "›", onSelect: () => void pick() } : null;
 
   const cards = live.length ? (
     <div className="flex flex-wrap gap-2">
       {live.map((r) => (
-        <div key={r.key} className="flex max-w-[16rem] items-center gap-2 rounded-xl border border-border bg-background py-1.5 pl-2.5 pr-1.5">
-          <Library className="size-4 shrink-0 text-muted-foreground" />
-          <span className="min-w-0">
-            <span className="block truncate text-[13px] text-foreground">{r.workName}</span>
-            <span className="block truncate text-[11px] text-muted-foreground">
-              {canvasLabel(r.workspace)} · {tr(`${r.files.length} 项`, `${r.files.length} items`)}
-            </span>
-          </span>
-          <button
-            type="button"
-            onClick={() => remove(r.key)}
-            className="shrink-0 rounded-md p-1 text-muted-foreground hover:bg-foreground/[0.06] hover:text-foreground"
-            aria-label={tr("移除引用", "Remove reference")}
-          >
-            <X className="size-3.5" />
-          </button>
-        </div>
+        <ReferenceCard
+          key={r.key}
+          reference={r}
+          canvas={canvasLabel(r.workspace)}
+          count={tr(`${r.files.length} 项`, `${r.files.length} items`)}
+          removeLabel={tr("移除引用", "Remove reference")}
+          onRemove={() => remove(r.key)}
+        />
       ))}
     </div>
   ) : null;
 
   return { menuItem, cards, plainFiles, attach };
+}
+
+/** One referenced work above the box; hovering its name shows its pictures and what was taken. */
+function ReferenceCard({ reference, canvas, count, removeLabel, onRemove }: { reference: AttachedReference; canvas: string; count: string; removeLabel: string; onRemove: () => void }) {
+  const peek = usePeek({ title: reference.workName, images: reference.images, text: reference.labels.join("、"), meta: `${canvas} · ${count}` });
+  return (
+    <div className="flex max-w-[16rem] items-center gap-2 rounded-xl border border-border bg-background py-1.5 pl-2.5 pr-1.5">
+      <span {...peek} className="flex min-w-0 items-center gap-2">
+        <Library className="size-4 shrink-0 text-muted-foreground" />
+        <span className="min-w-0">
+          <span className="block truncate text-[13px] text-foreground">{reference.workName}</span>
+          <span className="block truncate text-[11px] text-muted-foreground">
+            {canvas} · {count}
+          </span>
+        </span>
+      </span>
+      <button
+        type="button"
+        onClick={onRemove}
+        className="shrink-0 rounded-md p-1 text-muted-foreground hover:bg-foreground/[0.06] hover:text-foreground"
+        aria-label={removeLabel}
+      >
+        <X className="size-3.5" />
+      </button>
+    </div>
+  );
 }

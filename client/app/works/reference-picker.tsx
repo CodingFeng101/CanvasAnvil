@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Check, ImageOff, Loader2 } from "lucide-react";
-import { toast } from "sonner";
+import { errorText, notify } from "@/shared/ui/notify";
+import { acceptsReferenceItem, referenceSourcesFor } from "@/shared/references/sources";
 import { cn } from "@/shared/lib/utils";
 import { t as tShell, useUiLanguage } from "@/shared/i18n";
 import { Button } from "@/shared/ui/button";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/shared/ui/dialog";
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/shared/ui/dialog";
 import { ScrollArea } from "@/shared/ui/scroll-area";
 import { listedWorks, type WorkMeta } from "@/shared/works/works-index";
 import type { WorkspaceStore } from "@/shared/storage/indexed-db-store";
@@ -105,11 +106,13 @@ export function ReferencePickerHost() {
     void control.loadAll().then((all) => {
       if (cancelled) return;
       const list: Row[] = [];
+      const sources = referenceSourcesFor(request.from.workspace);
       for (const { id } of WORKSPACES) {
+        // Only canvases this one has a use for (never itself: within one canvas a work is copied).
+        if (!sources.includes(id)) continue;
         const state = all[id];
         if (!state) continue;
         for (const work of listedWorks(state.index)) {
-          if (id === request.from.workspace && work.id === request.from.workId) continue;
           list.push({ workspace: id, work });
         }
       }
@@ -136,19 +139,27 @@ export function ReferencePickerHost() {
     void EXTRACTORS[row.workspace](worksStoreFor(row.workspace).storeFor(row.work.id), lang, row.work, openWork)
       .then((result) => {
         if ("items" in result) {
-          const items = result.items.filter((item) => request.accept.includes(item.kind));
+          const items = result.items.filter(
+            (item) => request.accept.includes(item.kind) && acceptsReferenceItem(request.from.workspace, row.workspace, item),
+          );
           setExtract({ ...result, items });
           setTicked(new Set(items.filter((item) => item.defaultOn).map((item) => item.id)));
         } else setExtract(result);
       })
       .catch((error) => {
         console.error("[references] could not read the work", error);
-        setExtract({ blocked: { message: lang === "zh" ? "读取这个作品失败了。" : "Could not read this work." } });
+        setExtract({ blocked: { title: lang === "zh" ? "没能读取这个作品" : "Could not read this work", detail: errorText(error) } });
       });
   };
 
   const confirm = async () => {
-    if (!chosen || !extract || !("items" in extract)) return;
+    if (!chosen || !extract) return;
+    if ("blocked" in extract) {
+      // Not taken: what is wrong, what to do, and the button that does it.
+      const { title, detail, action } = extract.blocked;
+      notify.warning(title, { description: detail, action: action ? { label: action.label, onClick: action.run } : undefined });
+      return;
+    }
     setBusy(true);
     const items: ReferenceItem[] = [];
     for (const item of extract.items) {
@@ -161,7 +172,7 @@ export function ReferencePickerHost() {
         items.push({ ...item, dataUrl: await item.resolve(), resolve: undefined });
       } catch (error) {
         console.error("[references] could not produce", item.label, error);
-        toast.error(lang === "zh" ? `「${item.label}」没能生成，已跳过` : `Could not produce "${item.label}"; skipped`);
+        notify.warning(lang === "zh" ? `「${item.label}」没能生成` : `Could not produce "${item.label}"`, { description: lang === "zh" ? "这一项已跳过，其余的照常带过去。" : "It was skipped; the rest are brought over." });
       }
     }
     finish(items.length ? { workspace: chosen.workspace, workId: chosen.work.id, workName: chosen.work.name, items, revision: extract.revision } : null);
@@ -173,13 +184,12 @@ export function ReferencePickerHost() {
 
   return (
     <Dialog open={!!request} onOpenChange={(open) => !open && !busy && finish(null)}>
-      <DialogContent className="flex h-[min(680px,calc(100vh-3rem))] flex-col overflow-hidden sm:max-w-[min(60rem,calc(100%-2rem))]">
+      <DialogContent aria-describedby={undefined} className="flex h-[min(680px,calc(100vh-3rem))] flex-col overflow-hidden sm:max-w-[min(60rem,calc(100%-2rem))]">
         <DialogHeader>
           <DialogTitle>{t("ref.title")}</DialogTitle>
-          <DialogDescription>{t("ref.desc")}</DialogDescription>
         </DialogHeader>
         <div className="flex flex-wrap gap-1.5">
-          {(["all", ...WORKSPACES.map((w) => w.id)] as Filter[]).map((id) => (
+          {(["all", ...WORKSPACES.map((w) => w.id).filter((id) => !!request && referenceSourcesFor(request.from.workspace).includes(id))] as Filter[]).map((id) => (
             <button
               key={id}
               type="button"
@@ -234,14 +244,7 @@ export function ReferencePickerHost() {
                 {t("works.loading")}
               </p>
             ) : "blocked" in extract ? (
-              <div className="space-y-3 text-sm">
-                <p className="text-muted-foreground">{extract.blocked.message}</p>
-                {extract.blocked.action && (
-                  <Button size="sm" variant="outline" onClick={extract.blocked.action.run}>
-                    {extract.blocked.action.label}
-                  </Button>
-                )}
-              </div>
+              <p className="truncate text-sm font-medium text-foreground">{chosen.work.name}</p>
             ) : (
               <>
                 <div className="mb-2 flex items-center justify-between gap-2">
@@ -263,7 +266,12 @@ export function ReferencePickerHost() {
                     <ul className="space-y-1 pr-2">
                       {items.map((item, index) => {
                         const on = ticked.has(item.id);
-                        const nested = !!item.group && items[index - 1]?.group === item.group;
+                        // A row sits under its group's first row only when it belongs to that one (a slide's
+                        // earlier versions and materials), and then says only what it adds ("历史版本 1").
+                        // Items merely of one kind (a design's texts, its files) stay a flat list.
+                        const head = item.group && items[index - 1]?.group === item.group ? items.find((other) => other.group === item.group)?.label : undefined;
+                        const nested = !!head && item.label.startsWith(`${head} · `);
+                        const label = nested && head ? item.label.slice(head.length + 3) : item.label;
                         const preview = item.kind === "image" ? item.dataUrl || item.thumb : undefined;
                         return (
                           <li key={item.id}>
@@ -281,7 +289,7 @@ export function ReferencePickerHost() {
                                 {on && <Check className="size-3" />}
                               </span>
                               {preview ? <img src={preview} alt="" className="size-8 shrink-0 rounded border border-border object-cover" /> : null}
-                              <span className="min-w-0 flex-1 truncate">{item.label}</span>
+                              <span className="line-clamp-2 min-w-0 flex-1 break-words" title={item.label}>{label}</span>
                             </button>
                           </li>
                         );
@@ -297,7 +305,7 @@ export function ReferencePickerHost() {
           <Button variant="outline" onClick={() => finish(null)} disabled={busy}>
             {t("save.cancel")}
           </Button>
-          <Button onClick={() => void confirm()} disabled={busy || ticked.size === 0 || !extract || !("items" in extract)}>
+          <Button onClick={() => void confirm()} disabled={busy || !extract || ("items" in extract && ticked.size === 0)}>
             {busy && <Loader2 className="mr-1.5 size-4 animate-spin" />}
             {t("ref.confirm")}
           </Button>

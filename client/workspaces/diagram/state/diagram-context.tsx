@@ -7,6 +7,7 @@ import { DIAGRAM_DB_KEYS, diagramStore } from "@/workspaces/diagram/storage"
 import { useWorkStore } from "@/shared/works/work-context"
 import type { ExportFormat } from "@/workspaces/diagram/chat/save-dialog"
 import { extractDiagramXML, validateMxCellStructure } from "@/workspaces/diagram/lib/drawio-xml"
+import { followDrawio, resetDrawioPen } from "@/workspaces/diagram/lib/diagram-pen"
 
 interface DiagramContextType {
     chartXML: string
@@ -14,6 +15,8 @@ interface DiagramContextType {
     diagramHistory: { svg: string; xml: string }[]
     pushHistorySnapshot: (xml: string, svg?: string) => void
     loadDiagram: (chart: string, skipValidation?: boolean) => string | null
+    /** Draw a diagram that is still streaming in straight into draw.io, without saving it. */
+    previewDiagram: (chart: string) => void
     handleExport: () => boolean
     handleExportWithoutHistory: () => boolean
     resolverRef: React.MutableRefObject<((value: string) => void) | null>
@@ -47,6 +50,8 @@ export function DiagramProvider({ children }: { children: React.ReactNode }) {
     const resolverRef = useRef<((value: string) => void) | null>(null)
     // Track if we're expecting an export for history (user-initiated)
     const expectHistoryExportRef = useRef<boolean>(false)
+    // A streaming diagram is being drawn into draw.io: the first frame loads, later ones merge.
+    const previewingRef = useRef(false)
 
     const isEffectivelyEmptyDiagramXml = (xml: string) => {
         const safeXml = String(xml || "").trim()
@@ -139,6 +144,8 @@ export function DiagramProvider({ children }: { children: React.ReactNode }) {
 
         // Keep chartXML in sync even when diagrams are injected (e.g., display_diagram tool)
         setChartXML(chart)
+        previewingRef.current = false
+        resetDrawioPen()
 
         if (drawioRef.current) {
             drawioRef.current.load({
@@ -147,6 +154,29 @@ export function DiagramProvider({ children }: { children: React.ReactNode }) {
         }
 
         return null
+    }
+
+    /*
+     * While the model is still writing a diagram, each new frame goes into the
+     * editor itself. The first is loaded; after that draw.io merges the change
+     * in place (it patches the cells that differ), so shapes and connectors
+     * appear one by one without the editor reloading, flickering or losing the
+     * view. chartXML is left alone: the finished diagram is loaded as usual.
+     */
+    const previewDiagram = (chart: string) => {
+        const editor = drawioRef.current
+        if (!editor) return
+        if (previewingRef.current) {
+            editor.merge({ xml: chart })
+        } else {
+            previewingRef.current = true
+            resetDrawioPen()
+            editor.load({ xml: chart })
+        }
+        // The pen traces each new shape before it shows (see diagram-pen).
+        window.setTimeout(() => {
+            if (previewingRef.current) followDrawio()
+        }, 60)
     }
 
     const handleDiagramExport = (data: any) => {
@@ -295,6 +325,7 @@ export function DiagramProvider({ children }: { children: React.ReactNode }) {
                 diagramHistory,
                 pushHistorySnapshot,
                 loadDiagram,
+                previewDiagram,
                 handleExport,
                 handleExportWithoutHistory,
                 resolverRef,

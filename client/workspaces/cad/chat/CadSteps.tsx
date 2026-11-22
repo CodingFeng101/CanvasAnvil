@@ -16,45 +16,16 @@
  * Open decisions travel after the plan body as one line, [[CAD_CHOICES]] + JSON, and show as clickable options;
  * the confirm message carries the user's picks as [[CAD_PICKS]] + JSON.
  */
-import { type ReactNode, useState } from "react";
+import { useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { AlertTriangle, Check, ChevronDown, ClipboardList, Home, ImageIcon } from "lucide-react";
-import { AnvilMark, MessageImage, Shimmer } from "@/shared/chat";
+import { AlertTriangle, Check, ClipboardList, Home, ImageIcon, ScanSearch } from "lucide-react";
+import { MessageImage, Step, StepList } from "@/shared/chat";
 import { extractImageTags } from "@/shared/chat/ppt-message-tags";
 import { useUiLanguage } from "@/shared/i18n";
 import { cn } from "@/shared/lib/utils";
 import { isSendKey } from "@/shared/preferences";
 import { CAD_CONFIRM, CHECK_CONFIRM_EN, CHECK_CONFIRM_ZH, PICKS, chosen, parseCadSteps } from "./cad-steps-text";
-type StepState = "running" | "done" | "pending" | "error";
-
-function Step({ icon, title, meta, state, last, defaultOpen, children }: {
-  icon: ReactNode; title: ReactNode; meta?: ReactNode; state: StepState; last: boolean; defaultOpen: boolean; children?: ReactNode;
-}) {
-  const [open, setOpen] = useState(defaultOpen);
-  const hasBody = Boolean(children);
-  return (
-    <li className="relative flex gap-3 pb-3 last:pb-0">
-      {!last && <span aria-hidden className="absolute left-[11px] top-7 bottom-0 w-px bg-border" />}
-      <span className={cn(
-        "relative z-[1] mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full border bg-background",
-        state === "running" ? "border-primary/50 text-primary-strong" : state === "error" ? "border-destructive/50 text-destructive" : state === "pending" ? "border-dashed border-border text-muted-foreground/60" : "border-border text-muted-foreground",
-      )}>
-        {state === "running" ? <AnvilMark className="size-4" /> : icon}
-      </span>
-      <div className="min-w-0 flex-1 pt-0.5">
-        <button type="button" disabled={!hasBody} onClick={() => setOpen(!open)} aria-expanded={open}
-          className="flex w-full min-w-0 items-center gap-2 text-left enabled:hover:opacity-80">
-          <span className="shrink-0 text-sm font-medium text-foreground/85">{title}</span>
-          {meta && <span className="min-w-0 truncate text-xs text-muted-foreground">{meta}</span>}
-          {hasBody && <ChevronDown className={cn("h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform", open && "rotate-180")} />}
-        </button>
-        {hasBody && open && <div className="mt-1.5">{children}</div>}
-      </div>
-    </li>
-  );
-}
-
 const Markdown = ({ children }: { children: string }) => (
   <div className="prose prose-sm max-w-none break-words text-foreground/85 [overflow-wrap:anywhere] [&>*:first-child]:mt-0 [&>*:last-child]:mb-0">
     <ReactMarkdown remarkPlugins={[remarkGfm]}>{children}</ReactMarkdown>
@@ -80,9 +51,9 @@ export function CadSteps({ text, followUp, canAct, onAction }: {
     const running = parsed.state === "running";
     const failed = parsed.state === "error";
     return (
-      <ol className="my-1 w-full list-none pl-0">
-        <Step icon={failed ? <AlertTriangle className="h-3.5 w-3.5" /> : <Home className="h-3.5 w-3.5" />} state={running ? "running" : failed ? "error" : "done"} last defaultOpen
-          title={running ? <Shimmer duration={1}>{tr("生成户型", "Floorplan")}</Shimmer> : tr("生成户型", "Floorplan")}
+      <StepList className="my-1 w-full">
+        <Step icon={failed ? AlertTriangle : Home} state={running ? "running" : failed ? "error" : "done"} last defaultOpen
+          title={running ? tr("生成户型", "Floorplan") : tr("生成户型", "Floorplan")}
           meta={failed ? tr("没有完成", "Did not finish") : undefined}>
           <Markdown>{parsed.body}</Markdown>
           {failed && followUp === "none" && (
@@ -92,7 +63,7 @@ export function CadSteps({ text, followUp, canAct, onAction }: {
             </button>
           )}
         </Step>
-      </ol>
+      </StepList>
     );
   }
 
@@ -185,19 +156,19 @@ Also do this when generating: ${note}`)) : ""}${picksPayload}`); }}
   const status = followUp === "confirmed" ? tr("已确认", "Confirmed") : followUp === "feedback" ? tr("已提出修改意见", "Changes requested") : "";
 
   return (
-    <ol className="my-1 w-full list-none pl-0">
+    <StepList className="my-1 w-full">
       {/* Open while the plan streams in and while it waits for the user's answer (confirm sits at its bottom);
           folded to one line once confirmed or revised (the key remounts it). */}
-      <Step key={drafting ? "plan-drafting" : asking ? "plan-asking" : "plan-done"} icon={!drafting && followUp === "confirmed" ? <Check className="h-3.5 w-3.5" /> : <ClipboardList className="h-3.5 w-3.5" />}
+      <Step key={drafting ? "plan-drafting" : asking ? "plan-asking" : "plan-done"} icon={checking ? ScanSearch : ClipboardList}
         state={drafting ? "running" : "done"} last={!hasBoards} defaultOpen={drafting || asking}
-        title={checking ? tr("识别结果与待确认清单", "Recognized plan and questions") : drafting ? <Shimmer duration={1}>{tr("设计方案", "Design plan")}</Shimmer> : tr(parsed.regen ? "设计方案（已更新）" : "设计方案", "Design plan")}
+        title={checking ? tr("识别结果与待确认清单", "Recognized plan and questions") : drafting ? tr("设计方案", "Design plan") : tr(parsed.regen ? "设计方案（已更新）" : "设计方案", "Design plan")}
         meta={drafting ? tr("正在输出…", "Writing…") : [status, summary].filter(Boolean).join(" · ")}>
         <Markdown>{parsed.body}</Markdown>
         {confirmBlock}
       </Step>
       {/* Analysis boards are no longer drawn; the step only shows for older chats that have them. */}
-      {hasBoards && <Step icon={<ImageIcon className="h-3.5 w-3.5" />} state={drafting ? "pending" : ready ? "done" : "running"} last defaultOpen
-        title={!drafting && !ready ? <Shimmer duration={1}>{tr("分析图", "Analysis boards")}</Shimmer> : tr("分析图", "Analysis boards")}
+      {hasBoards && <Step icon={ImageIcon} state={drafting ? "pending" : ready ? "done" : "running"} last defaultOpen
+        title={!drafting && !ready ? tr("分析图", "Analysis boards") : tr("分析图", "Analysis boards")}
         meta={!drafting && !ready ? tr("正在生成…", "Drawing…") : ready && images.length ? tr(`${images.length} 张，点击放大`, `${images.length}, click to enlarge`) : undefined}>
         {ready && (images.length || imageNote) ? (
           <div className="space-y-1.5">
@@ -210,6 +181,6 @@ Also do this when generating: ${note}`)) : ""}${picksPayload}`); }}
           </div>
         ) : undefined}
       </Step>}
-    </ol>
+    </StepList>
   );
 }

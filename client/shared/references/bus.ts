@@ -37,7 +37,7 @@ export function openReferencePicker(request: ReferencePickerRequest): Promise<Wo
 }
 
 /**
- * Switching canvas from inside one ("放进 PPT" and the like). The shell owns
+ * Switching canvas from inside one ("到自由画布修改" and the like). The shell owns
  * the works, so it registers this too. `workId`: a work's id opens it, null
  * opens a new draft, undefined opens the canvas on its latest work.
  */

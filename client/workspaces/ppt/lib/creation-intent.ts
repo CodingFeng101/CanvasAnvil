@@ -13,6 +13,8 @@ export interface CreationRequest {
   text: string;
   /** Reference documents for idea / outline; the PDF to restyle for beautify. */
   files: File[];
+  /** Pictures of a referenced work (a design's renders, plans): they go onto the slides about them. */
+  pictures?: File[];
 }
 
 export interface CreationResult {

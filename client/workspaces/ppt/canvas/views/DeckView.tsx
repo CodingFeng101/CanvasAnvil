@@ -28,7 +28,6 @@ import {
 import {
   Dialog,
   DialogContent,
-  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/shared/ui/dialog";
@@ -100,10 +99,6 @@ interface DeckViewProps {
     addSlideToChat: (slide: SlideData) => void;
     /** Take the slide's picture to the free canvas to mark up there (absent without the app shell). */
     editOnBoard?: (slide: SlideData) => void;
-    backToStart: () => void;
-    backConfirmOpen: boolean;
-    confirmBackToStart: () => void;
-    setBackConfirmOpen: (open: boolean) => void;
     downloadPpt: () => void;
     downloadPdf: () => void;
     downloadEditablePpt: () => void;
@@ -217,15 +212,6 @@ export function DeckView({
             >
                 {railOpen ? <PanelLeftClose className="size-4" /> : <PanelLeftOpen className="size-4" />}
             </button>
-            <button
-                onClick={actions.backToStart}
-                title={tr("返回开始", "Back to start")}
-                className="flex items-center gap-2 px-3 py-1.5 bg-muted hover:bg-accent text-xs rounded transition-colors shadow-sm"
-            >
-                <ArrowLeft className="w-3.5 h-3.5" />
-                <span>{tr("返回", "Back")}</span>
-            </button>
-            <div className="h-4 w-px bg-border"></div>
             <button
                 onClick={() => slideshow.open(deck.currentIndex)}
                 disabled={deck.slides.length === 0}
@@ -660,33 +646,6 @@ export function DeckView({
           </div>
             );
           })()}
-        </DialogContent>
-      </Dialog>
-      <Dialog open={actions.backConfirmOpen} onOpenChange={actions.setBackConfirmOpen}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>{tr("确认返回开始", "Confirm restart")}</DialogTitle>
-          </DialogHeader>
-          <div className="text-sm text-muted-foreground">
-            {tr(
-              "返回开始将清空当前 PPT（建议先导出保存）。是否继续？",
-              "Restart will clear the current deck (export first if needed). Continue?"
-            )}
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => actions.setBackConfirmOpen(false)}>
-              {tr("取消", "Cancel")}
-            </Button>
-            <Button
-              variant="destructive"
-              onClick={() => {
-                actions.setBackConfirmOpen(false);
-                actions.confirmBackToStart();
-              }}
-            >
-              {tr("确认返回", "Confirm")}
-            </Button>
-          </DialogFooter>
         </DialogContent>
       </Dialog>
       <Dialog

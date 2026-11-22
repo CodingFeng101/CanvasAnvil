@@ -37,7 +37,6 @@ tmp/
 temp/
 *.tmp
 *.temp
-.tmp-diagram-deep-thinking/
 
 
 # Local tool workspaces (not project source)

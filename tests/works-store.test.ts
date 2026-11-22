@@ -80,6 +80,26 @@ test("a canvas with nothing saved starts on an unlisted draft", async () => {
   assert.deepEqual(listedWorks(index), []);
 });
 
+test("opening a work re-reports what it has and keeps its place; a real change moves it up", async () => {
+  const works = createWorksStore(config(memoryStore()), memoryLocal());
+  const { index } = await works.ensure("en");
+  const id = index[0].id;
+  let at = (await works.touch(id, { touched: true, lastPrompt: "a cat", thumb: "data:image/jpeg;base64,AAA" })).find((w) => w.id === id)!.updatedAt;
+  await new Promise((resolve) => setTimeout(resolve, 5));
+  // Opened again: the same request, picture and content flag.
+  let now = (await works.touch(id, { touched: true, lastPrompt: "a cat", thumb: "data:image/jpeg;base64,AAA", nameHint: "Cat" })).find((w) => w.id === id)!;
+  assert.equal(now.updatedAt, at);
+  assert.equal(now.nameHint, "Cat");
+  // A new request is a change.
+  now = (await works.touch(id, { lastPrompt: "a dog" })).find((w) => w.id === id)!;
+  assert.ok(now.updatedAt > at);
+  at = now.updatedAt;
+  await new Promise((resolve) => setTimeout(resolve, 5));
+  // So is a new picture (an edit made by hand).
+  now = (await works.touch(id, { thumb: "data:image/jpeg;base64,BBB" })).find((w) => w.id === id)!;
+  assert.ok(now.updatedAt > at);
+});
+
 test("migration runs once", async () => {
   const store = memoryStore({ primary: "v1" });
   const works = createWorksStore(config(store), memoryLocal());

@@ -1,3 +1,4 @@
+import { referenceMarker } from "./message-marker";
 import type { ReferenceItem, WorkReference } from "./types";
 
 /**
@@ -57,4 +58,25 @@ export function itemToFile(reference: Pick<WorkReference, "workName">, item: Ref
 
 export function referenceToFiles(reference: WorkReference): File[] {
   return reference.items.map((item) => itemToFile(reference, item)).filter((file): file is File => file !== null);
+}
+
+/**
+ * The files a chat box sends for a reference: the same, with the first text file opening with
+ * the reference marker (or a small marker-only note when nothing textual came along), so the
+ * transcript can show the reference as one canvas card.
+ */
+export function referenceToChatFiles(reference: WorkReference): File[] {
+  const files = referenceToFiles(reference);
+  if (!files.length) return files;
+  const marker = referenceMarker(reference);
+  const textItem = reference.items.find((item) => item.kind === "text" && item.text?.trim());
+  const textIndex = files.findIndex((file) => file.type === "text/markdown");
+  if (textItem && textIndex >= 0) {
+    const file = files[textIndex];
+    files[textIndex] = new File([`${marker}\n${textItem.text}`], file.name, { type: file.type });
+    return files;
+  }
+  const list = reference.items.map((item) => `- ${item.label}`).join("\n");
+  const note = new File([`${marker}\n${list}`], `${safeFileName(reference.workName || "reference")}.md`, { type: "text/markdown" });
+  return [note, ...files];
 }

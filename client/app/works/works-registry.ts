@@ -1,7 +1,8 @@
-import { toast } from "sonner";
+import { notify } from "@/shared/ui/notify";
 import { getUiLanguage } from "@/shared/i18n";
 import { createWorksStore, type WorksStore } from "@/shared/works/works-store";
 import type { WorkspaceId } from "@/app/workspaces";
+import { exportSettings, importSettings, type SettingsBackup } from "@/app/works/settings-backup";
 import { PPT_CHAT_STORAGE_KEY, PPT_HISTORY_STORAGE_KEY, PPT_RETURN_STAGE_STORAGE_KEY, PPT_STATE_KEY, PPT_WORKSPACE_STORAGE_KEY, pptStore } from "@/workspaces/ppt/storage";
 import { CANVAS_CHAT_IMAGES_KEY, CANVAS_CHAT_STORAGE_KEY, CANVAS_SCENE_KEY, canvasStore } from "@/workspaces/canvas/storage";
 import { CAD_CHAT_IMAGE_PREFIX, CAD_CHAT_STORAGE_KEY, CAD_DESIGN_KEYS, CAD_HISTORY_STORAGE_KEY, CAD_WORKSPACE_STORAGE_KEY, cadStore } from "@/workspaces/cad/storage";
@@ -32,11 +33,10 @@ function onSaveError(error: unknown) {
   const now = Date.now();
   if (now - lastQuotaToast < 10_000) return;
   lastQuotaToast = now;
-  toast.error(
-    getUiLanguage() === "zh"
-      ? "存储空间不足，请在「我的作品」里删除不用的作品"
-      : "Storage is full. Delete works you no longer need in My works.",
-  );
+  const zh = getUiLanguage() === "zh";
+  notify.error(zh ? "存储空间不足，作品没能保存" : "Storage is full; the work was not saved", {
+    description: zh ? "在「我的作品」里删除不用的作品后会继续保存。" : "Delete works you no longer need in My works and saving resumes.",
+  });
 }
 
 const stores = new Map<WorkspaceId, WorksStore>();
@@ -121,11 +121,23 @@ export async function storageByCanvas(): Promise<Record<WorkspaceId, number>> {
   return out;
 }
 
+export interface WorksBackup {
+  app: "CanvasAnvil";
+  format: 1;
+  exportedAt: string;
+  stores: Record<string, Record<string, unknown>>;
+  local?: Record<string, Record<string, string | null>>;
+  /** Settings, memory and model settings; missing in files from before they travelled. */
+  settings?: SettingsBackup;
+}
+
 /**
  * Everything every canvas keeps in IndexedDB (each work's live and saved
- * copies, the works lists), as one JSON-able object: Settings → Data → Export.
+ * copies, the works lists), plus the settings around them, as one JSON-able
+ * object: Settings → Data → Export. Restored on another machine it comes back
+ * as it was here. Model keys are in it only when `includeSecrets` is set.
  */
-export async function exportAllWorks() {
+export async function exportAllWorks(includeSecrets = false): Promise<WorksBackup> {
   const raw = { diagram: diagramStore, cad: cadStore, ppt: pptStore, canvas: canvasStore } as const;
   const stores: Record<string, Record<string, unknown>> = {};
   for (const [id, store] of Object.entries(raw)) {
@@ -135,10 +147,8 @@ export async function exportAllWorks() {
   }
   // The open work's small state lives in localStorage; without it a restored work would lose its chat.
   const local = Object.fromEntries(Object.keys(raw).map((id) => [id, worksStoreFor(id as WorkspaceId).localSnapshot()]));
-  return { app: "CanvasAnvil", format: 1, exportedAt: new Date().toISOString(), stores, local };
+  return { app: "CanvasAnvil", format: 1, exportedAt: new Date().toISOString(), stores, local, settings: exportSettings(includeSecrets) };
 }
-
-export type WorksBackup = Awaited<ReturnType<typeof exportAllWorks>>;
 
 /** Reads a file made by exportAllWorks; throws a readable error for anything else. */
 export function parseWorksBackup(text: string): WorksBackup {
@@ -153,7 +163,7 @@ export function parseWorksBackup(text: string): WorksBackup {
   return d as WorksBackup;
 }
 
-/** Replaces every canvas's works with a backup's. The page must reload afterwards. */
+/** Replaces every canvas's works, and the settings when the file has them, with a backup's. The page must reload afterwards. */
 export async function importAllWorks(backup: WorksBackup): Promise<number> {
   let canvases = 0;
   for (const id of ["diagram", "cad", "ppt", "canvas"] as WorkspaceId[]) {
@@ -162,5 +172,6 @@ export async function importAllWorks(backup: WorksBackup): Promise<number> {
     await worksStoreFor(id).replaceAll(entries, backup.local?.[id]);
     canvases += 1;
   }
+  if (backup.settings && typeof backup.settings === "object") importSettings(backup.settings);
   return canvases;
 }

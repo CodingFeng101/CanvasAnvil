@@ -39,7 +39,7 @@ Image generation tries the images route first and falls back to `/chat/completio
 ## Two roads to the model
 
 - **`/api/ppt-ai`**: non-streaming, called through `client/ai/client.ts`. The key stays out of cross-origin requests, and the server can inline remote images the browser could not fetch.
-- **`/api/chat`**: streaming with tool calls, for the diagram canvas. It is a pipeline: validate, extract attachments, summarise, read the intent, optionally draft a reference sketch, assemble the prompt, stream. See [Diagram chat pipeline](/docs/diagram-pipeline).
+- **`/api/chat`**: streaming with tool calls, for the diagram canvas. It is a pipeline: validate, extract attachments, summarise, assemble the prompt, stream. See [Diagram chat pipeline](/docs/diagram-pipeline).
 
 ## Debugging
 

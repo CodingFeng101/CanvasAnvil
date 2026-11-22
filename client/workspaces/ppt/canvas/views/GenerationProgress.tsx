@@ -1,70 +1,78 @@
-import { Check, Loader2 } from "lucide-react";
+import { PenLine } from "lucide-react";
 import type { CreationProgress } from "@/workspaces/ppt/canvas/lib/creation-machine";
-import type { CreationStep } from "@/workspaces/ppt/canvas/types";
-
-/** Circumference of the r=40 progress ring, for the stroke-dash trick. */
-const RING_LENGTH = 251.2;
+import { MODEL_CONCURRENCY } from "@/workspaces/ppt/canvas/lib/constants";
+import type { CreationStep, SlideData } from "@/workspaces/ppt/canvas/types";
+import { cn } from "@/shared/lib/utils";
 
 interface GenerationProgressProps {
   step: CreationStep;
   progress: CreationProgress;
   tr: (zh: string, en: string) => string;
+  /** The outline being drawn, one page per slide. */
+  slides: SlideData[];
+  /** The pictures drawn so far, by slide id. */
+  images: Record<string, string>;
 }
 
 /**
- * The full-screen view shown while a deck is being written and rendered.
- *
- * It is the only thing on screen for the whole run, deliberately: there is no
- * way to cancel or navigate away mid-generation, so there is nothing else to
- * offer.
+ * The deck being drawn by the AI pen: every page of the outline in a grid. A page being drawn has
+ * its frame sketched in over and over while the pen hatches across it (the picture cannot stream,
+ * so this is the pen thinking); when the picture arrives the pen sweeps across and wipes it in.
+ * Pages not started yet wait with their number and title. Progress is told in the chat.
  */
-export function GenerationProgress({ step, progress, tr }: GenerationProgressProps) {
-  // A run with no known total shows an empty ring rather than jumping to 100%.
-  const ratio = progress.total > 0 ? Math.max(0, Math.min(1, progress.current / progress.total)) : 0;
-  const percent = Math.round(ratio * 100);
-  const isRendering = step === "generating_images";
+export function GenerationProgress({ progress, tr, slides, images }: GenerationProgressProps) {
+  const done = slides.filter((slide) => images[slide.id]).length;
+  const total = slides.length || progress.total;
+  // Pages are drawn in order, a few at a time: the first ones still without a picture are under way.
+  const drawing = new Set(slides.filter((slide) => !images[slide.id]).slice(0, MODEL_CONCURRENCY).map((slide) => slide.id));
 
   return (
-    <div className="w-full h-full bg-sunken flex flex-col overflow-hidden">
-      <div className="flex-1 flex items-center justify-center p-6">
-        <div className="w-full max-w-md bg-card p-8 rounded-2xl shadow-soft-lg text-center space-y-6">
-          <div className="relative w-20 h-20 mx-auto">
-            <svg className="w-full h-full" viewBox="0 0 100 100">
-              <circle
-                className="text-foreground/80 stroke-current"
-                strokeWidth="8"
-                cx="50"
-                cy="50"
-                r="40"
-                fill="transparent"
-              />
-              <circle
-                className="text-primary-strong stroke-current transition-all duration-300 ease-in-out origin-center -rotate-90"
-                strokeWidth="8"
-                strokeLinecap="round"
-                cx="50"
-                cy="50"
-                r="40"
-                fill="transparent"
-                strokeDasharray={`${ratio * RING_LENGTH} ${RING_LENGTH}`}
-              />
-            </svg>
-            <div className="absolute inset-0 flex items-center justify-center text-sm font-bold">{percent}%</div>
-          </div>
+    <div className="flex h-full w-full flex-col overflow-hidden bg-background">
+      <div className="flex items-baseline justify-between gap-4 px-8 pt-6 pb-4">
+        <h3 className="text-lg font-semibold">{tr("正在画幻灯片", "Drawing the slides")}</h3>
+        <span className="text-sm tabular-nums text-muted-foreground">
+          {done} / {total}
+        </span>
+      </div>
 
-          <div className="space-y-2">
-            <h3 className="font-semibold text-lg">{tr("AI 正在创作中", "AI is creating")}</h3>
-            <p className="text-sm text-muted-foreground">
-              {progress.message || tr("正在渲染图片…", "Rendering images...")}
-            </p>
-          </div>
-
-          <div className="flex justify-center gap-2 text-xs text-muted-foreground">
-            <div className={`flex items-center gap-1 ${isRendering ? "text-primary-strong" : ""}`}>
-              {isRendering ? <Loader2 className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />}
-              <span>{tr("渲染图片", "Render images")}</span>
-            </div>
-          </div>
+      <div className="flex-1 overflow-y-auto px-8 pb-8">
+        <div className="grid grid-cols-[repeat(auto-fill,minmax(220px,1fr))] gap-5">
+          {slides.map((slide, index) => {
+            const url = images[slide.id];
+            const busy = !url && drawing.has(slide.id);
+            // Each page's pen at its own point in the motion, not all in step.
+            const phase = `${-((index * 0.7) % 3.2)}s`;
+            return (
+              <figure key={slide.id || index} className="min-w-0">
+                <div className={cn("relative aspect-video rounded-lg", url ? "" : busy ? "bg-foreground/[0.035]" : "bg-foreground/[0.02]")}>
+                  {url ? (
+                    <>
+                      <img src={url} alt="" className="pen-reveal h-full w-full rounded-lg object-cover shadow-soft" />
+                      <PenLine aria-hidden className="pen-ride pointer-events-none absolute -ml-1 -mt-5 size-5 text-brand drop-shadow-sm" strokeWidth={1.8} />
+                    </>
+                  ) : (
+                    <>
+                      {busy && (
+                        <>
+                          <svg aria-hidden className="absolute inset-0 h-full w-full overflow-visible text-foreground/30" preserveAspectRatio="none">
+                            <rect x="1" y="1" rx="8" fill="none" stroke="currentColor" strokeWidth="1.2" pathLength={100} className="frame-draw" style={{ width: "calc(100% - 2px)", height: "calc(100% - 2px)", animationDelay: phase }} />
+                          </svg>
+                          <PenLine aria-hidden className="pen-sketch pointer-events-none absolute size-5 text-brand" strokeWidth={1.8} style={{ animationDelay: phase }} />
+                        </>
+                      )}
+                      <span className={cn("absolute inset-0 flex items-center justify-center px-6 text-center text-[13px] leading-snug", busy ? "text-foreground/55" : "text-muted-foreground/45")}>
+                        <span className="line-clamp-3">{slide.title}</span>
+                      </span>
+                    </>
+                  )}
+                </div>
+                <figcaption className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
+                  <span className="tabular-nums">{index + 1}</span>
+                  <span className="min-w-0 truncate">{url ? slide.title : busy ? tr("正在画…", "Drawing…") : tr("等待中", "Waiting")}</span>
+                </figcaption>
+              </figure>
+            );
+          })}
         </div>
       </div>
     </div>

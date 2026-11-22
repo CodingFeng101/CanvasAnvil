@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
+import { CanvasPen } from '@/shared/canvas-pen';
 import { useUiLanguage } from '@/shared/i18n';
 import { cleanDesignerStorage, createDesignerBridge } from './designer-bridge';
 import { applyDesignerTheme } from './designer-theme';
 import type { DesignerApi, DesignerBridge } from './designer-bridge';
-import type { CadDesignSession, DesignerPreset } from '../lib/design/design-session';
+import { designerPen, type CadDesignSession, type DesignerPreset } from '../lib/design/design-session';
 import type { DesignIssue } from '../lib/design/types';
-import { toast } from 'sonner';
+import { errorText, notify } from '@/shared/ui/notify';
 import { loadChatHistory } from '@/shared/chat/chat-storage';
 import { setPendingPrompt } from '@/shared/pending-prompt';
 import { canOpenCanvas, openCanvasFor } from '@/shared/references/bus';
@@ -129,8 +130,9 @@ export function HouseDesignerFrame({ session, onFocus, onFixIssue, canRecognize 
   }, [request, session]);
 
   useEffect(() => {
-    if (hydrated && !snapshot.design && !snapshot.busy && !loadError && request) setRequest(null);
-  }, [hydrated, snapshot.design, snapshot.busy, loadError, request]);
+    // A floor plan drawn in while streaming stays until the turn ends; one that never became a design goes again.
+    if (hydrated && !snapshot.design && !snapshot.busy && !snapshot.previewing && !loadError && request) setRequest(null);
+  }, [hydrated, snapshot.design, snapshot.busy, snapshot.previewing, loadError, request]);
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -162,17 +164,56 @@ export function HouseDesignerFrame({ session, onFocus, onFixIssue, canRecognize 
       });
       await workStore.save(REFERENCE_BUNDLE_KEY, bundle);
       setBundleRevision(bundle.revision);
-      if (bundle.failed?.length) toast.warning(tr(`这几项没能导出：${bundle.failed.join('、')}`, `These could not be exported: ${bundle.failed.join(', ')}`));
+      if (bundle.failed?.length) notify.warning(tr('部分交付物没能导出', 'Some deliverables could not be exported'), { description: tr(`缺少：${bundle.failed.join('、')}。其余的已经可以引用。`, `Missing: ${bundle.failed.join(', ')}. The rest can be referenced.`) });
       return bundle;
     } finally {
       exportingRef.current = false;
       setExporting(null);
     }
   };
-  const updateDeliverables = () => run(async () => {
-    const bundle = await ensureBundle(true);
-    toast.success(tr(`交付物已更新（${bundle.items.length} 项），可以在其他画布引用这套户型了`, `Deliverables updated (${bundle.items.length} items); other canvases can reference this design now`));
+  /**
+   * Deliverables are made, not asked for: right after the design is confirmed, and when a
+   * confirmed design is opened without current ones (made before this was automatic, or a failed
+   * run). Failing leaves the design confirmed; the notice offers to try again.
+   */
+  // Confirming and the opened-design check can both ask at once: one run, announced if either wanted it.
+  const preparing = useRef<{ run: Promise<void>; announce: boolean } | null>(null);
+  const prepareDeliverables = (announce: boolean): Promise<void> => {
+    if (preparing.current) {
+      preparing.current.announce ||= announce;
+      return preparing.current.run;
+    }
+    const job = { announce, run: Promise.resolve() };
+    job.run = runPrepare(job).finally(() => { preparing.current = null; });
+    preparing.current = job;
+    return job.run;
+  };
+  const runPrepare = async (job: { announce: boolean }) => {
+    try {
+      const bundle = await ensureBundle();
+      if (job.announce) notify.success(tr('户型已确认', 'Design confirmed'), { description: tr(`交付物已准备好（${bundle.items.length} 项），其他画布现在可以引用这套户型。`, `${bundle.items.length} deliverables are ready; other canvases can reference this design now.`) });
+    } catch (reason) {
+      console.error('[CAD designer] Deliverables failed', reason);
+      notify.error(tr('交付物没能生成', 'The deliverables could not be made'), {
+        description: tr(`户型仍是已确认的，只是暂时不能被其他画布引用。原因：${errorText(reason)}`, `The design stays confirmed, but other canvases cannot reference it yet. Reason: ${errorText(reason)}`),
+        action: { label: tr('重试', 'Try again'), onClick: () => void prepareDeliverables(true) },
+      });
+    }
+  };
+  const confirmDesign = () => run(async () => {
+    await session.confirm();
+    if (session.getSnapshot().design?.status === 'confirmed') await prepareDeliverables(true);
   });
+  // A confirmed design opened without current deliverables gets them once the designer is up.
+  const autoPrepared = useRef<number | null>(null);
+  useEffect(() => {
+    const design = snapshot.design;
+    if (!snapshot.ready || snapshot.busy || exporting || design?.status !== 'confirmed') return;
+    if (bundleRevision === design.revision || autoPrepared.current === design.revision) return;
+    autoPrepared.current = design.revision;
+    void prepareDeliverables(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [snapshot.ready, snapshot.busy, snapshot.design?.status, snapshot.design?.revision, bundleRevision, exporting]);
   const makeReport = () => run(async () => {
     const bundle = await ensureBundle();
     const zh = language === 'zh';
@@ -188,9 +229,10 @@ export function HouseDesignerFrame({ session, onFocus, onFixIssue, canRecognize 
     await openCanvasFor('ppt', null);
   });
 
+  // A button's work that failed: said in a notice. The toolbar marker is for the designer itself breaking.
   const run = (action: () => Promise<unknown>) => { void action().catch(reason => {
     console.error('[CAD designer] Action failed', reason);
-    setRuntimeError(String(reason));
+    notify.error(tr('这一步没有完成', 'That did not finish'), { description: errorText(reason) });
   }); };
   if (hydrated && !snapshot.design && !snapshot.busy && !request) return <div className="flex h-full flex-col items-center justify-center gap-4 bg-background" data-testid="cad-design-empty">
     <p className="text-muted-foreground">{hasPlan ? tr('设计方案已在左侧对话里，确认后会在这里生成户型', 'The design plan is in the chat on the left; confirm it there to generate the floorplan here.') : tr('在左侧描述需求，先出设计方案；或上传原始户型图', 'Describe your needs on the left to get a design plan, or upload an existing floorplan.')}</p>
@@ -205,16 +247,16 @@ export function HouseDesignerFrame({ session, onFocus, onFixIssue, canRecognize 
       {canRecognize && <button className="rounded border px-2 py-1" onClick={onUpload}>{tr('上传原始户型', 'Upload floorplan')}</button>}
       <button className="rounded border px-2 py-1" onClick={onFocus}>{tr('专注模式', 'Focus mode')}</button>
       <button className="rounded border px-2 py-1" disabled={!snapshot.ready || snapshot.busy} onClick={() => run(() => session.recheck())}>{tr('重新检查', 'Recheck')}</button>
-      <button className="rounded bg-primary px-2 py-1 text-primary-foreground disabled:opacity-50" title={errors > 0 ? tr('请先解决全部错误', 'Resolve all errors first') : ''} disabled={!snapshot.ready || snapshot.busy || errors > 0} onClick={() => run(() => session.confirm())}>{snapshot.design?.status === 'confirmed' ? tr('户型已确认', 'Design confirmed') : tr('确认户型', 'Confirm design')}</button>
+      <button className="rounded bg-primary px-2 py-1 text-primary-foreground disabled:opacity-50" title={errors > 0 ? tr('请先解决全部错误', 'Resolve all errors first') : ''} disabled={!snapshot.ready || snapshot.busy || errors > 0} onClick={confirmDesign}>{snapshot.design?.status === 'confirmed' ? tr('户型已确认', 'Design confirmed') : tr('确认户型', 'Confirm design')}</button>
       {canQa && snapshot.design && <button className="rounded border px-2 py-1 disabled:opacity-50" title={tr('设计器逐项操作验收 + 导出文件检查（几分钟）', 'Operate every button, panel and export, then open the exported files (a few minutes)')} disabled={!snapshot.ready || snapshot.busy || qaRunning} onClick={onQa}>{qaRunning ? tr('交付检查中…', 'Checking delivery…') : tr('交付检查', 'Delivery check')}</button>}
       {snapshot.design?.status === 'confirmed' && canOpenCanvas() && <>
-        <button className="rounded border px-2 py-1 disabled:opacity-50" title={tr('用设计器导出报价单、施工图、彩平图、效果图等，供其他画布引用', 'Export the quote, drawings, colour plan, render and more for other canvases to reference')} disabled={!snapshot.ready || snapshot.busy || !!exporting} onClick={updateDeliverables}>{bundleRevision === snapshot.design.revision ? tr('重新导出交付物', 'Re-export deliverables') : tr('更新交付物', 'Update deliverables')}</button>
         <button className="rounded border px-2 py-1 disabled:opacity-50" title={tr('带上交付物，新建一份给业主的装修汇报 PPT', 'Start a renovation report PPT with the deliverables')} disabled={!snapshot.ready || snapshot.busy || !!exporting} onClick={makeReport}>{tr('生成汇报 PPT', 'Make report PPT')}</button>
       </>}
       {runtimeError && <span role="status" className="flex items-center gap-2 text-destructive" title={runtimeError}>{tr('设计器运行出错', 'Designer runtime error')}<button aria-label={tr('关闭错误提示', 'Dismiss error')} onClick={() => setRuntimeError('')}>×</button></span>}
     </div>
     {showIssues && <div className="max-h-48 overflow-auto border-b p-3 text-xs">{snapshot.issues.map((issue, index) => <div key={`${issue.code}-${index}`} className="flex items-center justify-between gap-3 py-1"><span>{issue.level} · {issue.msg}</span><button className="shrink-0 rounded border px-2 py-1" onClick={() => onFixIssue(issue)}>{tr('发给 AI 修复', 'Ask AI to fix')}</button></div>)}</div>}
     {request && <iframe key={request.id} ref={frameRef} title={tr('户型设计器', 'House designer')} className={`min-h-0 w-full flex-1 border-0 ${snapshot.busy || exporting ? 'pointer-events-none' : ''}`} />}
+    {snapshot.previewing && <CanvasPen store={designerPen} />}
     {exporting && <div role="status" className="pointer-events-none absolute inset-x-0 bottom-4 mx-auto w-fit rounded-full border bg-background/95 px-4 py-2 text-xs shadow">
       {tr(`正在导出交付物：${exporting.label}（${exporting.index}/${exporting.total}）· 效果图较慢，请勿操作设计器`, `Exporting deliverables: ${exporting.label} (${exporting.index}/${exporting.total}) · the render is slow; leave the designer alone`)}
     </div>}

@@ -48,6 +48,12 @@ export interface CanvasPaneValue {
   toggleMaximize(): void;
   /** The AI has put something on the canvas: open it, and let the card show. */
   reveal(): void;
+  /**
+   * The user sent a request. The first one in a work that has nothing on its
+   * canvas yet opens the canvas, so the drawing can be watched as it streams
+   * in (Settings → Canvas). Later ones leave the canvas as the user left it.
+   */
+  requested(): void;
   /** The last open / close / enlarge / restore, for the sheet's own motion. */
   change: PaneChange;
 }
@@ -130,6 +136,13 @@ export function useCanvasPaneState({ kind, icon, variant }: { kind: string; icon
     setMaximized(true);
     mark("maximize");
   }, [show]);
+  const askedOnce = useRef(false);
+  const requested = useCallback(() => {
+    if (askedOnce.current) return;
+    askedOnce.current = true;
+    if (!getPreferences().autoOpenCanvas || initialOpen || revealed) return;
+    if (panelRef.current?.isCollapsed()) show();
+  }, [initialOpen, revealed, show]);
   const reveal = useCallback(() => {
     setRevealed(true);
     // Settings → Canvas can leave it closed: the card under the reply opens it.
@@ -151,9 +164,10 @@ export function useCanvasPaneState({ kind, icon, variant }: { kind: string; icon
       restore,
       toggleMaximize: () => (chatRef.current?.isCollapsed() ? restore() : maximize()),
       reveal,
+      requested,
       change,
     }),
-    [open, maximized, initialOpen, revealed, kind, icon, variant, show, hide, maximize, restore, reveal, change],
+    [open, maximized, initialOpen, revealed, kind, icon, variant, show, hide, maximize, restore, reveal, requested, change],
   );
 
   return {
@@ -179,10 +193,12 @@ export function useCanvasPaneState({ kind, icon, variant }: { kind: string; icon
     /** On the chat column's div, for its fade. */
     chatColumnRef,
     /**
-     * For the chat column: while it has the room to itself its messages and
-     * input keep to a readable measure (`.chat-measure`), centred.
+     * For the chat column: its messages and input keep to a readable measure
+     * (`.chat-measure`), centred, whether the canvas is open or not. Dragging
+     * the chat wider only adds blank room on both sides; the conversation
+     * outline sits in the left one.
      */
-    chatColumnClassName: cn("h-full", !open && CHAT_MEASURE[prefs.chatWidth]),
+    chatColumnClassName: cn("h-full", CHAT_MEASURE[prefs.chatWidth]),
   };
 }
 

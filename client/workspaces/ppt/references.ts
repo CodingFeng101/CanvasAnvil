@@ -6,7 +6,7 @@ import type { SlideData, SlideImageVersion, SlideMaterialImage, UploadTemplate }
 
 /**
  * What a PPT work offers to other canvases: the outline (one text), the
- * speaker notes (one text), each slide's picture with its earlier versions,
+ * speaker notes (one text), each slide's current picture (no earlier versions),
  * each slide's material pictures, and the template picture. The editable
  * layers (text blocks, elements) stay behind: nothing else uses them.
  */
@@ -58,13 +58,8 @@ export function pptReferenceItems(deck: StoredDeck | null | undefined, lang: Lan
     const currentId = deck?.currentImageVersionId?.[slide.id];
     const current = versions.find((version) => version.id === currentId)?.url || deck?.generatedImages?.[slide.id];
     const group = `ppt:slide:${slide.id}`;
+    // Only the slide as it is now: earlier versions are the deck's own undo, not something to hand on.
     if (current) items.push({ id: `ppt:slide:${slide.id}`, kind: "image", label, group, dataUrl: current, defaultOn: true });
-    versions
-      .filter((version) => version.url !== current)
-      .forEach((version, n) => {
-        const name = lang === "zh" ? `${label} · 历史版本 ${n + 1}` : `${label} · earlier version ${n + 1}`;
-        items.push({ id: `ppt:version:${slide.id}:${version.id}`, kind: "image", label: name, group, dataUrl: version.url });
-      });
     (deck?.slideMaterials?.[slide.id] ?? []).forEach((material) => {
       if (!material?.dataUrl) return;
       const name = material.name || material.fileName || (lang === "zh" ? "素材" : "Material");

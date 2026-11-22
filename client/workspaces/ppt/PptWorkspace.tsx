@@ -19,6 +19,7 @@ import {
   pptStore,
 } from "@/workspaces/ppt/storage";
 import type { ChatMessage } from "@/ai/client";
+import { IDLE_ACTIVITY, type DeckActivity, type DeckCommand } from "@/workspaces/ppt/lib/deck-flow";
 import { PptCanvas } from "@/workspaces/ppt/canvas/PptCanvas";
 import { ChatPanel as PptChatPanel } from "@/workspaces/ppt/chat/ChatPanel";
 import type { HistoryItem } from "@/shared/chat";
@@ -45,6 +46,11 @@ export function PptWorkspace() {
     Array<{ id: string; slideId: string; title: string; json: string; kind: "outline" | "slide_image"; imageUrl?: string }>
   >([]);
   const [pptResetTick, setPptResetTick] = useState(0);
+  // Making a deck: the canvas reports its work to the chat's steps; the chat confirms the outline
+  // and opens the style picker, which the canvas carries out.
+  const [deckActivity, setDeckActivity] = useState<DeckActivity>(IDLE_ACTIVITY);
+  const [deckCommand, setDeckCommand] = useState<DeckCommand | null>(null);
+  const sendDeckCommand = (kind: DeckCommand["kind"]) => setDeckCommand({ id: `${Date.now()}`, kind });
   const [, setPptReady] = useState(false);
   const [pptStage, setPptStage] = useState<"start" | "outline" | "slides">(() => {
     if (typeof window === "undefined") return "start";
@@ -294,6 +300,9 @@ export function PptWorkspace() {
           onStartCreation={startCreation}
           selectedTemplate={selectedTemplate}
           onDraftChange={setDraftText}
+          activity={deckActivity}
+          onConfirmOutline={() => sendDeckCommand("generate")}
+          onPickStyle={() => sendDeckCommand("pick-style")}
         />
         </div>
       </ResizablePanel>
@@ -309,11 +318,13 @@ export function PptWorkspace() {
             onPptStageChange={setPptStage}
             incomingEdit={pptIncomingEdit}
             onIncomingEditHandled={() => setPptIncomingEdit(null)}
-            onResetWorkspace={clearWorkspace}
             creationRequest={creationRequest}
             onCreationHandled={handleCreationHandled}
             draftText={draftText}
             onTemplateChange={setSelectedTemplate}
+            onActivityChange={setDeckActivity}
+            command={deckCommand}
+            onCommandHandled={() => setDeckCommand(null)}
           />
         </CanvasSheet>
       </ResizablePanel>

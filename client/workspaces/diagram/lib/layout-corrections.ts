@@ -1,8 +1,8 @@
 /**
  * What the app did to each diagram the model drew, keyed by the tool call
  * that drew it, so the chat can show it as a step of its own under that
- * call: the layout check before and after, what moved, and a way to flip
- * between the model's layout and the corrected one.
+ * call: the layout check before and after, what moved, and every layout that
+ * was tried (the model's, the tidy pass, ELK) for the user to pick from.
  *
  * Saved to localStorage next to the chat, so a reloaded chat keeps its
  * correction steps. Only the latest diagram keeps both versions of its
@@ -12,8 +12,24 @@
 import { useSyncExternalStore } from "react"
 import { lintDiagramXml, type LintReport, type LintRule } from "./layout-lint"
 import { LAYOUT_CORRECTIONS_STORAGE_KEY } from "../storage"
+import type { CandidateNote } from "./arrange"
 
 export type CorrectionMethod = "original" | "tidy" | "layered-down" | "layered-right" | "layered-up"
+
+/** One layout that was tried, with its layout-check score. */
+export interface CorrectionCandidate {
+    /** Why it was not put on the canvas, when that was not its score. */
+    note?: CandidateNote
+    method: CorrectionMethod
+    xml: string
+    score: number
+}
+
+/** A layout pass that produced nothing for this diagram, and its reason. */
+export interface SkippedCorrection {
+    method: "tidy" | "elk"
+    reason: string
+}
 
 export interface LayoutCorrection {
     /** The diagram as the model drew it. */
@@ -33,6 +49,12 @@ export interface LayoutCorrection {
     straightened: number
     /** Which of the two the canvas shows now. */
     showing: "corrected" | "original"
+    /** Every layout tried, the latest diagram only (the others drop their XML). */
+    candidates?: CorrectionCandidate[]
+    /** The candidate on the canvas, when the user picked one. */
+    picked?: CorrectionMethod
+    /** The passes that could not lay the diagram out, shown as disabled options. */
+    skipped?: SkippedCorrection[]
 }
 
 const STORAGE_KEY = LAYOUT_CORRECTIONS_STORAGE_KEY
@@ -49,7 +71,7 @@ function save() {
     try {
         const entries = [...corrections.entries()].slice(-MAX_SAVED).map(([id, c]): [string, LayoutCorrection] => [
             id,
-            id === latestId ? c : { ...c, original: "", corrected: "" },
+            id === latestId ? c : { ...c, original: "", corrected: "", candidates: undefined },
         ])
         localStorage.setItem(STORAGE_KEY, JSON.stringify({ latestId, entries }))
     } catch {
@@ -105,6 +127,8 @@ export interface CorrectionInput {
     layout?: string
     moved?: number
     straightened?: number
+    candidates?: CorrectionCandidate[]
+    skipped?: SkippedCorrection[]
 }
 
 /** Record (or replace) the correction for one tool call. */
@@ -123,6 +147,8 @@ export function recordCorrection(toolCallId: string, input: CorrectionInput): vo
         moved: input.moved ?? 0,
         straightened: input.straightened ?? 0,
         showing: "corrected",
+        candidates: input.candidates,
+        skipped: input.skipped,
     })
     latestId = toolCallId
     emit()

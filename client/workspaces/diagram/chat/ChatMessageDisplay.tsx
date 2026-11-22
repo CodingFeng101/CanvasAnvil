@@ -48,6 +48,7 @@ import Image from "@/shared/ui/image"
 import type { MutableRefObject } from "react"
 import { Fragment, useCallback, useEffect, useRef, useState } from "react"
 import ReactMarkdown from "react-markdown"
+import { SmoothText } from "@/shared/chat/smooth-text"
 import {
     ApplyCodeButton,
     Reasoning,
@@ -58,6 +59,8 @@ import {
 } from "@/shared/chat"
 import { toTokenUsage } from "@/ai/usage"
 import { ChatScrollArea } from "@/shared/chat/chat-scroll"
+import { isReferenceFile, readReference, type SentReference } from "@/shared/references/message-marker"
+import { MessageReferences } from "@/shared/references/message-references"
 import { MessageEditor } from "@/shared/chat/message-editor"
 import { useDiagramT } from "@/workspaces/diagram/lib/translations"
 import {
@@ -68,13 +71,17 @@ import {
 import { convertToLegalXml, replaceNodes, validateMxCellStructure } from "@/workspaces/diagram/lib/drawio-xml"
 import { tidyIfBetter } from "@/workspaces/diagram/lib/arrange"
 import { CodeBlock } from "./code-block"
-import { DiagramSteps, SketchStep, type SketchData } from "./DiagramSteps"
+import { DiagramSteps, PrepSteps, type PrepData } from "./DiagramSteps"
 
 /** Tool calls that put a diagram on the canvas are shown as a chain of steps. */
 const DIAGRAM_TOOLS = new Set(["tool-display_diagram", "tool-append_diagram", "tool-edit_diagram"])
 
 /** Minimum gap between canvas redraws while a diagram's XML streams in. */
-const STREAM_PREVIEW_INTERVAL_MS = 400
+/**
+ * How often the sketch over the canvas catches up with the XML streaming in.
+ * The sketch is cheap (no editor reload), so it can follow closely.
+ */
+const STREAM_PREVIEW_INTERVAL_MS = 120
 
 // Tool part interface for type safety
 interface ToolPartLike {
@@ -138,8 +145,6 @@ interface ChatMessageDisplayProps {
     onEditMessage?: (messageIndex: number, newText: string) => void
     status?: "streaming" | "submitted" | "idle" | "error" | "ready"
     isParsingFiles?: boolean
-    /** Deep thinking is drawing its sketch (nothing has streamed yet). */
-    sketching?: boolean
 }
 
 export function ChatMessageDisplay({
@@ -149,10 +154,9 @@ export function ChatMessageDisplay({
     onEditMessage,
     status = "idle",
     isParsingFiles = false,
-    sketching = false,
 }: ChatMessageDisplayProps) {
     const t = useDiagramT()
-    const { chartXML, loadDiagram: onDisplayChart } = useDiagram()
+    const { chartXML, loadDiagram: onDisplayChart, previewDiagram } = useDiagram()
     const messagesEndRef = useRef<HTMLDivElement>(null)
     const previousXML = useRef<string>("")
     const assembledXmlRef = useRef<string>("")
@@ -264,12 +268,12 @@ export function ChatMessageDisplay({
                 const validationError = validateMxCellStructure(replacedXML)
                 if (!validationError) {
                     previousXML.current = convertedXml
-                    // While the XML streams in, show it as drawn; once it is
-                    // complete, show the same tidied layout the tool handler
-                    // loads, so the two never fight over the canvas.
-                    const shown = complete ? tidyIfBetter(replacedXML).xml : replacedXML
+                    // While the XML streams in, it is drawn into draw.io as it
+                    // arrives; once it is complete, the same tidied layout the
+                    // tool handler loads is shown, so the two never fight.
                     // Skip validation in loadDiagram since we already validated above
-                    onDisplayChart(shown, true)
+                    if (complete) onDisplayChart(tidyIfBetter(replacedXML).xml, true)
+                    else previewDiagram(replacedXML)
                 } else {
                     console.log(
                         "[ChatMessageDisplay] XML validation failed:",
@@ -278,19 +282,8 @@ export function ChatMessageDisplay({
                 }
             }
         },
-        [chartXML, onDisplayChart],
+        [chartXML, onDisplayChart, previewDiagram],
     )
-
-    useEffect(() => {
-        const end = messagesEndRef.current
-        if (!end) return
-        // Follow the reply only while the reader is at the bottom, and without
-        // a smooth glide per token: restarting that animation on every chunk
-        // is what made streaming stutter.
-        const viewport = end.closest<HTMLElement>('[data-slot="scroll-area-viewport"]')
-        if (viewport && viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight > 240) return
-        end.scrollIntoView({ behavior: status === "streaming" ? "auto" : "smooth", block: "end" })
-    }, [messages, status])
 
     useEffect(() => {
         if (!messages.length) {
@@ -306,9 +299,9 @@ export function ChatMessageDisplay({
     }, [editingMessageId])
 
     useEffect(() => {
-        // Each preview is a full reload inside draw.io, so while the XML is
-        // still streaming in, redraw at most every STREAM_PREVIEW_INTERVAL_MS.
-        // "input-available" (the complete XML) always goes through.
+        // While the XML is still streaming in, it is merged into draw.io at
+        // most every STREAM_PREVIEW_INTERVAL_MS (draw.io patches the cells in
+        // place). "input-available" (the complete XML) always goes through.
         const now = Date.now()
         const streamPreviewDue =
             now - lastStreamPreviewAtRef.current >= STREAM_PREVIEW_INTERVAL_MS
@@ -719,12 +712,12 @@ export function ChatMessageDisplay({
                                                     }
                                                     return
                                                 }
-                                                // Deep thinking's draft picture, drawn before the diagram.
+                                                // Reading the uploaded files, before the diagram (the part keeps its old name).
                                                 if (
                                                     message.role === "assistant" &&
                                                     part.type === "data-sketch"
                                                 ) {
-                                                    if ((part as any).data?.url || (part as any).data?.state || (part as any).data?.files) {
+                                                    if ((part as any).data?.files) {
                                                         groups.push({
                                                             type: "sketch",
                                                             parts: [part],
@@ -792,9 +785,9 @@ export function ChatMessageDisplay({
                                                     if (consumed.has(groupIndex)) return null
                                                     if (group.type === "sketch") {
                                                         return (
-                                                            <SketchStep
+                                                            <PrepSteps
                                                                 key={`${message.id}-sketch-${group.startIndex}`}
-                                                                data={((group.parts[0] as any).data ?? {}) as SketchData}
+                                                                data={((group.parts[0] as any).data ?? {}) as PrepData}
                                                             />
                                                         )
                                                     }
@@ -869,13 +862,20 @@ export function ChatMessageDisplay({
                                                     const textParts = group.parts.filter(
                                                         (p: any) => p.type === "text",
                                                     )
-                                                    const fileSections = textParts.flatMap(
+                                                    const allFileSections = textParts.flatMap(
                                                         (p: any) =>
                                                             extractFileSectionsFromText(
                                                                 String(
                                                                     p.text || "",
                                                                 ),
                                                             ),
+                                                    )
+                                                    // A referenced work rides in as a file that opens with its marker: a canvas card, not a file.
+                                                    const sentReferences = allFileSections
+                                                        .map((section) => readReference(section.content))
+                                                        .filter((r): r is SentReference => r !== null)
+                                                    const fileSections = allFileSections.filter(
+                                                        (section) => !isReferenceFile(section.filename ?? "", section.content, sentReferences),
                                                     )
                                                     const hasTextContent = textParts.some(
                                                         (p: any) =>
@@ -891,6 +891,9 @@ export function ChatMessageDisplay({
                                                             key={`${message.id}-content-${group.startIndex}`}
                                                             className={groupIndex > 0 ? "mt-3" : ""}
                                                         >
+                                                            {message.role === "user" && (
+                                                                <MessageReferences references={sentReferences} className="mb-2" />
+                                                            )}
                                                             {message.role === "user" &&
                                                                 (attachmentParts.length > 0 ||
                                                                     fileSections.length >
@@ -1085,6 +1088,8 @@ export function ChatMessageDisplay({
                                                                                                     "prose prose-sm font-voice text-[15px] max-w-none break-words [&>*:first-child]:mt-0 [&>*:last-child]:mb-0",
                                                                                                 )}
                                                                                             >
+                                                                                                <SmoothText text={section.content} streaming={status === "streaming" && message.role === "assistant" && message.id === messages[messages.length - 1]?.id}>
+                                                                                                {(shown) => (
                                                                                                 <ReactMarkdown
                                                                                                     remarkPlugins={[remarkGfm]}
                                                                                                     components={{
@@ -1194,8 +1199,10 @@ export function ChatMessageDisplay({
                                                                                                         },
                                                                                                     }}
                                                                                                 >
-                                                                                                    {section.content}
+                                                                                                    {shown}
                                                                                                 </ReactMarkdown>
+                                                                                                )}
+                                                                                                </SmoothText>
                                                                                             </div>
                                                                                         )
                                                                                     },
@@ -1279,7 +1286,7 @@ export function ChatMessageDisplay({
                         )
                     })}
                     {(isParsingFiles || status === "submitted" || status === "streaming") && (
-                        <WorkingIndicator kind="diagram" className="mt-3 animate-message-in" label={isParsingFiles ? t("message.parsing_files") : sketching && messages[messages.length - 1]?.role !== "assistant" ? t("message.sketching") : undefined} />
+                        <WorkingIndicator kind="diagram" className="mt-3 animate-message-in" label={isParsingFiles ? t("message.parsing_files") : undefined} />
                     )}
                     {status !== "submitted" && status !== "streaming" && messages[messages.length - 1]?.role === "assistant" && (
                         // The provider's counts, sent with the reply (server/routes/chat.ts).

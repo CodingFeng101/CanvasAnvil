@@ -1,6 +1,6 @@
 import { useState } from "react";
-import { Eye, Library, MessageSquarePlus, Plus, Sparkles, Trash2, Upload } from "lucide-react";
-import { toast } from "sonner";
+import { Eye, Library, MessageSquarePlus, Plus, Trash2, Upload } from "lucide-react";
+import { notify } from "@/shared/ui/notify";
 import { canReference, openReferencePicker } from "@/shared/references/bus";
 import { referenceToFiles } from "@/shared/references/to-files";
 import { useWork } from "@/shared/works/work-context";
@@ -8,8 +8,6 @@ import { Button } from "@/shared/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/shared/ui/dialog";
 import type { SlideData } from "@/workspaces/ppt/canvas/types";
 import type { useSlideMaterials } from "@/workspaces/ppt/canvas/hooks/use-slide-materials";
-import type { useTemplateLibrary } from "@/workspaces/ppt/canvas/hooks/use-template-library";
-import { StyleChip, StylePickerDialog } from "./StylePicker";
 import { ConfirmDialog } from "@/shared/ui/confirm-dialog";
 
 interface OutlineReviewProps {
@@ -17,13 +15,9 @@ interface OutlineReviewProps {
   setSlides: React.Dispatch<React.SetStateAction<SlideData[]>>;
   materials: ReturnType<typeof useSlideMaterials>;
   tr: (zh: string, en: string) => string;
-  onBack: () => void;
   onAddSlide: (afterIndex?: number) => void;
   onDeleteSlide: (slideId: string) => void;
   onAddSlideToChat: (slide: SlideData) => void;
-  onGenerate: () => void;
-  /** The deck's style is chosen here, just before the slides are made. */
-  templateLibrary: ReturnType<typeof useTemplateLibrary>;
 }
 
 /**
@@ -31,18 +25,16 @@ interface OutlineReviewProps {
  *
  * This is the last point at which changes are cheap: every edit here costs
  * nothing, while the same change after generation means re-rendering slides.
+ * Confirming it, and picking the style, happen in the chat's steps.
  */
 export function OutlineReview({
   slides,
   setSlides,
   materials,
   tr,
-  onBack,
   onAddSlide,
   onDeleteSlide,
   onAddSlideToChat,
-  onGenerate,
-  templateLibrary,
 }: OutlineReviewProps) {
   const work = useWork();
   /** Pictures from another work become this slide's materials, already named in its description. */
@@ -50,12 +42,11 @@ export function OutlineReview({
     const reference = await openReferencePicker({ from: { workspace: "ppt", workId: work?.workId }, accept: ["image"] });
     if (!reference) return;
     const added = await materials.addReferencedImages(slideId, referenceToFiles(reference), reference.workName);
-    if (added.length) toast.success(tr(`已加为素材：${added.map((x) => x.name).join("、")}`, `Added as materials: ${added.map((x) => x.name).join(", ")}`));
+    if (added.length) notify.success(tr(`已加为素材：${added.map((x) => x.name).join("、")}`, `Added as materials: ${added.map((x) => x.name).join(", ")}`), { description: tr("生成这一页时会用上。", "They are used when the slide is made.") });
   };
-  const [pickingStyle, setPickingStyle] = useState(false);
   const [deleting, setDeleting] = useState<{ id: string; index: number } | null>(null);
   return (
-    <div className="w-full h-full bg-sunken flex flex-col overflow-hidden">
+    <div className="w-full h-full bg-background flex flex-col overflow-hidden">
         <ConfirmDialog
           open={!!deleting}
           onOpenChange={(open) => !open && setDeleting(null)}
@@ -65,16 +56,17 @@ export function OutlineReview({
           cancelLabel={tr("取消", "Cancel")}
           onConfirm={() => deleting && onDeleteSlide(deleting.id)}
         />
-        <div className="flex-1 overflow-auto p-6">
-          <div className="w-full min-h-full bg-card rounded-2xl shadow-soft flex flex-col overflow-hidden">
-            <div className="p-6 border-b border-border flex justify-between items-center">
+        {/* No card around the outline: it is the canvas itself, heading, slides and actions. */}
+        <div className="flex min-h-0 flex-1 flex-col">
+          <div className="flex min-h-0 flex-1 flex-col">
+            <div className="px-8 pt-6 pb-2 flex justify-between items-baseline">
                 <h3 className="font-semibold text-lg">{tr("确认大纲", "Review outline")}</h3>
                 <div className="text-sm text-muted-foreground">{tr(`共 ${slides.length} 页`, `${slides.length} slides`)}</div>
             </div>
             
-            <div className="flex-1 overflow-y-auto p-6 space-y-4">
+            <div className="flex-1 overflow-y-auto px-8 pb-6 divide-y divide-border/70">
                 {slides.length === 0 && (
-                  <div className="rounded-lg border border-dashed border-input bg-sunken px-4 py-6 text-center text-sm text-muted-foreground">
+                  <div className="py-10 text-center text-sm text-muted-foreground">
                     {tr("当前没有大纲，请返回修改后重新生成。", "No outline yet. Go back and regenerate.")}
                   </div>
                 )}
@@ -82,9 +74,9 @@ export function OutlineReview({
                     <div
                       key={slide.id || i}
                       style={{ animationDelay: `${Math.min(i, 10) * 40}ms` }}
-                      className="animate-rise-in flex gap-4 p-4 border border-border/70 rounded-xl bg-sunken transition-[border-color,box-shadow] duration-base ease-out-soft hover:border-border hover:shadow-soft"
+                      className="animate-rise-in flex gap-4 py-6"
                     >
-                        <div className="w-8 h-8 flex items-center justify-center bg-card rounded-full border text-sm font-medium text-muted-foreground">
+                        <div className="w-6 shrink-0 pt-0.5 text-sm font-medium tabular-nums text-muted-foreground">
                             {i + 1}
                         </div>
                         <div className="flex-1 space-y-2">
@@ -171,6 +163,7 @@ export function OutlineReview({
                                   }}
                                   contentEditable
                                   suppressContentEditableWarning
+                                  data-peek-slide={slide.id}
                                   onFocus={() => {
                                     materials.editor.focusedRef.current = slide.id;
                                   }}
@@ -382,23 +375,6 @@ export function OutlineReview({
                 ))}
             </div>
 
-            <div className="p-6 border-t border-border bg-sunken/50 flex items-center justify-end gap-3">
-                <div className="mr-auto min-w-0">
-                  <StyleChip templateLibrary={templateLibrary} tr={tr} onChange={() => setPickingStyle(true)} />
-                </div>
-                <Button variant="outline" onClick={onBack}>{tr("返回修改", "Back")}</Button>
-                <Button onClick={onGenerate} className="bg-primary hover:bg-primary/90" disabled={slides.length === 0}>
-                    <Sparkles className="w-4 h-4 mr-2" />
-                    {tr("生成完整 PPT", "Generate full deck")}
-                </Button>
-            </div>
-            <StylePickerDialog
-              open={pickingStyle}
-              onOpenChange={setPickingStyle}
-              templateLibrary={templateLibrary}
-              tr={tr}
-              topic={slides.map((slide) => slide.title).join(" ")}
-            />
             <Dialog
               open={materials.preview.open}
               onOpenChange={(open) => materials.setPreview((prev) => ({ ...prev, open }))}

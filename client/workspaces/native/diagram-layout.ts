@@ -14,8 +14,11 @@ export async function correctDiagramLayout(currentXml: string, nextXml: string, 
       .filter(cell => previous.get(cell.id) !== nextXml.slice(cell.start, cell.end))
       .map(cell => cell.id);
     const tidied = tidyIfBetter(nextXml, { only: changedIds });
-    result = { ...tidied, chosen: tidied.report.applied ? 'tidy' : 'original',
-      scores: { original: lintDiagramXml(nextXml).score, tidy: lintDiagramXml(tidied.xml).score } };
+    const original = lintDiagramXml(nextXml).score;
+    const tidy = lintDiagramXml(tidied.xml).score;
+    result = { ...tidied, chosen: tidied.report.applied ? 'tidy' : 'original', scores: { original, tidy },
+      candidates: [{ method: 'original', xml: nextXml, score: original }, ...(tidied.report.applied ? [{ method: 'tidy' as const, xml: tidied.xml, score: tidy }] : [])],
+      skipped: tidied.report.applied ? [] : [{ method: 'tidy', reason: tidied.report.reason ?? 'nothing to tidy' }] };
   }
   return { xml: result.xml, correction: {
     originalXml: nextXml, correctedXml: result.xml, mode, layout: parseLayout(options.layout),

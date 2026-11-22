@@ -1,4 +1,4 @@
-import { History, Loader2, Undo2 } from "lucide-react";
+import { History, Undo2 } from "lucide-react";
 import { cn } from "@/shared/lib/utils";
 import { useUiLanguage } from "@/shared/i18n";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/shared/ui/tooltip";
@@ -46,7 +46,7 @@ export function VersionStrip({ versions, activeElementId, onSelectVersion, sendB
       disabled={sendBack.busy}
       className="flex h-8 shrink-0 items-center gap-1.5 rounded-md border border-border bg-background px-2.5 text-xs text-foreground transition-colors hover:bg-foreground/[0.04] disabled:opacity-60"
     >
-      {sendBack.busy ? <Loader2 className="size-3.5 animate-spin" /> : <Undo2 className="size-3.5" />}
+      <Undo2 className={cn("size-3.5", sendBack.busy && "icon-busy text-brand")} />
       {tr(`送回 PPT ${sendBack.label}`, `Send back to ${sendBack.label}`)}
     </button>
   ) : null;

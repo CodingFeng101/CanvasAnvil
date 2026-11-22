@@ -96,9 +96,12 @@ export function WorkingIndicator({
   const tokens = prefs.showTokens ? usageParts(usage, zh, true) : [];
 
   return (
-    <div role="status" aria-live="polite" className={cn("flex items-center gap-2 py-1 text-[13px] text-muted-foreground", className)}>
-      <AnvilMark className="size-[18px] text-brand" />
-      <span key={verb} className="text-foreground/80 animate-in fade-in duration-base">
+    <div role="status" aria-live="polite" className={cn("flex items-center gap-2.5 py-1 text-[13.5px] leading-6 text-muted-foreground", className)}>
+      {/* The same left column as the steps above it, the anvil a touch larger than their dots. */}
+      <span className="flex w-4 shrink-0 items-center justify-center">
+        <AnvilMark className="size-[20px] text-brand" />
+      </span>
+      <span key={verb} className="font-medium text-foreground/85 animate-in fade-in duration-base">
         {verb}…
       </span>
       <span className="tabular-nums text-muted-foreground/80">

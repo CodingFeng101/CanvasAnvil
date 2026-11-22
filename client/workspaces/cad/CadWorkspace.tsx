@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { House } from "lucide-react";
 import { CanvasPaneProvider, useCanvasPaneState } from "@/shared/canvas-pane";
-import { toast } from "sonner";
+import { errorText, notify } from "@/shared/ui/notify";
 import { t, useUiLanguage } from "@/shared/i18n";
 import {
   ResizableHandle,
@@ -91,13 +91,10 @@ export function CadWorkspace() {
     let cancelled = false;
     const timer = window.setTimeout(() => {
       const shot = designSession.previewImage();
-      const design = designSession.getSnapshot().design;
+      // The work's preview in My works; the session keeps each version's own picture.
       if (shot)
         void makeThumbnail(shot, 480).then((thumb) => {
-          if (!thumb || cancelled) return;
-          work.report({ thumb });
-          // The history dialog shows each version as the designer drew it.
-          if (design) void designSession.saveShot(design, thumb);
+          if (thumb && !cancelled) work.report({ thumb });
         });
     }, 800);
     return () => {
@@ -153,7 +150,7 @@ export function CadWorkspace() {
       };
       const started = await post({ action: "start", preset: current.preset });
       const jobId = String(started.jobId);
-      toast.loading(tr("交付检查中：设计器逐项操作（几分钟）…", "Delivery check: operating the designer (a few minutes)…"), { id: toastId });
+      notify.loading(tr("正在做交付检查", "Running the delivery check"), { id: toastId, description: tr("设计器在逐项操作，需要几分钟。", "The designer is operating every control; this takes a few minutes.") });
       // A check already running (409) is joined: its job is polled like a new one.
       let status: QaStatus = { ...started, jobId, state: started.state ?? "running" };
       const deadline = Date.now() + 40 * 60 * 1000;
@@ -161,16 +158,16 @@ export function CadWorkspace() {
         if (Date.now() > deadline) throw new Error(tr("交付检查超过 40 分钟没有结果", "The delivery check gave no result within 40 minutes"));
         await new Promise((resolve) => setTimeout(resolve, 5000));
         status = await post({ action: "status", jobId });
-        if (status.state === "running") toast.loading(tr(`交付检查中… ${status.seconds ?? 0} 秒`, `Delivery check… ${status.seconds ?? 0}s`), { id: toastId });
+        if (status.state === "running") notify.loading(tr("正在做交付检查", "Running the delivery check"), { id: toastId, description: tr(`已进行 ${status.seconds ?? 0} 秒，需要几分钟。`, `${status.seconds ?? 0}s so far; this takes a few minutes.`) });
       }
       // Replacing the loading toast (rather than dismissing it) closes it reliably, the page hidden or not.
-      if (status.state === "done") toast.success(tr("交付检查完成，结果在对话里", "Delivery check finished; the result is in the chat"), { id: toastId });
-      else toast.error(tr("交付检查没跑完", "The delivery check did not finish"), { id: toastId });
+      if (status.state === "done") notify.success(tr("交付检查完成", "Delivery check finished"), { id: toastId, description: tr("结果已写在对话里。", "The result is in the chat.") });
+      else notify.error(tr("交付检查没有跑完", "The delivery check did not finish"), { id: toastId, description: tr("已跑完的部分写在对话里，可以稍后再检查一次。", "What finished is in the chat; run the check again later.") });
       const recognition = recognitionLines(designSession.getSnapshot().design?.recognition);
       setComposerRequest({ id: Date.now(), text: "", assistant: deliveryMessage(status, { ...current, recognition }, zh) });
       pane.value.restore();
     } catch (reason) {
-      toast.error(String((reason as Error)?.message ?? reason), { id: toastId });
+      notify.error(tr("交付检查没能开始", "The delivery check could not run"), { id: toastId, description: errorText(reason) });
     } finally {
       setQaRunning(false);
     }
@@ -193,7 +190,7 @@ export function CadWorkspace() {
       if (layout) form.append("file2", layout);
       if (Number(width) > 0) form.append("totalWidth", String(Number(width)));
       if (Number(height) > 0) form.append("totalHeight", String(Number(height)));
-      const id = toast.loading(tr("正在识别原始户型…", "Recognizing the floorplan…"));
+      const id = notify.loading(tr("正在识别原始户型", "Recognizing the floorplan"), { description: tr("通常要十几秒。", "This usually takes a few seconds.") });
       try {
         const response = await fetch("/api/cad/recognize", { method: "POST", body: form });
         const result = await response.json().catch(() => ({}));
@@ -219,10 +216,10 @@ export function CadWorkspace() {
         const floors = Array.isArray(draft.floors) ? draft.floors : [draft];
         const walls = floors.reduce((sum, floor) => sum + (floor.walls?.length ?? 0), 0);
         const openings = floors.reduce((sum, floor) => sum + (floor.walls ?? []).reduce((count, wall) => count + (wall.openings?.length ?? 0), 0), 0);
-        toast.success(
-          tr(`已识别 ${walls} 面墙，原图已作为底图。`, `Recognized ${walls} walls; the original is shown as underlay.`),
-          { id, description: (result.warnings ?? []).slice(-2).join("；") || undefined },
-        );
+        notify.success(tr(`已识别 ${walls} 面墙`, `Recognized ${walls} walls`), {
+          id,
+          description: [tr("原图已放在下面作为底图。", "The original is shown underneath."), ...(result.warnings ?? []).slice(-2)].join(tr("", " ")),
+        });
         // The designer's GUIDE section 0: what to settle before reconstructing, as clickable options.
         setComposerRequest({
           id: Date.now(),
@@ -230,7 +227,7 @@ export function CadWorkspace() {
           assistant: checkMessage(recognitionSummary(result, walls, openings, floors.length, uiLang === "zh"), floorplanQuestions(!!layout, floors.length > 1, uiLang === "zh")),
         });
       } catch (error) {
-        toast.error(tr("识别失败：", "Recognition failed: ") + (error as Error).message, { id });
+        notify.error(tr("没能识别这张户型图", "Could not recognize this floorplan"), { id, description: tr(`${errorText(error)}。可以换一张更清晰的图再试。`, `${errorText(error)}. Try a clearer picture.`) });
       }
     };
     input.click();
@@ -267,7 +264,7 @@ export function CadWorkspace() {
     try {
       await designSession.clear();
     } catch (reason) {
-      toast.error(String(reason));
+      notify.error(tr("没能清空户型", "Could not clear the design"), { description: errorText(reason) });
       return;
     }
     setCadPlan(null);
@@ -303,6 +300,7 @@ export function CadWorkspace() {
           onRemoveAttachment={(id) => setAttachments((prev) => prev.filter((a) => a.id !== id))}
           onClearAttachments={() => setAttachments([])}
           onClearWorkspace={clearWorkspace}
+          onPlanReset={() => setCadPlan(null)}
           designSession={designSession}
           composerRequest={composerRequest}
           cadContext={{ plan: cadPlan }}

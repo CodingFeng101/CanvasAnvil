@@ -5,19 +5,14 @@ import { useSendAfterRender } from "@/shared/chat/use-send-after-render"
 import { ChatTitle } from "@/shared/chat/chat-title"
 import { constraintsFor } from "@/shared/constraints"
 import { CanvasOpenButton, useCanvasPane } from "@/shared/canvas-pane";
-import { canOpenCanvas, openCanvasFor } from "@/shared/references/bus";
-import { setPendingReference } from "@/shared/references/pending";
-import { isEmptyDiagram } from "@/workspaces/diagram/references";
-import { renderDrawioPng } from "@/workspaces/diagram/lib/drawio-render";
 import { useChat } from "@ai-sdk/react"
 import {
     Layers,
-    Loader2,
-    Presentation,
 } from "lucide-react"
 import type React from "react"
 import { useCallback, useEffect, useRef, useState } from "react"
-import { Toaster, toast } from "sonner"
+import { notify } from "@/shared/ui/notify"
+import { openSettings } from "@/shared/settings-bus"
 import { ChatEmptyState, ChatLandingExtras } from "@/shared/chat"
 import { t as tShell, useUiLanguage } from "@/shared/i18n"
 import { ChatInput } from "@/workspaces/diagram/chat/ChatInput"
@@ -63,7 +58,6 @@ import { reportModelCall, reportUsage } from "@/ai/usage"
 // Small values stay in localStorage; the messages, snapshots and diagram XML
 // live in the IndexedDB store (see ../storage.ts).
 const STORAGE_SESSION_ID_KEY = STORAGE_KEYS.sessionId
-const STORAGE_DEEP_THINKING_KEY = "next-ai-draw-io-deep-thinking"
 
 // Type for message parts (tool calls and their states)
 interface MessagePart {
@@ -236,19 +230,23 @@ export default function ChatPanel({
 
     // After a new diagram is up with the quick tidy pass, work out in the
     // background whether a full layout (ELK) fits it better, and swap it in
-    // if nothing else has been loaded since.
+    // if nothing else has been loaded since. Every layout tried is kept on the
+    // step, so the user can pick another.
     const arrangeLater = (toolCallId: string, original: string, layout: unknown) => {
         const seq = ++loadSeqRef.current
         const done = () => updateCorrection(toolCallId, { working: false })
         arrangeDiagramXml(original, parseLayout(layout))
             .then((arranged) => {
                 if (DEBUG) console.log("[arrange]", arranged.chosen, arranged.scores)
+                const candidates = arranged.candidates
+                const skipped = arranged.skipped
                 if (seq !== loadSeqRef.current || arranged.chosen === "original" || arranged.chosen === "tidy") {
-                    return done()
+                    return updateCorrection(toolCallId, { working: false, candidates, skipped })
                 }
-                // The user switched to the model's layout meanwhile: leave it.
-                if (getCorrection(toolCallId)?.showing === "original") return done()
-                if (onDisplayChart(arranged.xml, true)) return done()
+                // The user picked a layout meanwhile: leave it.
+                const now = getCorrection(toolCallId)
+                if (now?.showing === "original" || now?.picked) return updateCorrection(toolCallId, { working: false, candidates, skipped })
+                if (onDisplayChart(arranged.xml, true)) return updateCorrection(toolCallId, { working: false, candidates, skipped })
                 recordCorrection(toolCallId, {
                     original,
                     corrected: arranged.xml,
@@ -256,6 +254,8 @@ export default function ChatPanel({
                     layout: getCorrection(toolCallId)?.layout,
                     moved: arranged.report.moved,
                     straightened: arranged.report.straightened,
+                    candidates,
+                    skipped,
                 })
             })
             .catch((error) => {
@@ -300,47 +300,6 @@ export default function ChatPanel({
         ])
     }
 
-    /**
-     * 「放进 PPT」: the diagram as it is on screen, rendered to a picture and
-     * carried to the PPT canvas, which asks which slide it goes on.
-     */
-    const [sendingToPpt, setSendingToPpt] = useState(false)
-    const sendToPpt = async () => {
-        if (sendingToPpt) return
-        const zh = uiLang === "zh"
-        setSendingToPpt(true)
-        try {
-            let xml = chartXMLRef.current
-            try {
-                xml = (await onFetchChart(false)) || xml
-            } catch {
-                // The editor did not answer; the last known drawing will do.
-            }
-            if (!xml || isEmptyDiagram(xml)) {
-                toast.error(zh ? "图表还是空的" : "The diagram is empty")
-                return
-            }
-            const picture = await renderDrawioPng(xml)
-            const label = zh ? "当前图表" : "Current diagram"
-            setPendingReference({
-                to: "ppt",
-                intent: { kind: "slide-material" },
-                reference: {
-                    workspace: "diagram",
-                    workId: work?.workId ?? "",
-                    workName: work?.name || (zh ? "图表" : "Diagram"),
-                    items: [{ id: "diagram:current", kind: "image", label, dataUrl: picture }],
-                },
-            })
-            await openCanvasFor("ppt")
-        } catch (error) {
-            console.error("[diagram] could not send to PPT", error)
-            toast.error(zh ? "没能把图表放进 PPT" : "Could not send the diagram to the PPT")
-        } finally {
-            setSendingToPpt(false)
-        }
-    }
-
     // File processing using extracted hook
     const { files, pdfData, handleFileChange, setFiles } = useFileProcessor("diagram")
 
@@ -358,10 +317,6 @@ export default function ChatPanel({
     const [tpmLimit, setTpmLimit] = useState(0)
     const [defaultModel, setDefaultModel] = useState("")
     const [isParsingFiles, setIsParsingFiles] = useState(false)
-    const [deepThinkingEnabled, setDeepThinkingEnabled] = useState(() => {
-        if (typeof window === "undefined") return false
-        return localStorage.getItem(STORAGE_DEEP_THINKING_KEY) === "true"
-    })
 
     // Check config on mount
     useEffect(() => {
@@ -377,14 +332,6 @@ export default function ChatPanel({
                 // No config means no limits to apply; the defaults stand.
             })
     }, [])
-
-    useEffect(() => {
-        if (typeof window === "undefined") return
-        localStorage.setItem(
-            STORAGE_DEEP_THINKING_KEY,
-            deepThinkingEnabled ? "true" : "false",
-        )
-    }, [deepThinkingEnabled])
 
     // Quota management using extracted hook
     const quotaManager = useQuotaManager({
@@ -486,7 +433,7 @@ export default function ChatPanel({
                 // Keep raw detail text when it is not JSON.
             }
 
-            toast.error(translateDiagram("error.send_failed", { detail }))
+            notify.error(translateDiagram("error.send_failed.title"), { description: detail })
         },
         async onToolCall({ toolCall }: { toolCall: any }) {
             if (DEBUG) {
@@ -543,7 +490,7 @@ Rules:
                         state: "output-error",
                         errorText: `${error}
 
-Please fix the XML issues and call display_diagram again with corrected XML.
+Please fix the XML issues and call display_diagram again with corrected XML. In the plan, say first what went wrong and how this attempt fixes it; do not repeat the earlier plan.
 
 Your failed XML:
 \`\`\`xml
@@ -579,7 +526,7 @@ ${rawXml}
                         state: "output-error",
                         errorText: `${validationError}
 
-${isMxCellXmlComplete(xml) ? "Please fix the XML issues and call display_diagram again with corrected XML." : "The XML appears truncated. Continue with append_diagram from the exact point where this fragment stopped."}
+${isMxCellXmlComplete(xml) ? "Please fix the XML issues and call display_diagram again with corrected XML. In the plan, say first what went wrong and how this attempt fixes it; do not repeat the earlier plan." : "The XML appears truncated. Continue with append_diagram from the exact point where this fragment stopped."}
 
 Your failed XML:
 \`\`\`xml
@@ -759,7 +706,7 @@ ${isMxCellXmlComplete(combinedXml) ? "Please fix the appended XML and continue o
                             state: "output-error",
                             errorText: `${validationError}
 
-Please fix the XML issues. Ensure cell_id values exist in the current XML and that each new_xml contains exactly one valid mxCell.`,
+Please fix the XML issues. Ensure cell_id values exist in the current XML and that each new_xml contains exactly one valid mxCell. In the plan, say first what went wrong and how this attempt fixes it; do not repeat the earlier plan.`,
                         })
                     } else {
                         // Success: update cache and log completion.
@@ -806,9 +753,7 @@ Please fix the XML issues. Ensure cell_id values exist in the current XML and th
                         `[sendAutomaticallyWhen] Max retry count (${MAX_AUTO_RETRY_COUNT}) reached, stopping`,
                     )
                 }
-                toast.error(
-                    translateDiagram("error.retry_limit", { n: MAX_AUTO_RETRY_COUNT }),
-                )
+                notify.error(translateDiagram("error.retry_limit.title"), { description: translateDiagram("error.retry_limit.detail", { n: MAX_AUTO_RETRY_COUNT }) })
                 autoRetryCountRef.current = 0
                 return false
             }
@@ -883,7 +828,6 @@ Please fix the XML issues. Ensure cell_id values exist in the current XML and th
         }
     }, [messages.length])
 
-    const messagesEndRef = useRef<HTMLDivElement>(null)
 
     // My works: the layout steps in localStorage belong to the open work, so
     // they are re-read on mount; no switching while a reply streams; the first
@@ -1056,12 +1000,6 @@ Please fix the XML issues. Ensure cell_id values exist in the current XML and th
     }, [sessionId])
 
     useEffect(() => {
-        if (messagesEndRef.current) {
-            messagesEndRef.current.scrollIntoView({ behavior: "smooth" })
-        }
-    }, [messages])
-
-    useEffect(() => {
         if (status === "streaming" && isParsingFiles) {
             setIsParsingFiles(false)
         }
@@ -1102,6 +1040,7 @@ Please fix the XML issues. Ensure cell_id values exist in the current XML and th
         e.preventDefault()
         const isProcessing = status === "streaming" || status === "submitted"
         if (input.trim() && !isProcessing) {
+            canvasPane?.requested()
             let chartXml = chartXML || ""
             try {
                 if (isDrawioReady) {
@@ -1307,12 +1246,12 @@ Please fix the XML issues. Ensure cell_id values exist in the current XML and th
         
         if (typeof appendMessage !== 'function') {
             console.error('[sendChatMessage] appendMessage is not a function!', appendMessage)
-            toast.error(translateDiagram("error.chat_init"))
+            notify.error(translateDiagram("error.chat_init.title"), { description: translateDiagram("error.chat_init.detail") })
             return
         }
 
         if (!modelToUse) {
-            toast.error(translateDiagram("error.no_model"))
+            notify.warning(translateDiagram("error.no_model.title"), { description: translateDiagram("error.no_model.detail"), action: { label: translateDiagram("error.no_model.action"), onClick: () => openSettings("models") } })
             return
         }
 
@@ -1324,7 +1263,6 @@ Please fix the XML issues. Ensure cell_id values exist in the current XML and th
                     previousXml,
                     sessionId,
                     uploadedFiles,
-                    deepThinkingEnabled,
                     aiConfig: {
                         ...ai,
                         textModel: modelToUse,
@@ -1441,7 +1379,7 @@ Please fix the XML issues. Ensure cell_id values exist in the current XML and th
     const handleRegenerate = async (messageIndex: number) => {
         const isProcessing = status === "streaming" || status === "submitted"
         if (isProcessing) {
-            toast.warning(t("common.busy"))
+            notify.info(t("common.busy.title"), { description: t("common.busy.detail") })
             return
         }
 
@@ -1456,7 +1394,7 @@ Please fix the XML issues. Ensure cell_id values exist in the current XML and th
 
         if (userMessageIndex < 0) {
             console.error("Could not find preceding user message for index:", messageIndex)
-            toast.error(t("common.regenerate_error"))
+            notify.error(t("common.regenerate_error.title"), { description: t("common.regenerate_error.detail") })
             return
         }
 
@@ -1472,7 +1410,7 @@ Please fix the XML issues. Ensure cell_id values exist in the current XML and th
                 "No saved XML snapshot for message index:",
                 userMessageIndex,
             )
-            toast.error(t("common.regenerate_error"))
+            notify.error(t("common.regenerate_error.title"), { description: t("common.regenerate_error.detail") })
             return
         }
 
@@ -1562,16 +1500,6 @@ Please fix the XML issues. Ensure cell_id values exist in the current XML and th
     // Full view
     return (
         <div className="h-full flex flex-col bg-transparent animate-fade-in relative">
-            <Toaster
-                position="top-center"
-                richColors
-                expand
-                toastOptions={{
-                    style: {
-                        maxWidth: "480px",
-                    },
-                }}
-            />
             {/* Header */}
             <header
                 className={`${isMobile ? "px-3 py-2" : "flex h-12 shrink-0 flex-col justify-center px-4"}`}
@@ -1581,18 +1509,6 @@ Please fix the XML issues. Ensure cell_id values exist in the current XML and th
                         <ChatTitle fallback={t("chat.panel.title")} />
                     </div>
                     <div className="flex items-center gap-1">
-                        {canOpenCanvas() && chartXML && !isEmptyDiagram(chartXML) && (
-                            <button
-                                type="button"
-                                onClick={() => void sendToPpt()}
-                                disabled={sendingToPpt}
-                                title={uiLang === "zh" ? "把当前图表放到 PPT 的某一页" : "Put this diagram on a PPT slide"}
-                                className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full px-3 text-[13px] text-foreground/75 transition-colors hover:bg-foreground/[0.05] hover:text-foreground disabled:opacity-60"
-                            >
-                                {sendingToPpt ? <Loader2 className="size-3.5 animate-spin" /> : <Presentation className="size-3.5" />}
-                                {uiLang === "zh" ? "放进 PPT" : "Send to PPT"}
-                            </button>
-                        )}
                         {!isMobile && <CanvasOpenButton />}
                     </div>
                 </div>
@@ -1613,7 +1529,6 @@ Please fix the XML issues. Ensure cell_id values exist in the current XML and th
                         onRegenerate={handleRegenerate}
                         status={status}
                         isParsingFiles={isParsingFiles}
-                        sketching={deepThinkingEnabled && status === "submitted"}
                         onEditMessage={handleEditMessage}
                     />
                 )}
@@ -1659,11 +1574,7 @@ Please fix the XML issues. Ensure cell_id values exist in the current XML and th
                     showHistory={showHistory}
                     onToggleHistory={setShowHistory}
                     error={error}
-                    deepThinkingEnabled={deepThinkingEnabled}
                     focusKey={inputFocusTick}
-                    onToggleDeepThinking={() =>
-                        setDeepThinkingEnabled((prev) => !prev)
-                    }
                 />
             </footer>
       {(messages.length === 0 && status !== "submitted" && status !== "streaming") && <ChatLandingExtras icon={Layers} images={["/examples/portal/diagram-1-sm.webp", "/examples/portal/diagram-2-sm.webp", "/examples/portal/diagram-3-sm.webp"]} examples={[

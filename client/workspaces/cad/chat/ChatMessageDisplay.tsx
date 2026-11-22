@@ -1,7 +1,8 @@
-import React, { useRef, useEffect, useState, useCallback } from 'react';
+import React, { useRef, useEffect, useState } from 'react';
 import { CanvasCard } from "@/shared/canvas-pane";
 import { Check, ChevronDown, ChevronUp, Copy, FileCode, FileText, Pencil, RotateCcw } from "lucide-react";
 import ReactMarkdown from "react-markdown";
+import { SmoothText } from "@/shared/chat/smooth-text";
 import remarkGfm from 'remark-gfm';
 import { MessageAttachments, MessageImage, Reasoning, ReasoningContent, ReasoningTrigger, TokenUsageLine, WorkingIndicator, useTurnUsage } from "@/shared/chat";
 import { ChatScrollArea } from "@/shared/chat/chat-scroll";
@@ -123,11 +124,6 @@ export function ChatMessageDisplay({
     const [editText, setEditText] = useState<string>("");
     const [expandedPdfSections, setExpandedPdfSections] = useState<Record<string, boolean>>({});
     const [expandedSlideCards, setExpandedSlideCards] = useState<Record<string, boolean>>({});
-    const [isAtBottom, setIsAtBottom] = useState(true);
-    const scrollRafRef = useRef<number | null>(null);
-    const userScrolledUpRef = useRef(false);
-    const lastScrollTopRef = useRef(0);
-    const lastMessageCountRef = useRef(0);
 
     const copyMessageToClipboard = async (messageId: string, text: string) => {
         try {
@@ -155,102 +151,6 @@ export function ChatMessageDisplay({
             }
         }
     };
-
-    const getViewport = useCallback(() => {
-        const root = scrollRootRef.current;
-        if (!root) return null;
-        return (
-            (root.querySelector('[data-slot="scroll-area-viewport"]') as HTMLElement | null) ||
-            (root.querySelector('[data-radix-scroll-area-viewport]') as HTMLElement | null)
-        );
-    }, []);
-
-    const scrollToBottom = useCallback((behavior: ScrollBehavior = "auto") => {
-        const viewport = getViewport();
-        if (!viewport) {
-            messagesEndRef.current?.scrollIntoView({ behavior });
-            return;
-        }
-        viewport.scrollTo({ top: viewport.scrollHeight, behavior });
-    }, [getViewport]);
-
-    useEffect(() => {
-        let mounted = true;
-        let cleanup: null | (() => void) = null;
-        let rafId = 0;
-
-        const bind = () => {
-            if (!mounted) return;
-            const viewport = getViewport();
-            if (!viewport) {
-                rafId = requestAnimationFrame(bind);
-                return;
-            }
-            const threshold = 24;
-            const onScroll = () => {
-                const distanceToBottom = viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight;
-                const nearBottom = distanceToBottom <= threshold;
-                const currentTop = viewport.scrollTop;
-                const scrollingUp = currentTop < lastScrollTopRef.current;
-                lastScrollTopRef.current = currentTop;
-
-                if (nearBottom) userScrolledUpRef.current = false;
-                else if (scrollingUp) userScrolledUpRef.current = true;
-
-                setIsAtBottom(nearBottom);
-            };
-            const onWheel = (event: WheelEvent) => {
-                if (event.deltaY < 0) {
-                    userScrolledUpRef.current = true;
-                    setIsAtBottom(false);
-                }
-            };
-            lastScrollTopRef.current = viewport.scrollTop;
-            onScroll();
-            viewport.addEventListener("scroll", onScroll, { passive: true });
-            viewport.addEventListener("wheel", onWheel, { passive: true });
-            cleanup = () => {
-                viewport.removeEventListener("scroll", onScroll as any);
-                viewport.removeEventListener("wheel", onWheel as any);
-            };
-        };
-
-        bind();
-        return () => {
-            mounted = false;
-            if (rafId) cancelAnimationFrame(rafId);
-            if (cleanup) cleanup();
-        };
-    }, [getViewport, messages.length]);
-
-    useEffect(() => {
-        return () => {
-            if (scrollRafRef.current === null) return;
-            if (typeof cancelAnimationFrame === "function") cancelAnimationFrame(scrollRafRef.current);
-            else if (typeof window !== "undefined") window.clearTimeout(scrollRafRef.current);
-            scrollRafRef.current = null;
-        };
-    }, []);
-
-    useEffect(() => {
-        if (!isAtBottom || userScrolledUpRef.current) return;
-        if (scrollRafRef.current !== null) return;
-        const previousCount = lastMessageCountRef.current;
-        const currentCount = messages.length;
-        const messageCountChanged = currentCount !== previousCount;
-        if (!messageCountChanged && status === "streaming") return;
-        const behavior: ScrollBehavior = status === "streaming" ? "auto" : "smooth";
-        const schedule = (cb: () => void) => {
-            if (typeof requestAnimationFrame === "function") return requestAnimationFrame(cb);
-            if (typeof window !== "undefined") return window.setTimeout(cb, 16);
-            return 0;
-        };
-        scrollRafRef.current = schedule(() => {
-            scrollRafRef.current = null;
-            scrollToBottom(behavior);
-        });
-        lastMessageCountRef.current = currentCount;
-    }, [messages.length, status, isAtBottom, scrollToBottom]);
 
     useEffect(() => {
         if (editingMessageId && editTextareaRef.current) {
@@ -280,12 +180,6 @@ export function ChatMessageDisplay({
         <div
             ref={scrollRootRef}
             className="h-full w-full relative"
-            onWheelCapture={(e) => {
-                if (e.deltaY < 0) {
-                    userScrolledUpRef.current = true;
-                    setIsAtBottom(false);
-                }
-            }}
         >
             <ChatScrollArea contentClassName="py-5 px-5 space-y-5">
                     {messages.map((message, messageIndex) => {
@@ -607,6 +501,8 @@ export function ChatMessageDisplay({
                                                             // with the plugin's own greys.
                                                             "prose prose-sm font-voice text-[15px] max-w-none break-words [overflow-wrap:anywhere] [&>*:first-child]:mt-0 [&>*:last-child]:mb-0"
                                                         )}>
+                                                            <SmoothText text={content} streaming={status === "streaming" && message.role === "assistant" && isLastAssistantMessage}>
+                                                            {(shown) => (
                                                             <ReactMarkdown
                                                                 remarkPlugins={[remarkGfm]}
                                                                 urlTransform={(url) => {
@@ -673,8 +569,10 @@ export function ChatMessageDisplay({
                                                                     },
                                                                 }}
                                                             >
-                                                                {content}
+                                                                {shown}
                                                             </ReactMarkdown>
+                                                            )}
+                                                            </SmoothText>
                                                         </div>
                                                     );
 

@@ -379,6 +379,91 @@ html[data-reduce-motion] .anvil-mark.is-active .anvil-sparks {
 }
 
 /*
+ * A step's own icon while it is under way (shared/chat/steps.tsx): it breathes in place,
+ * fading a little and back, instead of a spinner standing in for it.
+ */
+.icon-busy {
+  animation: icon-busy 1.6s ease-in-out infinite;
+}
+@keyframes icon-busy {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.45; transform: scale(0.92); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .icon-busy { animation: none; }
+}
+html[data-reduce-motion] .icon-busy {
+  animation: none;
+}
+
+/*
+ * The AI pen on the PPT canvas (views/OutlineWriting.tsx, views/GenerationProgress.tsx).
+ *  - pen-bob: the pen at the end of the line it is writing, a small writing wiggle.
+ *  - pen-sketch: over a page still being drawn, the pen hatching back and forth.
+ *  - frame-draw: that page's frame sketched in, again and again.
+ *  - pen-reveal / pen-ride: a finished page wiped in from left to right, the pen riding the edge.
+ */
+.pen-bob {
+  transform-origin: 10% 90%;
+  animation: pen-bob 0.9s ease-in-out infinite;
+}
+@keyframes pen-bob {
+  0%, 100% { transform: rotate(0deg) translate(0, 0); }
+  30% { transform: rotate(-7deg) translate(1px, -1px); }
+  60% { transform: rotate(4deg) translate(2px, 0); }
+}
+.pen-sketch {
+  animation: pen-sketch 3.2s ease-in-out infinite;
+}
+@keyframes pen-sketch {
+  0% { left: 16%; top: 28%; transform: rotate(-6deg); }
+  20% { left: 70%; top: 22%; transform: rotate(4deg); }
+  40% { left: 28%; top: 48%; transform: rotate(-4deg); }
+  60% { left: 76%; top: 56%; transform: rotate(6deg); }
+  80% { left: 22%; top: 68%; transform: rotate(-3deg); }
+  100% { left: 16%; top: 28%; transform: rotate(-6deg); }
+}
+.frame-draw {
+  stroke-dasharray: 100;
+  animation: frame-draw 2.6s ease-in-out infinite;
+}
+@keyframes frame-draw {
+  0% { stroke-dashoffset: 100; opacity: 1; }
+  70% { stroke-dashoffset: 0; opacity: 1; }
+  100% { stroke-dashoffset: 0; opacity: 0.25; }
+}
+.pen-reveal {
+  animation: pen-reveal 1.3s cubic-bezier(0.45, 0, 0.25, 1) backwards;
+}
+@keyframes pen-reveal {
+  from { clip-path: inset(0 100% 0 0); }
+  to { clip-path: inset(0 0 0 0); }
+}
+.pen-ride {
+  animation: pen-ride 1.3s cubic-bezier(0.45, 0, 0.25, 1) forwards;
+}
+@keyframes pen-ride {
+  0% { left: 0%; top: 20%; opacity: 1; }
+  25% { top: 70%; }
+  50% { top: 30%; }
+  75% { top: 65%; }
+  92% { left: 100%; top: 40%; opacity: 1; }
+  100% { left: 100%; top: 40%; opacity: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .pen-bob, .pen-sketch, .frame-draw, .pen-reveal, .pen-ride { animation: none; }
+  .pen-ride { opacity: 0; }
+}
+html[data-reduce-motion] .pen-bob,
+html[data-reduce-motion] .pen-sketch,
+html[data-reduce-motion] .frame-draw,
+html[data-reduce-motion] .pen-reveal,
+html[data-reduce-motion] .pen-ride {
+  animation: none;
+}
+html[data-reduce-motion] .pen-ride { opacity: 0; }
+
+/*
  * A quiet aside in the serif: empty states, the line under a settings title,
  * captions. Italic only for Latin text: Chinese has no italic, and a browser
  * asked for one just slants the glyphs, which reads as a mistake, not a voice.

@@ -2,7 +2,6 @@ import { useState } from "react";
 import { Loader2, Palette, Presentation } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/shared/ui/dialog";
 import { useUiLanguage } from "@/shared/i18n";
-import { AnvilMark } from "@/shared/chat/anvil-mark";
 import type { CreationProgress } from "@/workspaces/ppt/canvas/lib/creation-machine";
 import { useTemplateLibrary } from "@/workspaces/ppt/canvas/hooks/use-template-library";
 import { StyleLibrary } from "./StyleLibrary";
@@ -73,29 +72,8 @@ export function StyleChip({ templateLibrary, tr, onChange }: { templateLibrary: 
  * The canvas before a deck exists. What the deck is about is said in the
  * chat; the style is chosen once the outline is there.
  */
-export function PptStart({ progress, tr, templateLibrary, outlineDraft = [] }: { progress: CreationProgress; tr: Translate; templateLibrary: Library; outlineDraft?: string[] }) {
+export function PptStart({ progress, tr, templateLibrary }: { progress: CreationProgress; tr: Translate; templateLibrary: Library }) {
   const [picking, setPicking] = useState(false);
-  // The outline arriving: each slide's title as soon as it is written.
-  if (outlineDraft.length > 0) {
-    return (
-      <div className="h-full w-full overflow-y-auto bg-sunken px-8 py-10">
-        <div className="mx-auto max-w-[560px]">
-          <p className="mb-4 flex items-center gap-2 text-sm text-muted-foreground" role="status">
-            <AnvilMark className="size-[18px]" />
-            {tr(`正在写大纲 · 已有 ${outlineDraft.length} 页`, `Writing the outline · ${outlineDraft.length} slides so far`)}
-          </p>
-          <ol className="space-y-2">
-            {outlineDraft.map((title, index) => (
-              <li key={index} className="flex items-center gap-3 rounded-xl border border-border/70 bg-card px-4 py-3 animate-rise-in">
-                <span className="flex size-7 shrink-0 items-center justify-center rounded-full border text-xs text-muted-foreground">{index + 1}</span>
-                <span className="min-w-0 truncate text-[14px] text-foreground">{title}</span>
-              </li>
-            ))}
-          </ol>
-        </div>
-      </div>
-    );
-  }
   return (
     <div className="flex h-full w-full items-center justify-center bg-sunken px-8">
       <div className="max-w-[420px] text-center">

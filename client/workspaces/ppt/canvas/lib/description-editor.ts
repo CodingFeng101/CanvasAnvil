@@ -21,6 +21,8 @@ const CHIP_CLASS =
 export function createMaterialChip(name: string): HTMLSpanElement {
   const chip = document.createElement("span");
   chip.setAttribute("data-material-token", name);
+  // Hovering shows the material; its slide is on the editor (`data-peek-slide`).
+  chip.setAttribute("data-peek", "ppt-material");
   // Without this the caret can land inside the chip and break the token.
   chip.setAttribute("contenteditable", "false");
   chip.className = CHIP_CLASS;

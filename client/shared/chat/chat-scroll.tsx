@@ -22,6 +22,8 @@ import { ScrollArea } from "@/shared/ui/scroll-area";
  */
 
 const VIEWPORT = '[data-slot="scroll-area-viewport"]';
+/** "Back to the latest" asks FollowLatest to pick the reply up again. */
+const FOLLOW_EVENT = "chat:follow";
 
 function useViewport(rootRef: React.RefObject<HTMLDivElement | null>) {
   const [viewport, setViewport] = useState<HTMLElement | null>(null);
@@ -39,10 +41,73 @@ export function ChatScrollArea({ children, contentClassName }: { children: React
       <ScrollArea className="h-full w-full scrollbar-thin">
         <div className={cn("chat-measure", contentClassName)}>{children}</div>
       </ScrollArea>
+      {viewport && <FollowLatest viewport={viewport} />}
       {viewport && <ChatOutline viewport={viewport} />}
       {viewport && <BackToLatest viewport={viewport} />}
     </div>
   );
+}
+
+/**
+ * Keeps the newest line in view while a reply streams in — but only while the reader is at the
+ * bottom. Any move up (wheel, touch, keys, dragging the scrollbar) lets go at once, and the reply
+ * keeps growing below without pulling them back; scrolling back down to the bottom, the
+ * "back to the latest" button, or sending a new message picks it up again.
+ */
+function FollowLatest({ viewport }: { viewport: HTMLElement }) {
+  useEffect(() => {
+    const content = viewport.firstElementChild as HTMLElement | null;
+    if (!content) return;
+    const distance = () => viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight;
+    let following = true;
+    let lastTop = viewport.scrollTop;
+    let userMessages = viewport.querySelectorAll('[data-chat-msg="user"]').length;
+    const toBottom = () => {
+      viewport.scrollTop = viewport.scrollHeight;
+      lastTop = viewport.scrollTop;
+    };
+    const letGo = () => {
+      following = false;
+    };
+    const onScroll = () => {
+      const top = viewport.scrollTop;
+      if (top < lastTop - 1) following = false;
+      if (distance() <= 24) following = true;
+      lastTop = top;
+    };
+    const onWheel = (event: WheelEvent) => {
+      if (event.deltaY < 0) letGo();
+    };
+    const onKey = (event: KeyboardEvent) => {
+      if (["ArrowUp", "PageUp", "Home"].includes(event.key)) letGo();
+    };
+    const onFollow = () => {
+      following = true;
+    };
+    const onGrow = () => {
+      const count = viewport.querySelectorAll('[data-chat-msg="user"]').length;
+      if (count > userMessages) following = true; // the reader just sent something: show it
+      userMessages = count;
+      if (following) toBottom();
+    };
+    toBottom();
+    const resize = new ResizeObserver(onGrow);
+    resize.observe(content);
+    viewport.addEventListener("scroll", onScroll, { passive: true });
+    viewport.addEventListener("wheel", onWheel, { passive: true });
+    viewport.addEventListener("touchmove", letGo, { passive: true });
+    viewport.addEventListener("keydown", onKey);
+    viewport.addEventListener(FOLLOW_EVENT, onFollow);
+    return () => {
+      resize.disconnect();
+      viewport.removeEventListener("scroll", onScroll);
+      viewport.removeEventListener("wheel", onWheel);
+      viewport.removeEventListener("touchmove", letGo);
+      viewport.removeEventListener("keydown", onKey);
+      viewport.removeEventListener(FOLLOW_EVENT, onFollow);
+    };
+  }, [viewport]);
+  return null;
 }
 
 function BackToLatest({ viewport }: { viewport: HTMLElement }) {
@@ -66,7 +131,10 @@ function BackToLatest({ viewport }: { viewport: HTMLElement }) {
       title={label}
       aria-label={label}
       tabIndex={away ? 0 : -1}
-      onClick={() => viewport.scrollTo({ top: viewport.scrollHeight, behavior: "smooth" })}
+      onClick={() => {
+        viewport.dispatchEvent(new Event(FOLLOW_EVENT));
+        viewport.scrollTo({ top: viewport.scrollHeight, behavior: "smooth" });
+      }}
       className={cn(
         "absolute bottom-3 left-1/2 z-20 flex size-8 -translate-x-1/2 items-center justify-center rounded-full border border-border/80 bg-card text-foreground/70 shadow-[0_2px_8px_-2px_hsl(var(--shadow-hue)/0.16),0_1px_2px_hsl(var(--shadow-hue)/0.06)] transition-[opacity,transform,color] duration-base ease-out-soft hover:text-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/30",
         away ? "translate-y-0 opacity-100" : "pointer-events-none translate-y-2 opacity-0",

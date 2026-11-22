@@ -12,6 +12,9 @@ export type DesignerApi = {
   dxfBytes(standard: string, mode: string): number[];
   shot2d(mode: string, cx: number, cy: number, scale: number, w?: number, h?: number): string;
   fit2D(): void;
+  /** The 2D view: a plan point (mm) is drawn at x * s + ox, y * s + oy on a W x H canvas. */
+  view?: { s: number; ox: number; oy: number; W: number; H: number };
+  requestDraw?: () => void;
 };
 /**
  * The designer's own one-click exports, as skill/cad-skill/scripts/run-designer.mjs drives them:
@@ -44,6 +47,12 @@ export interface DesignerBridge {
   exportDxf(): Uint8Array;
   shot2d(): string;
   fit2D(): void;
+  /** Where a plan point (mm) is on the page, in the app window's coordinates; null when it cannot be told. */
+  toScreen(x: number, y: number): { x: number; y: number } | null;
+  /** Whether a plan point (mm) is inside the 2D view, `margin` px clear of its edges. */
+  inView(x: number, y: number, margin?: number): boolean;
+  /** Glide the 2D view to show this box (mm). */
+  viewTo(box: { x: number; y: number; w: number; h: number }, ms?: number): Promise<void>;
   /** Runs the designer's own 一键布置水电 when the plan has no MEP points yet; returns how many were placed. */
   autoElec(): Promise<number>;
   /** Room-by-room MEP audit (lights, switches, sockets, heights, door switches); null before any MEP points exist. */
@@ -100,6 +109,55 @@ export function createDesignerBridge(getApi: () => DesignerApi | undefined, getE
       return api().shot2d('layout', b.x + b.w / 2, b.y + b.h / 2, Math.min(1400 / b.w, 1000 / b.h));
     },
     fit2D: () => api().fit2D(),
+    inView(x, y, margin = 40) {
+      const view = getApi()?.view;
+      if (!view?.W) return true;
+      const px = x * view.s + view.ox;
+      const py = y * view.s + view.oy;
+      return px >= margin && py >= margin && px <= view.W - margin && py <= view.H - margin;
+    },
+    viewTo(box, ms = 320) {
+      const designer = getApi();
+      const view = designer?.view;
+      if (!designer || !view?.W) return Promise.resolve();
+      const pad = 70;
+      const w = Math.max(box.w, 2500);
+      const h = Math.max(box.h, 2500);
+      const s1 = Math.min(1.5, Math.max(0.008, Math.min((view.W - pad * 2) / w, (view.H - pad * 2) / h)));
+      const c1 = { x: box.x + box.w / 2, y: box.y + box.h / 2 };
+      const s0 = view.s;
+      const c0 = { x: (view.W / 2 - view.ox) / s0, y: (view.H / 2 - view.oy) / s0 };
+      const start = performance.now();
+      return new Promise(resolve => {
+        const step = (now: number) => {
+          const t = Math.min(1, (now - start) / ms);
+          const e = 0.5 - Math.cos(Math.PI * t) / 2;
+          // Scale geometrically and move the centre, so the view does not swing.
+          const s = s0 * Math.pow(s1 / s0, e);
+          const cx = c0.x + (c1.x - c0.x) * e;
+          const cy = c0.y + (c1.y - c0.y) * e;
+          view.s = s;
+          view.ox = view.W / 2 - cx * s;
+          view.oy = view.H / 2 - cy * s;
+          designer.requestDraw?.();
+          if (t < 1) requestAnimationFrame(step);
+          else resolve();
+        };
+        requestAnimationFrame(step);
+      });
+    },
+    toScreen(x, y) {
+      const view = getApi()?.view;
+      const doc = getDocument();
+      const frame = doc?.defaultView?.frameElement;
+      if (!view?.W || !doc || !frame) return null;
+      // The 2D canvas is the one the view is sized for.
+      const canvas = Array.from(doc.querySelectorAll('canvas')).find(c => Math.abs(c.getBoundingClientRect().width - view.W) < 2 && c.getBoundingClientRect().height > 0);
+      if (!canvas) return null;
+      const box = canvas.getBoundingClientRect();
+      const outer = frame.getBoundingClientRect();
+      return { x: outer.left + box.left + x * view.s + view.ox, y: outer.top + box.top + y * view.s + view.oy };
+    },
     elecAudit: () => {
       const audit = auditElec(api());
       return audit.total.points ? audit : null;

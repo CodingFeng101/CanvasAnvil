@@ -6,11 +6,6 @@
  * tool inputs as strings where the SDK expects objects.
  */
 
-export function isMinimalDiagram(xml: string): boolean {
-    const stripped = xml.replace(/\s/g, "")
-    return !stripped.includes('id="2"')
-}
-
 // Helper function to replace historical tool call XML with placeholders
 // This reduces token usage and forces LLM to rely on the current diagram XML (source of truth)
 export function replaceHistoricalToolInputs(messages: any[]): any[] {

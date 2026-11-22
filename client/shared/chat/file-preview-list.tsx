@@ -1,6 +1,7 @@
 "use client"
 
-import { Loader2, X } from "lucide-react"
+import { X } from "lucide-react"
+import { Shimmer } from "@/shared/chat/shimmer"
 import { AttachmentPreview, fileExtension, formatSize, type PreviewTarget } from "@/shared/chat/attachment-preview"
 import { useEffect, useRef, useState } from "react"
 import { isPdfFile, isTextFile } from "@/shared/files"
@@ -112,8 +113,7 @@ export function FilePreviewList({
                                                 {fileExtension(file.name)}
                                             </span>
                                             <span className="flex min-w-0 items-center gap-1 truncate text-[10.5px] text-muted-foreground">
-                                                {info?.isExtracting && <Loader2 className="size-3 animate-spin" />}
-                                                {secondary}
+                                                {info?.isExtracting ? <Shimmer as="span" duration={1.6}>{secondary}</Shimmer> : secondary}
                                             </span>
                                         </span>
                                     </span>

@@ -14,14 +14,16 @@
  * can be switched: an older one would replace whatever the canvas holds now.
  */
 
-import { BrainIcon, ChevronDown, FileCode, FileText, ImageIcon, Images, Wand2 } from "lucide-react"
-import { type ReactNode, useEffect, useState } from "react"
-import { Shimmer } from "@/shared/chat"
+import type { ReactNode } from "react"
+import { Brain, FileCode, FilePen, FilePlus2, FileText, Wand2 } from "lucide-react"
+import { Step, StepList, type StepState } from "@/shared/chat"
 import { cn } from "@/shared/lib/utils"
-import { parseLayout } from "@/workspaces/diagram/lib/arrange"
+import { parseLayout, type CandidateNote } from "@/workspaces/diagram/lib/arrange"
 import type { LintRule } from "@/workspaces/diagram/lib/layout-lint"
 import {
+    type CorrectionCandidate,
     type LayoutCorrection,
+    type SkippedCorrection,
     updateCorrection,
     useLatestCorrectionId,
     useLayoutCorrection,
@@ -30,198 +32,41 @@ import { useDiagramT } from "@/workspaces/diagram/lib/translations"
 import { useDiagram } from "@/workspaces/diagram/state/diagram-context"
 
 type Key = Parameters<ReturnType<typeof useDiagramT>>[0]
-type StepState = "running" | "done" | "warning" | "error"
-
-function Step({
-    icon,
-    title,
-    meta,
-    state,
-    last,
-    collapsible = true,
-    defaultOpen = true,
-    children,
-}: {
-    icon: ReactNode
-    title: ReactNode
-    meta?: ReactNode
-    state: StepState
-    last: boolean
-    collapsible?: boolean
-    defaultOpen?: boolean
-    children?: ReactNode
-}) {
-    const [open, setOpen] = useState(defaultOpen)
-    const hasBody = Boolean(children)
-    const header = (
-        <>
-            <span className="text-sm font-medium text-foreground/85">{title}</span>
-            {meta && <span className="min-w-0 truncate text-xs text-muted-foreground">{meta}</span>}
-            {collapsible && hasBody && (
-                <ChevronDown
-                    className={cn("h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform", open && "rotate-180")}
-                />
-            )}
-        </>
-    )
-    return (
-        <li className="relative flex gap-3 pb-3 last:pb-0">
-            {!last && <span aria-hidden className="absolute left-[11px] top-7 bottom-0 w-px bg-border" />}
-            <span
-                className={cn(
-                    "relative z-[1] mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full border bg-background",
-                    state === "error"
-                        ? "border-destructive/50 text-destructive"
-                        : state === "warning"
-                          ? "border-warning/50 text-warning"
-                          : state === "running"
-                            ? "border-primary/50 text-primary-strong"
-                            : "border-border text-muted-foreground",
-                )}
-            >
-                {state === "running" ? (
-                    <span className="h-3 w-3 rounded-full border-2 border-current border-t-transparent animate-spin" />
-                ) : (
-                    icon
-                )}
-            </span>
-            <div className="min-w-0 flex-1 pt-0.5">
-                {collapsible && hasBody ? (
-                    <button
-                        type="button"
-                        onClick={() => setOpen(!open)}
-                        aria-expanded={open}
-                        className="flex w-full min-w-0 items-center gap-2 text-left hover:opacity-80"
-                    >
-                        {header}
-                    </button>
-                ) : (
-                    <div className="flex min-w-0 items-center gap-2">{header}</div>
-                )}
-                {hasBody && (open || !collapsible) && <div className="mt-1.5">{children}</div>}
-            </div>
-        </li>
-    )
-}
-
 /**
- * What happens before the diagram, as steps: reading the uploaded files, the
- * user's reference images and deep thinking's sketch (being drawn, the
- * picture, or why there is none).
+ * What happens before the diagram: reading the uploaded files. Sent as the "data-sketch" part
+ * (the name saved messages carry); a sketch in an old message is no longer shown.
  */
-export type SketchData = {
+export type PrepData = {
     files?: { state: "running" | "done" | "error"; names?: string[]; seconds?: number; error?: string }
-    images?: number
-    state?: "running" | "done" | "error"
-    url?: string
-    seconds?: number
-    error?: string
 }
 
-function useSeconds(running: boolean) {
-    const [start] = useState(() => Date.now())
-    const [, tick] = useState(0)
-    useEffect(() => {
-        if (!running) return
-        const id = window.setInterval(() => tick((n) => n + 1), 1000)
-        return () => window.clearInterval(id)
-    }, [running])
-    return Math.floor((Date.now() - start) / 1000)
-}
-
-export function SketchStep({ data }: { data: SketchData }) {
+export function PrepSteps({ data }: { data: PrepData }) {
     const t = useDiagramT()
-    // Older messages carry only the url.
-    const sketch = data.state ?? (data.url ? "done" : undefined)
     const files = data.files
-    const seconds = useSeconds(files?.state === "running" || sketch === "running")
-    const url = data.url ?? ""
-    const names = files?.names ?? []
+    if (!files) return null
+    const names = files.names ?? []
     return (
-        <ol className="my-3 list-none pl-0">
-            {files && (
-                <Step
-                    icon={<FileText className="h-3.5 w-3.5" />}
-                    title={
-                        files.state === "running" ? (
-                            <Shimmer duration={1}>{t("steps.reading")}</Shimmer>
-                        ) : files.state === "done" ? (
-                            t("steps.read")
-                        ) : (
-                            t("steps.read_failed")
-                        )
-                    }
-                    meta={
-                        files.state === "running" ? (
-                            <span className="tabular-nums">{seconds}s</span>
-                        ) : (
-                            t("steps.read_meta", { n: names.length, s: files.seconds ?? 0 })
-                        )
-                    }
-                    state={files.state === "error" ? "warning" : files.state}
-                    last={!data.images && !sketch}
-                    defaultOpen={false}
-                >
-                    {names.length > 0 || files.error ? (
-                        <div className="space-y-1 text-sm text-muted-foreground">
-                            {names.map((name, i) => (
-                                <p key={i} className="truncate">
-                                    {name}
-                                </p>
-                            ))}
-                            {files.error && <p className="text-xs whitespace-pre-wrap">{files.error}</p>}
-                        </div>
-                    ) : null}
-                </Step>
-            )}
-            {!!data.images && (
-                <Step
-                    icon={<Images className="h-3.5 w-3.5" />}
-                    title={t("steps.images")}
-                    meta={t("steps.images_meta", { n: data.images })}
-                    state="done"
-                    last={!sketch}
-                />
-            )}
-            {sketch && (
-                <Step
-                    icon={<ImageIcon className="h-3.5 w-3.5" />}
-                    title={
-                        sketch === "running" ? (
-                            <Shimmer duration={1}>{t("steps.sketching")}</Shimmer>
-                        ) : sketch === "done" ? (
-                            t("steps.sketch")
-                        ) : (
-                            t("steps.sketch_failed")
-                        )
-                    }
-                    meta={
-                        sketch === "running" ? (
-                            <span className="tabular-nums">{seconds}s</span>
-                        ) : sketch === "done" ? (
-                            data.seconds !== undefined ? t("steps.sketch_meta", { n: data.seconds }) : t("chat.sketch")
-                        ) : (
-                            t("steps.sketch_fallback")
-                        )
-                    }
-                    state={sketch === "error" ? "warning" : sketch}
-                    last
-                >
-                    {sketch === "done" && url ? (
-                        <button
-                            type="button"
-                            onClick={() => window.open(url, "_blank", "noopener,noreferrer")}
-                            aria-label={t("steps.sketch_open")}
-                            className="block w-full max-w-[420px] overflow-hidden rounded-xl border border-border/80 bg-white transition-shadow hover:shadow-soft"
-                        >
-                            <img src={url} alt="" className="block max-h-[260px] w-full object-contain" />
-                        </button>
-                    ) : sketch === "error" && data.error ? (
-                        <p className="text-xs text-muted-foreground whitespace-pre-wrap">{data.error}</p>
-                    ) : null}
-                </Step>
-            )}
-        </ol>
+        <StepList>
+            <Step
+                icon={FileText}
+                title={files.state === "running" ? t("steps.reading") : files.state === "done" ? t("steps.read") : t("steps.read_failed")}
+                meta={files.state === "running" ? undefined : t("steps.read_meta", { n: names.length, s: files.seconds ?? 0 })}
+                state={files.state === "error" ? "warning" : files.state}
+                last
+                defaultOpen={false}
+            >
+                {names.length > 0 || files.error ? (
+                    <div className="space-y-1 text-sm text-muted-foreground">
+                        {names.map((name, i) => (
+                            <p key={i} className="truncate">
+                                {name}
+                            </p>
+                        ))}
+                        {files.error && <p className="text-xs whitespace-pre-wrap">{files.error}</p>}
+                    </div>
+                ) : null}
+            </Step>
+        </StepList>
     )
 }
 
@@ -245,6 +90,34 @@ function issueChanges(c: LayoutCorrection) {
         if (after > 0) left.push({ rule, n: after })
     }
     return { fixed, left }
+}
+
+/** The layout pass's own reason, in words the user reads. */
+function skipReason(reason: string, t: ReturnType<typeof useDiagramT>) {
+    if (/no rows or columns/.test(reason)) return t("correction.skip.norows")
+    if (/^nothing/.test(reason)) return t("correction.skip.neat")
+    if (/too few/.test(reason)) return t("correction.skip.few")
+    if (/overlap/.test(reason)) return t("correction.skip.overlap")
+    if (/orthogonal/.test(reason)) return t("correction.skip.orthogonal")
+    return t("correction.skip.error", { reason: reason.replace(/^error:\s*/, "") })
+}
+
+/** Why an offered layout was not the one put on the canvas, in words. */
+function noteText(note: CandidateNote, t: ReturnType<typeof useDiagramT>) {
+    switch (note.why) {
+        case "worse":
+            return t("correction.note.worse")
+        case "rearranged":
+            return t("correction.note.rearranged", {
+                order: Math.round(note.order * 100),
+                aligned: Math.round(note.aligned * 100),
+                min: Math.round(note.min * 100),
+            })
+        case "layout":
+            return t("correction.note.layout")
+        case "margin":
+            return t("correction.note.margin", { margin: note.margin })
+    }
 }
 
 const count = (xml: string, kind: "vertex" | "edge") =>
@@ -296,12 +169,12 @@ export function DiagramSteps(props: DiagramStepsProps) {
               : undefined
 
     return (
-        <ol className="my-3 list-none pl-0">
+        <StepList>
             {hasThinking && (
                 <Step
-                    icon={<BrainIcon className="h-3.5 w-3.5" />}
-                    title={thinkingRunning ? <Shimmer duration={1}>{t("steps.thinking")}</Shimmer> : t("steps.thought")}
-                    state={thinkingRunning ? "running" : "done"}
+                    icon={Brain}
+                    title={thinkingRunning ? t("steps.thinking") : t("steps.thought")}
+                    state={thinkingRunning ? "running" : "done"} defaultOpen={thinkingRunning}
                     last={false}
                 >
                     <div className="space-y-2 text-sm text-muted-foreground">
@@ -315,7 +188,7 @@ export function DiagramSteps(props: DiagramStepsProps) {
                 </Step>
             )}
             <Step
-                icon={<FileCode className="h-3.5 w-3.5" />}
+                icon={toolName === "edit_diagram" ? FilePen : toolName === "append_diagram" ? FilePlus2 : FileCode}
                 title={drawTitle}
                 meta={
                     <>
@@ -341,7 +214,7 @@ export function DiagramSteps(props: DiagramStepsProps) {
                     load={loadDiagram}
                 />
             )}
-        </ol>
+        </StepList>
     )
 }
 
@@ -365,13 +238,27 @@ function CorrectionStep({
         const error = load(which === "corrected" ? correction.corrected : correction.original, true)
         if (!error) updateCorrection(toolCallId, { showing: which })
     }
+    // Older steps carry no candidates and keep the two-way switch below.
+    const candidates = correction.candidates ?? []
+    const skipped: SkippedCorrection[] = candidates.length ? (correction.skipped ?? []) : []
+    const current = correction.picked ?? (correction.showing === "original" ? "original" : correction.method)
+    // A layout that scored higher but was not used because it broke up the drawing.
+    const chosenScore = candidates.find((c) => c.method === correction.method)?.score ?? correction.after.score
+    const setAside = candidates.some((c) => c.note?.why === "rearranged" && c.score > chosenScore)
+    const pick = (candidate: CorrectionCandidate) => {
+        if (candidate.method === current) return
+        const error = load(candidate.xml, true)
+        if (!error) updateCorrection(toolCallId, { picked: candidate.method, showing: candidate.method === "original" ? "original" : "corrected" })
+    }
+    const optionName = (method: CorrectionCandidate["method"] | "elk") =>
+        method === "original" ? t("correction.option.original") : method === "tidy" ? t("correction.option.tidy") : t("correction.option.elk")
     const issues = (list: { rule: LintRule; n: number }[]) =>
         list.map((f) => t("correction.issue", { n: f.n, rule: t(`rule.${f.rule}` as Key) })).join(t("correction.sep"))
 
     return (
         <Step
-            icon={<Wand2 className="h-3.5 w-3.5" />}
-            title={correction.working ? <Shimmer duration={1}>{t("correction.working")}</Shimmer> : t("correction.title")}
+            icon={Wand2}
+            title={correction.working ? t("correction.working") : t("correction.title")}
             meta={
                 changed ? (
                     <span title={t("correction.score_hint")} className="tabular-nums">
@@ -381,7 +268,7 @@ function CorrectionStep({
                     t("correction.unchanged")
                 )
             }
-            state={correction.working ? "running" : "done"}
+            state={correction.working ? "running" : "done"} defaultOpen
             last
         >
             <div className="space-y-1 text-sm text-muted-foreground">
@@ -398,7 +285,9 @@ function CorrectionStep({
                           ? correction.method === "tidy"
                               ? t("correction.by_tidy", { moved: correction.moved, straight: correction.straightened })
                               : t("correction.by_elk", { direction: t(`method.${correction.method}` as Key) })
-                          : t("correction.kept")}
+                          : setAside
+                            ? t("correction.kept_rearranged")
+                            : t("correction.kept")}
                 </p>
                 {fixed.length > 0 && (
                     <p>
@@ -412,7 +301,61 @@ function CorrectionStep({
                         {issues(left)}
                     </p>
                 )}
-                {changed && canSwitch && !correction.working && correction.original && (
+                {/* Every layout tried, each with its score: the best one is on the canvas, the user may pick another. */}
+                {canSwitch && !correction.working && candidates.length + skipped.length > 1 && (
+                    <div className="pt-1.5">
+                        <p className="mb-1">{t("correction.pick")}</p>
+                        <div className="flex flex-wrap items-center gap-1">
+                            {candidates.map((candidate) => {
+                                const on = current === candidate.method
+                                return (
+                                    <button
+                                        key={candidate.method}
+                                        type="button"
+                                        onClick={() => pick(candidate)}
+                                        aria-pressed={on}
+                                        title={candidate.method.startsWith("layered") ? t(`method.${candidate.method}` as Key) : undefined}
+                                        className={cn(
+                                            "inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs transition-colors",
+                                            on
+                                                ? "border border-border/60 bg-background text-foreground shadow-sm"
+                                                : "text-muted-foreground hover:bg-muted hover:text-foreground",
+                                        )}
+                                    >
+                                        <span>{optionName(candidate.method)}</span>
+                                        <span className="tabular-nums opacity-70">{t("correction.option.score", { score: candidate.score })}</span>
+                                        {candidate.method === correction.method && <span className="text-brand">{t("correction.recommended")}</span>}
+                                    </button>
+                                )
+                            })}
+                            {/* A pass that produced nothing still shows, greyed, with its reason on hover. */}
+                            {skipped.map((s) => (
+                                <span
+                                    key={s.method}
+                                    title={skipReason(s.reason, t)}
+                                    aria-disabled
+                                    className="inline-flex cursor-not-allowed items-center gap-1.5 rounded-md px-2.5 py-1 text-xs text-muted-foreground/50"
+                                >
+                                    <span>{optionName(s.method)}</span>
+                                    <span className="opacity-70">{t("correction.option.na")}</span>
+                                </span>
+                            ))}
+                        </div>
+                        {candidates
+                            .filter((c) => c.note && c.method !== correction.method)
+                            .map((c) => (
+                                <p key={c.method} className="mt-1 text-xs text-muted-foreground/70">
+                                    {t("correction.skip.line", { name: optionName(c.method), reason: noteText(c.note!, t) })}
+                                </p>
+                            ))}
+                        {skipped.map((s) => (
+                            <p key={s.method} className="mt-1 text-xs text-muted-foreground/70">
+                                {t("correction.skip.line", { name: optionName(s.method), reason: skipReason(s.reason, t) })}
+                            </p>
+                        ))}
+                    </div>
+                )}
+                {changed && canSwitch && !correction.working && correction.original && candidates.length <= 1 && (
                     <div className="flex items-center gap-1 pt-1.5">
                         {(["corrected", "original"] as const).map((which) => (
                             <button

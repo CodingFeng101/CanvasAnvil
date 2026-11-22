@@ -1,7 +1,7 @@
-import { useEffect, useRef, useState } from "react";
-import { Check, Copy, Pencil } from "lucide-react";
+import { useRef, useState } from "react";
+import { Brain, Check, Copy, Paintbrush, Pencil } from "lucide-react";
 import { CanvasCard } from "@/shared/canvas-pane";
-import { MessageImage, WorkingIndicator } from "@/shared/chat";
+import { MessageImage, Step, StepList, WorkingIndicator } from "@/shared/chat";
 import { extractImageTags } from "@/shared/chat/ppt-message-tags";
 import { ChatScrollArea } from "@/shared/chat/chat-scroll";
 import { MessageEditor } from "@/shared/chat/message-editor";
@@ -15,9 +15,14 @@ export interface CanvasChatMessage extends ChatMessage {
   id: string;
 }
 
+/** Where an annotated edit is (see AnnotatedEditOptions.onStage). */
+export type EditStage = { step: "reading" } | { step: "drawing"; understood: string | null };
+
 interface ChatMessageDisplayProps {
   messages: CanvasChatMessage[];
   isGenerating: boolean;
+  /** An annotated edit under way, shown as its steps: the AI's reading of the markup comes before the picture. */
+  editStage?: EditStage | null;
   /** Resend one of your messages, edited: what came after it is replaced. */
   onEditMessage?: (index: number, text: string) => void;
   /** Looks up a picture's current data URL by canvas element id; null once it's gone (cleared, undone). */
@@ -70,16 +75,12 @@ function describeStrippedImageTags(text: string, uiLang: "zh" | "en"): string {
   });
 }
 
-export function ChatMessageDisplay({ messages, isGenerating, onEditMessage, resolveCanvasImage, chatImages }: ChatMessageDisplayProps) {
+export function ChatMessageDisplay({ messages, isGenerating, editStage, onEditMessage, resolveCanvasImage, chatImages }: ChatMessageDisplayProps) {
   const uiLang = useUiLanguage();
   const tr = (zh: string, en: string) => (uiLang === "zh" ? zh : en);
   const endRef = useRef<HTMLDivElement>(null);
   const [editing, setEditing] = useState<{ id: string; text: string } | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
-
-  useEffect(() => {
-    endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
-  }, [messages.length, isGenerating]);
 
   const copy = (id: string, text: string) => {
     void navigator.clipboard?.writeText(text).then(() => {
@@ -156,6 +157,34 @@ export function ChatMessageDisplay({ messages, isGenerating, onEditMessage, reso
           );
         })}
         {!isGenerating && messages[messages.length - 1]?.role === "assistant" && <CanvasCard className="mt-0" />}
+        {isGenerating && editStage && (
+          <StepList className="mb-1">
+            <Step
+              icon={Brain}
+              title={
+                editStage.step === "reading"
+                  ? tr("正在理解标注…", "Reading the annotation…")
+                  : editStage.understood
+                    ? tr("理解了标注", "Read the annotation")
+                    : tr("没能用文字读出标注，把标注图直接交给图像模型", "Couldn't put the annotation into words; the marked-up picture goes to the image model as is")
+              }
+              state={editStage.step === "reading" ? "running" : "done"}
+              defaultOpen
+              collapsible={editStage.step === "drawing" && !!editStage.understood}
+            >
+              {editStage.step === "drawing" && editStage.understood ? (
+                <p className="whitespace-pre-wrap text-sm text-foreground/80">{editStage.understood}</p>
+              ) : null}
+            </Step>
+            <Step
+              icon={Paintbrush}
+              title={tr("按这个理解修改图片", "Editing the picture from it")}
+              state={editStage.step === "drawing" ? "running" : "pending"}
+              collapsible={false}
+              last
+            />
+          </StepList>
+        )}
         {isGenerating && (
           <div className="flex w-full justify-start">
             <WorkingIndicator kind="canvas" />

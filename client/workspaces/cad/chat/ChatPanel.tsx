@@ -2,7 +2,8 @@ import { usePendingPrompt } from "@/shared/pending-prompt";
 
 import { ChatTitle } from "@/shared/chat/chat-title";
 import { constraintsFor } from "@/shared/constraints";
-import { CanvasOpenButton } from "@/shared/canvas-pane";
+import { CanvasOpenButton, useCanvasPane } from "@/shared/canvas-pane";
+import { previewFromCadText } from "@/workspaces/cad/lib/stream-plan";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { Home } from "lucide-react";
 import { cn } from "@/shared/lib/utils";
@@ -21,7 +22,7 @@ import {
 } from "@/shared/chat";
 import { ChatMessageDisplay, type UIMessage } from "./ChatMessageDisplay";
 import { DesignHistoryDialog } from "./DesignHistoryDialog";
-import { CAD_CONFIRM, applyPicks, describeSpecStream, generateMessage, parseCadSteps, parsePartialJson, planMessage, recognitionLines, stripCadMarkers, takePicks, validDecisions } from "./cad-steps-text";
+import { CAD_CONFIRM, applyPicks, describeSpecStream, designMark, designMarkOf, generateMessage, parseCadSteps, parsePartialJson, planMessage, recognitionLines, stripCadMarkers, stripDesignMark, takePicks, validDecisions } from "./cad-steps-text";
 import { t, useUiLanguage } from "@/shared/i18n";
 import {
   chatStorageKey,
@@ -43,7 +44,7 @@ import { catalogPromptTable } from "../lib/design/catalog";
 import { elecPrefsFromDecisions } from "@/workspaces/cad/lib/design/elec-prefs";
 import { unwrapCadPlan } from "@/workspaces/cad/lib/design/cad-plan";
 import { layoutToSpec } from "../lib/design/layout";
-import type { CadDesignSession, MepRun } from "../lib/design/design-session";
+import { CadDesignSession, type MepRun } from "../lib/design/design-session";
 import {
   buildImageTags,
   buildContextAttachments,
@@ -88,6 +89,8 @@ interface ChatPanelProps {
     plan?: any;
   };
   onClearWorkspace?: () => void;
+  /** An edit or retry went back to before the design plan: the plan is dropped too. */
+  onPlanReset?: () => void;
   designSession: CadDesignSession;
   /** Fill (or send) the composer; `assistant` instead posts that text as an assistant message (no model call). */
   composerRequest?: { id: number; text: string; send?: boolean; assistant?: string };
@@ -129,6 +132,7 @@ export function ChatPanel(props: ChatPanelProps) {
     closeInterruptedStep(loadChatHistory(chatStorageKey(workspaceId), props.initialMessages ?? []), language === "zh"),
   );
   const [input, setInput] = useState("");
+  const canvasPane = useCanvasPane();
   // A sentence written on the portal lands here once, unsent.
   usePendingPrompt("cad", setInput);
   const [files, setFiles] = useState<File[]>([]);
@@ -191,9 +195,33 @@ export function ChatPanel(props: ChatPanelProps) {
       throw new Error(result.error || "CAD application failed");
     return null;
   };
+  /**
+   * Editing or retrying an earlier message starts the conversation again from there, so the design
+   * goes back to where it was then: the version the last remaining turn ended on, or none when the
+   * edit goes back before the first floorplan (and the plan too, before the plan was made). A chat
+   * from before these marks, with a floorplan step still in it, keeps the design as it is.
+   */
+  const rewindFor = async (history: ChatMessage[]) => {
+    const text = (message: ChatMessage) => (typeof message.content === "string" ? message.content : "");
+    const marks = history.map((message) => designMarkOf(text(message))).filter((key): key is string => !!key);
+    const madeDesign = history.some((message) => message.role === "assistant" && /^\[\[CAD_STEPS\|(?:generate\|done|check\|)/.test(text(message)));
+    try {
+      if (marks.length) await session.rewindTo(marks[marks.length - 1]);
+      else if (!madeDesign) await session.rewindTo(null);
+    } catch (reason) {
+      console.warn("[CAD] Could not take the design back", reason);
+    }
+    if (!history.some((message) => text(message).startsWith("[[CAD_STEPS|plan|ready"))) props.onPlanReset?.();
+  };
+  const runFrom = async (text: string, history: ChatMessage[]) => {
+    if (busyRef.current || !text.trim()) return;
+    await rewindFor(history);
+    await run(text, history, []);
+  };
   const run = async (text: string, history = messages, uploadFiles = files) => {
     if (busyRef.current || !text.trim()) return;
     busyRef.current = true;
+    canvasPane?.requested();
     setLoading(true);
     setInput("");
     setFiles([]);
@@ -207,6 +235,8 @@ export function ChatPanel(props: ChatPanelProps) {
     // The floorplan step's finished stages; the catch block below shows a failure inside the same step.
     let generateLog: string[] | null = null;
     try {
+      // Everything this turn changes is saved as one version, its final result.
+      await session.beginTurn();
       const design = await session.sync();
       const blocked = tr(
         "请先在设计器里点“确认户型”，再导出报价单和施工图。",
@@ -303,7 +333,12 @@ export function ChatPanel(props: ChatPanelProps) {
             timer = 0;
             const latest = pending;
             pending = null;
-            if (latest !== null) target(latest);
+            if (latest !== null) {
+              target(latest);
+              // A first floor plan being written is drawn into the designer, wall by wall.
+              const preview = previewFromCadText(latest);
+              if (preview) void session.previewPlan(preview);
+            }
           }, 80);
         };
         const stopShowing = () => {
@@ -725,6 +760,19 @@ export function ChatPanel(props: ChatPanelProps) {
       // A failed floorplan stays in its step block (a bare JSON array here used to render as PPT slides).
       updateAssistant(generateLog ? generateMessage("error", [...generateLog, message].join("\n\n")) : message);
     } finally {
+      session.endPreview();
+      session.endTurn();
+      // Remember which design this turn ended on, for a later edit or retry of an earlier message.
+      const ended = session.getSnapshot().design;
+      if (ended) {
+        const mark = designMark(CadDesignSession.shotKey(ended));
+        setMessages((previous) => {
+          const last = previous.length - 1;
+          const message = previous[last];
+          if (message?.role !== "assistant" || typeof message.content !== "string") return previous;
+          return previous.map((item, index) => (index === last ? { ...item, content: stripDesignMark(message.content as string) + mark } : item));
+        });
+      }
       setLoading(false);
       busyRef.current = false;
     }
@@ -809,7 +857,7 @@ export function ChatPanel(props: ChatPanelProps) {
               messages.map((message, index) => ({
                 id: `cad-${index}`,
                 role: message.role,
-                content: message.content,
+                content: typeof message.content === "string" ? stripDesignMark(message.content) : message.content,
               })) as UIMessage[]
             }
             status={loading ? "streaming" : "idle"}
@@ -820,15 +868,9 @@ export function ChatPanel(props: ChatPanelProps) {
                 .reverse()
                 .find((message) => message.role === "user");
               if (user && typeof user.content === "string")
-                void run(
-                  user.content,
-                  history.slice(0, history.lastIndexOf(user)),
-                  [],
-                );
+                void runFrom(user.content, history.slice(0, history.lastIndexOf(user)));
             }}
-            onEditMessage={(index, text) =>
-              void run(text, messages.slice(0, index), [])
-            }
+            onEditMessage={(index, text) => void runFrom(text, messages.slice(0, index))}
             onCadAction={(text) => void run(text)}
           />
         ) : (

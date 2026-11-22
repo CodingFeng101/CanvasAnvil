@@ -47,9 +47,11 @@ export interface WorkReference {
 
 /** What a canvas's extractor reports when a work cannot be referenced as it is. */
 export interface ReferenceBlock {
-  /** Why, in the interface language ("先在设计器里确认户型"). */
-  message: string;
-  /** A button that fixes it, e.g. open that work in its canvas. */
+  /** What is wrong, in one short line ("这套户型还没确认"). */
+  title: string;
+  /** What to do about it, in one sentence; the action below does it when there is one. */
+  detail?: string;
+  /** The one button that fixes it, e.g. open that work in its canvas. */
   action?: { label: string; run: () => void };
 }
 

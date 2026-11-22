@@ -413,9 +413,15 @@ export function createWorksStore(config: WorksConfig, local: LocalArea = browser
     touch(id: string, patch: Pick<Partial<WorkMeta>, "thumb" | "nameHint" | "touched" | "lastPrompt"> = {}): Promise<WorkMeta[]> {
       return serial(async () => {
         const before = await readIndex();
-        if (!before.some((w) => w.id === id)) return before;
-        // Recording the latest request alone (done on every open) is not an edit: the work keeps its place.
-        const edit = Object.keys(patch).some((key) => key !== "lastPrompt");
+        const work = before.find((w) => w.id === id);
+        if (!work) return before;
+        // Only a real change moves a work up the recents: a new request, a new
+        // picture, its first content. Opening one re-reports all of these with
+        // the values it already has, and must leave it where it is.
+        const edit =
+          (patch.lastPrompt !== undefined && patch.lastPrompt !== work.lastPrompt) ||
+          (!!patch.thumb && patch.thumb !== work.thumb) ||
+          (!!patch.touched && !work.touched);
         const index = patchWork(before, id, edit ? { ...patch, updatedAt: Date.now() } : patch);
         await writeIndex(index);
         return index;

@@ -69,6 +69,31 @@ test('manual changes persist, invalidate confirmation and survive unrelated AI e
   assert.equal((restored.getSnapshot().design!.plan as SinglePlan).furniture[1].x, manuallyMoved.furniture[1].x);
 });
 
+test('a chat turn saves one version, its final result, however many changes it makes on the way', async () => {
+  const { session, bridge, plan } = setup();
+  await session.applyModelOutput({ type: 'cad_spec', spec: validSpec() });
+  const start = session.getSnapshot().design!;
+  assert.equal(session.versions().length, 1);
+  await session.beginTurn();
+  const id = plan().furniture[0].id;
+  await session.applyModelOutput({ type: 'cad_ops', ops: [{ op: 'resize_furniture', id, w: 1500 }] });
+  // The designer changes the plan itself mid-turn (a self-check nudge): not a manual edit.
+  const nudged = structuredClone(plan());
+  nudged.furniture[1].x += 100;
+  bridge.replacePlan(nudged);
+  await session.sync();
+  await session.applyModelOutput({ type: 'cad_ops', ops: [{ op: 'resize_furniture', id, w: 1600 }] });
+  session.endTurn();
+  const versions = session.versions();
+  assert.equal(versions.length, 2);
+  assert.equal(versions[0], start);
+  assert.equal((versions[1].plan as SinglePlan).furniture[0].w, 1600);
+  assert.notEqual(versions[1].lastSource, 'user');
+  // Undo goes back to where the turn started.
+  await session.restoreVersion(0);
+  assert.notEqual(plan().furniture[0].w, 1600);
+});
+
 test('unsupported spec opening types are rejected before iframe loading', async () => {
   const { session, loads } = setup();
   const spec = validSpec();
@@ -209,4 +234,29 @@ test('completing a recognized draft keeps the original underlay and records the 
   assert.deepEqual(design.recognition!.answers, { 层高: ['2900'] });
   assert.deepEqual(design.recognition!.symbols, [{ symbol: '双人床', where: '主卧', count: 1, model: 'bed18' }]);
   assert.deepEqual(design.recognition!.confirm, ['层高按 2900']);
+});
+
+test('an edit of an earlier message takes the design back to that point, or to none before the first floorplan', async () => {
+  const { session, bridge, plan } = setup();
+  await session.beginTurn();
+  await session.applyModelOutput({ type: 'cad_spec', spec: validSpec() });
+  session.endTurn();
+  const first = session.getSnapshot().design!;
+  const firstKey = CadDesignSession.shotKey(first);
+  await session.beginTurn();
+  const id = plan().furniture[0].id;
+  await session.applyModelOutput({ type: 'cad_ops', ops: [{ op: 'resize_furniture', id, w: 1500 }] });
+  session.endTurn();
+  assert.notEqual(CadDesignSession.shotKey(session.getSnapshot().design!), firstKey);
+
+  // Back to the end of the first turn: that version is in the designer again.
+  await session.rewindTo(firstKey);
+  assert.deepEqual(session.getSnapshot().design!.plan, first.plan);
+  assert.deepEqual(bridge.readPlan(), first.plan);
+
+  // Back to before any floorplan: no design, and what was there stays in the history.
+  const before = session.versions().length;
+  await session.rewindTo(null);
+  assert.equal(session.getSnapshot().design, null);
+  assert.equal(session.versions().length, before);
 });

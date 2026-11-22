@@ -6,7 +6,9 @@ import { parseJsonLoose } from "./lib/parse-json";
 import { extractPdfPagesAsImages, isPdfFile } from "./lib/deck-source";
 import { GenerationProgress } from "./views/GenerationProgress";
 import { OutlineReview } from "./views/OutlineReview";
-import { PptStart } from "./views/StylePicker";
+import { OutlineWriting, type WritingPage } from "./views/OutlineWriting";
+import { PptStart, StylePickerDialog } from "./views/StylePicker";
+import type { DeckActivity, DeckCommand } from "@/workspaces/ppt/lib/deck-flow";
 import type { CreationRequest, CreationResult } from "@/workspaces/ppt/lib/creation-intent";
 import { DeckView } from "./views/DeckView";
 import {
@@ -53,14 +55,13 @@ import {
 } from '@/workspaces/ppt/lib/ppt-service';
 import { PPT_STATE_KEY, PPT_WORKSPACE_STORAGE_KEY, pptStore } from "@/workspaces/ppt/storage";
 import { useReportBusy, useWork, useWorkStore } from "@/shared/works/work-context";
-import { toast } from "sonner";
+import { notify } from "@/shared/ui/notify";
+import { registerPeekSource } from "@/shared/ui/peek";
 import { setPendingReference, takePendingReference } from "@/shared/references/pending";
 import { canOpenCanvas, openCanvasFor } from "@/shared/references/bus";
 import { inboxForSlides, PPT_INBOX_KEY, type SlideInboxEntry } from "@/shared/references/inbox";
 import { referenceToFiles } from "@/shared/references/to-files";
-import type { WorkReference } from "@/shared/references/types";
-import { SlideReferenceChooser } from "./views/SlideReferenceChooser";
-import { REPORT_IMAGES_KEY, matchReportImages, type PendingReportImages } from "./lib/report-images";
+import { REPORT_IMAGES_KEY, matchReportImages, picturesAsReportItems, type PendingReportImages } from "./lib/report-images";
 import { nameFromText } from "@/shared/works/works-index";
 import { makeThumbnail } from "@/shared/works/thumbnail";
 import { useUiLanguage } from "@/shared/i18n";
@@ -108,14 +109,17 @@ interface PptCanvasProps {
   onPptStageChange?: (stage: "start" | "outline" | "slides") => void;
   incomingEdit?: { id: string; payload: string } | null;
   onIncomingEditHandled?: (id: string) => void;
-  onResetWorkspace?: () => void;
   /** The first chat message of a deck: what to make, from what. */
   creationRequest?: (CreationRequest & { id: string }) | null;
   onCreationHandled?: (id: string, result: CreationResult) => void;
   /** What is being typed in the chat, for the style library's suggestions. */
   draftText?: string;
   onTemplateChange?: (template: { name: string; previewSrc: string } | null) => void;
-  /** The outline text as it streams in (for the chat's token count); "" when it is done. */
+  /** What the canvas is doing while a deck is made, for the chat's steps. */
+  onActivityChange?: (activity: DeckActivity) => void;
+  /** What the chat asks for: make the slides (the outline was confirmed there), or pick a style. */
+  command?: DeckCommand | null;
+  onCommandHandled?: () => void;
 }
 
 export function PptCanvas({
@@ -125,11 +129,13 @@ export function PptCanvas({
   onPptStageChange,
   incomingEdit,
   onIncomingEditHandled,
-  onResetWorkspace,
   creationRequest,
   onCreationHandled,
   draftText = "",
   onTemplateChange,
+  onActivityChange,
+  command,
+  onCommandHandled,
 }: PptCanvasProps) {
   const uiLang = useUiLanguage();
   const tr = useCallback((zh: string, en: string) => (uiLang === "zh" ? zh : en), [uiLang]);
@@ -185,7 +191,6 @@ export function PptCanvas({
   useEffect(() => {
     onTemplateChange?.(selectedTemplateName ? { name: selectedTemplateName, previewSrc: selectedTemplatePreview } : null);
   }, [selectedTemplateName, selectedTemplatePreview, onTemplateChange]);
-  const [backConfirmOpen, setBackConfirmOpen] = useState(false);
   const [generatedImages, setGeneratedImages] = useState<Record<string, string>>(() => {
     const v = initialPptState?.generatedImages;
     if (!v || typeof v !== "object" || Array.isArray(v)) return {};
@@ -272,17 +277,6 @@ export function PptCanvas({
     })(),
   );
   const { step: creationStep, progress } = creation;
-  useEffect(() => {
-    if (creationStep === "done") {
-      onPptStageChange?.("slides");
-      return;
-    }
-    if (creationStep === "outline") {
-      onPptStageChange?.("outline");
-      return;
-    }
-    onPptStageChange?.("start");
-  }, [creationStep, onPptStageChange]);
   const inputs = useCreationInputs({ initialState: initialPptState });
   const { creationMode, setCreationMode, ideaInput, outlineInput } = inputs;
   const { setIdeaInput, setOutlineInput } = inputs;
@@ -299,8 +293,15 @@ export function PptCanvas({
   const pptImagePersistenceRunningRef = useRef(false);
   const pptImagePersistenceRetryRef = useRef(false);
   const [isPersistenceHydrated, setIsPersistenceHydrated] = useState(false);
-  /** Pictures another canvas sent here ("放进 PPT"), waiting for the user to pick a slide. */
-  const [incomingReference, setIncomingReference] = useState<WorkReference | null>(null);
+  // The workspace clears the chat when the deck goes back to "start", so only a real start says so:
+  // not while slides are being drawn (the outline exists), and not before the saved deck has loaded
+  // (a refresh would otherwise wipe the conversation of a finished deck).
+  useEffect(() => {
+    if (creationStep === "done") onPptStageChange?.("slides");
+    else if (creationStep === "outline" || creationStep === "generating_images") onPptStageChange?.("outline");
+    else if (creationStep === "generating_content") return;
+    else if (isPersistenceHydrated) onPptStageChange?.("start");
+  }, [creationStep, onPptStageChange, isPersistenceHydrated]);
   const latestWorkspaceUpdatedAtRef = useRef(
     typeof initialPptState?.updatedAt === "number" ? initialPptState.updatedAt : 0
   );
@@ -1162,7 +1163,46 @@ export function PptCanvas({
   const getTextlessBackgroundVersion = (slideId: string) => textlessBackgroundOf(slideId, versionState);
   const getSlideImageUrl = (slideId: string) => getSlideVersionMeta(slideId).imageUrl;
 
-  // A picture sent here from another canvas ("放进 PPT"): ask which slide once the deck is loaded.
+  // Hover previews for slides named in the chat and materials named in a description.
+  const peekRef = useLatestRef({ localSlides, slideMaterials, getSlideImageUrl, tr });
+  useEffect(() => {
+    const slideOf = (el: HTMLElement) => {
+      const { localSlides: slides } = peekRef.current;
+      const id = el.dataset.slideId;
+      const page = Number(el.dataset.peekPage);
+      const index = id ? slides.findIndex((s) => s.id === id) : Number.isFinite(page) ? page - 1 : -1;
+      return index >= 0 && index < slides.length ? { slide: slides[index], index } : null;
+    };
+    const offSlide = registerPeekSource("ppt-slide", (el) => {
+      const found = slideOf(el);
+      if (!found) return null;
+      const { slide, index } = found;
+      const { getSlideImageUrl: imageOf, tr: say } = peekRef.current;
+      const picture = el.dataset.tokenKind === "outline" ? "" : imageOf(slide.id);
+      const points = (slide.content || []).filter(Boolean).map((line) => `· ${line}`).join("\n");
+      return {
+        title: say(`第 ${index + 1} 页 · ${slide.title || "未命名"}`, `Slide ${index + 1} · ${slide.title || "Untitled"}`),
+        images: picture ? [picture] : [],
+        text: points || slide.description || "",
+      };
+    });
+    const offMaterial = registerPeekSource("ppt-material", (el) => {
+      const name = el.dataset.materialToken;
+      const slideId = el.closest<HTMLElement>("[data-peek-slide]")?.dataset.peekSlide;
+      if (!name || !slideId) return null;
+      const material = (peekRef.current.slideMaterials[slideId] || []).find((m) => m.name === name);
+      if (!material) return { title: name, text: peekRef.current.tr("这张素材已经删掉了", "This material has been removed") };
+      return { title: name, images: material.dataUrl ? [material.dataUrl] : [], text: material.caption || "", meta: material.refLabel || material.sourceFileName || "" };
+    });
+    return () => {
+      offSlide();
+      offMaterial();
+    };
+    // Registered once; the ref carries the current deck.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // A design sent here from the interior canvas ("生成汇报 PPT"), once the deck is loaded.
   useEffect(() => {
     if (!isPersistenceHydrated) return;
     const waiting = takePendingReference("ppt");
@@ -1173,13 +1213,7 @@ export function PptCanvas({
       if (items.length) void deckStore.save<PendingReportImages>(REPORT_IMAGES_KEY, { workName: waiting.reference.workName, items });
       return;
     }
-    if (waiting.intent.kind !== "slide-material") return;
-    if (localSlides.length === 0) {
-      toast.error(tr("这份 PPT 还没有页面。先生成大纲，再把图放进来。", "This deck has no slides yet. Make the outline first, then bring the picture in."));
-      return;
-    }
-    setIncomingReference(waiting.reference);
-    // Only on arrival: the slides change later without a new reference.
+    // Only on arrival.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isPersistenceHydrated]);
 
@@ -1199,12 +1233,12 @@ export function PptCanvas({
         const index = localSlides.findIndex((slide) => slide.id === slideId);
         if (added.length) placed.push(tr(`第 ${index + 1} 页：${items.map((i) => i.label).join("、")}`, `slide ${index + 1}: ${items.map((i) => i.label).join(", ")}`));
       }
-      if (placed.length) toast.success(tr(`户型图片已放到对应页面的素材里：${placed.join("；")}`, `Design pictures added as materials: ${placed.join("; ")}`), { duration: 8000 });
+      if (placed.length) notify.success(tr("户型图片已放进对应页面", "Design pictures added to their slides"), { description: placed.join(tr("；", "; ")), duration: 8000 });
       if (unmatched.length)
-        toast.message(
-          tr(`没找到合适页面的图片：${unmatched.map((i) => i.label).join("、")}。可以在那一页点「从作品引用」再加。`, `No slide fits: ${unmatched.map((i) => i.label).join(", ")}. Add them on a slide with "From a work".`),
-          { duration: 8000 },
-        );
+        notify.info(tr(`有 ${unmatched.length} 张图没找到合适的页面`, `${unmatched.length} picture(s) fit no slide`), {
+          description: tr(`${unmatched.map((i) => i.label).join("、")}。可以在那一页点「从作品引用」加进去。`, `${unmatched.map((i) => i.label).join(", ")}. Add them on a slide with "From a work".`),
+          duration: 8000,
+        });
     })();
     return () => {
       cancelled = true;
@@ -1231,9 +1265,9 @@ export function PptCanvas({
       }
       if (lastIndex >= 0) {
         setCurrentSlideIndex(lastIndex);
-        toast.success(tr(`已作为第 ${lastIndex + 1} 页的新版本，可以在版本里切回原来的。`, `Added as a new version of slide ${lastIndex + 1}; the earlier one is still in the versions.`), { duration: 6000 });
+        notify.success(tr(`已送回第 ${lastIndex + 1} 页`, `Sent back to slide ${lastIndex + 1}`), { description: tr("加成了新版本，原来的版本还在，可以随时切回。", "It is a new version; the earlier one is still there to switch back to."), duration: 6000 });
       }
-      if (dropped) toast.message(tr(`有 ${dropped} 张送回的图对应的页面已删除，没有加进来。`, `${dropped} sent-back picture(s) were for deleted slides and were not added.`));
+      if (dropped) notify.info(tr(`有 ${dropped} 张送回的图没有加进来`, `${dropped} sent-back picture(s) were not added`), { description: tr("它们对应的页面已经删除了。", "Their slides have been deleted.") });
     })();
     return () => {
       cancelled = true;
@@ -1249,7 +1283,7 @@ export function PptCanvas({
     if (!url || index < 0 || !work) return;
     const dataUrl = await persistImageUrlIfNeeded(url);
     if (!dataUrl.startsWith("data:image")) {
-      toast.error(tr("没能读出这一页的图片", "Could not read this slide's picture"));
+      notify.error(tr("没能读出这一页的图片", "Could not read this slide's picture"), { description: tr("可以先重新渲染这一页再试。", "Re-render the slide and try again.") });
       return;
     }
     const slideLabel = tr(`第 ${index + 1} 页`, `slide ${index + 1}`);
@@ -1259,28 +1293,10 @@ export function PptCanvas({
       reference: { workspace: "ppt", workId: work.workId, workName: deckName, items: [{ id: `ppt:${slide.id}`, kind: "image", label: slideLabel, dataUrl }] },
       intent: { kind: "board-edit", returnTo: { workId: work.workId, slideId: slide.id, slideLabel, deckName } },
     });
-    await openCanvasFor("canvas");
+    // A board of its own: the latest board may hold other slides sent there before.
+    await openCanvasFor("canvas", null);
   };
 
-  const placeIncomingReference = async (slideId: string) => {
-    const reference = incomingReference;
-    setIncomingReference(null);
-    if (!reference) return;
-    const index = localSlides.findIndex((slide) => slide.id === slideId);
-    const added = await materials.addReferencedImages(slideId, referenceToFiles(reference), reference.workName);
-    if (!added.length) {
-      toast.error(tr("没能加进这一页", "Could not add it to the slide"));
-      return;
-    }
-    if (index >= 0) setCurrentSlideIndex(index);
-    const names = added.map((x) => x.name).join(tr("、", ", "));
-    toast.success(
-      creationStep === "done"
-        ? tr(`已加为第 ${index + 1} 页的素材「${names}」。要放进现有画面，把这一页加入对话，说"把${names}放进来"。`, `Added to slide ${index + 1} as "${names}". To put it into the picture, add the slide to the chat and ask for ${names}.`)
-        : tr(`已加为第 ${index + 1} 页的素材「${names}」，生成时会放进这一页。`, `Added to slide ${index + 1} as "${names}"; it goes into the slide when it is made.`),
-      { duration: 8000 },
-    );
-  };
   const getSlideRenderLayer = useCallback((slideId: string) => {
     const { versionId } = getSlideVersionMeta(slideId);
     if (!versionId) return undefined;
@@ -1517,13 +1533,17 @@ export function PptCanvas({
 
 
   // The outline as it streams: slide titles shown on the canvas one by one.
-  const [outlineDraft, setOutlineDraft] = useState<string[]>([]);
+  const [outlineDraft, setOutlineDraft] = useState<WritingPage[]>([]);
+  // The AI pen writing the outline out on the canvas; it keeps going until it has written the
+  // whole outline, then the outline turns editable.
+  const [penWriting, setPenWriting] = useState(false);
   const watchOutline = () => {
+    setPenWriting(true);
     let timer = 0;
     let latest = "";
     const flush = () => {
       timer = 0;
-      setOutlineDraft(partialOutlinePages(latest).map((page) => page.title));
+      setOutlineDraft(partialOutlinePages(latest).map((page) => ({ title: page.title, content: page.content ?? [] })));
     };
     const onText = (text: string) => {
       latest = text;
@@ -1756,7 +1776,7 @@ export function PptCanvas({
       onPptReadyChange?.(true);
     } catch (e) {
       console.error("Retry failed slides error", e);
-      alert(tr("重试失败页时出错，请重试。", "Retrying failed slides failed. Please try again."));
+      notify.error(tr("重试失败页没有成功", "Retrying the failed slides did not work"), { description: errorText(e) });
       dispatchCreation({ type: "finished" });
     }
   };
@@ -1877,6 +1897,11 @@ export function PptCanvas({
       setBeautifyUseTemplate(Boolean(templateImage));
     }
     void (async () => {
+      // A referenced work's pictures wait (saved with this work) until the outline exists, like a design sent here.
+      if (request.kind !== "beautify" && request.pictures?.length) {
+        const items = await picturesAsReportItems(request.pictures).catch(() => []);
+        if (items.length) await deckStore.save<PendingReportImages>(REPORT_IMAGES_KEY, { workName: items[0].workName, items: items.map((x) => x.item) });
+      }
       if (request.kind !== "beautify") {
         dispatchCreation({ type: "preparing", message: tr("正在读参考资料...", "Reading the reference files...") });
         await inputs.reference.handleFileChange(request.files).catch((e) => console.error("Failed to read reference files", e));
@@ -1899,7 +1924,11 @@ export function PptCanvas({
           : handleStartBeautify(request.files[0] ?? null, request.text, Boolean(templateImage));
     void run
       .catch((e): CreationResult => ({ ok: false, error: getErrorMessage(e) }))
-      .then((result) => onCreationHandled?.(request.id, result));
+      .then((result) => {
+        // A request turned away before it started leaves no "reading…" behind.
+        if (!result.ok) dispatchCreation({ type: "failed" });
+        onCreationHandled?.(request.id, result);
+      });
     // Runs the handlers of the render that has the parsed files.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pendingCreationTick, inputs.reference.isParsing]);
@@ -1952,13 +1981,15 @@ export function PptCanvas({
         });
 
         await runInParallel(imageTasks, MODEL_CONCURRENCY);
+        // The last page's pen sweep finishes before the deck replaces the grid.
+        await sleep(1400);
 
         dispatchCreation({ type: "finished" });
         onPptReadyChange?.(true);
 
     } catch (e) {
         console.error("Full generation failed", e);
-        alert(tr("生成过程中出错。", "An error occurred during generation."));
+        notify.error(tr("生成中途出错了", "Generation stopped with an error"), { description: tr(`已经生成的页面都保留了。${errorText(e)}`, `The slides already made are kept. ${errorText(e)}`) });
         dispatchCreation({ type: "finished" }); // Show whatever did render
         onPptReadyChange?.(true);
     }
@@ -2109,7 +2140,7 @@ export function PptCanvas({
         await pptService.exportPptx(pages, images, `presentation-${Date.now()}`);
     } catch (e) {
         console.error("Export failed", e);
-        alert(tr("导出失败", "Export failed"));
+        notify.error(tr("导出没有成功", "Export failed"), { description: errorText(e) });
     } finally {
         exporter.setIsExporting(null);
     }
@@ -2124,7 +2155,7 @@ export function PptCanvas({
         await pptService.exportPdf(pages, images, `presentation-${Date.now()}`);
     } catch (e) {
         console.error("Export failed", e);
-        alert(tr("导出失败", "Export failed"));
+        notify.error(tr("导出没有成功", "Export failed"), { description: errorText(e) });
     } finally {
         exporter.setIsExporting(null);
     }
@@ -2316,52 +2347,9 @@ export function PptCanvas({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [firstSlideImage]);
 
-  const resetToStart = () => {
-    if (typeof onResetWorkspace === "function") {
-      onResetWorkspace();
-      return;
-    }
-    try {
-      localStorage.removeItem(PPT_WORKSPACE_STORAGE_KEY);
-    } catch {
-      // A blocked localStorage only means the old history lingers.
-    }
-    void deckStore.clear(PPT_STATE_KEY).catch((e) => {
-      console.error("Failed to clear persisted PPT workspace", e);
-    });
-    setLocalSlides([]);
-    resetGenerationState();
-    dispatchCreation({ type: "cleared" });
-    setIdeaInput("");
-    setOutlineInput("");
-    setBeautifyRequirement("");
-    setBeautifyUseTemplate(false);
-    inputs.beautify.setFile(null);
-    setBeautifyFailures({});
-    inputs.reference.setUploadFiles([]);
-    setSlideMaterials({});
-    materials.picker.close();
-    setRenderLayers({});
-    setImageVersions({});
-    setCurrentImageVersionId({});
-    setGeneratedImages({});
-    restoreTemplateSelection(null);
-    dispatchCreation({ type: "progress", current: 0, total: 0, message: "" });
-  };
-
-  const handleBackToStart = () => {
-    setBackConfirmOpen(true);
-  };
-
-  const handleBackToInputFromOutline = () => {
-    setLocalSlides([]);
-    setSlideMaterials({});
-    resetGenerationState();
-    dispatchCreation({ type: "cleared" });
-  };
   const createOutlineSlide = (displayIndex: number): SlideData => ({
     id: `slide-${Date.now()}-${Math.random().toString(16).slice(2)}`,
-    title: tr(`? ${displayIndex + 1} ?`, `Slide ${displayIndex + 1}`),
+    title: tr(`第 ${displayIndex + 1} 页`, `Slide ${displayIndex + 1}`),
     content: [],
     description: "",
     note: "",
@@ -2428,19 +2416,64 @@ export function PptCanvas({
   };
 
   // Before a deck: what it is about is said in the chat; the style comes at the outline.
-  const incomingChooser = (
-    <SlideReferenceChooser
-      reference={incomingReference}
-      slides={activeSlides}
-      imageOf={getSlideImageUrl}
+  // What the canvas is doing, for the chat's steps (only when it changes).
+  const drawnCount = localSlides.filter((slide) => generatedImages[slide.id]).length;
+  const activityPhase: DeckActivity["phase"] =
+    creationStep === "input"
+      ? outlineDraft.length > 0 ? "outlining" : "reading"
+      : creationStep === "outline"
+        ? "review"
+        : creationStep === "generating_images"
+          ? "drawing"
+          : creationStep === "done"
+            ? "done"
+            : creationStep === "generating_content"
+              ? "working"
+              : "idle";
+  const activityTitles = (creationStep === "input" ? outlineDraft.map((page) => page.title) : localSlides.map((slide) => slide.title)).join("\u0000");
+  useEffect(() => {
+    onActivityChange?.({
+      phase: activityPhase,
+      titles: activityTitles ? activityTitles.split("\u0000") : [],
+      drawn: drawnCount,
+      total: localSlides.length,
+    });
+  }, [activityPhase, activityTitles, drawnCount, localSlides.length, onActivityChange]);
+
+  const [pickingStyle, setPickingStyle] = useState(false);
+  useEffect(() => {
+    if (!command) return;
+    if (command.kind === "generate" && creationStep === "outline") void handleGenerateFullPpt();
+    if (command.kind === "pick-style") setPickingStyle(true);
+    onCommandHandled?.();
+    // One command at a time, with the handlers of the render that has it.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [command?.id]);
+  const stylePicker = (
+    <StylePickerDialog
+      open={pickingStyle}
+      onOpenChange={setPickingStyle}
+      templateLibrary={templateLibrary}
       tr={tr}
-      onChoose={(slideId) => void placeIncomingReference(slideId)}
-      onCancel={() => setIncomingReference(null)}
+      topic={localSlides.map((slide) => slide.title).join(" ")}
     />
   );
+
+  // The outline being written by the AI pen, until it has written all of it.
+  if (penWriting && (creationStep === "input" || creationStep === "outline")) {
+    const final = creationStep === "outline";
+    return (
+      <OutlineWriting
+        pages={final ? localSlides.map((slide) => ({ title: slide.title, content: slide.content || [] })) : outlineDraft}
+        final={final}
+        onDone={() => setPenWriting(false)}
+        tr={tr}
+      />
+    );
+  }
   if (activeSlides.length === 0 && (creationStep === 'idle' || creationStep === 'input' || creationStep === 'done')) {
     return (
-      <PptStart progress={progress} tr={tr} templateLibrary={templateLibrary} outlineDraft={outlineDraft} />
+      <PptStart progress={progress} tr={tr} templateLibrary={templateLibrary} />
     );
   }
 
@@ -2448,32 +2481,28 @@ export function PptCanvas({
   if (creationStep === 'outline') {
     return (
       <>
-      {incomingChooser}
       <OutlineReview
         slides={localSlides}
         setSlides={setLocalSlides}
         materials={materials}
         tr={tr}
-        onBack={handleBackToInputFromOutline}
         onAddSlide={handleAddOutlineSlide}
         onDeleteSlide={handleDeleteOutlineSlide}
         onAddSlideToChat={handleAddSlideToChat}
-        onGenerate={handleGenerateFullPpt}
-        templateLibrary={templateLibrary}
       />
+      {stylePicker}
       </>
     );
   }
 
   // Render Progress
   if (isGenerating(creationStep)) {
-    return <GenerationProgress step={creationStep} progress={progress} tr={tr} />;
+    return <GenerationProgress step={creationStep} progress={progress} tr={tr} slides={activeSlides} images={generatedImages} />;
   }
 
   // Regular View (creationStep === 'done' or manually provided data)
   return (
     <>
-    {incomingChooser}
     <DeckView
       deck={{
         slides: activeSlides,
@@ -2505,10 +2534,6 @@ export function PptCanvas({
       actions={{
         addSlideToChat: handleAddSlideToChat,
         editOnBoard: canOpenCanvas() && work ? (slide) => void editSlideOnBoard(slide) : undefined,
-        backToStart: handleBackToStart,
-        backConfirmOpen,
-        setBackConfirmOpen,
-        confirmBackToStart: resetToStart,
         downloadPpt: () => void handleDownloadPpt(),
         downloadPdf: () => void handleDownloadPdf(),
         downloadEditablePpt: () =>

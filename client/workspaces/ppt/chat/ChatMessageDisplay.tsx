@@ -1,10 +1,13 @@
-import React, { useRef, useEffect, useState, useCallback } from 'react';
+import React, { useRef, useEffect, useState } from 'react';
 import { CanvasCard } from "@/shared/canvas-pane";
 import { Check, ChevronDown, ChevronUp, Copy, FileCode, FileText, Image as ImageIcon, ListOrdered, Pencil, RotateCcw } from "lucide-react";
 import ReactMarkdown from "react-markdown";
+import { SmoothText } from "@/shared/chat/smooth-text";
 import remarkGfm from 'remark-gfm';
 import { MessageAttachments, MessageImage, Reasoning, ReasoningContent, ReasoningTrigger, TokenUsageLine, WorkingIndicator, useTurnUsage } from "@/shared/chat";
 import { ChatScrollArea } from "@/shared/chat/chat-scroll";
+import { isReferenceFile, readReference, type SentReference } from "@/shared/references/message-marker";
+import { MessageReferences } from "@/shared/references/message-references";
 import { MessageEditor } from "@/shared/chat/message-editor";
 import { CodeBlock } from "@/workspaces/ppt/chat/code-block";
 import { useUiLanguage } from "@/shared/i18n";
@@ -36,6 +39,8 @@ interface ChatMessageDisplayProps {
     onEditMessage?: (messageIndex: number, newText: string) => void;
     status?: "streaming" | "submitted" | "idle" | "error" | "ready";
     onDisplayChart?: (xml: string) => void; // Callback for diagram display
+    /** An assistant message the panel draws itself (the deck's steps), or null for an ordinary one. */
+    renderSpecial?: (text: string, messageIndex: number) => React.ReactNode | null;
     /** Text streaming in on the canvas (the outline), counted in the working line. */
 }
 
@@ -46,6 +51,7 @@ export function ChatMessageDisplay({
     onEditMessage,
     status = "idle",
     onDisplayChart,
+    renderSpecial,
 }: ChatMessageDisplayProps) {
     // Tokens the provider reported for this turn (all its model calls).
     const turnUsage = useTurnUsage(status === "submitted" || status === "streaming");
@@ -59,11 +65,6 @@ export function ChatMessageDisplay({
     const [editText, setEditText] = useState<string>("");
     const [expandedPdfSections, setExpandedPdfSections] = useState<Record<string, boolean>>({});
     const [expandedSlideCards, setExpandedSlideCards] = useState<Record<string, boolean>>({});
-    const [isAtBottom, setIsAtBottom] = useState(true);
-    const scrollRafRef = useRef<number | null>(null);
-    const userScrolledUpRef = useRef(false);
-    const lastScrollTopRef = useRef(0);
-    const lastMessageCountRef = useRef(0);
 
     const copyMessageToClipboard = async (messageId: string, text: string) => {
         try {
@@ -91,102 +92,6 @@ export function ChatMessageDisplay({
             }
         }
     };
-
-    const getViewport = useCallback(() => {
-        const root = scrollRootRef.current;
-        if (!root) return null;
-        return (
-            (root.querySelector('[data-slot="scroll-area-viewport"]') as HTMLElement | null) ||
-            (root.querySelector('[data-radix-scroll-area-viewport]') as HTMLElement | null)
-        );
-    }, []);
-
-    const scrollToBottom = useCallback((behavior: ScrollBehavior = "auto") => {
-        const viewport = getViewport();
-        if (!viewport) {
-            messagesEndRef.current?.scrollIntoView({ behavior });
-            return;
-        }
-        viewport.scrollTo({ top: viewport.scrollHeight, behavior });
-    }, [getViewport]);
-
-    useEffect(() => {
-        let mounted = true;
-        let cleanup: null | (() => void) = null;
-        let rafId = 0;
-
-        const bind = () => {
-            if (!mounted) return;
-            const viewport = getViewport();
-            if (!viewport) {
-                rafId = requestAnimationFrame(bind);
-                return;
-            }
-            const threshold = 24;
-            const onScroll = () => {
-                const distanceToBottom = viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight;
-                const nearBottom = distanceToBottom <= threshold;
-                const currentTop = viewport.scrollTop;
-                const scrollingUp = currentTop < lastScrollTopRef.current;
-                lastScrollTopRef.current = currentTop;
-
-                if (nearBottom) userScrolledUpRef.current = false;
-                else if (scrollingUp) userScrolledUpRef.current = true;
-
-                setIsAtBottom(nearBottom);
-            };
-            const onWheel = (event: WheelEvent) => {
-                if (event.deltaY < 0) {
-                    userScrolledUpRef.current = true;
-                    setIsAtBottom(false);
-                }
-            };
-            lastScrollTopRef.current = viewport.scrollTop;
-            onScroll();
-            viewport.addEventListener("scroll", onScroll, { passive: true });
-            viewport.addEventListener("wheel", onWheel, { passive: true });
-            cleanup = () => {
-                viewport.removeEventListener("scroll", onScroll as any);
-                viewport.removeEventListener("wheel", onWheel as any);
-            };
-        };
-
-        bind();
-        return () => {
-            mounted = false;
-            if (rafId) cancelAnimationFrame(rafId);
-            if (cleanup) cleanup();
-        };
-    }, [getViewport, messages.length]);
-
-    useEffect(() => {
-        return () => {
-            if (scrollRafRef.current === null) return;
-            if (typeof cancelAnimationFrame === "function") cancelAnimationFrame(scrollRafRef.current);
-            else if (typeof window !== "undefined") window.clearTimeout(scrollRafRef.current);
-            scrollRafRef.current = null;
-        };
-    }, []);
-
-    useEffect(() => {
-        if (!isAtBottom || userScrolledUpRef.current) return;
-        if (scrollRafRef.current !== null) return;
-        const previousCount = lastMessageCountRef.current;
-        const currentCount = messages.length;
-        const messageCountChanged = currentCount !== previousCount;
-        if (!messageCountChanged && status === "streaming") return;
-        const behavior: ScrollBehavior = status === "streaming" ? "auto" : "smooth";
-        const schedule = (cb: () => void) => {
-            if (typeof requestAnimationFrame === "function") return requestAnimationFrame(cb);
-            if (typeof window !== "undefined") return window.setTimeout(cb, 16);
-            return 0;
-        };
-        scrollRafRef.current = schedule(() => {
-            scrollRafRef.current = null;
-            scrollToBottom(behavior);
-        });
-        lastMessageCountRef.current = currentCount;
-    }, [messages.length, status, isAtBottom, scrollToBottom]);
 
     useEffect(() => {
         if (editingMessageId && editTextareaRef.current) {
@@ -216,12 +121,6 @@ export function ChatMessageDisplay({
         <div
             ref={scrollRootRef}
             className="h-full w-full relative"
-            onWheelCapture={(e) => {
-                if (e.deltaY < 0) {
-                    userScrolledUpRef.current = true;
-                    setIsAtBottom(false);
-                }
-            }}
         >
             <ChatScrollArea contentClassName="py-5 px-5 space-y-5">
                     {messages.map((message, messageIndex) => {
@@ -231,9 +130,21 @@ export function ChatMessageDisplay({
                         (messageIndex === messages.length - 1 || messages.slice(messageIndex + 1).every((m) => m.role !== "assistant"));
                     const isEditing = editingMessageId === message.id;
                     const messageText = getMessageTextContent(message);
+                    const special = message.role === "assistant" && renderSpecial ? renderSpecial(messageText, messageIndex) : null;
+                    if (special) {
+                        return (
+                            <div key={message.id} data-chat-msg="assistant" data-chat-preview="" className="w-full min-w-0 animate-message-in">
+                                {special}
+                            </div>
+                        );
+                    }
                     const { images: probeImages, rest: probeWithoutImages } = extractImageTags(messageText);
                     const { tags: probePptTags, rest: probeText } = extractPptSlideTags(probeWithoutImages);
                     const probeSections = splitTextIntoFileSections(probeText);
+                    // A referenced work rides in as a file that opens with its marker: it shows as a canvas card.
+                    const probeReferences = probeSections
+                        .map((s) => (s.type === "file" ? readReference(String(s.content || "")) : null))
+                        .filter((r): r is SentReference => r !== null);
                     const hasProbeText = probeSections.some((s) => s.type === "text" && String(s.content || "").trim().length > 0);
                     const hasProbeFiles = probeSections.some((s) => s.type === "file" && String(s.content || "").trim().length > 0);
                     const hasProbePptTool = probeSections.some(
@@ -269,10 +180,13 @@ export function ChatMessageDisplay({
                                     it does on claude.ai -- inside, a one-line question
                                     with a screenshot became a mostly-empty card. */}
                                 {message.role === "user" && (
+                                    <MessageReferences references={probeReferences} className="mb-1.5" />
+                                )}
+                                {message.role === "user" && (
                                     <MessageAttachments
                                         images={probeImages}
                                         files={probeSections
-                                            .filter((s) => s.type === "file")
+                                            .filter((s) => s.type === "file" && !isReferenceFile(String(s.filename || ""), String(s.content || ""), probeReferences))
                                             .map((s) => ({ filename: s.filename, fileType: s.fileType }))}
                                         className="mb-1.5"
                                     />
@@ -289,7 +203,9 @@ export function ChatMessageDisplay({
                                     "relative text-sm leading-relaxed break-words overflow-hidden w-full text-foreground",
                                     message.role === "user"
                                         ? (isEditing ? "overflow-visible" : "px-4 py-3 rounded-2xl bg-foreground/[0.06]")
-                                        : "py-1"
+                                        : "py-1",
+                                    // Only files were sent (they sit above): no empty bubble under them.
+                                    message.role === "user" && !isEditing && !hasProbeText && probePptTags.length === 0 && "hidden"
                                 )}>
                                     
                                     {/* Reasoning Parts */}
@@ -385,7 +301,9 @@ export function ChatMessageDisplay({
                                                             return (
                                                                 <span
                                                                     key={`${message.id}-ppttag-${i}-${t.n}`}
-                                                                    title={t.title ? `${page} · ${t.title}` : page}
+                                                                    data-peek="ppt-slide"
+                                                                    data-peek-page={t.n}
+                                                                    data-token-kind={t.kind}
                                                                     className="inline-flex max-w-[260px] items-center gap-1.5 rounded-md bg-foreground/[0.06] px-2 py-1 text-[12.5px] text-foreground/85"
                                                                 >
                                                                     <Icon className="size-3.5 shrink-0 text-muted-foreground" />
@@ -397,6 +315,8 @@ export function ChatMessageDisplay({
                                                 )}
                                                 {sections.map((section, idx) => {
                                                     if (section.type === "text" && !String(section.content || "").trim()) return null;
+                                                    // Files and referenced works sit above the bubble already.
+                                                    if (section.type === 'file' && message.role === "user") return null;
                                                     if (section.type === 'file') {
                                                         const key = `${message.id}-file-${idx}`;
                                                         const isExpanded = expandedPdfSections[key] || false;
@@ -517,6 +437,8 @@ export function ChatMessageDisplay({
                                                         <div key={idx} className={cn(
                                                             "prose prose-sm font-voice text-[15px] max-w-none break-words",
                                                         )}>
+                                                            <SmoothText text={section.content} streaming={status === "streaming" && message.role === "assistant" && isLastAssistantMessage}>
+                                                            {(shown) => (
                                                             <ReactMarkdown
                                                                 remarkPlugins={[remarkGfm]}
                                                                 urlTransform={(url) => {
@@ -583,8 +505,10 @@ export function ChatMessageDisplay({
                                                                     }
                                                                 }}
                                                             >
-                                                                {section.content}
+                                                                {shown}
                                                             </ReactMarkdown>
+                                                            )}
+                                                            </SmoothText>
                                                         </div>
                                                     );
                                                 })}

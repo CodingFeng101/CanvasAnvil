@@ -8,10 +8,12 @@ import {
     CollapsibleTrigger,
 } from "@/shared/ui/collapsible"
 import { useUiLanguage } from "@/shared/i18n"
+import { useSmoothText } from "@/shared/chat/smooth-text"
 import { cn } from "@/shared/lib/utils"
 import { getPreferences } from "@/shared/preferences"
 import { Shimmer } from "@/shared/chat/shimmer"
-import { AnvilMark } from "@/shared/chat/anvil-mark"
+import { StepIcon } from "@/shared/chat/steps"
+import { Brain } from "lucide-react"
 
 type ReasoningContextValue = {
     isStreaming: boolean
@@ -139,7 +141,7 @@ export const ReasoningTrigger = memo(
         return (
             <CollapsibleTrigger
                 className={cn(
-                    "group/think inline-flex items-center gap-1.5 rounded-md py-0.5 text-[13px] text-muted-foreground transition-colors hover:text-foreground",
+                    "group/think inline-flex items-center gap-2.5 rounded-md py-0.5 text-[13.5px] leading-6 text-foreground/75 transition-colors hover:text-foreground",
                     className,
                 )}
                 {...props}
@@ -161,9 +163,13 @@ export const ReasoningTrigger = memo(
     },
 )
 
-/** The anvil, striking while the model thinks, at rest once it is done. */
+/** The same marker as a step's: a brain, breathing in the brand colour while the model thinks. */
 function ThinkingGlyph({ active }: { active: boolean }) {
-    return <AnvilMark active={active} className={cn("size-4", active ? "text-brand" : "text-muted-foreground")} />
+    return (
+        <span className="flex w-[18px] shrink-0 items-center justify-center">
+            <StepIcon icon={Brain} state={active ? "running" : "done"} />
+        </span>
+    )
 }
 
 export type ReasoningContentProps = ComponentProps<
@@ -176,10 +182,12 @@ export const ReasoningContent = memo(
     ({ className, children, ...props }: ReasoningContentProps) => {
         const { isStreaming } = useReasoning()
         const ref = useRef<HTMLDivElement>(null)
+        // The thinking arrives in bursts too: let it out at an even pace.
+        const shown = useSmoothText(children, isStreaming)
         // While it streams, keep the newest line in view inside the capped box.
         useEffect(() => {
             if (isStreaming && ref.current) ref.current.scrollTop = ref.current.scrollHeight
-        }, [children, isStreaming])
+        }, [shown, isStreaming])
         return (
             <CollapsibleContent
                 className={cn(
@@ -191,11 +199,11 @@ export const ReasoningContent = memo(
                 <div
                     ref={ref}
                     className={cn(
-                        "ml-[6px] border-l-2 border-border/80 pl-3.5 text-[13px] leading-relaxed text-muted-foreground whitespace-pre-wrap",
+                        "ml-[8.5px] border-l border-border/80 pl-[19px] text-[13px] leading-relaxed text-muted-foreground whitespace-pre-wrap",
                         isStreaming && "max-h-[180px] overflow-y-auto scrollbar-thin [mask-image:linear-gradient(to_bottom,transparent,black_24px)]",
                     )}
                 >
-                    {children}
+                    {shown}
                 </div>
             </CollapsibleContent>
         )

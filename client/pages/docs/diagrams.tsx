@@ -173,7 +173,6 @@ const FLOWS: Record<string, { caption: L; steps: Step[]; loop?: L }> = {
     caption: { zh: "一条消息在 /api/chat 里走过的路。", en: "The path one message takes through /api/chat." },
     steps: [
       { title: { zh: "你的消息", en: "Your message" }, note: { zh: "可带图片、PDF、Word", en: "with images, PDF, Word" }, tone: "user" },
-      { title: { zh: "判断意图", en: "Read the intent" }, note: { zh: "局部修改，还是重画", en: "local edit or redraw" }, tone: "code" },
       { title: { zh: "整理上下文", en: "Assemble context" }, note: { zh: "摘要旧对话、按需加载图形库", en: "summarise history, load shape libraries" }, tone: "code" },
       { title: { zh: "模型流式作答", en: "Model streams" }, note: { zh: "以工具调用写 XML", en: "writes XML via tool calls" }, tone: "model" },
       { title: { zh: "上画布并排版", en: "Onto the canvas" }, note: { zh: "整理不变差才采用", en: "tidy only if not worse" }, tone: "check" },

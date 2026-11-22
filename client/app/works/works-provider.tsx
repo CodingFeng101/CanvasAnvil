@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { toast } from "sonner";
+import { errorText, notify } from "@/shared/ui/notify";
 import { t as tShell, useUiLanguage } from "@/shared/i18n";
 import { announceTaskDone } from "@/shared/task-done";
 import { recordDuration, recordUse } from "@/shared/usage-stats";
@@ -133,7 +133,7 @@ export function WorksProvider({
       .then((state) => setActive({ ...state, workspace, phase: "ready" }))
       .catch((error) => {
         console.error("Failed to switch works", error);
-        toast.error(String(error));
+        notify.error(langRef.current === "zh" ? "没能切换作品" : "Could not switch works", { description: errorText(error) });
         setActive((prev) => (prev ? { ...prev, phase: "ready" } : prev));
       })
       .finally(bump);
@@ -219,7 +219,7 @@ export function WorksProvider({
     if (now && now.workspace === workspace && now.phase === "ready") {
       if (id !== null && id === now.currentId) return true;
       if (isBusy()) {
-        toast.info(tWorks(langRef.current, "busy.switch"));
+        notify.info(tWorks(langRef.current, "busy.switch.title"), { description: tWorks(langRef.current, "busy.switch") });
         return false;
       }
       await flushCanvas();
@@ -230,7 +230,7 @@ export function WorksProvider({
       return true;
     }
     if (now && now.workspace !== workspace && isBusy()) {
-      toast.info(tWorks(langRef.current, "busy.switch"));
+      notify.info(tWorks(langRef.current, "busy.switch.title"), { description: tWorks(langRef.current, "busy.switch") });
       return false;
     }
     // Another canvas: its works switch while it is off screen, then it is shown.
@@ -273,7 +273,7 @@ export function WorksProvider({
     const now = activeRef.current;
     if (now && now.workspace === workspace && now.currentId === id) {
       if (isBusy()) {
-        toast.info(tWorks(langRef.current, "busy.switch"));
+        notify.info(tWorks(langRef.current, "busy.switch.title"), { description: tWorks(langRef.current, "busy.switch") });
         return;
       }
       leaveActive(null, { discardFrom: true });
