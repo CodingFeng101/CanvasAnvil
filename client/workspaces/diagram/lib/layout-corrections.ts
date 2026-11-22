@@ -53,6 +53,8 @@ export interface LayoutCorrection {
     candidates?: CorrectionCandidate[]
     /** The candidate on the canvas, when the user picked one. */
     picked?: CorrectionMethod
+    /** The user confirmed the layout on the canvas; the choices are put away. */
+    confirmed?: boolean
     /** The passes that could not lay the diagram out, shown as disabled options. */
     skipped?: SkippedCorrection[]
 }

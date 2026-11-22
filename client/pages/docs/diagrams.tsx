@@ -161,12 +161,12 @@ const FLOWS: Record<string, { caption: L; steps: Step[]; loop?: L }> = {
     loop: { zh: "检查不过时带着问题回到模型，直到干净或不再进步。", en: "When the check fails, the problems go back to the model until it is clean or stops improving." },
   },
   "diagram-arrange": {
-    caption: { zh: "排版是一次比较：原图、整理稿、ELK 稿，打分最高且守住原意的那一份胜出。", en: "Arranging is a comparison: the drawing, the tidy pass and ELK; the best score that keeps the intent wins." },
+    caption: { zh: "排版是一次比较：原图、整理稿、ELK 稿各打一个分，由你挑一份确定。", en: "Arranging is a comparison: the drawing, the tidy pass and ELK each get a score, and you confirm one." },
     steps: [
       { title: { zh: "模型画出的草稿", en: "The model's sketch" }, note: { zh: "坐标当作意图来读", en: "coordinates read as intent" }, tone: "model" },
       { title: { zh: "整理 tidy", en: "Tidy pass" }, note: { zh: "分行、减交叉、对齐、吸附网格", en: "rows, fewer crossings, align, grid" }, tone: "code" },
       { title: { zh: "ELK 分层布局", en: "ELK layered" }, note: { zh: "按需加载，带着原顺序", en: "lazy, seeded with the order" }, tone: "code" },
-      { title: { zh: "layout-lint 打分", en: "layout-lint scores" }, note: { zh: "顺序与对齐各保留 ≥ 70%", en: "order and alignment each ≥ 70% kept" }, tone: "check" },
+      { title: { zh: "layout-lint 打分", en: "layout-lint scores" }, note: { zh: "列出分数，你点选后确定", en: "scores listed, you pick and confirm" }, tone: "check" },
     ],
   },
   "diagram-pipeline": {

@@ -466,6 +466,10 @@ ${lastMessageText}
             }
             const since = (at: number) => Math.round((Date.now() - at) / 1000)
             if (uploadedFiles.length > 0) {
+                // Open the message first, so it carries its id from the start. A part written before
+                // "start" lands under a temporary id; when "start" brings the real one the client takes it
+                // for a second message, and the file step shows twice.
+                writer.write({ type: "start" } as any)
                 const started = Date.now()
                 const names = uploadedFiles.map((file: any) => String(file?.name || "")).filter(Boolean)
                 emit({ files: { state: "running", names } })

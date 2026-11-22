@@ -27,7 +27,7 @@ You can also drag and retype things by hand in draw.io; the next AI edit reads t
 
 The coordinates a model draws are often a few pixels off: boxes that should line up sit slightly apart, and the lines bend into little kinks. Every diagram passes through an automatic tidy before it reaches the canvas (rows, alignment, fewer crossings, grid snapping), and the result is used only if it scores no lower than the original.
 
-A new diagram goes up with this quick tidy first; then a full layered layout (ELK) is tried in the background, and if it does better while keeping your original arrangement, it is quietly swapped in. The "Layout correction" step in the conversation shows the layout check score before and after and which problems were fixed, and lets you switch between "Corrected" and "Model's layout", so you can always see what the model first drew. The algorithm and its trade-offs are in [Diagram layout](/docs/diagram-layout).
+A new diagram goes up with this quick tidy first; then a full layered layout (ELK) is worked out in the background. The "Layout correction" step in the conversation shows the layout check score before and after and which problems were fixed, and lists the model's drawing, the tidied one and the ELK one with their scores: click one to see it on the canvas, then confirm it, and later changes build on that diagram. The algorithm and its trade-offs are in [Diagram layout](/docs/diagram-layout).
 
 ## Export
 

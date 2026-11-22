@@ -47,7 +47,6 @@ import { arrangeDiagramXml, parseLayout, tidyIfBetter } from "@/workspaces/diagr
 import {
     clearCorrections,
     reloadCorrections,
-    getCorrection,
     recordCorrection,
     updateCorrection,
 } from "@/workspaces/diagram/lib/layout-corrections"
@@ -204,10 +203,6 @@ export default function ChatPanel({
     
     const t = useDiagramT()
 
-    // Every diagram the chat puts on the canvas bumps this, so a layout
-    // still being worked out for an older one is dropped.
-    const loadSeqRef = useRef(0)
-
     // Each diagram the model draws gets a "layout correction" step under
     // its tool call in the chat: what the app changed, the layout check
     // before and after, and a switch back to the model's own layout.
@@ -229,34 +224,16 @@ export default function ChatPanel({
         })
 
     // After a new diagram is up with the quick tidy pass, work out in the
-    // background whether a full layout (ELK) fits it better, and swap it in
-    // if nothing else has been loaded since. Every layout tried is kept on the
-    // step, so the user can pick another.
+    // background the other layouts (ELK) and their scores. None is swapped in
+    // on its own: they are listed on the step with their scores, the user
+    // tries them on the canvas and confirms one, and the chat goes on from
+    // whatever the canvas then holds.
     const arrangeLater = (toolCallId: string, original: string, layout: unknown) => {
-        const seq = ++loadSeqRef.current
         const done = () => updateCorrection(toolCallId, { working: false })
         arrangeDiagramXml(original, parseLayout(layout))
             .then((arranged) => {
                 if (DEBUG) console.log("[arrange]", arranged.chosen, arranged.scores)
-                const candidates = arranged.candidates
-                const skipped = arranged.skipped
-                if (seq !== loadSeqRef.current || arranged.chosen === "original" || arranged.chosen === "tidy") {
-                    return updateCorrection(toolCallId, { working: false, candidates, skipped })
-                }
-                // The user picked a layout meanwhile: leave it.
-                const now = getCorrection(toolCallId)
-                if (now?.showing === "original" || now?.picked) return updateCorrection(toolCallId, { working: false, candidates, skipped })
-                if (onDisplayChart(arranged.xml, true)) return updateCorrection(toolCallId, { working: false, candidates, skipped })
-                recordCorrection(toolCallId, {
-                    original,
-                    corrected: arranged.xml,
-                    method: arranged.chosen,
-                    layout: getCorrection(toolCallId)?.layout,
-                    moved: arranged.report.moved,
-                    straightened: arranged.report.straightened,
-                    candidates,
-                    skipped,
-                })
+                updateCorrection(toolCallId, { working: false, candidates: arranged.candidates, skipped: arranged.skipped })
             })
             .catch((error) => {
                 console.warn("[arrange] Layout failed, keeping the tidied diagram:", error)
@@ -688,9 +665,6 @@ ${isMxCellXmlComplete(combinedXml) ? "Please fix the appended XML and continue o
                     const changedIds = operations
                         .filter((op) => op.operation !== "delete")
                         .map((op) => op.cell_id)
-                    // A full layout still pending for the previous diagram
-                    // must not land on top of this edit.
-                    loadSeqRef.current++
                     const editedOriginal = applyDiagramOperations(currentXml, operations)
                     const shown = loadTidied(onDisplayChart, editedOriginal, changedIds)
                     const { error: validationError, xml: editedXml } = shown

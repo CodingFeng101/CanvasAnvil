@@ -32,21 +32,18 @@ We also tried ELK's mrtree, radial and stress algorithms. On the evaluation set 
 diagram-arrange
 ```
 
-Each diagram has three candidates: the model's drawing, the tidied one and the ELK one. All three are scored by **layout-lint**, and chosen by these rules:
+Each diagram has three candidates: the model's drawing, the tidied one and the ELK one. All three are scored by **layout-lint**, the scores are listed in the conversation, and you choose:
 
 - **layout-lint** scores any draw.io diagram from 0 to 100. Hard problems: shapes overlapping, shapes outside their container, containers overlapping, edges running through shapes, text that does not fit, edges missing an end. Softer measures: crossings, bends, and near-misses where two connected shapes were almost lined up.
-- **ELK must keep the drawing's arrangement**: at least 70% of the original "left of" and "above" relations, and at least 70% of the rows and columns that were lined up.
-- **ELK must also beat the tidy pass by 2 points**: relaying a whole diagram has to earn its keep.
-- **Nothing returned may score below the model's drawing.**
+- A new diagram goes up tidied (or as drawn, when tidying scores lower). ELK finishes in the background and only lists its score: it is **never swapped in on its own**.
+- Click a candidate to see it on the canvas; when you are happy, click **Confirm**, and later changes build on that diagram.
 
 > [!WHY]
-> Why the gates? Without them ELK kept about 90% of the order on the evaluation diagrams, but only about 60% of the alignment: it lines up each layer on its own and breaks up the columns that ran across layers. And the diagrams it broke up still scored well on layout-lint. A high score does not mean your intent survived, so how much of it survived is checked separately.
->
-> The value 0.7 was chosen on the evaluation's dev split as the best score that keeps 90%+ of both overall, then checked on the holdout split.
+> Why not pick automatically? A high score does not mean your intent survived. ELK lines up each layer on its own and often breaks up the columns that ran across layers: on the evaluation diagrams it kept only about 30% of the original alignment on average, yet those diagrams still scored well on layout-lint. Gates that guessed whether it broke something meant ELK was almost never chosen; a look from you settles it more directly.
 
 ## You can always look back
 
-Every tidy and relayout keeps both versions. The "Layout correction" step in the conversation switches between "Corrected" and "Model's layout"; once you switch back to the model's layout, an ELK result finishing in the background will not replace it.
+Every tidy and relayout keeps all the candidates. Until you confirm, the "Layout correction" step in the conversation switches freely between the model's drawing, the tidied one and the ELK one.
 
 ## During a local edit
 

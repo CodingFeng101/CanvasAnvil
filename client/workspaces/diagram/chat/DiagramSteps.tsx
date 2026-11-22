@@ -15,10 +15,10 @@
  */
 
 import type { ReactNode } from "react"
-import { Brain, FileCode, FilePen, FilePlus2, FileText, Wand2 } from "lucide-react"
+import { Brain, Check, FileCode, FilePen, FilePlus2, FileText, Wand2 } from "lucide-react"
 import { Step, StepList, type StepState } from "@/shared/chat"
 import { cn } from "@/shared/lib/utils"
-import { parseLayout, type CandidateNote } from "@/workspaces/diagram/lib/arrange"
+import { parseLayout } from "@/workspaces/diagram/lib/arrange"
 import type { LintRule } from "@/workspaces/diagram/lib/layout-lint"
 import {
     type CorrectionCandidate,
@@ -100,24 +100,6 @@ function skipReason(reason: string, t: ReturnType<typeof useDiagramT>) {
     if (/overlap/.test(reason)) return t("correction.skip.overlap")
     if (/orthogonal/.test(reason)) return t("correction.skip.orthogonal")
     return t("correction.skip.error", { reason: reason.replace(/^error:\s*/, "") })
-}
-
-/** Why an offered layout was not the one put on the canvas, in words. */
-function noteText(note: CandidateNote, t: ReturnType<typeof useDiagramT>) {
-    switch (note.why) {
-        case "worse":
-            return t("correction.note.worse")
-        case "rearranged":
-            return t("correction.note.rearranged", {
-                order: Math.round(note.order * 100),
-                aligned: Math.round(note.aligned * 100),
-                min: Math.round(note.min * 100),
-            })
-        case "layout":
-            return t("correction.note.layout")
-        case "margin":
-            return t("correction.note.margin", { margin: note.margin })
-    }
 }
 
 const count = (xml: string, kind: "vertex" | "edge") =>
@@ -242,9 +224,7 @@ function CorrectionStep({
     const candidates = correction.candidates ?? []
     const skipped: SkippedCorrection[] = candidates.length ? (correction.skipped ?? []) : []
     const current = correction.picked ?? (correction.showing === "original" ? "original" : correction.method)
-    // A layout that scored higher but was not used because it broke up the drawing.
-    const chosenScore = candidates.find((c) => c.method === correction.method)?.score ?? correction.after.score
-    const setAside = candidates.some((c) => c.note?.why === "rearranged" && c.score > chosenScore)
+    const currentCandidate = candidates.find((c) => c.method === current)
     const pick = (candidate: CorrectionCandidate) => {
         if (candidate.method === current) return
         const error = load(candidate.xml, true)
@@ -285,9 +265,7 @@ function CorrectionStep({
                           ? correction.method === "tidy"
                               ? t("correction.by_tidy", { moved: correction.moved, straight: correction.straightened })
                               : t("correction.by_elk", { direction: t(`method.${correction.method}` as Key) })
-                          : setAside
-                            ? t("correction.kept_rearranged")
-                            : t("correction.kept")}
+                          : t("correction.kept")}
                 </p>
                 {fixed.length > 0 && (
                     <p>
@@ -301,8 +279,14 @@ function CorrectionStep({
                         {issues(left)}
                     </p>
                 )}
-                {/* Every layout tried, each with its score: the best one is on the canvas, the user may pick another. */}
-                {canSwitch && !correction.working && candidates.length + skipped.length > 1 && (
+                {/* Confirmed: the choices are put away, the chat goes on from this layout. */}
+                {correction.confirmed && currentCandidate && (
+                    <p className="text-foreground/80">
+                        {t("correction.confirmed", { name: optionName(currentCandidate.method), score: currentCandidate.score })}
+                    </p>
+                )}
+                {/* Every layout tried, each with its score: the user tries them on the canvas and confirms one. */}
+                {canSwitch && !correction.working && !correction.confirmed && candidates.length + skipped.length > 1 && (
                     <div className="pt-1.5">
                         <p className="mb-1">{t("correction.pick")}</p>
                         <div className="flex flex-wrap items-center gap-1">
@@ -324,7 +308,6 @@ function CorrectionStep({
                                     >
                                         <span>{optionName(candidate.method)}</span>
                                         <span className="tabular-nums opacity-70">{t("correction.option.score", { score: candidate.score })}</span>
-                                        {candidate.method === correction.method && <span className="text-brand">{t("correction.recommended")}</span>}
                                     </button>
                                 )
                             })}
@@ -340,14 +323,17 @@ function CorrectionStep({
                                     <span className="opacity-70">{t("correction.option.na")}</span>
                                 </span>
                             ))}
+                            {candidates.length > 1 && (
+                                <button
+                                    type="button"
+                                    onClick={() => updateCorrection(toolCallId, { confirmed: true })}
+                                    className="ml-1 inline-flex items-center gap-1 rounded-md bg-foreground px-2.5 py-1 text-xs text-background transition-opacity hover:opacity-85"
+                                >
+                                    <Check className="size-3.5" aria-hidden />
+                                    {t("correction.confirm")}
+                                </button>
+                            )}
                         </div>
-                        {candidates
-                            .filter((c) => c.note && c.method !== correction.method)
-                            .map((c) => (
-                                <p key={c.method} className="mt-1 text-xs text-muted-foreground/70">
-                                    {t("correction.skip.line", { name: optionName(c.method), reason: noteText(c.note!, t) })}
-                                </p>
-                            ))}
                         {skipped.map((s) => (
                             <p key={s.method} className="mt-1 text-xs text-muted-foreground/70">
                                 {t("correction.skip.line", { name: optionName(s.method), reason: skipReason(s.reason, t) })}
