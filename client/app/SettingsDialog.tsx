@@ -1074,7 +1074,7 @@ function SettingsPanel({ initial, focus, onClose }: { initial: SectionId; focus?
         ["diagram", zh ? "图表绘制" : "Diagram", zh ? "只用于图表，比如配色、字体、连线风格。" : "Diagrams only: colours, fonts, line style."],
         ["cad", zh ? "室内设计" : "Interior", zh ? "只用于户型，比如层高、规范、常用材料。" : "Floor plans only: ceiling height, codes, materials."],
         ["ppt", zh ? "PPT 演示" : "Slides", zh ? "只用于演示文稿，比如页数、版式、配色。" : "Decks only: length, layout, colours."],
-        ["canvas", zh ? "自由画布" : "Free canvas", zh ? "只用于生成图片，比如画风、构图偏好。" : "Pictures only: style, composition."],
+        ["canvas", zh ? "自由绘制" : "Free drawing", zh ? "只用于生成图片，比如画风、构图偏好。" : "Pictures only: style, composition."],
       ] as const
     ).map(([scope, title, desc]): RowSpec => {
       const c = getConstraint(scope as ConstraintScope);

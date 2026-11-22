@@ -51,8 +51,8 @@ export const portalCanvasItems: PortalCanvasItem[] = [
   },
   {
     id: "canvas",
-    zhTitle: "自由画布",
-    enTitle: "Free Canvas",
+    zhTitle: "自由绘制",
+    enTitle: "Free Drawing",
     zhSummary: "一句话生成图片，圈画标注即可改图",
     enSummary: "Prompt images onto a board, then mark them up to edit",
     image: "/examples/canvas/01.svg",

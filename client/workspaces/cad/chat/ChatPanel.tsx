@@ -674,7 +674,7 @@ export function ChatPanel(props: ChatPanelProps) {
         ], (chunk) => {
           // Show the plan as readable text while the model is still writing its JSON.
           const partial = parsePartialJson(chunk);
-          updateAssistant(planMessage("drafting", partial?.plan && typeof partial.plan === "object" ? planText(partial.plan) : drafting));
+          updateAssistant(planMessage("drafting", partial?.plan && typeof partial.plan === "object" ? planText(partial.plan, chunk) : drafting));
         });
         const payload = response.payload;
         if (payload.type !== "cad_plan") throw new Error("Expected cad_plan");
@@ -682,7 +682,9 @@ export function ChatPanel(props: ChatPanelProps) {
         await applyArtifact(payload, retry);
         return { plan: payload.plan, text: response.text };
       };
-      const planText = (planValue: any) => {
+      // `written`: the model's text so far. While it streams, each part shows in the order the model writes it,
+      // so the text grows at the end instead of jumping back to fill in a part above.
+      const planText = (planValue: any, written?: string) => {
         const list = (value: unknown) => (Array.isArray(value) ? value.filter(Boolean).join("、") : "");
         const rooms = Array.isArray(planValue?.rooms)
           ? planValue.rooms.map((room: any) => {
@@ -695,24 +697,29 @@ export function ChatPanel(props: ChatPanelProps) {
               return `- **${room.name}**${facts ? `（${facts}）` : ""}${must ? `：${must}` : ""}${room.notes ? `。${room.notes}` : ""}`;
             })
           : [];
-        return [
-          `### ${tr("设计方案", "Design plan")}`,
-          planValue?.summary ?? "",
-          [
+        // In the order the plan format lists them (the model mostly writes them so).
+        const parts: Array<[keys: string[], text: string]> = [
+          [["summary"], planValue?.summary ?? ""],
+          [["totalArea", "height", "style"], [
             planValue?.totalArea ? `${tr("总面积", "Total area")} ${planValue.totalArea}㎡` : "",
             planValue?.height ? `${tr("层高", "Ceiling")} ${planValue.height}mm` : "",
             planValue?.style ? `${tr("风格", "Style")}：${planValue.style}` : "",
-          ].filter(Boolean).join(" · "),
-          planValue?.household ? `**${tr("居住情况", "Household")}**：${planValue.household}` : "",
-          planValue?.zoning ? `**${tr("分区与动线", "Zoning")}**：${planValue.zoning}` : "",
-          planValue?.entry ? `**${tr("入户", "Entry")}**：${planValue.entry}` : "",
-          rooms.length ? `**${tr("房间", "Rooms")}**\n${rooms.join("\n")}` : "",
-          list(planValue?.constraints) ? `**${tr("约束", "Constraints")}**：${list(planValue.constraints)}` : "",
-          list(planValue?.assumptions) ? `**${tr("假设（请核对）", "Assumptions (please check)")}**：${list(planValue.assumptions)}` : "",
-          validDecisions(planValue?.decisions).length
+          ].filter(Boolean).join(" · ")],
+          [["household"], planValue?.household ? `**${tr("居住情况", "Household")}**：${planValue.household}` : ""],
+          [["zoning"], planValue?.zoning ? `**${tr("分区与动线", "Zoning")}**：${planValue.zoning}` : ""],
+          [["entry"], planValue?.entry ? `**${tr("入户", "Entry")}**：${planValue.entry}` : ""],
+          [["rooms"], rooms.length ? `**${tr("房间", "Rooms")}**\n${rooms.join("\n")}` : ""],
+          [["decisions"], validDecisions(planValue?.decisions).length
             ? `**${tr("已定事项（当前选择）", "Decisions (current choice)")}**：${validDecisions(planValue.decisions).map((decision) => `${decision.topic} ${[decision.choice].flat().filter(Boolean).join("、") || tr("未定", "open")}`).join(" · ")}`
-            : "",
-        ].filter(Boolean).join("\n\n");
+            : ""],
+          [["constraints"], list(planValue?.constraints) ? `**${tr("约束", "Constraints")}**：${list(planValue.constraints)}` : ""],
+          [["assumptions"], list(planValue?.assumptions) ? `**${tr("假设（请核对）", "Assumptions (please check)")}**：${list(planValue.assumptions)}` : ""],
+        ];
+        if (written) {
+          const at = (keys: string[]) => Math.min(...keys.map((key) => { const found = written.indexOf(`"${key}"`); return found < 0 ? Infinity : found; }));
+          parts.sort((a, b) => at(a[0]) - at(b[0]));
+        }
+        return [`### ${tr("设计方案", "Design plan")}`, ...parts.map(([, text]) => text)].filter(Boolean).join("\n\n");
       };
       // The plan goes straight to confirmation: no analysis boards (slow, and they did not help the floorplan).
       const showPlan = (drafted: { plan: any }, regenerate: boolean) => {

@@ -26,7 +26,7 @@ stance
 | Diagram | Nodes, edges, rough rows and columns | Rows, alignment, grid snapping, routing | layout-lint, 0–100, keeping the original order and alignment |
 | Interior | Grid dimension chains, rooms, doors, furniture intent | Real coordinates of walls, openings and furniture | Designer self-check, electrical audit, delivery check |
 | Slides | Outline, each slide's content and layout intent | Concurrency, retries, export | You review the outline |
-| Free canvas | Reads the marks into one sentence | Gathers marks by geometry, composites at the image's resolution | The new version sits beside the old, never over it |
+| Free drawing | Reads the marks into one sentence | Gathers marks by geometry, composites at the image's resolution | The new version sits beside the old, never over it |
 
 ## Principles that run throughout
 

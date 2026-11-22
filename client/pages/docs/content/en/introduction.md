@@ -11,7 +11,7 @@ It brings four kinds of everyday making into one workspace: diagrams, interior d
 | [Diagram](/docs/diagram) | Architecture, flowcharts, research frameworks, course maps | Editable draw.io diagrams, exported as drawio / SVG / PNG |
 | [Interior design](/docs/interior) | A renovation plan from one sentence or an existing floor plan | Editable plan, 3D walkthrough, quote, drawing set, DXF, colour plan |
 | [Slides](/docs/ppt) | Reports, proposals, lecture decks | PDF, image PPTX, editable PPTX |
-| [Free canvas](/docs/canvas) | Posters, illustrations, reworking one picture again and again | Images, and every version of the same image |
+| [Free drawing](/docs/canvas) | Posters, illustrations, reworking one picture again and again | Images, and every version of the same image |
 
 ## What it believes
 

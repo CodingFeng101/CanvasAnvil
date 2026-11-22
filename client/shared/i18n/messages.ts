@@ -112,7 +112,7 @@ const messages = {
   "nav.diagram": { zh: "图表绘制", en: "Diagram" },
   "nav.cad": { zh: "室内设计", en: "Interior" },
   "nav.ppt": { zh: "PPT 演示", en: "PPT" },
-  "nav.canvas": { zh: "自由画布", en: "Canvas" },
+  "nav.canvas": { zh: "自由绘制", en: "Free drawing" },
 
   "sidebar.new": { zh: "新建作品", en: "New work" },
   "sidebar.recent": { zh: "最近", en: "Recents" },

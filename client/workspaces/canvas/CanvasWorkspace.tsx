@@ -18,7 +18,11 @@ import {
   type AnnotatedEditOptions,
 } from "@/workspaces/canvas/canvas/annotated-edit";
 import { CanvasBoard } from "@/workspaces/canvas/canvas/CanvasBoard";
-import { insertGeneratedImage } from "@/workspaces/canvas/canvas/insert-image";
+import { insertGeneratedImage, plannedPlacement } from "@/workspaces/canvas/canvas/insert-image";
+import { centreOn, DrawingPlaceholder, type DrawingBox } from "@/workspaces/canvas/canvas/drawing-placeholder";
+import { getImageLineage } from "@/workspaces/canvas/canvas/lineage";
+import type { ImageSize } from "@/ai/client";
+import type { ExcalidrawImageElement } from "@excalidraw/excalidraw/element/types";
 import { getLineageReturnTo, getLineageVersions, type ImageVersion, type SelectedImageInfo } from "@/workspaces/canvas/canvas/lineage";
 import { openCanvasFor, updateWorkValue } from "@/shared/references/bus";
 import { appendInbox, PPT_INBOX_KEY, type SlideInboxEntry } from "@/shared/references/inbox";
@@ -36,6 +40,8 @@ export function CanvasWorkspace() {
   const [versions, setVersions] = useState<ImageVersion[]>([]);
   const [returnTo, setReturnTo] = useState<BoardReturnTo | null>(null);
   const [sendingBack, setSendingBack] = useState(false);
+  /** Where the picture being generated will land, drawn in while it is generated. */
+  const [drawing, setDrawing] = useState<DrawingBox | null>(null);
   const work = useWork();
   const tr = (zh: string, en: string) => (uiLang === "zh" ? zh : en);
   // Written once the imperative API is available, purely to make that moment
@@ -53,7 +59,7 @@ export function CanvasWorkspace() {
   };
 
   /**
-   * A slide brought here from a deck ("到自由画布修改"): onto the board, remembering where it goes
+   * A slide brought here from a deck ("到自由绘制修改"): onto the board, remembering where it goes
    * back. Taken only when the timer fires, after the board has put its saved scene in (or the
    * picture would be drawn over) and on the board that stays (a remount cancels the timer).
    */
@@ -78,7 +84,7 @@ export function CanvasWorkspace() {
         })
         .catch((error) => {
           console.error("Failed to place the slide on the board", error);
-          notify.error(tr("没能把这一页放到白板上", "Could not put the slide on the board"), { description: tr("回到 PPT 再点一次「到自由画布修改」。", "Go back to the deck and press \"Edit on free canvas\" again.") });
+          notify.error(tr("没能把这一页放到白板上", "Could not put the slide on the board"), { description: tr("回到 PPT 再点一次「到自由绘制修改」。", "Go back to the deck and press \"Edit in Free drawing\" again.") });
         });
     }, 400);
     return () => clearTimeout(timer);
@@ -101,7 +107,7 @@ export function CanvasWorkspace() {
         slideId: target.slideId,
         dataUrl,
         ...(version?.note ? { note: version.note } : {}),
-        from: work?.name || tr("自由画布", "Free canvas"),
+        from: work?.name || tr("自由绘制", "Free drawing"),
         createdAt: Date.now(),
       };
       const ok = await updateWorkValue<SlideInboxEntry[]>("ppt", target.workId, PPT_INBOX_KEY, (previous) => appendInbox(previous, entry));
@@ -118,11 +124,27 @@ export function CanvasWorkspace() {
     }
   };
 
+  /** A picture is being generated: show where it will land, at the size asked for (square for "auto"). */
+  const startDrawing = (box: DrawingBox) => {
+    const api = excalidrawApiRef.current;
+    if (!api) return;
+    setDrawing(box);
+    pane.value.reveal();
+    centreOn(api, box);
+  };
+  const handleDrawingStart = (size: ImageSize) => {
+    const api = excalidrawApiRef.current;
+    if (!api) return;
+    const [width, height] = /^(\d+)x(\d+)$/.exec(size)?.slice(1).map(Number) ?? [1024, 1024];
+    startDrawing(plannedPlacement(api, { width, height }));
+  };
+
   const handleImageGenerated = async (dataUrl: string, prompt: string): Promise<string | null> => {
     const api = excalidrawApiRef.current;
     if (!api) return null;
     try {
       const { elementId } = await insertGeneratedImage(api, dataUrl, { note: prompt });
+      setDrawing(null);
       pane.value.reveal();
       return elementId;
     } catch (e) {
@@ -145,7 +167,14 @@ export function CanvasWorkspace() {
     if (!api) {
       return { ok: false, error: uiLang === "zh" ? "画布还没准备好。" : "The canvas isn't ready yet." };
     }
-    return await runAnnotatedEdit(api, instruction, uiLang, options);
+    // The new version lands beside its source, at the source's shape.
+    const source = selectedImage && (api.getSceneElements().find((el) => el.id === selectedImage.elementId && el.type === "image") as ExcalidrawImageElement | undefined);
+    if (source) startDrawing(plannedPlacement(api, { width: source.width, height: source.height }, getImageLineage(source)?.lineageId, source.id));
+    try {
+      return await runAnnotatedEdit(api, instruction, uiLang, options);
+    } finally {
+      setDrawing(null);
+    }
   };
 
   const handlePreviewAnnotatedEdit = async () => {
@@ -165,6 +194,21 @@ export function CanvasWorkspace() {
     api.updateScene({ elements: cleared, captureUpdate: CaptureUpdateAction.IMMEDIATELY });
     setSelectedImage(null);
     setVersions([]);
+  };
+
+  /** Soft-deleted, so Ctrl+Z on the board brings them back. */
+  const handleRemoveImages = (elementIds: string[]) => {
+    const api = excalidrawApiRef.current;
+    if (!api) return;
+    const gone = new Set(elementIds);
+    api.updateScene({
+      elements: api.getSceneElements().map((el) => (gone.has(el.id) ? newElementWith(el, { isDeleted: true }) : el)),
+      captureUpdate: CaptureUpdateAction.IMMEDIATELY,
+    });
+    if (selectedImage && gone.has(selectedImage.elementId)) {
+      setSelectedImage(null);
+      setVersions([]);
+    }
   };
 
   const handleSelectVersion = (elementId: string) => {
@@ -198,6 +242,9 @@ export function CanvasWorkspace() {
           onSelectVersion={handleSelectVersion}
           sendBack={returnTo ? { label: returnTo.slideLabel, busy: sendingBack, onSend: () => void sendBack() } : null}
           onClearAll={handleClearAll}
+          onRemoveImages={handleRemoveImages}
+          onDrawingStart={handleDrawingStart}
+          onDrawingEnd={() => setDrawing(null)}
         />
         </div>
       </ResizablePanel>
@@ -215,6 +262,7 @@ export function CanvasWorkspace() {
             }}
             onSelectedImageChange={handleSelectedImageChange}
           />
+          {drawing && excalidrawApiRef.current && <DrawingPlaceholder api={excalidrawApiRef.current} box={drawing} />}
         </CanvasSheet>
       </ResizablePanel>
     </ResizablePanelGroup>

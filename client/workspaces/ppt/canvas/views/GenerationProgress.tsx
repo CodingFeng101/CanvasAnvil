@@ -3,6 +3,7 @@ import type { CreationProgress } from "@/workspaces/ppt/canvas/lib/creation-mach
 import { MODEL_CONCURRENCY } from "@/workspaces/ppt/canvas/lib/constants";
 import type { CreationStep, SlideData } from "@/workspaces/ppt/canvas/types";
 import { cn } from "@/shared/lib/utils";
+import { PenSketch } from "@/shared/ui/pen-sketch";
 
 interface GenerationProgressProps {
   step: CreationStep;
@@ -16,7 +17,7 @@ interface GenerationProgressProps {
 
 /**
  * The deck being drawn by the AI pen: every page of the outline in a grid. A page being drawn has
- * its frame sketched in over and over while the pen hatches across it (the picture cannot stream,
+ * its frame and a loose sketch of a page drawn in over and over while the pen hatches across it (the picture cannot stream,
  * so this is the pen thinking); when the picture arrives the pen sweeps across and wipes it in.
  * Pages not started yet wait with their number and title. Progress is told in the chat.
  */
@@ -52,23 +53,20 @@ export function GenerationProgress({ progress, tr, slides, images }: GenerationP
                     </>
                   ) : (
                     <>
-                      {busy && (
-                        <>
-                          <svg aria-hidden className="absolute inset-0 h-full w-full overflow-visible text-foreground/30" preserveAspectRatio="none">
-                            <rect x="1" y="1" rx="8" fill="none" stroke="currentColor" strokeWidth="1.2" pathLength={100} className="frame-draw" style={{ width: "calc(100% - 2px)", height: "calc(100% - 2px)", animationDelay: phase }} />
-                          </svg>
-                          <PenLine aria-hidden className="pen-sketch pointer-events-none absolute size-5 text-brand" strokeWidth={1.8} style={{ animationDelay: phase }} />
-                        </>
+                      {/* Being drawn: the pen sketches the page (the title is under it); waiting: the title. */}
+                      {busy ? (
+                        <PenSketch motif="slide" phase={phase} />
+                      ) : (
+                        <span className="absolute inset-0 flex items-center justify-center px-6 text-center text-[13px] leading-snug text-muted-foreground/45">
+                          <span className="line-clamp-3">{slide.title}</span>
+                        </span>
                       )}
-                      <span className={cn("absolute inset-0 flex items-center justify-center px-6 text-center text-[13px] leading-snug", busy ? "text-foreground/55" : "text-muted-foreground/45")}>
-                        <span className="line-clamp-3">{slide.title}</span>
-                      </span>
                     </>
                   )}
                 </div>
                 <figcaption className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
                   <span className="tabular-nums">{index + 1}</span>
-                  <span className="min-w-0 truncate">{url ? slide.title : busy ? tr("正在画…", "Drawing…") : tr("等待中", "Waiting")}</span>
+                  <span className="min-w-0 truncate">{url || !busy ? slide.title : `${tr("正在画", "Drawing")} · ${slide.title}`}</span>
                 </figcaption>
               </figure>
             );

@@ -1,14 +1,14 @@
-# Free canvas
+# Free drawing
 
 A whiteboard where you can make pictures from words, or circle one spot on a picture and change only that.
 
 ## Pictures from words
 
-Describe the scene in the chat and the picture is placed on the whiteboard. You can pick the size and quality. Write your preferred style and composition in Settings → Memory → Free canvas and they come along every time.
+Describe the scene in the chat and the picture is placed on the whiteboard. You can pick the size and quality. Write your preferred style and composition in Settings → Memory → Free drawing and they come along every time.
 
 ## Circle it, change it
 
-This is the free canvas's everyday way of working:
+This is Free drawing's everyday way of working:
 
 1. Select a picture;
 2. With the pen, circle the spot to change, draw an arrow, or write a few words beside it;

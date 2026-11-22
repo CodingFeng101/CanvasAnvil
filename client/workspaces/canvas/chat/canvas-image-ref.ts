@@ -58,3 +58,13 @@ export function referencedChatImageIds(contents: string[]): Set<string> {
   }
   return ids;
 }
+
+/** Every board picture the given messages point at (what those turns put on the board). */
+export function referencedCanvasElementIds(contents: string[]): string[] {
+  const ids = new Set<string>();
+  const pattern = /::canvasElement:([^|\]\s]+)/g;
+  for (const content of contents) {
+    for (const match of content.matchAll(pattern)) ids.add(match[1]);
+  }
+  return [...ids];
+}

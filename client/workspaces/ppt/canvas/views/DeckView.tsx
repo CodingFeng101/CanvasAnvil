@@ -97,7 +97,7 @@ interface DeckViewProps {
   slideshow: ReturnType<typeof useSlideshow>;
   actions: {
     addSlideToChat: (slide: SlideData) => void;
-    /** Take the slide's picture to the free canvas to mark up there (absent without the app shell). */
+    /** Take the slide's picture to Free drawing to mark up there (absent without the app shell). */
     editOnBoard?: (slide: SlideData) => void;
     downloadPpt: () => void;
     downloadPdf: () => void;
@@ -448,11 +448,11 @@ export function DeckView({
                 type="button"
                 onClick={() => actions.editOnBoard!(deck.currentSlide!)}
                 disabled={status.isGeneratingImage || status.isApplyingEdits}
-                title={tr("把这一页放到自由画布上圈改，改好再送回来", "Mark up this slide on the free canvas, then send it back")}
+                title={tr("把这一页放到自由绘制上圈改，改好再送回来", "Mark up this slide on Free drawing, then send it back")}
                 className="flex h-7 items-center gap-1.5 rounded-md px-2 text-xs text-foreground/80 transition-colors hover:bg-accent hover:text-foreground disabled:opacity-50"
               >
                 <PenLine className="size-3.5" />
-                {tr("到自由画布修改", "Edit on free canvas")}
+                {tr("到自由绘制修改", "Edit in Free drawing")}
               </button>
             ) : null}
           </div>

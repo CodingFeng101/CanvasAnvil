@@ -34,7 +34,7 @@ Write down what the AI should always remember, and it goes with every request. O
 - **Diagram**: colours, fonts, line style;
 - **Interior design**: ceiling height, codes, usual materials;
 - **Slides**: length, layout, colours;
-- **Free canvas**: style, composition.
+- **Free drawing**: style, composition.
 
 Each one can be switched off on its own without deleting the text.
 

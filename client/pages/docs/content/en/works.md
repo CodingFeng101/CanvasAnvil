@@ -4,7 +4,7 @@ What is on screen is what is kept. There is no Save to remember and no reload to
 
 ## My works
 
-My works, at the top, lists everything under All / Diagram / Interior design / Slides / Free canvas. Works can be opened, renamed, duplicated and deleted. Opening a work from another canvas switches straight to it.
+My works, at the top, lists everything under All / Diagram / Interior design / Slides / Free drawing. Works can be opened, renamed, duplicated and deleted. Opening a work from another canvas switches straight to it.
 
 A work appears in the list on its own as soon as it has content; an empty draft left without a mark on it is dropped, so no trail of "Untitled" builds up.
 

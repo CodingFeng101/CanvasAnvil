@@ -17,7 +17,7 @@ import { chatStorageKey, loadChatHistory, saveChatHistory } from "@/shared/chat/
 import { t, useUiLanguage } from "@/shared/i18n";
 import type { AnnotatedEditOptions, AnnotatedEditPreview, AnnotatedEditResult } from "@/workspaces/canvas/canvas/annotated-edit";
 import type { ImageVersion } from "@/workspaces/canvas/canvas/lineage";
-import { referencedChatImageIds, withCanvasImageRef, withChatImageRef } from "@/workspaces/canvas/chat/canvas-image-ref";
+import { referencedCanvasElementIds, referencedChatImageIds, withCanvasImageRef, withChatImageRef } from "@/workspaces/canvas/chat/canvas-image-ref";
 import {
   loadChatImages,
   pruneChatImages,
@@ -79,6 +79,11 @@ interface ChatPanelProps {
   sendBack?: { label: string; busy: boolean; onSend: () => void } | null;
   /** Wipes the canvas; called together with clearing the chat log so "clear" means everything, in one action. */
   onClearAll: () => void;
+  /** Editing an earlier message: the pictures the dropped turns put on the board come off it again. */
+  onRemoveImages: (elementIds: string[]) => void;
+  /** A picture is being generated at this size / it is done (or failed). */
+  onDrawingStart: (size: ImageSize) => void;
+  onDrawingEnd: () => void;
 }
 
 export function ChatPanel({
@@ -93,6 +98,9 @@ export function ChatPanel({
   onSelectVersion,
   sendBack,
   onClearAll,
+  onRemoveImages,
+  onDrawingStart,
+  onDrawingEnd,
 }: ChatPanelProps) {
   const uiLang = useUiLanguage();
   const tr = (zh: string, en: string) => (uiLang === "zh" ? zh : en);
@@ -226,9 +234,15 @@ export function ChatPanel({
     void generateFrom(prompt, messages);
   };
 
-  /** Editing a message of yours: what came after it goes, and the picture is drawn again. */
+  /**
+   * Editing a message of yours: what came after it goes, and so do the pictures those turns put on
+   * the board (a picture still shown by an earlier message stays); then the picture is drawn again.
+   */
   const handleEditMessage = (index: number, text: string) => {
     if (isGenerating || messages[index]?.role !== "user") return;
+    const kept = new Set(referencedCanvasElementIds(messages.slice(0, index).map((m) => m.content || "")));
+    const dropped = referencedCanvasElementIds(messages.slice(index).map((m) => m.content || "")).filter((id) => !kept.has(id));
+    if (dropped.length) onRemoveImages(dropped);
     void generateFrom(text, messages.slice(0, index));
   };
 
@@ -238,6 +252,7 @@ export function ChatPanel({
     persist(withUser);
     setIsGenerating(true);
     const epoch = clearEpochRef.current;
+    onDrawingStart(imageOptions.size);
 
     try {
       const constraints = constraintsFor("canvas");
@@ -271,6 +286,7 @@ ${constraints}` : prompt,
       };
       persist([...withUser, assistantMessage]);
     } finally {
+      onDrawingEnd();
       setIsGenerating(false);
     }
   };

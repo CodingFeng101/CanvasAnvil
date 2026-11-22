@@ -1247,7 +1247,7 @@ export function PptCanvas({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isPersistenceHydrated, creationStep, localSlides.length]);
 
-  // Pictures sent back from the free canvas ("送回 PPT"): each becomes a new version of its slide.
+  // Pictures sent back from Free drawing ("送回 PPT"): each becomes a new version of its slide.
   useEffect(() => {
     if (!isPersistenceHydrated) return;
     let cancelled = false;
@@ -1260,7 +1260,7 @@ export function PptCanvas({
       for (const entry of apply) {
         const slide = localSlides.find((s) => s.id === entry.slideId);
         if (!slide) continue;
-        await pushImageVersionAndProcess(slide, entry.dataUrl, "edited", entry.note || tr(`从自由画布「${entry.from}」送回`, `Sent back from the free canvas "${entry.from}"`));
+        await pushImageVersionAndProcess(slide, entry.dataUrl, "edited", entry.note || tr(`从自由绘制「${entry.from}」送回`, `Sent back from Free drawing "${entry.from}"`));
         lastIndex = localSlides.indexOf(slide);
       }
       if (lastIndex >= 0) {
@@ -1276,7 +1276,7 @@ export function PptCanvas({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isPersistenceHydrated]);
 
-  /** The slide's current picture to the free canvas, to mark up and edit there; it can be sent back. */
+  /** The slide's current picture to Free drawing, to mark up and edit there; it can be sent back. */
   const editSlideOnBoard = async (slide: SlideData) => {
     const index = localSlides.findIndex((s) => s.id === slide.id);
     const url = getSlideImageUrl(slide.id);

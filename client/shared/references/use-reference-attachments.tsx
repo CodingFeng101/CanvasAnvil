@@ -14,7 +14,7 @@ import type { ReferenceItemKind, ReferenceWorkspace, WorkReference } from "./typ
  * as one card each above the box. Their items join the box's attachments as
  * files (the form chat already sends), so nothing downstream changes; the
  * cards replace those files' own previews. A canvas that puts references
- * somewhere else (the free canvas, onto the board) passes `onReference`.
+ * somewhere else (Free drawing, onto the board) passes `onReference`.
  */
 
 interface AttachedReference {
@@ -96,7 +96,7 @@ export function useReferenceAttachments({ workspace, accept, files, setFiles, on
   };
 
   const canvasLabel = (id: ReferenceWorkspace) =>
-    ({ canvas: tr("自由画布", "Free canvas"), ppt: "PPT", diagram: tr("图表", "Diagram"), cad: tr("室内设计", "Interior") })[id];
+    ({ canvas: tr("自由绘制", "Free drawing"), ppt: "PPT", diagram: tr("图表", "Diagram"), cad: tr("室内设计", "Interior") })[id];
 
   const menuItem: PlusMenuItem | null =
     canReference() && accept.length > 0 && referenceSourcesFor(workspace).length > 0 ? { icon: Library, label: tr("引用作品", "Reference a work"), trailing: "›", onSelect: () => void pick() } : null;

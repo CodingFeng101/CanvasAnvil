@@ -9,7 +9,7 @@
 | 接口 | 作用 |
 | --- | --- |
 | `POST /api/chat` | 图表画布的流式对话，带工具调用 |
-| `POST /api/ppt-ai` | 非流式的模型调用，室内设计、PPT、自由画布共用 |
+| `POST /api/ppt-ai` | 非流式的模型调用，室内设计、PPT、自由绘制共用 |
 | `POST /api/ppt-ai/stream` | 同上的流式版本 |
 | `POST /api/cad/recognize` | 从原始户型图识别墙体和门窗（需要 Python） |
 | `POST /api/cad/qa` | 户型的交付检查（需要浏览器） |

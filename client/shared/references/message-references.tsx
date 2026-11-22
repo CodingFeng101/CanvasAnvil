@@ -26,7 +26,7 @@ export function MessageReferences({ references, className }: { references: SentR
 
 function SentReferenceCard({ reference }: { reference: SentReference }) {
   const lang = useUiLanguage();
-  const canvas = ({ canvas: ["自由画布", "Free canvas"], ppt: ["PPT", "PPT"], diagram: ["图表", "Diagram"], cad: ["室内设计", "Interior"] } as const)[reference.workspace][lang === "zh" ? 0 : 1];
+  const canvas = ({ canvas: ["自由绘制", "Free drawing"], ppt: ["PPT", "PPT"], diagram: ["图表", "Diagram"], cad: ["室内设计", "Interior"] } as const)[reference.workspace][lang === "zh" ? 0 : 1];
   const kind = lang === "zh" ? `${canvas}画布` : `${canvas} canvas`;
   const taken = reference.labels.join(lang === "zh" ? "、" : ", ");
   const peek = usePeek({ title: reference.workName, text: reference.text.slice(0, 600) || taken, meta: [kind, taken].filter(Boolean).join(" · ") });

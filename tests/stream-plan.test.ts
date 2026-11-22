@@ -46,3 +46,18 @@ test("a streaming HouseSpec becomes a step per wall, drawn end to end", () => {
   assert.deepEqual(preview?.steps[1].outline, [[5000, 0], [5000, 4000]]);
   assert.equal(preview?.steps[0].plan.walls.length, 1);
 });
+
+test("furniture in a streaming cad_layout: a step per piece, round its footprint, doors and windows in", () => {
+  const head = '{"type":"cad_layout","layout":{"cols":[4000,3000],"rows":[3000,3000],"rooms":[{"name":"客厅","cells":"A1:A2"},{"name":"主卧","cells":"B1"}],'
+    + '"doors":[{"entry":true,"room":"客厅","side":"S"},{"between":["客厅","主卧"]}],"windows":[{"room":"主卧","side":"N"}],"furniture":{"主卧":[{"key":"bed18","wall":"W"}';
+  const rooms = previewFromCadText(head)!;
+  const bed = rooms.steps.at(-1)!;
+  assert.equal(rooms.steps.length > 2, true, "the bed is a step after the two rooms");
+  assert.ok(bed.plan.furniture.some((item) => item.key === "bed18"));
+  assert.ok(bed.plan.openings.length >= 2, "the doors and windows came in with the furniture");
+  assert.equal(bed.outline.length, 5, "round the footprint");
+  // A half-written piece waits.
+  const half = previewFromCadText(`${head},{"key":"wardrobe","wall":"E`)!;
+  assert.equal(half.steps.length, rooms.steps.length);
+  assert.ok(previewFromCadText(`${head},{"key":"wardrobe","wall":"E"}`)!.steps.length > rooms.steps.length);
+});

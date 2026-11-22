@@ -9,7 +9,7 @@ Every endpoint is registered in one table, `API_ROUTES` in `server/http/routes.t
 | Endpoint | What it does |
 | --- | --- |
 | `POST /api/chat` | The diagram canvas's streaming conversation, with tool calls |
-| `POST /api/ppt-ai` | Non-streaming model calls, shared by interior design, slides and the free canvas |
+| `POST /api/ppt-ai` | Non-streaming model calls, shared by interior design, slides and Free drawing |
 | `POST /api/ppt-ai/stream` | The streaming version of the above |
 | `POST /api/cad/recognize` | Recognise walls and openings from an existing floor plan (needs Python) |
 | `POST /api/cad/qa` | The floor plan's delivery check (needs a browser) |

@@ -95,11 +95,13 @@ function slotBesideLineage(
   lineageId: string,
   width: number,
   height: number,
+  /** A source picture not tagged with the lineage yet (an edit tags it as it lands). */
+  sourceId?: string,
 ): { x: number; y: number } | null {
   const images = api
     .getSceneElements()
     .filter((el) => el.type === "image") as unknown as ExcalidrawImageElement[];
-  const members = images.filter((el) => lineageIdOf(el) === lineageId);
+  const members = images.filter((el) => lineageIdOf(el) === lineageId || el.id === sourceId);
   if (members.length === 0) return null;
 
   const last = members.reduce((a, b) => (a.x + a.width >= b.x + b.width ? a : b));
@@ -118,6 +120,22 @@ function slotBesideLineage(
 }
 
 /**
+ * Where a picture of this size will go and how big it will stand there: what
+ * insertGeneratedImage does with it, known before the picture exists (the
+ * drawing placeholder stands there while it is generated).
+ */
+export function plannedPlacement(
+  api: ExcalidrawImperativeAPI,
+  naturalSize: { width: number; height: number },
+  lineageId?: string,
+  sourceId?: string,
+): { x: number; y: number; width: number; height: number } {
+  const { width, height } = fitWithinMax(naturalSize.width, naturalSize.height, MAX_PLACED_DIMENSION);
+  const { x, y } = ((lineageId || sourceId) && slotBesideLineage(api, lineageId ?? "", width, height, sourceId)) || nextGridSlot(api);
+  return { x, y, width, height };
+}
+
+/**
  * Drops a newly generated image onto the board as a new element and selects
  * it so it's immediately available for another annotated edit.
  *
@@ -133,7 +151,6 @@ export async function insertGeneratedImage(
 ): Promise<InsertGeneratedImageResult> {
   const dataUrl = await toDataUrl(imageUrl);
   const naturalSize = await loadImageSize(dataUrl);
-  const { width, height } = fitWithinMax(naturalSize.width, naturalSize.height, MAX_PLACED_DIMENSION);
 
   const fileId = `canvas-image-${Date.now()}-${Math.random().toString(36).slice(2)}` as unknown as FileId;
   api.addFiles([
@@ -145,8 +162,7 @@ export async function insertGeneratedImage(
     },
   ]);
 
-  const { x, y } =
-    (options?.lineageId && slotBesideLineage(api, options.lineageId, width, height)) || nextGridSlot(api);
+  const { x, y, width, height } = plannedPlacement(api, naturalSize, options?.lineageId);
 
   const lineageId = options?.lineageId || makeLineageId();
   const note = options?.note?.trim();

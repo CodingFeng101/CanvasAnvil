@@ -268,7 +268,17 @@ export class CadDesignSession {
     const key = planKey(plan);
     if (key === preview.key) return;
     preview.key = key;
-    try { bridge.replacePlan(plan); } catch (reason) { console.warn('[CAD] Streaming preview failed', reason); }
+    // Furniture as the designer makes it (type, height, colour), at the size the layout gave it.
+    const furnished = plan.furniture.length ? {
+      ...plan,
+      furniture: plan.furniture.map(item => {
+        try {
+          const size = { ...(typeof item.w === 'number' ? { w: item.w } : {}), ...(typeof item.d === 'number' ? { d: item.d } : {}) };
+          return bridge.makeFurn(item.key, item.x, item.y, Number(item.rot) || 0, size) as SinglePlan['furniture'][number];
+        } catch { return item; }
+      }),
+    } : plan;
+    try { bridge.replacePlan(furnished); } catch (reason) { console.warn('[CAD] Streaming preview failed', reason); }
     // Every step in and the rooms named: the whole plan, centred.
     if (preview.shown >= steps.length && plan.rooms.length && plan.nodes.length) void bridge.viewTo(boundsOf(plan.nodes.map(node => [node.x, node.y])), 420);
   }

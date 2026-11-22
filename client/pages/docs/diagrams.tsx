@@ -116,7 +116,7 @@ function Architecture({ lang }: { lang: UiLanguage }) {
             <Chip color="--viz-diagram">{zh ? "图表绘制" : "Diagram"}</Chip>
             <Chip color="--viz-cad">{zh ? "室内设计" : "Interior"}</Chip>
             <Chip color="--viz-ppt">PPT</Chip>
-            <Chip color="--viz-canvas">{zh ? "自由画布" : "Free canvas"}</Chip>
+            <Chip color="--viz-canvas">{zh ? "自由绘制" : "Free drawing"}</Chip>
           </div>
           <div className="mt-2 flex flex-wrap gap-1.5 text-muted-foreground">
             <Chip>app/ {zh ? "外壳与设置" : "shell, settings"}</Chip>

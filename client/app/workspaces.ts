@@ -1,5 +1,5 @@
 import { lazy, type ComponentType, type LazyExoticComponent } from "react";
-import { FileCode, Layers, Paintbrush, Presentation, type LucideIcon } from "lucide-react";
+import { House, Layers, Paintbrush, Presentation, type LucideIcon } from "lucide-react";
 import type { MessageKey } from "@/shared/i18n";
 
 /**
@@ -36,7 +36,7 @@ export const WORKSPACES: WorkspaceDescriptor[] = [
   {
     id: "cad",
     labelKey: "nav.cad",
-    icon: FileCode,
+    icon: House,
     Component: lazy(() =>
       import("@/workspaces/cad/CadWorkspace").then((m) => ({ default: m.CadWorkspace })),
     ),

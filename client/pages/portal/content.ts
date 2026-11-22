@@ -21,7 +21,7 @@ export const CANVAS: Record<PortalWorkspace, { name: L; swatch: string; ink: str
   diagram: { name: { zh: "图表绘制", en: "Diagram" }, swatch: "#bcd1ca", ink: "#629987" },
   cad: { name: { zh: "室内设计", en: "Interior Design" }, swatch: "#e3dacc", ink: "#a8825c" },
   ppt: { name: { zh: "PPT 演示", en: "PPT" }, swatch: "#ebc9b7", ink: "#d97757" },
-  canvas: { name: { zh: "自由画布", en: "Free Canvas" }, swatch: "#cbcadb", ink: "#827dbd" },
+  canvas: { name: { zh: "自由绘制", en: "Free Drawing" }, swatch: "#cbcadb", ink: "#827dbd" },
 };
 export const CANVAS_ORDER: PortalWorkspace[] = ["diagram", "cad", "ppt", "canvas"];
 

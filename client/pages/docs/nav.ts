@@ -28,7 +28,7 @@ export const DOC_GROUPS: DocGroup[] = [
       { slug: "diagram", zh: "图表绘制", en: "Diagram" },
       { slug: "interior", zh: "室内设计", en: "Interior design" },
       { slug: "ppt", zh: "PPT 演示", en: "Slides" },
-      { slug: "canvas", zh: "自由画布", en: "Free canvas" },
+      { slug: "canvas", zh: "自由绘制", en: "Free drawing" },
     ],
   },
   {
