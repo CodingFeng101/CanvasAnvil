@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { PenLine } from "lucide-react";
+import { PencilMark } from "@/shared/ui/pencil";
 
 export interface WritingPage {
   title: string;
@@ -88,7 +88,7 @@ export function OutlineWriting({
       <div className="flex-1 overflow-y-auto px-8 pb-10">
         {lines.length === 0 && (
           <p className="py-6 text-sm text-muted-foreground">
-            <PenLine className="pen-bob mr-2 inline size-4 text-brand" />
+            <PencilMark size={18} className="pen-bob mr-2 inline align-baseline text-brand" />
             {tr("构思中…", "Thinking it through…")}
           </p>
         )}
@@ -101,7 +101,7 @@ export function OutlineWriting({
                   if (line.page !== pageIndex || (!written[index] && index !== penAt)) return null;
                   const pen = index === penAt && (!final || shown < total) ? (
                     <span ref={penRef} className="relative inline-block w-0 align-baseline">
-                      <PenLine aria-hidden className="pen-bob absolute -top-[15px] left-0.5 size-[18px] text-brand" strokeWidth={1.8} />
+                      <PencilMark size={20} className="pen-bob absolute -top-[17px] left-0 text-brand drop-shadow-sm" />
                     </span>
                   ) : null;
                   return line.kind === "title" ? (

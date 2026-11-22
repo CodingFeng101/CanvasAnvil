@@ -1,9 +1,9 @@
-import { PenLine } from "lucide-react";
 import type { CreationProgress } from "@/workspaces/ppt/canvas/lib/creation-machine";
 import { MODEL_CONCURRENCY } from "@/workspaces/ppt/canvas/lib/constants";
 import type { CreationStep, SlideData } from "@/workspaces/ppt/canvas/types";
 import { cn } from "@/shared/lib/utils";
 import { PenSketch } from "@/shared/ui/pen-sketch";
+import { PencilMark } from "@/shared/ui/pencil";
 
 interface GenerationProgressProps {
   step: CreationStep;
@@ -42,20 +42,20 @@ export function GenerationProgress({ progress, tr, slides, images }: GenerationP
             const url = images[slide.id];
             const busy = !url && drawing.has(slide.id);
             // Each page's pen at its own point in the motion, not all in step.
-            const phase = `${-((index * 0.7) % 3.2)}s`;
+            const phase = `${-((index * 2.3) % 12)}s`;
             return (
               <figure key={slide.id || index} className="min-w-0">
                 <div className={cn("relative aspect-video rounded-lg", url ? "" : busy ? "bg-foreground/[0.035]" : "bg-foreground/[0.02]")}>
                   {url ? (
                     <>
                       <img src={url} alt="" className="pen-reveal h-full w-full rounded-lg object-cover shadow-soft" />
-                      <PenLine aria-hidden className="pen-ride pointer-events-none absolute -ml-1 -mt-5 size-5 text-brand drop-shadow-sm" strokeWidth={1.8} />
+                      <PencilMark size={22} className="pen-ride pointer-events-none absolute -ml-[1.5px] -mt-[19px] text-brand drop-shadow-sm" />
                     </>
                   ) : (
                     <>
                       {/* Being drawn: the pen sketches the page (the title is under it); waiting: the title. */}
                       {busy ? (
-                        <PenSketch motif="slide" phase={phase} />
+                        <PenSketch phase={phase} scene={index} />
                       ) : (
                         <span className="absolute inset-0 flex items-center justify-center px-6 text-center text-[13px] leading-snug text-muted-foreground/45">
                           <span className="line-clamp-3">{slide.title}</span>

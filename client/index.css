@@ -450,17 +450,124 @@ html[data-reduce-motion] .icon-busy {
   92% { left: 100%; top: 40%; opacity: 1; }
   100% { left: 100%; top: 40%; opacity: 0; }
 }
+/* The seaside town the pen draws (shared/ui/pen-sketch.tsx): the beam sweeps, the boat sails, windows light up. */
+.town-beam {
+  transform-box: view-box;
+  transform-origin: 165px 40px;
+  animation: town-beam 5s ease-in-out infinite;
+}
+@keyframes town-beam {
+  0%, 100% { transform: rotate(-12deg); }
+  50% { transform: rotate(196deg); }
+}
+.town-boat {
+  animation: town-boat 18s linear infinite;
+}
+@keyframes town-boat {
+  from { transform: translateX(-30px); }
+  to { transform: translateX(230px); }
+}
+.town-window {
+  animation: town-window 4s ease-in-out infinite;
+}
+@keyframes town-window {
+  0%, 100% { opacity: 0.35; }
+  50% { opacity: 1; }
+}
+/* The desk by the window: steam rises, the curtain stirs, the cat's tail flicks, the lamp glows. */
+.desk-steam {
+  opacity: 0;
+  animation: desk-steam 3.2s ease-out infinite;
+}
+@keyframes desk-steam {
+  0% { transform: translateY(0); opacity: 0; }
+  30% { opacity: 0.85; }
+  100% { transform: translateY(-14px); opacity: 0; }
+}
+.desk-curtain {
+  transform-box: view-box;
+  transform-origin: 120px 12px;
+  animation: desk-curtain 5s ease-in-out infinite;
+}
+@keyframes desk-curtain {
+  0%, 100% { transform: skewX(0deg); }
+  50% { transform: skewX(-4deg); }
+}
+.desk-tail {
+  transform-box: view-box;
+  transform-origin: 139px 69px;
+  animation: desk-tail 4s ease-in-out infinite;
+}
+@keyframes desk-tail {
+  0%, 65%, 100% { transform: rotate(0deg); }
+  78% { transform: rotate(-20deg); }
+  90% { transform: rotate(6deg); }
+}
+.desk-glow {
+  animation: desk-glow 3s ease-in-out infinite;
+}
+@keyframes desk-glow {
+  0%, 100% { opacity: 0.3; }
+  50% { opacity: 0.55; }
+}
+/* The valley: the train runs through puffing, the signal blinks, the clouds drift. */
+.train-run {
+  animation: train-run 11s linear infinite;
+}
+@keyframes train-run {
+  from { transform: translateX(-80px); }
+  to { transform: translateX(210px); }
+}
+.train-puff {
+  transform-box: fill-box;
+  transform-origin: center;
+  opacity: 0;
+  animation: train-puff 1.5s ease-out infinite;
+}
+@keyframes train-puff {
+  0% { transform: translate(0, 0) scale(0.5); opacity: 0.9; }
+  100% { transform: translate(-10px, -16px) scale(1.7); opacity: 0; }
+}
+.train-signal {
+  animation: train-signal 1.8s steps(1) infinite;
+}
+@keyframes train-signal {
+  0% { fill: #cc5a4a; }
+  50% { fill: #9dae8b; }
+}
+.train-cloud {
+  animation: train-cloud 9s ease-in-out infinite alternate;
+}
+@keyframes train-cloud {
+  from { transform: translateX(0); }
+  to { transform: translateX(22px); }
+}
 @media (prefers-reduced-motion: reduce) {
-  .pen-bob, .pen-sketch, .frame-draw, .pen-reveal, .pen-ride { animation: none; }
+  .pen-bob, .pen-sketch, .frame-draw, .pen-reveal, .pen-ride, .town-beam, .town-boat, .town-window,
+  .desk-steam, .desk-curtain, .desk-tail, .desk-glow, .train-run, .train-puff, .train-signal, .train-cloud { animation: none; }
+  .desk-steam, .train-puff { opacity: 0.6; }
   .pen-ride { opacity: 0; }
 }
 html[data-reduce-motion] .pen-bob,
 html[data-reduce-motion] .pen-sketch,
 html[data-reduce-motion] .frame-draw,
 html[data-reduce-motion] .pen-reveal,
-html[data-reduce-motion] .pen-ride {
+html[data-reduce-motion] .pen-ride,
+html[data-reduce-motion] .town-beam,
+html[data-reduce-motion] .town-boat,
+html[data-reduce-motion] .town-window,
+html[data-reduce-motion] .desk-steam,
+html[data-reduce-motion] .desk-curtain,
+html[data-reduce-motion] .desk-tail,
+html[data-reduce-motion] .desk-glow,
+html[data-reduce-motion] .train-run,
+html[data-reduce-motion] .train-puff,
+html[data-reduce-motion] .train-signal,
+html[data-reduce-motion] .train-cloud {
   animation: none;
 }
+html[data-reduce-motion] .desk-steam,
+html[data-reduce-motion] .train-puff { opacity: 0.6; }
 html[data-reduce-motion] .pen-ride { opacity: 0; }
 
 /*

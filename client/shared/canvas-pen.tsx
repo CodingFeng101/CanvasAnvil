@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import type { PenPoint, PenStore } from "@/shared/pen-store";
+import { PencilGlyph } from "@/shared/ui/pencil";
 
 export { createPenStore, type PenPoint, type PenStore, type PenStroke } from "@/shared/pen-store";
 
@@ -23,15 +24,7 @@ const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v
 function PencilIcon() {
   return (
     <svg width="34" height="34" viewBox="-3 -31 34 34" className="absolute -left-[3px] -top-[31px] overflow-visible" aria-hidden>
-      <g transform="rotate(-45)">
-        {/* Point, wood, body, ferrule, eraser. */}
-        <path d="M0 0 L8 -3.6 L8 3.6 Z" fill="#e8c497" />
-        <path d="M0 0 L2.6 -1.2 L2.6 1.2 Z" fill="#3b3631" />
-        <rect x="8" y="-3.6" width="17" height="7.2" rx="0.6" fill="currentColor" />
-        <rect x="8" y="-3.6" width="17" height="2.4" fill="#ffffff" opacity="0.18" />
-        <rect x="25" y="-3.6" width="3.2" height="7.2" fill="#b9b4ab" />
-        <rect x="28.2" y="-3.6" width="3.4" height="7.2" rx="1.4" fill="#e58f8f" />
-      </g>
+      <PencilGlyph />
     </svg>
   );
 }

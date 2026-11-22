@@ -31,7 +31,7 @@ export function DrawingPlaceholder({ api, box }: { api: ExcalidrawImperativeAPI;
         className="drawing-sheet absolute overflow-hidden rounded-[6px] shadow-soft"
         style={{ left, top, width: box.width * view.zoom, height: box.height * view.zoom }}
       >
-        <PenSketch motif="picture" />
+        <PenSketch />
         <span className="absolute inset-x-0 bottom-2 text-center text-xs text-[#7a6f66]">
           {uiLang === "zh" ? "正在画…" : "Drawing…"}
         </span>
