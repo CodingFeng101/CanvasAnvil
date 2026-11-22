@@ -104,11 +104,12 @@ export async function generateSummaryWithRetry(args: {
     return extractiveFallbackSummary(args.fallbackSource, args.maxChars)
 }
 
-export async function summarizeBlockMethod(args: { model: any; text: string }): Promise<string> {
+export async function summarizeBlockMethod(args: { model: any; text: string; concurrency?: number }): Promise<string> {
+    const limit = args.concurrency ?? SUMMARY_CONCURRENCY
     const chunks = splitByApproxTokens(args.text, CHUNK_TOKEN_TARGET)
     const partial = await runWithConcurrency(
         chunks,
-        SUMMARY_CONCURRENCY,
+        limit,
         (chunk) => summarizeChunk(args.model, chunk),
     )
     const merged = partial.filter(Boolean).join("\n")
@@ -123,11 +124,12 @@ export async function summarizeBlockMethod(args: { model: any; text: string }): 
     })
 }
 
-export async function summarizeRecursiveMethod(args: { model: any; text: string }): Promise<string> {
+export async function summarizeRecursiveMethod(args: { model: any; text: string; concurrency?: number }): Promise<string> {
+    const limit = args.concurrency ?? SUMMARY_CONCURRENCY
     const baseChunks = splitByApproxTokens(args.text, 3000)
     let level = await runWithConcurrency(
         baseChunks,
-        SUMMARY_CONCURRENCY,
+        limit,
         (chunk) => summarizeChunk(args.model, chunk),
     )
     level = level.filter(Boolean)
@@ -139,7 +141,7 @@ export async function summarizeRecursiveMethod(args: { model: any; text: string 
         }
         level = await runWithConcurrency(
             groups,
-            SUMMARY_CONCURRENCY,
+            limit,
             async (group) =>
                 generateSummaryWithRetry({
                     model: args.model,

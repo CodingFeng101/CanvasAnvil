@@ -18,6 +18,8 @@ Theme (light / dark / system), text size, density, conversation width, serif or 
 
 Whether the canvas opens after generating, how much room it takes, whether the minimap shows.
 
+Two concurrency numbers too: slides drawn at once in PPT (5 by default), and pieces of a long file summarized at once in the diagram chat (50 by default). Higher is faster; lower them if your provider limits bursts and pages fail.
+
 ## Notifications
 
 A system notification and a chime when a task finishes, with a choice of sound and volume. Handy for wandering off while a deck or a floor plan is generated.

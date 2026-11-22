@@ -73,7 +73,7 @@ import {
 import type { WorkspaceId } from "@/app/workspaces";
 import { setUiLanguage, useUiLanguage, type UiLanguage } from "@/shared/i18n";
 import { cn } from "@/shared/lib/utils";
-import { resetPreferences, setPreference, usePreferences, type ChimeKind, type Preferences } from "@/shared/preferences";
+import { FILE_CONCURRENCY_CHOICES, PPT_CONCURRENCY_CHOICES, resetPreferences, setPreference, usePreferences, type ChimeKind, type Preferences } from "@/shared/preferences";
 import { CHIME_KINDS, notificationsSupported, playChime, requestNotificationPermission } from "@/shared/task-done";
 import { useTheme, type Theme } from "@/shared/theme";
 import { listedWorks } from "@/shared/works/works-index";
@@ -969,6 +969,38 @@ function SettingsPanel({ initial, focus, onClose }: { initial: SectionId; focus?
       control: <Toggle label={zh ? "思考过程保持展开" : "Keep thinking open"} checked={prefs.thinkingOpen} onChange={pref("thinkingOpen")} />,
       keywords: "thinking reasoning 思考 深度",
     },
+    {
+      section: "canvas",
+      id: "pptConcurrency",
+      title: zh ? "PPT 同时生成几页" : "Slides drawn at once",
+      desc: zh
+        ? "生成整套、逐页美化和一次改多页时，同时发出几页的请求。多了更快，但服务商可能限流报错；出错多就调小。"
+        : "How many slides are requested at once when making a deck, restyling one or editing several pages. More is faster, but a provider may turn bursts away; lower it if pages fail.",
+      control: (
+        <Segmented<string>
+          value={String(prefs.pptConcurrency)}
+          onChange={(value) => setPreference("pptConcurrency", Number(value))}
+          options={PPT_CONCURRENCY_CHOICES.map((n) => ({ value: String(n), label: String(n) }))}
+        />
+      ),
+      keywords: "concurrency parallel 并发 同时 速度 限流",
+    },
+    {
+      section: "canvas",
+      id: "fileConcurrency",
+      title: zh ? "读参考文件时同时摘要几段" : "File pieces read at once",
+      desc: zh
+        ? "图表里上传的长文件会切成小段分别摘要，这里定同时摘要几段。服务商限流时调小。"
+        : "A long file sent in the diagram chat is cut into pieces and each is summarized; this is how many at once. Lower it if your provider limits bursts.",
+      control: (
+        <Segmented<string>
+          value={String(prefs.fileConcurrency)}
+          onChange={(value) => setPreference("fileConcurrency", Number(value))}
+          options={FILE_CONCURRENCY_CHOICES.map((n) => ({ value: String(n), label: String(n) }))}
+        />
+      ),
+      keywords: "concurrency parallel 并发 文件 摘要 限流",
+    },
     // Notifications
     {
       section: "notifications",
@@ -1110,7 +1142,6 @@ function SettingsPanel({ initial, focus, onClose }: { initial: SectionId; focus?
         ["newline", zh ? "换行" : "New line", prefs.sendKey === "enter" ? ["Shift", "Enter"] : ["Enter"]],
         ["upload", zh ? "添加图片或文件（输入框里）" : "Add files or photos (in the input)", [mod, "U"]],
         ["accept", zh ? "填入输入框里的灰色建议" : "Take the grey suggestion in the input", ["Tab"]],
-        ["search", zh ? "搜索作品" : "Search works", [mod, "K"]],
         ["move", zh ? "上下移动侧栏里选中的作品" : "Move the focused work in the sidebar", ["Alt", "↑ / ↓"]],
         ["close", zh ? "关闭弹窗" : "Close a dialog", ["Esc"]],
       ] as const

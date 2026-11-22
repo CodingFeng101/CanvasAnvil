@@ -6,43 +6,54 @@ type ReviseArgs = {
   initial: CadDesign;
   issuesOf(plan: InternalPlan): Promise<DesignIssue[]>;
   /** cad_ops, a HouseSpec or a spec patch, as the session's apply takes it. */
-  askModel(issues: DesignIssue[], summary: string): Promise<PlanOp[] | HouseSpec | { patch: unknown[] }>;
+  /** `missed`: the last round left as many errors and was undone, so a different fix is wanted. */
+  askModel(issues: DesignIssue[], summary: string, missed: boolean): Promise<PlanOp[] | HouseSpec | { patch: unknown[] }>;
   apply(output: PlanOp[] | HouseSpec | { patch: unknown[] }, current: CadDesign): Promise<CadDesign>;
   maxRounds?: number;
 };
-/** The designer's delivery gate is 0 errors and 0 warnings; an error weighs more than any number of warnings. */
-const open = (issues: DesignIssue[]) => issues.filter(issue => issue.level === 'error' || issue.level === 'warn');
-const score = (issues: DesignIssue[]) => issues.reduce((sum, issue) => sum + (issue.level === 'error' ? 1000 : issue.level === 'warn' ? 1 : 0), 0);
+/**
+ * Errors must go: the design cannot be confirmed (nor its deliverables exported) while any is
+ * left. Warnings are acceptable, so they are neither sent nor waited for.
+ */
+const errorsOf = (issues: DesignIssue[]) => issues.filter(issue => issue.level === 'error');
 export const MAX_REVISE_ROUNDS = 6;
+/** Rounds in a row that may fail to take an error away before giving up: a fix often needs a second go. */
+const MAX_MISSES = 2;
 
-/** Ask the model to fix the designer's errors and warnings until none are left, a round makes nothing better, or the rounds run out. */
+/**
+ * Ask the model to fix the designer's errors until none are left or the rounds run out. A round
+ * is kept when it leaves fewer errors (more warnings are fine); one that does not is undone and
+ * the model is asked again from the best plan, up to MAX_MISSES times in a row.
+ */
 export async function reviseUntilClean(args: ReviseArgs): Promise<{ design: CadDesign; issues: DesignIssue[]; rounds: number; rolledBack: boolean }> {
   let best = structuredClone(args.initial);
   let issues = await args.issuesOf(best.plan);
-  let current = score(issues);
   let rounds = 0;
+  let misses = 0;
+  let rolledBack = false;
   const maxRounds = Math.max(0, Math.min(MAX_REVISE_ROUNDS, Math.floor(args.maxRounds ?? MAX_REVISE_ROUNDS)));
-  while (current > 0 && rounds < maxRounds) {
-    const pending = open(issues);
-    const output = await args.askModel(pending, issueSummary(best.plan, pending));
+  while (errorsOf(issues).length > 0 && rounds < maxRounds && misses < MAX_MISSES) {
+    const pending = errorsOf(issues);
+    const output = await args.askModel(pending, issueSummary(best.plan, pending), misses > 0);
     rounds++;
     try {
       const candidate = await args.apply(output, structuredClone(best));
       const nextIssues = await args.issuesOf(candidate.plan);
-      const nextScore = score(nextIssues);
-      const errorCount = issues.filter(issue => issue.level === 'error').length;
-      const nextCount = nextIssues.filter(issue => issue.level === 'error').length;
-      if (nextScore >= current || nextCount > errorCount) {
-        const restoredIssues = await args.issuesOf(best.plan);
-        return { design: best, issues: restoredIssues, rounds, rolledBack: true };
+      if (errorsOf(nextIssues).length < pending.length) {
+        best = structuredClone(candidate);
+        issues = nextIssues;
+        misses = 0;
+        rolledBack = false;
+        continue;
       }
-      best = structuredClone(candidate);
-      issues = nextIssues;
-      current = nextScore;
+      // No better: back to the best plan, and try again from it.
+      issues = await args.issuesOf(best.plan);
+      misses++;
+      rolledBack = true;
     } catch (reason) {
       await args.issuesOf(best.plan);
       throw reason;
     }
   }
-  return { design: best, issues, rounds, rolledBack: false };
+  return { design: best, issues, rounds, rolledBack };
 }

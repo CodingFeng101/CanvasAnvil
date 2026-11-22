@@ -36,12 +36,13 @@ var CadKit = (() => {
   // client/workspaces/cad/lib/design/auto-nudge.ts
   var STEPS = [25, 50, 100, 150, 200, 300, 400];
   var DIRECTIONS = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+  var SHRINKS = [0.95, 0.9, 0.85, 0.8];
   var MAX_PASSES = 8;
   var score = (issues) => ({
     errors: issues.filter((issue) => issue.level === "error").length,
     warnings: issues.filter((issue) => issue.level === "warn").length
   });
-  var better = (a, b) => a.errors < b.errors && a.warnings <= b.warnings;
+  var better = (a, b) => a.errors < b.errors || a.errors === b.errors && a.warnings < b.warnings;
   function nudgeFurniture(start, issuesOf) {
     let plan = structuredClone(start);
     let issues = issuesOf(plan);
@@ -53,20 +54,37 @@ var CadKit = (() => {
       ids.sort((a, b) => Number(byId.get(a)?.key === "curtain") - Number(byId.get(b)?.key === "curtain"));
       let improved = false;
       for (const id of ids) {
-        const index2 = plan.furniture.findIndex((item) => item.id === id);
+        const index2 = plan.furniture.findIndex((item2) => item2.id === id);
         if (index2 < 0) continue;
+        const fixes = (next) => next.errors < current.errors;
+        const pick2 = (best2, candidate) => {
+          const nextIssues = issuesOf(candidate);
+          const next = score(nextIssues);
+          return fixes(next) && (!best2 || better(next, best2.score)) ? { plan: candidate, score: next, issues: nextIssues } : best2;
+        };
         let best;
         for (const step of STEPS) {
           for (const [dx, dy] of DIRECTIONS) {
             const candidate = structuredClone(plan);
-            const item = candidate.furniture[index2];
-            item.x += dx * step;
-            item.y += dy * step;
-            const nextIssues = issuesOf(candidate);
-            const next = score(nextIssues);
-            if (better(next, best?.score ?? current)) best = { plan: candidate, score: next, issues: nextIssues };
+            const item2 = candidate.furniture[index2];
+            item2.x += dx * step;
+            item2.y += dy * step;
+            best = pick2(best, candidate);
           }
           if (best) break;
+        }
+        const item = plan.furniture[index2];
+        if (!best && typeof item.w === "number" && typeof item.d === "number") {
+          for (const share of SHRINKS) {
+            for (const [sw, sd] of [[share, 1], [1, share], [share, share]]) {
+              const candidate = structuredClone(plan);
+              const piece = candidate.furniture[index2];
+              piece.w = Math.round(item.w * sw);
+              piece.d = Math.round(item.d * sd);
+              best = pick2(best, candidate);
+            }
+            if (best) break;
+          }
         }
         if (best) {
           plan = best.plan;

@@ -35,8 +35,6 @@ import {
     ChevronUp,
     Copy,
     Cpu,
-    FileCode,
-    FileText,
     ListPlus,
     PenLine,
     Pencil,
@@ -44,13 +42,13 @@ import {
     Shapes,
     X,
 } from "lucide-react"
-import Image from "@/shared/ui/image"
 import type { MutableRefObject } from "react"
 import { Fragment, useCallback, useEffect, useRef, useState } from "react"
 import ReactMarkdown from "react-markdown"
 import { SmoothText } from "@/shared/chat/smooth-text"
 import {
     ApplyCodeButton,
+    MessageAttachments,
     Reasoning,
     ReasoningContent,
     ReasoningTrigger,
@@ -784,10 +782,19 @@ export function ChatMessageDisplay({
                                                 (group, groupIndex) => {
                                                     if (consumed.has(groupIndex)) return null
                                                     if (group.type === "sketch") {
+                                                        // The text read out of each file rides in the user's message just before.
+                                                        const asked = messages.slice(0, messageIndex).reverse().find((m) => m.role === "user")
+                                                        const contents = asked
+                                                            ? extractFileSectionsFromText(getMessageTextContent(asked)).map((section) => ({
+                                                                  name: String(section.filename ?? ""),
+                                                                  text: String(section.content ?? ""),
+                                                              }))
+                                                            : []
                                                         return (
                                                             <PrepSteps
                                                                 key={`${message.id}-sketch-${group.startIndex}`}
                                                                 data={((group.parts[0] as any).data ?? {}) as PrepData}
+                                                                contents={contents}
                                                             />
                                                         )
                                                     }
@@ -894,72 +901,19 @@ export function ChatMessageDisplay({
                                                             {message.role === "user" && (
                                                                 <MessageReferences references={sentReferences} className="mb-2" />
                                                             )}
-                                                            {message.role === "user" &&
-                                                                (attachmentParts.length > 0 ||
-                                                                    fileSections.length >
-                                                                        0) && (
-                                                                    <div className="mb-2 flex justify-end">
-                                                                        <div className="flex flex-wrap gap-2 max-w-[85%]">
-                                                                            {attachmentParts.map((part, partIndex) => {
-                                                                                const url =
-                                                                                    (part as any).url ||
-                                                                                    (part as any).image ||
-                                                                                    (part as any).image_url?.url
-                                                                                if (!url) return null
-                                                                                return (
-                                                                                    <Image
-                                                                                        key={`${message.id}-att-${group.startIndex}-${partIndex}`}
-                                                                                        src={url}
-                                                                                        width={96}
-                                                                                        height={96}
-                                                                                        alt="Uploaded image"
-                                                                                        className="rounded-md border border-border"
-                                                                                        style={{ objectFit: "cover" }}
-                                                                                    />
-                                                                                )
-                                                                            })}
-                                                                            {fileSections.map(
-                                                                                (
-                                                                                    section,
-                                                                                    idx,
-                                                                                ) => {
-                                                                                    const charDisplay =
-                                                                                        section.charCount &&
-                                                                                        section.charCount >=
-                                                                                            1000
-                                                                                            ? `${(section.charCount / 1000).toFixed(1)}k`
-                                                                                            : section.charCount
-                                                                                    return (
-                                                                                        <div
-                                                                                            key={`${message.id}-file-top-${group.startIndex}-${idx}`}
-                                                                                            className="inline-flex items-center gap-2 rounded-md border border-border/60 bg-muted/35 px-2.5 py-1.5"
-                                                                                        >
-                                                                                            {section.fileType ===
-                                                                                            "pdf" ? (
-                                                                                                <FileText className="h-4 w-4 text-destructive" />
-                                                                                            ) : (
-                                                                                                <FileCode className="h-4 w-4 text-primary-strong" />
-                                                                                            )}
-                                                                                            <span className="text-xs font-medium leading-none">
-                                                                                                {
-                                                                                                    section.filename
-                                                                                                }
-                                                                                            </span>
-                                                                                            {charDisplay ? (
-                                                                                                <span className="text-[10px] text-muted-foreground leading-none">
-                                                                                                    {
-                                                                                                        charDisplay
-                                                                                                    }{" "}
-                                                                                                    chars
-                                                                                                </span>
-                                                                                            ) : null}
-                                                                                        </div>
-                                                                                    )
-                                                                                },
-                                                                            )}
-                                                                        </div>
-                                                                    </div>
-                                                                )}
+                                                            {message.role === "user" && (
+                                                                <MessageAttachments
+                                                                    images={attachmentParts
+                                                                        .map((part: any) => ({ url: part.url || part.image || part.image_url?.url }))
+                                                                        .filter((image: { url?: string }) => !!image.url)}
+                                                                    files={fileSections.map((section) => ({
+                                                                        filename: section.filename,
+                                                                        fileType: section.fileType,
+                                                                        charCount: section.charCount,
+                                                                    }))}
+                                                                    className="mb-2"
+                                                                />
+                                                            )}
 
                                                         {hasTextContent || message.role !== "user" ? (
                                                             <div className={message.role === "user" ? "flex flex-col items-end gap-1.5" : ""}>
@@ -969,12 +923,11 @@ export function ChatMessageDisplay({
                                                                         <button
                                                                             type="button"
                                                                             onClick={() =>
+                                                                                // What the user typed, without the text read out of attached files.
                                                                                 copyMessageToClipboard(
                                                                                     message.id,
-                                                                                    userMessageText ||
-                                                                                        getUserOriginalText(
-                                                                                            message,
-                                                                                        ),
+                                                                                    stripFileSectionsFromText(userMessageText).trim() ||
+                                                                                        getUserOriginalText(message),
                                                                                 )
                                                                             }
                                                                             className="p-1.5 rounded-lg transition-[color,background-color,opacity,transform] duration-fast ease-out-soft active:scale-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/30 text-muted-foreground/70 hover:text-foreground hover:bg-accent"

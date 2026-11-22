@@ -1,6 +1,7 @@
 import { usePendingPrompt } from "@/shared/pending-prompt";
 import { peekPendingReference } from "@/shared/references/pending";
 import { PptFlowSteps } from "@/workspaces/ppt/chat/PptFlowSteps";
+import { PptKindQuestion } from "@/workspaces/ppt/chat/PptKindQuestion";
 import {
   IDLE_ACTIVITY,
   applyActivity,
@@ -36,8 +37,11 @@ import { HistoryDialog, HistoryItem } from '@/shared/chat';
 import { ResetWarningModal } from '@/shared/chat';
 import { t, useUiLanguage } from "@/shared/i18n";
 import {
+  askKindText,
   detectCreationKind,
   isPdfName,
+  needsKindChoice,
+  readAskKind,
   type CreationKind,
   type CreationRequest,
   type CreationResult,
@@ -339,26 +343,66 @@ const getPptTag = (slideId: string, title: string, kind: "outline" | "slide_imag
     }
   };
 
+  /**
+   * Files sent without a word that include a PDF, waiting for the user to say what they are for
+   * (restyle the PDF, or make a deck from them). Only in memory: a reload asks for them again.
+   */
+  const [kindChoiceFiles, setKindChoiceFiles] = useState<File[] | null>(null);
+
   /** The first message of a deck: hand it to the canvas and report how it went. */
   const startCreation = async () => {
     const text = draftText.trim();
-    const pdf = files.find((f) => isPdfName(f.name));
-    const kind: CreationKind = creationKind === "beautify" && !pdf ? "idea" : creationKind;
-    const requestFiles = kind === "beautify" ? [pdf as File] : files.filter((f) => !f.type.startsWith("image/"));
-    // A referenced design's pictures: placed on the slides that talk about them once the outline exists.
-    const pictures = files.filter((f) => f.type.startsWith("image/"));
-    if ((!text && requestFiles.length === 0) || isLoading || !onStartCreation) return;
+    if ((!text && files.length === 0) || isLoading || !onStartCreation) return;
+    if (needsKindChoice(text, draftFileNames)) {
+      // Nothing said: ask rather than guess. The files show as sent (a referenced work as its card).
+      const sent = await fileLinesOf(files.filter((f) => !f.type.startsWith("image/")));
+      setMessages((prev) => [...prev, { role: "user", content: sent }, { role: "assistant", content: askKindText({}) }]);
+      setKindChoiceFiles(files);
+      setPptInputSegments([{ type: "text", text: "" }]);
+      setPptClearTick((x) => x + 1);
+      setFiles([]);
+      return;
+    }
+    if (text && kindChoiceFiles && files.length === 0) {
+      // The question answered in words: the waiting files go with them.
+      const chosen = kindChoiceFiles;
+      const kind = detectCreationKind(text, chosen.map((f) => f.name));
+      answerKindQuestion(kind === "beautify" ? "beautify" : "idea");
+      await runCreation(kind, text, chosen, "text");
+      return;
+    }
+    await runCreation(creationKind, text, files, "all");
+  };
 
-    const working = {
-      idea: trText("正在根据主题写提纲…", "Writing an outline from your topic..."),
-      outline: trText("正在把提纲整理成逐页内容…", "Turning your outline into slides..."),
-      beautify: trText("正在逐页换风格，文字和数据保持不变…", "Restyling each page; text and numbers stay as they are..."),
-    }[kind];
-    // Text files go in whole (a referenced work's text carries the marker the transcript shows as
-    // a canvas card); a PDF only by name.
-    const fileLines = (
+  /** Marks the waiting question with what was picked; the files it held are handed over. */
+  const answerKindQuestion = (kind: "beautify" | "idea") => {
+    setKindChoiceFiles(null);
+    setMessages((prev) => {
+      let index = -1;
+      prev.forEach((m, i) => {
+        const ask = readAskKind(m.content);
+        if (ask && !ask.picked) index = i;
+      });
+      if (index < 0) return prev;
+      const next = prev.slice();
+      next[index] = { ...prev[index], content: askKindText({ picked: kind }) };
+      return next;
+    });
+  };
+
+  /** The answer to "restyle it or make a deck from it?", by button. */
+  const pickKind = (kind: "beautify" | "idea") => {
+    const chosen = kindChoiceFiles;
+    if (!chosen || isLoading) return;
+    answerKindQuestion(kind);
+    void runCreation(kind, "", chosen, "none");
+  };
+
+  /** Text files go in whole (a referenced work's text carries the marker the transcript shows as a canvas card); a PDF only by name. */
+  const fileLinesOf = async (list: File[]) =>
+    (
       await Promise.all(
-        requestFiles.map(async (f) =>
+        list.map(async (f) =>
           isPdfName(f.name)
             ? `[PDF: ${f.name}]`
             : f.type === "text/markdown" || f.type === "text/plain"
@@ -367,13 +411,34 @@ const getPptTag = (slideId: string, title: string, kind: "outline" | "slide_imag
         ),
       )
     ).join("\n\n");
-    const userContent = [text, fileLines].filter(Boolean).join("\n\n");
+
+  /**
+   * `echo`: what of the request shows as the user's message: all of it, only the words (the files
+   * are already there, above the question they answered), or nothing (a button answered it).
+   */
+  const runCreation = async (requested: CreationKind, text: string, all: File[], echo: "all" | "text" | "none") => {
+    if (!onStartCreation) return;
+    const pdf = all.find((f) => isPdfName(f.name));
+    const kind: CreationKind = requested === "beautify" && !pdf ? "idea" : requested;
+    const requestFiles = kind === "beautify" ? [pdf as File] : all.filter((f) => !f.type.startsWith("image/"));
+    // A referenced design's pictures: placed on the slides that talk about them once the outline exists.
+    const pictures = all.filter((f) => f.type.startsWith("image/"));
+    if (!text && requestFiles.length === 0) return;
+
+    const working = {
+      idea: trText("正在根据主题写提纲…", "Writing an outline from your topic..."),
+      outline: trText("正在把提纲整理成逐页内容…", "Turning your outline into slides..."),
+      beautify: trText("正在逐页换风格，文字和数据保持不变…", "Restyling each page; text and numbers stay as they are..."),
+    }[kind];
+    const userContent = echo === "all" ? [text, await fileLinesOf(requestFiles)].filter(Boolean).join("\n\n") : text;
     // A topic or an outline becomes a deck step by step: one message of steps that follows the canvas.
     const flowStart = kind === "beautify" ? null : flowText(newFlow(kind === "idea" ? requestFiles.length : 0));
-    setMessages((prev) => [...prev, { role: "user", content: userContent }, { role: "assistant", content: flowStart ?? working }]);
-    setPptInputSegments([{ type: "text", text: "" }]);
-    setPptClearTick((x) => x + 1);
-    setFiles([]);
+    setMessages((prev) => [...prev, ...(echo !== "none" ? [{ role: "user" as const, content: userContent }] : []), { role: "assistant", content: flowStart ?? working }]);
+    if (echo !== "none") {
+      setPptInputSegments([{ type: "text", text: "" }]);
+      setPptClearTick((x) => x + 1);
+      setFiles([]);
+    }
     setIsLoading(true);
 
     let result: CreationResult;
@@ -464,6 +529,18 @@ const getPptTag = (slideId: string, title: string, kind: "outline" | "slide_imag
   };
 
   const renderSpecial = (text: string, index: number) => {
+    const ask = readAskKind(text);
+    if (ask) {
+      return (
+        <PptKindQuestion
+          state={ask}
+          canAct={!!kindChoiceFiles && stage === "start" && !isLoading}
+          expired={!kindChoiceFiles}
+          onPick={pickKind}
+          tr={trText}
+        />
+      );
+    }
     const flow = readFlow(text);
     if (!flow) return null;
     return (

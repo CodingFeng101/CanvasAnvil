@@ -278,9 +278,10 @@ export const PRESET_TEMPLATES: PresetTemplate[] = [
   { id: "preset-other-15", zhName: "典型应用案例", enName: "Case Study", path: "/templates/template_other_15.jpg", categoryId: "other" },
 ];
 
-/** Fan-out limits: the provider rejects larger bursts of per-slide calls. */
-export const MODEL_CONCURRENCY = 5;
-export const BEAUTIFY_CONCURRENCY = 5;
+/**
+ * Fan-out limit of the editable export. Slides drawn, restyled or edited at once follow the
+ * user's setting (pptConcurrency in shared/preferences).
+ */
 export const EDITABLE_EXPORT_CONCURRENCY = 3;
 /**
  * Pictures one chat message may carry into slide generation.

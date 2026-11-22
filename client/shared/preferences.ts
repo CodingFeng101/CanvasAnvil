@@ -48,6 +48,10 @@ export interface Preferences {
   density: "comfortable" | "compact";
   /** The language the AI is asked to reply in. */
   replyLanguage: "auto" | "zh" | "en";
+  /** Slides drawn (or restyled, or edited) at the same time. */
+  pptConcurrency: number;
+  /** Pieces of a reference file summarized at the same time while it is read. */
+  fileConcurrency: number;
 }
 
 export type ChimeKind = "soft" | "bell" | "marimba" | "chord" | "pop" | "drop";
@@ -72,7 +76,19 @@ export const DEFAULT_PREFERENCES: Preferences = {
   fontSize: "medium",
   density: "comfortable",
   replyLanguage: "auto",
+  pptConcurrency: 5,
+  fileConcurrency: 50,
 };
+
+/** The choices offered for each concurrency setting (Settings → Canvas). */
+export const PPT_CONCURRENCY_CHOICES = [1, 3, 5, 8, 10] as const;
+export const FILE_CONCURRENCY_CHOICES = [5, 10, 20, 50] as const;
+
+/** How many slides go at once: the setting, kept to a sane range. */
+export function pptConcurrency(): number {
+  const n = Math.round(current.pptConcurrency);
+  return Number.isFinite(n) ? Math.min(10, Math.max(1, n)) : DEFAULT_PREFERENCES.pptConcurrency;
+}
 
 const KEY = "CanvasAnvil-preferences-v1";
 const listeners = new Set<() => void>();

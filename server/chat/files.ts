@@ -12,7 +12,14 @@ import mammoth from "mammoth"
 export const MAX_FILE_SIZE = 2 * 1024 * 1024 // 2MB
 export const MAX_FILES = 5
 
+/** Pieces summarized at once while a file is read; the user may ask for fewer (Settings → Canvas). */
 export const SUMMARY_CONCURRENCY = 50
+
+/** The request's own limit, kept between 1 and SUMMARY_CONCURRENCY; the default when it has none. */
+export function summaryConcurrency(requested: unknown): number {
+    const n = Math.round(Number(requested))
+    return Number.isFinite(n) && n > 0 ? Math.min(SUMMARY_CONCURRENCY, n) : SUMMARY_CONCURRENCY
+}
 export const CHUNK_TOKEN_TARGET = 2500
 export const RECURSIVE_THRESHOLD_TOKENS = 50000
 

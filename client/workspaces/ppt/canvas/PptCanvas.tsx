@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback, useMemo, useReducer } from 'r
 import { useLatestRef } from "@/shared/lib/use-latest-ref";
 import { errorText, isRetryableBeautifyError } from "./lib/errors";
 import { runInParallel, sleep } from "./lib/concurrency";
+import { pptConcurrency } from "@/shared/preferences";
 import { parseJsonLoose } from "./lib/parse-json";
 import { extractPdfPagesAsImages, isPdfFile } from "./lib/deck-source";
 import { GenerationProgress } from "./views/GenerationProgress";
@@ -67,10 +68,8 @@ import { makeThumbnail } from "@/shared/works/thumbnail";
 import { useUiLanguage } from "@/shared/i18n";
 import { canvasAnvilToEditorSlide, editorSlideToExportPayload } from "@/features/ppt-editor";
 import {
-  BEAUTIFY_CONCURRENCY,
   BEAUTIFY_RETRY_BASE_DELAY_MS,
   BEAUTIFY_RETRY_MAX_ATTEMPTS,
-  MODEL_CONCURRENCY,
   UPLOADED_IMAGE_LIMIT,
 } from "@/workspaces/ppt/canvas/lib/constants";
 import {
@@ -935,7 +934,7 @@ export function PptCanvas({
     if (routedEditTasks.length > 0) {
       setIsApplyingEdits(true);
       try {
-        await runInParallel(routedEditTasks, MODEL_CONCURRENCY);
+        await runInParallel(routedEditTasks, pptConcurrency());
       } catch (e) {
         console.error("Failed to apply image edits", e);
       } finally {
@@ -1120,7 +1119,7 @@ export function PptCanvas({
     if (editTasks.length > 0) {
       setIsApplyingEdits(true);
       try {
-        await runInParallel(editTasks, MODEL_CONCURRENCY);
+        await runInParallel(editTasks, pptConcurrency());
       } catch (e) {
         console.error("Failed to apply image edits", e);
       } finally {
@@ -1706,7 +1705,7 @@ export function PptCanvas({
         }
       });
 
-      await runInParallel(tasks, BEAUTIFY_CONCURRENCY);
+      await runInParallel(tasks, pptConcurrency());
       dispatchCreation({ type: "finished" });
       onPptReadyChange?.(true);
       return { ok: true, count: slides.length, failed: failedCount };
@@ -1771,7 +1770,7 @@ export function PptCanvas({
         }
       });
 
-      await runInParallel(tasks, BEAUTIFY_CONCURRENCY);
+      await runInParallel(tasks, pptConcurrency());
       dispatchCreation({ type: "finished" });
       onPptReadyChange?.(true);
     } catch (e) {
@@ -1980,7 +1979,7 @@ export function PptCanvas({
              }
         });
 
-        await runInParallel(imageTasks, MODEL_CONCURRENCY);
+        await runInParallel(imageTasks, pptConcurrency());
         // The last page's pen sweep finishes before the deck replaces the grid.
         await sleep(1400);
 

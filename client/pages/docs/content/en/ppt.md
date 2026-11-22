@@ -23,7 +23,7 @@ The template sets the style and palette of the whole deck; each slide's layout i
 
 ## Generating
 
-All slides generate at once, up to five at a time, and a slide that fails is retried automatically. Afterwards any single slide can be revised without touching the others.
+All slides generate at once, up to five at a time by default (changeable in Settings), and a slide that fails is retried automatically. Afterwards any single slide can be revised without touching the others.
 
 ## Export
 

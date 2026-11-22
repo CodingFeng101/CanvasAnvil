@@ -32,7 +32,9 @@ const handElec = (plan: InternalPlan) => JSON.stringify(((plan as { elec?: Elec[
 /** The pen over the designer while a floor plan streams in: it draws each wall before the wall is in. */
 export const designerPen = createPenStore();
 
-const planKey = (plan: SinglePlan) => `${plan.walls.length}:${plan.rooms.length}:${plan.nodes.length}`;
+/** What a preview step changes: a step may add only a door, a window or a piece of furniture. */
+const planKey = (plan: SinglePlan) =>
+  `${plan.walls.length}:${plan.rooms.length}:${plan.nodes.length}:${plan.openings.length}:${plan.furniture.length}`;
 const boundsOf = (points: Point[]) => {
   const xs = points.map(([x]) => x);
   const ys = points.map(([, y]) => y);
@@ -694,9 +696,12 @@ export class CadDesignSession {
         initial: candidate,
         maxRounds: retry ? MAX_REVISE_ROUNDS - validationRounds : 0,
         issuesOf: async plan => { checkAbort(); live().replacePlan(plan); return live().runChecks(); },
-        askModel: async (issues, summary) => {
+        askModel: async (issues, summary, missed) => {
           checkAbort();
-          const correction = object(await retry!(JSON.stringify({ issues, requestedChanges: payload.type === 'cad_ops' ? payload.ops : payload.type === 'cad_spec_patch' ? payload.patch : undefined }), summary));
+          const note = missed
+            ? '上一轮的修改没有减少错误，已撤回。这次换一种改法：换个位置、缩小尺寸、换更小的型号，实在放不下就删掉这件。警告可以接受，只要把错误修掉。'
+            : '只需修掉这些错误；警告可以接受，不必为了它们改动别处。';
+          const correction = object(await retry!(JSON.stringify({ issues, note, requestedChanges: payload.type === 'cad_ops' ? payload.ops : payload.type === 'cad_spec_patch' ? payload.patch : undefined }), summary));
           checkAbort();
           if (correction.type === 'cad_spec_patch' && Array.isArray(correction.patch)) return { patch: correction.patch };
           if (correction.type !== 'cad_ops' || !Array.isArray(correction.ops)) throw new Error('设计器修复必须返回 cad_ops 或 cad_spec_patch / Designer repair requires cad_ops or cad_spec_patch');

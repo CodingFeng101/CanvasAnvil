@@ -37,6 +37,31 @@ export function detectCreationKind(text: string, fileNames: string[]): CreationK
   return body.split(/\r?\n/).filter((line) => line.trim()).length >= 3 ? "outline" : "idea";
 }
 
+/**
+ * A PDF given without a word could be an old deck to restyle or material to make a deck from
+ * (a design's drawing set, a report). Nothing tells them apart, so the chat asks.
+ */
+export function needsKindChoice(text: string, fileNames: string[]): boolean {
+  return !String(text || "").trim() && fileNames.some(isPdfName);
+}
+
+/** The chat's question "restyle it or make a deck from it?", saved as a message. */
+export const ASK_KIND_MARKER = "[[PPT_ASK_KIND]]";
+export interface AskKindState {
+  /** What the user picked; absent while the question waits. */
+  picked?: "beautify" | "idea";
+}
+export const askKindText = (state: AskKindState) => `${ASK_KIND_MARKER}${JSON.stringify(state)}`;
+export function readAskKind(text: unknown): AskKindState | null {
+  if (typeof text !== "string" || !text.startsWith(ASK_KIND_MARKER)) return null;
+  try {
+    const value = JSON.parse(text.slice(ASK_KIND_MARKER.length));
+    return value && typeof value === "object" ? (value as AskKindState) : null;
+  } catch {
+    return null;
+  }
+}
+
 /** The other reading the user can switch to, if there is one. */
 export function alternativeKind(kind: CreationKind, text: string): CreationKind | null {
   if (kind === "beautify") return String(text || "").trim() ? "idea" : null;

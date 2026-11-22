@@ -4,7 +4,7 @@ import { ChatTitle } from "@/shared/chat/chat-title";
 import { constraintsFor } from "@/shared/constraints";
 import { CanvasOpenButton, useCanvasPane } from "@/shared/canvas-pane";
 import { previewFromCadText } from "@/workspaces/cad/lib/stream-plan";
-import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Home } from "lucide-react";
 import { cn } from "@/shared/lib/utils";
 import {
@@ -127,7 +127,6 @@ export function ChatPanel(props: ChatPanelProps) {
   } = props;
   const language = useUiLanguage();
   const tr = (zh: string, en: string) => (language === "zh" ? zh : en);
-  const snapshot = useSyncExternalStore(session.subscribe, session.getSnapshot);
   const [messages, setMessages] = useState<ChatMessage[]>(() =>
     closeInterruptedStep(loadChatHistory(chatStorageKey(workspaceId), props.initialMessages ?? []), language === "zh"),
   );
@@ -888,52 +887,6 @@ export function ChatPanel(props: ChatPanelProps) {
           />
         )}
       </div>
-      {snapshot.lastResult && (
-        <div
-          className="chat-measure border-t p-2 text-xs"
-          data-testid="cad-chat-design-result"
-          data-rounds={snapshot.lastResult.rounds}
-        >
-          {(() => {
-            // Say what the remaining problems are, not just how many: errors first, then warnings.
-            const open = snapshot.issues.filter((issue) => issue.level === "error" || issue.level === "warn")
-              .sort((a, b) => (a.level === "error" ? 0 : 1) - (b.level === "error" ? 0 : 1));
-            const errors = open.filter((issue) => issue.level === "error").length;
-            if (!open.length) return <div>{tr("设计器检查通过，没有错误和警告。", "The designer check passed: no errors or warnings.")}</div>;
-            return (
-              <details open={errors > 0}>
-                <summary className="cursor-pointer">
-                  {tr(
-                    `设计器检查：${errors} 个错误，${open.length - errors} 个警告（点开看具体是什么，可以直接让我改）`,
-                    `Designer check: ${errors} errors, ${open.length - errors} warnings (expand to see them; ask me to fix any)`,
-                  )}
-                </summary>
-                <ul className="mt-1 max-h-32 list-disc overflow-y-auto pl-4">
-                  {open.map((issue, index) => (
-                    <li key={`${issue.code}-${index}`} className={issue.level === "error" ? "text-destructive" : "text-muted-foreground"}>
-                      {issue.room ? `${issue.room}：` : ""}{issue.msg}
-                    </li>
-                  ))}
-                </ul>
-              </details>
-            );
-          })()}
-          {snapshot.audit && (snapshot.audit.problems.length > 0 || snapshot.audit.notes.length > 0) && (
-            <details className="mt-1" data-testid="cad-chat-elec-audit">
-              <summary className="cursor-pointer">
-                {tr(
-                  `水电审计：${snapshot.audit.problems.length} 个问题，${snapshot.audit.notes.length} 条提示（可在设计器「水电」里调整）`,
-                  `MEP audit: ${snapshot.audit.problems.length} problems, ${snapshot.audit.notes.length} notes (adjust under MEP in the designer)`,
-                )}
-              </summary>
-              <ul className="mt-1 max-h-32 list-disc overflow-y-auto pl-4">
-                {snapshot.audit.problems.map((item) => <li key={`p-${item}`} className="text-destructive">{item}</li>)}
-                {snapshot.audit.notes.map((item) => <li key={`n-${item}`} className="text-muted-foreground">{item}</li>)}
-              </ul>
-            </details>
-          )}
-        </div>
-      )}
       <div className={`chat-measure px-4 pb-4 pt-2${(!messages.length) ? " [--chat-measure:720px]" : ""}`} data-testid="cad-chat-composer">
         <ChatInput
           constraintScope="cad"

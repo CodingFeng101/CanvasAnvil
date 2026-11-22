@@ -195,7 +195,7 @@ const FLOWS: Record<string, { caption: L; steps: Step[]; loop?: L }> = {
       { title: { zh: "想法 / 大纲 / 美化", en: "Idea / outline / beautify" }, note: { zh: "从第一句话判断模式", en: "mode read from the first message" }, tone: "model" },
       { title: { zh: "审阅大纲", en: "Review the outline" }, note: { zh: "增删改页、调顺序", en: "add, cut, reorder" }, tone: "user" },
       { title: { zh: "选模板", en: "Pick a template" }, note: { zh: "定整套风格与配色", en: "style and palette" }, tone: "user" },
-      { title: { zh: "逐页并发出图", en: "Pages in parallel" }, note: { zh: "同时 5 页，失败重试", en: "5 at a time, retried" }, tone: "code" },
+      { title: { zh: "逐页并发出图", en: "Pages in parallel" }, note: { zh: "默认同时 5 页（设置里可改），失败重试", en: "5 at a time by default (Settings), retried" }, tone: "code" },
       { title: { zh: "单页修改与导出", en: "Edit a page, export" }, note: { zh: "PDF · 图片版 PPTX · 可编辑 PPTX", en: "PDF · image PPTX · editable PPTX" }, tone: "check" },
     ],
   },

@@ -14,8 +14,8 @@
  * can be switched: an older one would replace whatever the canvas holds now.
  */
 
-import type { ReactNode } from "react"
-import { Brain, Check, FileCode, FilePen, FilePlus2, FileText, Wand2 } from "lucide-react"
+import { type ReactNode, useState } from "react"
+import { Brain, Check, ChevronRight, FileCode, FilePen, FilePlus2, FileText, Wand2 } from "lucide-react"
 import { Step, StepList, type StepState } from "@/shared/chat"
 import { cn } from "@/shared/lib/utils"
 import { parseLayout } from "@/workspaces/diagram/lib/arrange"
@@ -37,10 +37,20 @@ type Key = Parameters<ReturnType<typeof useDiagramT>>[0]
  * (the name saved messages carry); a sketch in an old message is no longer shown.
  */
 export type PrepData = {
-    files?: { state: "running" | "done" | "error"; names?: string[]; seconds?: number; error?: string }
+    files?: {
+        state: "running" | "done" | "error"
+        names?: string[]
+        seconds?: number
+        error?: string
+        /** What reading each file came to: the summary handed to the model. */
+        digests?: { name: string; summary: string }[]
+    }
 }
 
-export function PrepSteps({ data }: { data: PrepData }) {
+/** The text read out of one file (from the user's message), shown under its name. */
+export type FileContent = { name: string; text: string }
+
+export function PrepSteps({ data, contents = [] }: { data: PrepData; contents?: FileContent[] }) {
     const t = useDiagramT()
     const files = data.files
     if (!files) return null
@@ -58,15 +68,65 @@ export function PrepSteps({ data }: { data: PrepData }) {
                 {names.length > 0 || files.error ? (
                     <div className="space-y-1 text-sm text-muted-foreground">
                         {names.map((name, i) => (
-                            <p key={i} className="truncate">
-                                {name}
-                            </p>
+                            <FileRead
+                                key={i}
+                                name={name}
+                                text={contents.find((c) => c.name === name)?.text}
+                                digest={files.digests?.find((d) => d.name === name)?.summary}
+                            />
                         ))}
                         {files.error && <p className="text-xs whitespace-pre-wrap">{files.error}</p>}
                     </div>
                 ) : null}
             </Step>
         </StepList>
+    )
+}
+
+/**
+ * One file that was read: its name, and under it on a click what came out of
+ * it: the points reading it came to and the full text read out of it (the
+ * model is given both).
+ */
+function FileRead({ name, text, digest }: { name: string; text?: string; digest?: string }) {
+    const t = useDiagramT()
+    const [open, setOpen] = useState(false)
+    const body = (text ?? "").trim()
+    const points = (digest ?? "").trim()
+    if (!body && !points) return <p className="truncate">{name}</p>
+    return (
+        <div>
+            <button
+                type="button"
+                onClick={() => setOpen((v) => !v)}
+                aria-expanded={open}
+                className="flex max-w-full items-center gap-1 text-left transition-colors hover:text-foreground"
+            >
+                <ChevronRight className={cn("size-3.5 shrink-0 transition-transform duration-fast", open && "rotate-90")} aria-hidden />
+                <span className="truncate">{name}</span>
+                {body && <span className="shrink-0 text-xs tabular-nums opacity-70">· {t("steps.read_chars", { n: body.length })}</span>}
+            </button>
+            {open && (
+                <div className="mt-1.5 space-y-2 pl-[18px]">
+                    {points && (
+                        <div>
+                            <p className="mb-1 text-xs">{t("steps.read_digest")}</p>
+                            <p className="max-h-56 overflow-y-auto whitespace-pre-wrap rounded-md bg-muted/40 px-2.5 py-2 text-xs leading-relaxed text-foreground/85">
+                                {points}
+                            </p>
+                        </div>
+                    )}
+                    {body && (
+                        <div>
+                            <p className="mb-1 text-xs">{t("steps.read_text")}</p>
+                            <p className="max-h-72 overflow-y-auto whitespace-pre-wrap rounded-md bg-muted/40 px-2.5 py-2 text-xs leading-relaxed text-foreground/85">
+                                {body}
+                            </p>
+                        </div>
+                    )}
+                </div>
+            )}
+        </div>
     )
 }
 

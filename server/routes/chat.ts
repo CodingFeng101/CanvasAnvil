@@ -17,7 +17,7 @@ import { shapeLibraryDir } from "../chat/resources"
 import { getSystemPrompt } from "../chat/system-prompt"
 import {
     RECURSIVE_THRESHOLD_TOKENS,
-    SUMMARY_CONCURRENCY,
+    summaryConcurrency,
     type UploadedFilePayload,
     estimateTokens,
     extractUploadedFileText,
@@ -126,10 +126,13 @@ async function handleChatRequest(req: Request): Promise<Response> {
 
     // Uploaded documents, read and summarized inside the stream (see execute) so the chat shows it.
     let parsedFilesContext = ""
+    /** What reading each file came to, for the chat's file step to show. */
+    let fileDigests: { name: string; summary: string }[] = []
     const readFiles = async () => {
+        const limit = summaryConcurrency(payload?.fileConcurrency)
         const fileSummaries = await runWithConcurrency(
             uploadedFiles,
-            SUMMARY_CONCURRENCY,
+            limit,
             async (file) => {
                 const extracted = await extractUploadedFileText(file)
                 const tokens = estimateTokens(extracted)
@@ -137,12 +140,13 @@ async function handleChatRequest(req: Request): Promise<Response> {
                     tokens >= RECURSIVE_THRESHOLD_TOKENS ? "recursive" : "chunk"
                 const summary =
                     method === "recursive"
-                        ? await summarizeRecursiveMethod({ model, text: extracted })
-                        : await summarizeBlockMethod({ model, text: extracted })
+                        ? await summarizeRecursiveMethod({ model, text: extracted, concurrency: limit })
+                        : await summarizeBlockMethod({ model, text: extracted, concurrency: limit })
                 return { name: file.name, tokens, method, summary }
             },
         )
 
+        fileDigests = fileSummaries.map((item) => ({ name: item.name, summary: String(item.summary ?? "").slice(0, 6000) }))
         parsedFilesContext = fileSummaries
             .map(
                 (item, idx) =>
@@ -475,7 +479,7 @@ ${lastMessageText}
                 emit({ files: { state: "running", names } })
                 try {
                     await readFiles()
-                    emit({ files: { state: "done", names, seconds: since(started) } })
+                    emit({ files: { state: "done", names, seconds: since(started), digests: fileDigests } })
                     if (userText && parsedFilesContext) userText.text += `\n\nParsed file summaries:\n"""md\n${parsedFilesContext}\n"""`
                 } catch (error) {
                     const message = error instanceof Error ? error.message : String(error)

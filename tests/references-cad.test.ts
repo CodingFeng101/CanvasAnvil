@@ -113,6 +113,7 @@ test("a canvas references only the canvases it has a use for, never itself", asy
   const { referenceSourcesFor } = await import("../client/shared/references/sources");
   for (const ws of ["ppt", "canvas", "diagram", "cad"] as const) assert.ok(!referenceSourcesFor(ws).includes(ws));
   assert.ok(!referenceSourcesFor("diagram").includes("cad"));
+  assert.ok(!referenceSourcesFor("canvas").includes("cad"), "the free canvas does not take interior designs");
   assert.deepEqual([...referenceSourcesFor("cad")], []);
   assert.ok(referenceSourcesFor("ppt").includes("cad"));
 });

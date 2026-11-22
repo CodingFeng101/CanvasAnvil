@@ -166,13 +166,12 @@ test('validation handles unknown input and oversized units', () => {
   assert.match(validateSpec(unknown).find(i => i.code === 'furniture_key')!.msg, /候选.*bed/);
 });
 
-test('repair loop stops at six improving rounds and passes scoped error and warning context', async () => {
+test('repair loop stops at six improving rounds and sends only the errors, with their context', async () => {
   let count = 0;
   const result = await reviseUntilClean({ initial,
     issuesOf: async p => [...issues(8 - Number(p.round ?? 0)), { level: 'warn', code: 'warn', msg: 'warning' }, { level: 'info', code: 'info', msg: 'note' }],
     askModel: async (errors, summary) => {
-      assert.ok(errors.every(issue => issue.level === 'error' || issue.level === 'warn'));
-      assert.ok(errors.some(issue => issue.level === 'warn'));
+      assert.ok(errors.length > 0 && errors.every(issue => issue.level === 'error'), 'warnings are acceptable: only errors are sent');
       const context = JSON.parse(summary);
       assert.ok(context.rooms.length < plan.rooms.length);
       return [];
@@ -185,29 +184,30 @@ test('repair loop stops at six improving rounds and passes scoped error and warn
   assert.equal(result.design.revision, 6);
 });
 
-test('repair loop restores the best applied plan after a plateau', async () => {
+test('repair loop tries again after a round that fails, telling the model, and keeps the best plan', async () => {
   let calls = 0;
   const loaded: string[] = [];
+  const missedFlags: boolean[] = [];
   const result = await reviseUntilClean({ initial,
     issuesOf: async p => { loaded.push(String(p.name)); return issues(p.name === 'improved' ? 1 : 2); },
-    askModel: async () => [],
+    askModel: async (_issues, _summary, missed) => { missedFlags.push(missed); return []; },
     apply: async (_, current) => ({ ...current, plan: { ...plan, name: ++calls === 1 ? 'improved' : 'worse' }, revision: calls }),
   });
   assert.equal(result.design.plan.name, 'improved');
   assert.equal(loaded.at(-1), 'improved');
   assert.ok(result.rolledBack);
-  assert.equal(result.rounds, 2);
+  assert.equal(result.rounds, 3, 'one improving round, then two misses in a row');
+  assert.deepEqual(missedFlags, [false, false, true]);
 });
 
-test('repair loop works warnings down to zero, never trades a warning for an error, and restores a plan after partial apply failure', async () => {
+test('repair loop takes more warnings for fewer errors, leaves warnings alone, and restores a plan after partial apply failure', async () => {
   const warn = (n: number): DesignIssue[] => Array.from({ length: n }, (_, i) => ({ level: 'warn', code: 'warn', msg: `warning ${i}` }));
-  let round = 0;
-  const cleared = await reviseUntilClean({ initial, issuesOf: async p => warn(2 - Number(p.round ?? 0)), askModel: async () => [], apply: async (_, current) => ({ ...current, plan: { ...plan, round: ++round } }) });
-  assert.equal(cleared.rounds, 2);
-  assert.equal(cleared.issues.length, 0);
-  const traded = await reviseUntilClean({ initial, issuesOf: async p => p.name === 'traded' ? issues(1) : warn(3), askModel: async () => [], apply: async (_, current) => ({ ...current, plan: { ...plan, name: 'traded' } }) });
-  assert.ok(traded.rolledBack);
-  assert.equal(traded.issues.length, 3);
+  const onlyWarnings = await reviseUntilClean({ initial, issuesOf: async () => warn(3), askModel: async () => { throw new Error('must not call'); }, apply: async () => initial });
+  assert.equal(onlyWarnings.rounds, 0);
+  const traded = await reviseUntilClean({ initial, issuesOf: async p => p.name === 'traded' ? warn(4) : issues(1), askModel: async () => [], apply: async (_, current) => ({ ...current, plan: { ...plan, name: 'traded' } }) });
+  assert.equal(traded.design.plan.name, 'traded');
+  assert.equal(traded.issues.filter(i => i.level === 'error').length, 0);
+  assert.equal(traded.rounds, 1);
   const quiet = await reviseUntilClean({ initial, issuesOf: async () => [{ level: 'info', code: 'info', msg: 'note' }], askModel: async () => { throw new Error('must not call'); }, apply: async () => initial });
   assert.equal(quiet.rounds, 0);
   let loaded = 0;

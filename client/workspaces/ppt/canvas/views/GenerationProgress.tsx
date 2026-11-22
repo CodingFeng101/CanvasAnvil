@@ -1,5 +1,5 @@
 import type { CreationProgress } from "@/workspaces/ppt/canvas/lib/creation-machine";
-import { MODEL_CONCURRENCY } from "@/workspaces/ppt/canvas/lib/constants";
+import { pptConcurrency } from "@/shared/preferences";
 import type { CreationStep, SlideData } from "@/workspaces/ppt/canvas/types";
 import { cn } from "@/shared/lib/utils";
 import { PenSketch } from "@/shared/ui/pen-sketch";
@@ -25,7 +25,7 @@ export function GenerationProgress({ progress, tr, slides, images }: GenerationP
   const done = slides.filter((slide) => images[slide.id]).length;
   const total = slides.length || progress.total;
   // Pages are drawn in order, a few at a time: the first ones still without a picture are under way.
-  const drawing = new Set(slides.filter((slide) => !images[slide.id]).slice(0, MODEL_CONCURRENCY).map((slide) => slide.id));
+  const drawing = new Set(slides.filter((slide) => !images[slide.id]).slice(0, pptConcurrency()).map((slide) => slide.id));
 
   return (
     <div className="flex h-full w-full flex-col overflow-hidden bg-background">

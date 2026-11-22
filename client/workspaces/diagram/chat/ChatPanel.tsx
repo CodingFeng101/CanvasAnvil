@@ -1,4 +1,5 @@
 "use client"
+import { getPreferences } from "@/shared/preferences"
 
 import { usePendingPrompt } from "@/shared/pending-prompt"
 import { useSendAfterRender } from "@/shared/chat/use-send-after-render"
@@ -1237,6 +1238,7 @@ Please fix the XML issues. Ensure cell_id values exist in the current XML and th
                     previousXml,
                     sessionId,
                     uploadedFiles,
+                    fileConcurrency: getPreferences().fileConcurrency,
                     aiConfig: {
                         ...ai,
                         textModel: modelToUse,

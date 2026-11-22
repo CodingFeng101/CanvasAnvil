@@ -25,7 +25,7 @@ The template library is stored apart from decks: clear a deck, and the templates
 
 ## Concurrency and retries
 
-All slides generate together, at most 5 at a time (`MODEL_CONCURRENCY`). A failed slide is retried on its own, and one failure never holds up the rest.
+All slides generate together, at most 5 at a time by default; Settings → Canvas → "Slides drawn at once" sets it from 1 to 10, and restyling or editing several pages follows it too. A failed slide is retried on its own, and one failure never holds up the rest.
 
 > [!WHY]
 > Why 5? Queued one by one, a 15-slide deck takes a long while; sent all at once, providers reject the burst and more slides fail. 5 is the limit that is not rejected, and within it, the more at once, the sooner the deck is done. The editable export is heavier and runs 3 at a time.

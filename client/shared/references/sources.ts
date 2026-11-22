@@ -5,7 +5,8 @@ import type { ReferenceItem, ReferenceWorkspace } from "./types";
  * picker offers works of these canvases alone, and a canvas with none shows no entry.
  *
  * - PPT: diagrams and free-canvas pictures as slide materials, interior design for the report deck.
- * - Free canvas: anything with a picture, to mark up on the board.
+ * - Free canvas: deck slides and diagrams, to mark up on the board. Not interior design: its
+ *   plans and renders are changed in the designer, where the plan stays editable.
  * - Diagram: a deck's outline, or a sketch on the free canvas, to draw from.
  *   Not interior design: a floorplan is not something a diagram is drawn from.
  * - Interior design: takes nothing; it is referenced, not referencing.
@@ -13,7 +14,7 @@ import type { ReferenceItem, ReferenceWorkspace } from "./types";
  */
 export const REFERENCE_SOURCES: Record<ReferenceWorkspace, readonly ReferenceWorkspace[]> = {
   ppt: ["diagram", "canvas", "cad"],
-  canvas: ["ppt", "diagram", "cad"],
+  canvas: ["ppt", "diagram"],
   diagram: ["ppt", "canvas"],
   cad: [],
 };
