@@ -1,12 +1,12 @@
 # Settings
 
-Every setting really does something somewhere. Here is what each group looks after. To open Settings, click the bottom left or press `Ctrl ,`.
+Every setting really does something somewhere. Here is what each group looks after. To open Settings, click the bottom left or press `Ctrl + ,`.
 
 ## General
 
 | Setting | What it does |
 | --- | --- |
-| Send key | `Enter` sends and `Shift Enter` starts a new line, or the other way round with `Ctrl Enter` to send |
+| Send key | `Enter` sends and `Shift + Enter` starts a new line, or the other way round with `Ctrl + Enter` to send |
 | Open on start | Where you left off, the home page, or straight into a canvas |
 | Reply language | Follow your input, or always Chinese / English |
 
@@ -44,11 +44,12 @@ Each one can be switched off on its own without deleting the text.
 
 | Action | Keys |
 | --- | --- |
-| Search works | `Ctrl K` |
-| Open settings | `Ctrl ,` |
-| Enlarge / restore the canvas (Diagram) | `Ctrl B` |
-| Add files or photos | `Ctrl U` |
+| Search works | `Ctrl + K` |
+| Open settings | `Ctrl + ,` |
+| Enlarge / restore the canvas (Diagram) | `Ctrl + B` |
+| Add files or photos | `Ctrl + U` |
 | Take the grey suggestion in the input | `Tab` |
+| Move the focused work in the sidebar | `Alt + ↑ / ↓` |
 | Close a dialog | `Esc` |
 
 On a Mac, use `⌘` in place of `Ctrl`.
@@ -68,3 +69,7 @@ Export and import all works, clear all works, restore the default settings. Ever
 ## Videos
 
 Four kinds (overview, tutorials, what's new, best practices), shown one kind at a time. Click a video and it plays in a small window at the bottom right, and keeps playing after Settings closes.
+
+## About
+
+The version, GitHub, the changelog and a place to report problems. "Get the desktop app" opens the GitHub releases page for the latest Windows installer; the portal's top bar and footer link there too.

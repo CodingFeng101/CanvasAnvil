@@ -15,6 +15,8 @@ const P = "/examples/portal/";
 export const img = (name: string, size: "sm" | "md" = "md") => `${P}${name}-${size}.webp`;
 
 export const REPO_URL = "https://github.com/CodingFeng101/CanvasAnvil";
+/** The Windows installer: the newest release, so a new build needs no change here. */
+export const DESKTOP_URL = `${REPO_URL}/releases/latest`;
 
 /** Each canvas owns one swatch (backgrounds, dots) and a deeper ink for small marks. */
 export const CANVAS: Record<PortalWorkspace, { name: L; swatch: string; ink: string }> = {
@@ -31,6 +33,8 @@ export const NAV = {
   how: { zh: "工作方式", en: "How it works" },
   faq: { zh: "常见问题", en: "FAQ" },
   tutorials: { zh: "教程", en: "Tutorials" },
+  download: { zh: "下载桌面版", en: "Download app" },
+  downloadHint: { zh: "Windows 安装包", en: "Windows installer" },
   start: { zh: "开始创作", en: "Start creating" },
   menu: { zh: "菜单", en: "Menu" },
 } satisfies Record<string, L>;
@@ -392,6 +396,7 @@ export const FOOTER = {
   resources: { zh: "资源", en: "Resources" },
   open: { zh: "开源", en: "Open source" },
   tutorials: { zh: "教程", en: "Tutorials" },
+  desktop: { zh: "桌面版（Windows）", en: "Desktop app (Windows)" },
   changelog: { zh: "更新日志", en: "Changelog" },
   docs: { zh: "文档", en: "Docs" },
   license: { zh: "MIT 协议", en: "MIT licence" },

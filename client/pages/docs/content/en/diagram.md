@@ -35,6 +35,6 @@ Export `.drawio`, SVG or PNG from the top right. A `.drawio` file keeps editing 
 
 ## Tips
 
-- `Ctrl B` enlarges the canvas; press it again to restore.
+- `Ctrl + B` enlarges the canvas; press it again to restore.
 - Write your usual colours, fonts and line style in Settings → Memory → Diagram, and they are sent with every request.
 - When you run it yourself, installing dependencies also downloads a copy of draw.io, which the canvas uses first, so it works offline. Without that copy it loads draw.io online, switching to a mirror if the default address does not load within 8 seconds.

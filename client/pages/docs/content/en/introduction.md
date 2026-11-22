@@ -33,4 +33,4 @@ It brings four kinds of everyday making into one workspace: diagrams, interior d
 - **Skills and plugins**: open the canvases right inside coding agents such as Claude Code and Codex.
 - **Developers**: how the code is organised and how to add a canvas.
 
-Press `Ctrl K` (`⌘ K` on a Mac) to search the docs at any time.
+Press `Ctrl + K` (`⌘ + K` on a Mac) to search the docs at any time.

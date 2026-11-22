@@ -23,7 +23,7 @@ What the model outputs is a layout description:
 
 ## A deterministic finish
 
-With the geometry in place, two more kinds of problem remain that models are just as poor at: furniture a few centimetres into a wall, blocking a curtain, or clashing with a neighbour. `auto-nudge.ts` shifts each named piece along the axes, and **a move is kept only if the designer's own checks then report fewer errors and no more warnings**. Curtains belong in front of their window, so the other piece moves first.
+With the geometry in place, two more kinds of problem remain that models are just as poor at: furniture a few centimetres into a wall, blocking a curtain, or clashing with a neighbour. `auto-nudge.ts` shifts each named piece along the axes, the smallest step first; where no shift helps, it makes the piece a little smaller about its middle (width or depth down to 80%). **A change is kept whenever the designer's own checks then report fewer errors**; a warning it brings is acceptable. Curtains belong in front of their window, so the other piece moves first.
 
 Electrical and plumbing points are then placed in one go and adjusted to your preferences: more sockets, network ports, the panel beside the front door, floor sockets under the dining or coffee table, USB by the bed.
 
@@ -31,16 +31,16 @@ Electrical and plumbing points are then placed in one go and adjusted to your pr
 
 The designer has its own checks, plus a room-by-room electrical audit (`elec-audit.ts`): which switch works which light, mounting heights, whether a switch by a door is on the handle side, each room type's standard points. These rules match the cad-skill audit script, so the site and the skill reach the same verdicts.
 
-When problems turn up, `revise-loop.ts` takes the list back to the model, which edits the designer's own format with an **RFC 6902 JSON Patch** (`spec-patch.ts`), sending only the fields that change rather than the whole scheme.
+While errors remain, `revise-loop.ts` takes only the errors back to the model (warnings are acceptable: they are neither sent nor worth another round), which edits the designer's own format with an **RFC 6902 JSON Patch** (`spec-patch.ts`), sending only the fields that change rather than the whole scheme.
 
 The loop stops at whichever comes first:
 
-- 0 errors and 0 warnings, which is the designer's delivery bar;
-- a round that improves nothing;
+- 0 errors, which is all that Confirm design and the deliverables ask for; warnings do not block them;
+- two rounds in a row that take no error away;
 - the limit of 6 rounds.
 
 > [!WHY]
-> In the scoring, **one error outweighs any number of warnings** (an error counts 1000, a warning 1). If a round does not lower the score, or adds errors, it is rolled back to the previous version. The model's "fixes" can never make a usable plan worse.
+> A round is kept whenever it leaves fewer errors, even if it brings a warning or two. One that does not is undone, and the model is told its last fix did not work and asked for another: move the piece, make it smaller, pick a smaller model, or remove it if nothing fits. The model's "fixes" can never make a usable plan worse.
 
 ## Converting both ways
 

@@ -32,11 +32,12 @@ RUN npm ci --omit=dev
 # The API runs from source through tsx, so the server and its contracts ship
 # as-is. resources/ is read at request time — the agent prompts and the draw.io
 # shape libraries — so it has to be present too, not just bundled into dist.
-# skill/cad-skill carries the designer's scripts: recognition and the delivery check run them.
+# skill/ carries the designer's scripts (recognition and the delivery check run them) and every skill
+# that Settings -> Skills & plugins offers to download.
 COPY server ./server
 COPY contracts ./contracts
 COPY resources ./resources
-COPY skill/cad-skill ./skill/cad-skill
+COPY skill ./skill
 COPY scripts/slide-agent ./scripts/slide-agent
 COPY tsconfig.json ./tsconfig.json
 COPY --from=build /app/dist ./dist

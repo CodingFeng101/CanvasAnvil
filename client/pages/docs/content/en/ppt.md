@@ -8,7 +8,9 @@ Your first sentence decides where it starts:
 
 - **Idea**: just a topic, such as "brief new staff on our data security rules, about ten slides". The AI writes the outline for you.
 - **Outline**: you already have an outline or a document. Paste it in and the AI arranges the pages from it.
-- **Beautify**: you already have a finished deck and only want it to look better.
+- **Beautify**: you already have a finished deck and only want it to look better. Drop in the PDF and say "restyle it".
+
+Send a PDF without a word and the AI does not guess: it asks whether to make a new deck from the files or restyle the PDF page by page. Press a button, or write what you want below.
 
 ## Reviewing the outline
 

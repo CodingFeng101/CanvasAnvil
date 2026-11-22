@@ -9,4 +9,5 @@ coverage
 .trae
 .tmp-superpowers
 runs
+build
 **/__pycache__

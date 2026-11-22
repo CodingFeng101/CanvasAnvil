@@ -9,6 +9,7 @@ import {
   Cpu,
   Database,
   ArrowRight,
+  Download,
   ExternalLink,
   Eye,
   EyeOff,
@@ -94,6 +95,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
  */
 
 const REPO_URL = "https://github.com/CodingFeng101/CanvasAnvil";
+/** The desktop app's installer: always the newest release, so a new build needs no change here. */
+const DESKTOP_DOWNLOAD_URL = `${REPO_URL}/releases/latest`;
 const MINERU_LINK = "https://mineru.net/";
 
 /** Where to get a key for the endpoint in Base URL; an unknown endpoint gets OpenAI's page. */
@@ -1622,6 +1625,21 @@ function SettingsPanel({ initial, focus, onClose }: { initial: SectionId; focus?
       id: "version",
       title: zh ? "版本" : "Version",
       control: <span className="shrink-0 font-mono text-[13px] text-muted-foreground">v{__APP_VERSION__}</span>,
+    },
+    {
+      section: "about",
+      id: "desktop",
+      title: zh ? "获取桌面版" : "Get the desktop app",
+      desc: zh
+        ? "Windows 安装包，装好后像普通软件一样从开始菜单打开。在 GitHub 的发布页下载最新版。"
+        : "A Windows installer; once installed it opens from the Start menu like any app. Download the latest release on GitHub.",
+      control: (
+        <a href={DESKTOP_DOWNLOAD_URL} target="_blank" rel="noreferrer" className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-lg bg-foreground/[0.06] px-3 text-[13px] text-foreground hover:bg-foreground/[0.1]">
+          <Download className="size-3.5" />
+          {zh ? "下载" : "Download"}
+        </a>
+      ),
+      keywords: "desktop windows installer exe download 桌面 安装包 下载 客户端",
     },
     ...(
       [

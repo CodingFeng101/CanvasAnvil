@@ -2,12 +2,31 @@
 
 Every change worth mentioning, newest first.
 
+## 2026-11-22
+
+### New
+
+- **Works reference each other**: PPT takes diagrams, free-drawing pictures and interior designs (for a renovation report); the free canvas takes slides and diagrams to mark up.
+- **Drawn with a pen**: diagrams and interior plans are traced by a pencil as they stream in; three pen sketches take turns while pictures are generated.
+- **You pick the diagram layout**: each arrangement shows its score; choose one and press Confirm, and later edits build on it. The file-read step opens to each file's digest and text.
+- **PPT asks first**: a PDF sent without a word asks whether to make a new deck or restyle it. Exported PPTX files carry the speaker notes.
+- **Concurrency settings**: Settings → Canvas sets how many slides are drawn at once and how many pieces of a long file are summarized at once.
+- **Desktop app download**: Settings → About and the home page's top bar link to the Windows desktop app.
+- **Local draw.io**: installing downloads draw.io, so the diagram canvas works offline.
+
+### Fixed
+
+- Interior design's auto-repair targets errors only: a piece that cannot move is made a little smaller, and warnings are acceptable; furniture appears piece by piece while streaming; the check list above the chat is gone.
+- Files sent in the diagram chat use the shared attachment tiles again, copy takes only your words, and files are no longer read twice.
+- The duplicated "Search works" shortcut no longer lingers in other Settings sections.
+- CI and unused files removed.
+
 ## 2026-11-20
 
 ### New
 
 - **A new home page and a detail page for each canvas**: a long, quiet page in a warm, literary style, with real screenshots of each canvas and the prompts that made them. "Start creating" carries a prompt typed on the home page into the canvas.
-- **Workspaces laid out like Claude**: a sidebar with New work, Search (`Ctrl K`), My works, the four canvases and recent works (pin, rename, delete). A new work opens on a greeting with three example cards, each a request this canvas really ran, shown with what it made; click one to send it.
+- **Workspaces laid out like Claude**: a sidebar with New work, Search (`Ctrl + K`), My works, the four canvases and recent works (pin, rename, delete). A new work opens on a greeting with three example cards, each a request this canvas really ran, shown with what it made; click one to send it.
 - **Saved automatically**: every work is kept as you go, with no Save button. "New work" starts a fresh one and the old one stays in My works, so the clear-chat button and its setting are gone.
 - **Built-in docs** (`#/docs`): 22 pages in Chinese and English covering getting started, each canvas, My works, Settings, skills, development, the FAQ and the changelog, plus a "How it works" group that explains the algorithms and why each was chosen (diagram layout correction, the generate-check-revise loop, the interior layout engine, the PPT pipeline, canvas edits, how works are stored). Search, an outline of the page, and copy buttons on code blocks.
 - **More in Settings**:

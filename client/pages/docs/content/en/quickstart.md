@@ -29,7 +29,7 @@ This one command starts both the web app and the API. Open `http://127.0.0.1:800
 
 ### 3. Connect a model
 
-Open Settings from the bottom left, or press `Ctrl ,`, and go to Models: enter a Base URL, an API key and a model name, then press Test connection. Details are in [Connecting a model](/docs/models).
+Open Settings from the bottom left, or press `Ctrl + ,`, and go to Models: enter a Base URL, an API key and a model name, then press Test connection. Details are in [Connecting a model](/docs/models).
 
 ### 4. Draw your first diagram
 

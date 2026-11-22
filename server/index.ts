@@ -84,7 +84,10 @@ if (fs.existsSync(indexHtmlPath)) {
   console.warn(`[server] dist not found at "${distDir}". Build the client with "npm run build".`);
 }
 
-app.listen(PORT, () => {
+// LISTEN_HOST=127.0.0.1 keeps it off the network (the desktop app sets it); unset, it listens on every interface.
+const onListening = () => {
   console.log(`[server] listening on http://localhost:${PORT}`);
   console.log(`[server] web root: ${distDir}`);
-});
+};
+if (process.env.LISTEN_HOST) app.listen(PORT, process.env.LISTEN_HOST, onListening);
+else app.listen(PORT, onListening);

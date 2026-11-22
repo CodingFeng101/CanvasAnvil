@@ -192,6 +192,8 @@ Editable PPTX export uses the host model too: the agent rebuilds the slides step
 
 ## 🚀 Quick Start
 
+To skip the setup, download the [Windows desktop app](https://github.com/CodingFeng101/CanvasAnvil/releases/latest): install it and go; works and keys stay on your computer. The steps below run it from source.
+
 1. Install dependencies
 
 ```bash
@@ -247,6 +249,21 @@ npm run build
 <a id="recent-updates"></a>
 
 ## 🗓️ Recent updates
+
+### 2026-11-22
+
+**✨ New**
+
+- Works reference each other: PPT takes diagrams, free-drawing pictures and interior designs; the free canvas takes slides and diagrams.
+- You pick the diagram layout: each arrangement shows its score, and Confirm makes later edits build on it.
+- PPT asks first when it gets only a PDF: a new deck, or a page-by-page restyle. Exported PPTX files carry speaker notes.
+- Settings gain concurrency controls (slides drawn at once, file pieces summarized at once) and a Windows desktop download.
+- A pencil traces diagrams and floor plans as they stream; three pen sketches take turns while pictures generate.
+
+**🛠️ Fixed**
+
+- Interior auto-repair fixes errors and accepts warnings, shrinking a piece that cannot move; furniture appears piece by piece.
+- Diagram attachment tiles, what copy takes, files read twice; a duplicated shortcut row in Settings.
 
 ### 2026-11-20
 

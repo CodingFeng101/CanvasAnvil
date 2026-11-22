@@ -203,6 +203,12 @@ export async function POST(req: Request) {
   }
 
   if (body.action === "create") {
+    // The Windows desktop app ships without the pipeline's tsx, Python and PowerPoint dependencies.
+    if (process.env.CANVASANVIL_DESKTOP) {
+      return Response.json({
+        error: "桌面版不支持导出可编辑 PPT：请在 设置 → 技能 里安装 ppt-skill，用 Claude Code / Codex 完成。 (Editable export is not available in the desktop app; install ppt-skill from Settings → Skills and run it in Claude Code / Codex.)",
+      }, { status: 501 });
+    }
     if ([...jobs.values()].some((job) => job.state === "uploading" || job.state === "running")) {
       return Response.json({ error: "busy" }, { status: 409 });
     }

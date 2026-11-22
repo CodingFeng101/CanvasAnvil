@@ -13,6 +13,7 @@
     "test": "tsx --import ./tests/support/register.mjs --test tests/*.test.ts",
     "test:cad-roundtrip": "node tools/cad-spec-roundtrip/run.mjs",
     "preview": "vite preview --host 0.0.0.0 --port 8001",
+    "desktop:build": "npm run build && node desktop/build.mjs",
     "check": "tsc -b --noEmit",
     "drawio": "node scripts/fetch-drawio.mjs",
     "postinstall": "node -e \"require('fs').existsSync('scripts/fetch-drawio.mjs')&&import('./scripts/fetch-drawio.mjs')\""
@@ -78,6 +79,8 @@
     "@types/react-dom": "^18.3.1",
     "@vitejs/plugin-react": "^4.4.1",
     "autoprefixer": "^10.4.23",
+    "electron": "^45.4.1",
+    "electron-builder": "^26.18.0",
     "eslint": "^9.25.0",
     "eslint-plugin-react-hooks": "^5.2.0",
     "eslint-plugin-react-refresh": "^0.4.19",

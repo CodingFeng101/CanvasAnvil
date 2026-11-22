@@ -8,6 +8,10 @@ import type { CadDesign, DesignIssue, HouseSpec, InternalPlan, Point, SinglePlan
 import { applyElecPrefs, type ElecPrefs } from './elec-prefs';
 import type { ElecAudit } from './elec-audit';
 import { isBuilding } from './types';
+import { getUiLanguage } from '@/shared/i18n';
+
+/** A message the user may see, in the interface language. */
+const say = (zh: string, en: string) => (getUiLanguage() === 'zh' ? zh : en);
 import { validateSpec } from './spec-validate';
 import { autofixSpec } from './spec-autofix';
 import { nudgeFurniture } from './auto-nudge';
@@ -83,7 +87,7 @@ export class CadDesignSession {
   constructor(options: { store?: WorkspaceStore; activate?: () => void; confirmReplace?: () => boolean | Promise<boolean> } = {}) {
     this.store = options.store ?? cadStore;
     this.activate = options.activate ?? (() => {});
-    this.confirmReplace = options.confirmReplace ?? (() => window.confirm('将覆盖你在设计器里的手动修改。继续吗？ / Replace manual changes?'));
+    this.confirmReplace = options.confirmReplace ?? (() => window.confirm(say('将覆盖你在设计器里的手动修改。继续吗？', 'Replace manual changes?')));
   }
   getSnapshot = () => this.snapshot;
   subscribe = (listener: () => void) => { this.listeners.add(listener); return () => { this.listeners.delete(listener); }; };
@@ -160,7 +164,7 @@ export class CadDesignSession {
     this.activate();
     const start = Date.now();
     while (!this.loader) {
-      if (Date.now() - start > 20000) throw new Error('设计器标签页加载超时 / Designer tab loading timed out');
+      if (Date.now() - start > 20000) throw new Error(say('设计器标签页加载超时', 'Designer tab loading timed out'));
       await new Promise(resolve => setTimeout(resolve, 25));
     }
     const bridge = await this.loader(preset, recovering);
@@ -171,7 +175,7 @@ export class CadDesignSession {
   async ensureReady(): Promise<DesignerBridge> {
     await this.hydrate();
     if (this.bridge) return this.bridge;
-    if (!this.snapshot.design) throw new Error('请先生成户型 / Generate a design first');
+    if (!this.snapshot.design) throw new Error(say('请先生成户型', 'Generate a design first'));
     this.loading ??= (async () => {
       const current = this.snapshot.design!;
       try { return await this.load({ plan: current.plan, ...underlaysOf(current) }); }
@@ -355,13 +359,13 @@ export class CadDesignSession {
   }
   async confirm() {
     await this.sync();
-    if (this.snapshot.busy) throw new Error('设计器正在更新 / Designer is updating');
+    if (this.snapshot.busy) throw new Error(say('设计器正在更新', 'Designer is updating'));
     this.update({ busy: true });
     try {
       const bridge = await this.ensureReady();
       const issues = bridge.runChecks();
       this.update({ issues });
-      if (issues.some(issue => issue.level === 'error')) throw new Error('请先解决全部错误 / Resolve all errors first');
+      if (issues.some(issue => issue.level === 'error')) throw new Error(say('请先解决全部错误', 'Resolve all errors first'));
       const current = this.snapshot.design!;
       const design: CadDesign = { ...current, status: 'confirmed', updatedAt: Date.now() };
       await this.persist(design, this.history, this.undo);
@@ -529,8 +533,8 @@ export class CadDesignSession {
   /** Loads a recognized floorplan draft (walls + openings) with the original image as underlay (one per floor for a building). */
   async loadDraft(spec: HouseSpec, underlay?: CadDesign['underlay'], extra: { underlays?: CadDesign['underlays']; recognition?: CadDesign['recognition'] } = {}) {
     const before = await this.sync();
-    if (this.snapshot.busy) throw new Error('请等待户型更新结束 / Wait for design updates');
-    if (before?.lastSource === 'user' && !await this.confirmReplace()) throw new Error('已取消 / Cancelled');
+    if (this.snapshot.busy) throw new Error(say('请等待户型更新结束', 'Wait for design updates'));
+    if (before?.lastSource === 'user' && !await this.confirmReplace()) throw new Error(say('已取消', 'Cancelled'));
     this.update({ busy: true });
     try {
       const bridge = await this.load({ spec, underlay, ...(extra.underlays ? { underlays: extra.underlays } : {}) });
@@ -549,7 +553,7 @@ export class CadDesignSession {
   }
   async clear() {
     await this.sync();
-    if (this.snapshot.busy) throw new Error('请等待户型更新结束 / Wait for design updates');
+    if (this.snapshot.busy) throw new Error(say('请等待户型更新结束', 'Wait for design updates'));
     this.update({ busy: true });
     try {
       await this.persist(null, [], null);
@@ -563,7 +567,7 @@ export class CadDesignSession {
   async applyModelOutput(input: unknown, retry?: Retry, options: { signal?: AbortSignal; allowReplace?: boolean; initialRepairRounds?: number } = {}): Promise<DesignResult> {
     await this.sync();
     if (this.snapshot.design && !this.bridge) { await this.ensureReady(); await this.sync(); }
-    if (this.snapshot.busy) throw new Error('已有户型更新正在执行 / A design update is already running');
+    if (this.snapshot.busy) throw new Error(say('已有户型更新正在执行', 'A design update is already running'));
     const before = clone(this.snapshot.design);
     const checkAbort = () => { options.signal?.throwIfAborted(); };
     checkAbort();
@@ -588,7 +592,7 @@ export class CadDesignSession {
         checkAbort();
         const corrected = object(await retry(feedback, '尚无可加载的户型。请返回修正后的 cad_spec。 / Return a corrected cad_spec.'));
         checkAbort();
-        if (corrected.type !== 'cad_spec') throw new Error('校验修复必须返回 cad_spec / Validation repair requires cad_spec');
+        if (corrected.type !== 'cad_spec') throw new Error(say('校验修复必须返回 cad_spec', 'Validation repair requires cad_spec'));
         spec = corrected.spec;
         validationRounds++;
         const nextErrors = validateSpec(spec).filter(issue => issue.level === 'error');
@@ -596,14 +600,14 @@ export class CadDesignSession {
       }
     };
     const applyOperations = async (value: unknown, current: CadDesign, allowRetry: boolean): Promise<CadDesign> => {
-      if (!Array.isArray(value)) throw new Error('cad_ops.ops 必须是数组 / cad_ops.ops must be an array');
+      if (!Array.isArray(value)) throw new Error(say('cad_ops.ops 必须是数组', 'cad_ops.ops must be an array'));
       const bridge = await this.ensureReady();
       let result = applyOps(current.plan, value as PlanOp[], { makeFurn: bridge.makeFurn, isValidKey });
       if (result.rejected.length && allowRetry && retry) {
         checkAbort();
         const corrected = object(await retry(JSON.stringify(result.rejected), summarizePlan(current.plan, bridge.roomAreas(), this.snapshot.issues)));
         checkAbort();
-        if (corrected.type !== 'cad_ops' || !Array.isArray(corrected.ops)) throw new Error('操作重试必须返回 cad_ops / Operation retry requires cad_ops');
+        if (corrected.type !== 'cad_ops' || !Array.isArray(corrected.ops)) throw new Error(say('操作重试必须返回 cad_ops', 'Operation retry requires cad_ops'));
         result = applyOps(current.plan, corrected.ops as PlanOp[], { makeFurn: bridge.makeFurn, isValidKey });
       }
       if (result.rejected.length) throw new Error(JSON.stringify(result.rejected));
@@ -640,7 +644,7 @@ export class CadDesignSession {
         checkAbort();
         const corrected = object(await retry(JSON.stringify({ patchError: reason instanceof Error ? reason.message : String(reason), patch: ops }), JSON.stringify(base)));
         checkAbort();
-        if (corrected.type !== 'cad_spec_patch' || !Array.isArray(corrected.patch)) throw new Error('补丁重试必须返回 cad_spec_patch / Patch retry requires cad_spec_patch');
+        if (corrected.type !== 'cad_spec_patch' || !Array.isArray(corrected.patch)) throw new Error(say('补丁重试必须返回 cad_spec_patch', 'Patch retry requires cad_spec_patch'));
         ops = corrected.patch as SpecPatchOp[];
         next = attempt(ops);
       }
@@ -658,8 +662,8 @@ export class CadDesignSession {
       let candidate: CadDesign;
       if (payload.type === 'cad_spec') {
         if (before) {
-          if (payload.replace !== true || !options.allowReplace) throw new Error('已有户型请输出 cad_ops，整体重画需用户明确要求 / Existing designs require cad_ops or explicit redraw approval');
-          if (before.lastSource === 'user' && !await this.confirmReplace()) throw new Error('已取消整体重画 / Redraw cancelled');
+          if (payload.replace !== true || !options.allowReplace) throw new Error(say('已有户型请输出 cad_ops，整体重画需用户明确要求', 'Existing designs require cad_ops or explicit redraw approval'));
+          if (before.lastSource === 'user' && !await this.confirmReplace()) throw new Error(say('已取消整体重画', 'Redraw cancelled'));
         }
         const spec = await validatedSpec(payload.spec);
         checkAbort();
@@ -672,14 +676,14 @@ export class CadDesignSession {
         applied = 1;
         touched.layout = true;
       } else if (payload.type === 'cad_ops') {
-        if (!before) throw new Error('尚无户型，请先生成 cad_spec / Generate cad_spec first');
-        if (isBuilding(before.plan)) throw new Error('多层户型请用 cad_spec_patch 修改（路径 /floors/层号/...）/ Use cad_spec_patch for multi-floor designs');
+        if (!before) throw new Error(say('尚无户型，请先生成 cad_spec', 'Generate cad_spec first'));
+        if (isBuilding(before.plan)) throw new Error(say('多层户型请用 cad_spec_patch 修改（路径 /floors/层号/...）', 'Use cad_spec_patch for multi-floor designs'));
         candidate = await applyOperations(payload.ops, before, true);
       } else if (payload.type === 'cad_spec_patch') {
-        if (!before) throw new Error('尚无户型，请先生成 cad_spec / Generate cad_spec first');
-        if (!Array.isArray(payload.patch)) throw new Error('cad_spec_patch.patch 必须是数组 / patch must be an array');
+        if (!before) throw new Error(say('尚无户型，请先生成 cad_spec', 'Generate cad_spec first'));
+        if (!Array.isArray(payload.patch)) throw new Error(say('cad_spec_patch.patch 必须是数组', 'patch must be an array'));
         candidate = await applyPatch(payload.patch, before, true);
-      } else throw new Error('需要 cad_spec、cad_ops 或 cad_spec_patch / Expected cad_spec, cad_ops or cad_spec_patch');
+      } else throw new Error(say('需要 cad_spec、cad_ops 或 cad_spec_patch', 'Expected cad_spec, cad_ops or cad_spec_patch'));
       // Read the bridge each time: a repair round answered with cad_spec_patch reloads the designer into a
       // new iframe, and a bridge kept from before then points at the removed one ("Designer unavailable").
       const live = () => { if (!this.bridge) throw new Error('Designer unavailable'); return this.bridge; };
@@ -704,7 +708,7 @@ export class CadDesignSession {
           const correction = object(await retry!(JSON.stringify({ issues, note, requestedChanges: payload.type === 'cad_ops' ? payload.ops : payload.type === 'cad_spec_patch' ? payload.patch : undefined }), summary));
           checkAbort();
           if (correction.type === 'cad_spec_patch' && Array.isArray(correction.patch)) return { patch: correction.patch };
-          if (correction.type !== 'cad_ops' || !Array.isArray(correction.ops)) throw new Error('设计器修复必须返回 cad_ops 或 cad_spec_patch / Designer repair requires cad_ops or cad_spec_patch');
+          if (correction.type !== 'cad_ops' || !Array.isArray(correction.ops)) throw new Error(say('设计器修复必须返回 cad_ops 或 cad_spec_patch', 'Designer repair requires cad_ops or cad_spec_patch'));
           return correction.ops as PlanOp[];
         },
         apply: async (output, current) => !Array.isArray(output) && 'patch' in output

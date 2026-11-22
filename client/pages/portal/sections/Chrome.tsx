@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import type { UiLanguage } from "@/shared/i18n";
-import { CANVAS, CANVAS_ORDER, FOOTER, NAV, REPO_URL, t } from "../content";
+import { CANVAS, CANVAS_ORDER, DESKTOP_URL, FOOTER, NAV, REPO_URL, t } from "../content";
 import { docsHref } from "@/pages/docs/route";
 import { BrandMark, GithubIcon } from "../components";
 import type { PortalWorkspace } from "../data";
@@ -51,6 +51,9 @@ export function PortalNav({
           <button type="button" className="p-navtool p-hide-m" onClick={onTutorials}>
             {t(NAV.tutorials, lang)}
           </button>
+          <a className="p-navtool p-hide-m" href={DESKTOP_URL} target="_blank" rel="noreferrer" title={t(NAV.downloadHint, lang)}>
+            {t(NAV.download, lang)}
+          </a>
           <a className="p-navtool p-hide-m" href={REPO_URL} target="_blank" rel="noreferrer" aria-label="GitHub">
             <GithubIcon />
           </a>
@@ -102,6 +105,11 @@ export function PortalFooter({
                 <button type="button" onClick={onTutorials}>
                   {t(FOOTER.tutorials, lang)}
                 </button>
+              </li>
+              <li>
+                <a href={DESKTOP_URL} target="_blank" rel="noreferrer">
+                  {t(FOOTER.desktop, lang)}
+                </a>
               </li>
               <li>
                 <a href={docsHref("changelog")}>

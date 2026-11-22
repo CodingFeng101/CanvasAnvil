@@ -29,7 +29,7 @@ npm run dev
 
 ### 3. 接上模型
 
-点左下角的设置，或按 `Ctrl ,`，进入「模型」：填入 Base URL、API Key 和模型名，再点「测试连接」。详细说明见 [接入模型](/docs/models)。
+点左下角的设置，或按 `Ctrl + ,`，进入「模型」：填入 Base URL、API Key 和模型名，再点「测试连接」。详细说明见 [接入模型](/docs/models)。
 
 ### 4. 画第一张图
 

@@ -14,7 +14,8 @@ export async function GET() {
         // Floorplan upload runs the designer's recognition scripts on this server (Python).
         cadRecognizer: await cadRecognizerAvailable(),
         // The delivery check (交付检查) runs the designer's qa in a headless Chrome / Edge on this server.
-        cadQa: await cadQaAvailable(),
+        // Not in the Windows desktop app, which ships without the designer's qa dependencies.
+        cadQa: !process.env.CANVASANVIL_DESKTOP && (await cadQaAvailable()),
     })
 }
 
