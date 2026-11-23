@@ -246,6 +246,15 @@ npm run build
 - Architecture overview: [docs/architecture.md](docs/architecture.md)
 - Deployment guide: [deploy/README.md](deploy/README.md)
 
+## 🧭 Future plans
+
+| Plan | Description |
+| --- | --- |
+| 🎬 PPT to narrated video | Voice each slide from its speaker notes, switch visuals with the narration, export as a video with subtitles |
+| 🧠 Design memory | Learn your preferences during the conversation, such as what you say outright or keep changing, and apply them to later works; you can review and delete what it remembers |
+| 🔗 Smoother cross-canvas flow | Make referencing and passing work between the four canvases feel natural, with fewer steps |
+| 🖥️ Desktop app polish | Make the Windows desktop app more stable and easier to use |
+
 <a id="recent-updates"></a>
 
 ## 🗓️ Recent updates
